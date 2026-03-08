@@ -250,11 +250,30 @@ def vision_available() -> bool:
 # Deduplication helpers
 # ---------------------------------------------------------------------------
 
+# WeChat UI strings that appear in the accessibility tree but are NOT chat content.
+_WECHAT_UI_NOISE: set[str] = {
+    "to use voice input", "Hold to talk", "Send",
+    "Emoji", "More", "Voice", "发消息", "按住说话",
+}
+
+def is_ui_noise(line: str) -> bool:
+    """Return True if the line looks like a WeChat UI label rather than a message."""
+    stripped = line.strip()
+    if stripped in _WECHAT_UI_NOISE:
+        return True
+    # Very short fragments like "(5)" or lone numbers are likely UI, not messages
+    if len(stripped) <= 3 and not stripped.isalpha():
+        return True
+    return False
+
+
 def deduplicate(lines: list[str]) -> list[str]:
-    """Remove duplicate adjacent lines while preserving order."""
+    """Remove duplicate lines and obvious UI noise while preserving order."""
     seen: set[str] = set()
     out: list[str] = []
     for ln in lines:
+        if is_ui_noise(ln):
+            continue
         if ln not in seen:
             seen.add(ln)
             out.append(ln)
@@ -432,17 +451,23 @@ def main() -> None:
         print("  → Upload them to claude.ai and ask it to summarize the chat.", file=sys.stderr)
         return
 
-    if not collected_lines:
+    clean = deduplicate(collected_lines)
+    print(f"\n  Collected {len(clean)} unique text lines.", file=sys.stderr)
+
+    MIN_LINES = 5  # fewer than this is almost certainly just UI chrome, not messages
+    if len(clean) < MIN_LINES:
         print(
-            "\n✗ No text was captured. Try:\n"
-            "  1. pip install pyobjc-framework-Vision pyobjc-framework-Quartz  (for OCR)\n"
-            "  2. python wechat_scraper_mac.py --screenshots-only  (save images instead)",
+            f"\n✗ Only {len(clean)} lines of content captured — not enough to summarise.\n"
+            "\n  This usually means one or both permissions are missing:\n"
+            "  1. Accessibility  → System Preferences → Privacy & Security → Accessibility → ✓ Terminal\n"
+            "  2. Screen Recording → System Preferences → Privacy & Security → Screen Recording → ✓ Terminal\n"
+            "     (quit and reopen Terminal after granting)\n"
+            "\n  If permissions are already granted, try:\n"
+            "    pip install pyobjc-framework-Vision pyobjc-framework-Quartz   # enables OCR\n"
+            "    python wechat_scraper_mac.py --screenshots-only               # save images to upload manually",
             file=sys.stderr,
         )
         sys.exit(1)
-
-    clean = deduplicate(collected_lines)
-    print(f"\n  Collected {len(clean)} unique text lines.", file=sys.stderr)
 
     prompt = build_prompt(clean)
     out_path = Path(args.output)
