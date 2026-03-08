@@ -1,1 +1,2 @@
-anthropic>=0.40.0
+# No dependencies — wechat_summarizer.py uses only the Python standard library.
+# (stdlib modules used: argparse, re, sys, pathlib)

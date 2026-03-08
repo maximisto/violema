@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-WeChat Chat Room Summarizer
-============================
-Parses exported WeChat chat logs and generates a structured summary
-using the Claude API. The summary is saved to memory/wechat_summary.md
-so it persists for future Claude sessions.
+WeChat Chat Room Summarizer (no API key required)
+==================================================
+Parses exported WeChat chat logs, trims them to a size that fits
+claude.ai's context window, then prints a ready-to-paste prompt
+so you can summarize using your Claude Pro account at claude.ai.
 
 How to export your WeChat chat:
   - iOS:  Chat → top-right menu → "Email Chat History"
@@ -13,17 +13,13 @@ How to export your WeChat chat:
 
 Usage:
   python wechat_summarizer.py <path_to_chat_export.txt>
-  python wechat_summarizer.py <path_to_chat_export.txt> --output memory/wechat_summary.md
+  python wechat_summarizer.py <path_to_chat_export.txt> --max-messages 500
 """
 
 import argparse
-import os
 import re
 import sys
-from datetime import datetime
 from pathlib import Path
-
-import anthropic
 
 
 # ---------------------------------------------------------------------------
@@ -130,8 +126,8 @@ def parse_wechat_export(text: str) -> list[dict]:
     return messages
 
 
-def format_messages_for_claude(messages: list[dict]) -> str:
-    """Format parsed messages into a readable block for Claude."""
+def format_messages(messages: list[dict]) -> str:
+    """Format parsed messages into a readable block."""
     lines = []
     for msg in messages:
         ts = f"[{msg['timestamp']}] " if msg["timestamp"] else ""
@@ -139,152 +135,71 @@ def format_messages_for_claude(messages: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def get_chat_stats(messages: list[dict]) -> dict:
+def chat_stats(messages: list[dict]) -> dict:
     """Compute basic statistics about the chat."""
     if not messages:
         return {}
-
-    senders = [m["sender"] for m in messages]
     sender_counts: dict[str, int] = {}
-    for s in senders:
-        sender_counts[s] = sender_counts.get(s, 0) + 1
-
+    for m in messages:
+        sender_counts[m["sender"]] = sender_counts.get(m["sender"], 0) + 1
     timestamps = [m["timestamp"] for m in messages if m["timestamp"]]
-
     return {
-        "total_messages": len(messages),
+        "total": len(messages),
         "participants": list(sender_counts.keys()),
-        "message_counts_by_sender": sender_counts,
-        "date_range": (
-            f"{timestamps[0]} → {timestamps[-1]}" if timestamps else "unknown"
-        ),
+        "counts": sender_counts,
+        "date_range": f"{timestamps[0]} → {timestamps[-1]}" if timestamps else "unknown",
     }
 
 
-# ---------------------------------------------------------------------------
-# Claude summarisation
-# ---------------------------------------------------------------------------
-
-def summarize_with_claude(chat_text: str, stats: dict) -> str:
-    """
-    Send the chat to Claude Opus 4.6 and get back a structured summary.
-    Uses adaptive thinking for a thorough analysis.
-    """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise EnvironmentError(
-            "ANTHROPIC_API_KEY environment variable is not set.\n"
-            "Export it with: export ANTHROPIC_API_KEY='your-key-here'"
-        )
-
-    client = anthropic.Anthropic(api_key=api_key)
-
+def build_prompt(chat_text: str, stats: dict) -> str:
+    """Build the full prompt to paste into claude.ai."""
     stats_block = ""
     if stats:
-        stats_block = f"""
-## Chat Statistics
-- Total messages: {stats.get('total_messages', 'N/A')}
-- Participants: {', '.join(stats.get('participants', []))}
-- Date range: {stats.get('date_range', 'N/A')}
-- Messages per person: {stats.get('message_counts_by_sender', {})}
+        counts_str = ", ".join(f"{k}: {v}" for k, v in stats["counts"].items())
+        stats_block = (
+            f"Chat stats — {stats['total']} messages, "
+            f"date range: {stats['date_range']}, "
+            f"participants: {counts_str}\n\n"
+        )
 
-"""
-
-    system_prompt = (
-        "You are an expert analyst specializing in conversation summarization. "
-        "Your goal is to create a concise yet comprehensive summary of a WeChat "
-        "group chat or direct message history that captures:\n"
-        "1. The main topics discussed\n"
-        "2. Key decisions or action items\n"
-        "3. Important information shared (links, files, plans, dates)\n"
-        "4. The overall tone and dynamic of the conversation\n"
-        "5. Any unresolved questions or follow-ups needed\n\n"
-        "Format your response as a well-structured markdown document suitable "
-        "for saving as a memory file. Be specific about names, dates, and facts."
-    )
-
-    user_message = (
-        f"{stats_block}"
-        f"Please analyze and summarize the following WeChat chat export:\n\n"
-        f"---\n{chat_text}\n---\n\n"
-        "Produce a detailed summary following the structure:\n"
+    return (
+        "Please summarize this WeChat chat export. "
+        "Structure your response as markdown with these sections:\n"
         "# WeChat Chat Summary\n"
         "## Overview\n"
         "## Key Topics & Discussions\n"
         "## Decisions & Action Items\n"
-        "## Important Details (dates, links, files mentioned)\n"
+        "## Important Details (dates, links, plans mentioned)\n"
         "## Tone & Dynamics\n"
-        "## Open Questions / Follow-ups\n"
+        "## Open Questions / Follow-ups\n\n"
+        "Be specific about names, dates, and facts.\n\n"
+        f"{stats_block}"
+        f"---\n{chat_text}\n---"
     )
-
-    print("Sending chat to Claude for analysis (streaming)...")
-
-    summary_parts: list[str] = []
-
-    with client.messages.stream(
-        model="claude-opus-4-6",
-        max_tokens=4096,
-        thinking={"type": "adaptive"},
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_message}],
-    ) as stream:
-        for event in stream:
-            if event.type == "content_block_start":
-                if event.content_block.type == "thinking":
-                    print("\n[Claude is thinking...]\n", flush=True)
-                elif event.content_block.type == "text":
-                    print("\n[Summary]\n", flush=True)
-            elif event.type == "content_block_delta":
-                if event.delta.type == "text_delta":
-                    print(event.delta.text, end="", flush=True)
-                    summary_parts.append(event.delta.text)
-
-        final = stream.get_final_message()
-        usage = final.usage
-        print(
-            f"\n\n[Tokens used — input: {usage.input_tokens}, output: {usage.output_tokens}]"
-        )
-
-    return "".join(summary_parts)
-
-
-# ---------------------------------------------------------------------------
-# Memory persistence
-# ---------------------------------------------------------------------------
-
-def save_summary(summary: str, output_path: str, stats: dict) -> None:
-    """Save the summary to a markdown file for Claude's memory."""
-    out = Path(output_path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-
-    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    header = (
-        f"<!-- Generated by wechat_summarizer.py on {generated_at} -->\n\n"
-        f"*Last updated: {generated_at}*\n\n"
-    )
-
-    with open(out, "w", encoding="utf-8") as f:
-        f.write(header + summary)
-
-    print(f"\n✓ Summary saved to: {out.resolve()}")
 
 
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+# claude.ai Pro context window is ~200K tokens; ~4 chars/token → ~800K chars.
+# We stay well under that with a conservative 300K char limit.
+_MAX_CHARS = 300_000
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Parse a WeChat chat export and generate a Claude-powered summary."
+        description=(
+            "Parse a WeChat chat export and print a prompt ready to paste "
+            "into claude.ai (no API key needed)."
+        )
     )
+    parser.add_argument("chat_file", help="Path to the exported WeChat chat text file")
     parser.add_argument(
-        "chat_file",
-        help="Path to the exported WeChat chat text file",
-    )
-    parser.add_argument(
-        "--output",
-        default="memory/wechat_summary.md",
-        help="Output path for the summary markdown file (default: memory/wechat_summary.md)",
+        "--max-messages",
+        type=int,
+        default=2000,
+        help="Maximum messages to include (default: 2000, most recent kept)",
     )
     parser.add_argument(
         "--encoding",
@@ -292,20 +207,17 @@ def main() -> None:
         help="File encoding (default: utf-8). Try 'gbk' or 'utf-16' for Chinese exports.",
     )
     parser.add_argument(
-        "--max-messages",
-        type=int,
-        default=2000,
-        help="Maximum messages to include in the summary request (default: 2000)",
+        "--output",
+        default=None,
+        help="Optional file path to save the prompt instead of printing it",
     )
     args = parser.parse_args()
 
-    # Read the exported chat file
     chat_path = Path(args.chat_file)
     if not chat_path.exists():
         print(f"Error: file not found — {chat_path}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Reading chat export: {chat_path}")
     try:
         raw_text = chat_path.read_text(encoding=args.encoding)
     except UnicodeDecodeError:
@@ -316,41 +228,53 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # Parse into structured messages
-    print("Parsing messages...")
     messages = parse_wechat_export(raw_text)
 
     if not messages:
         print(
-            "Warning: no messages were parsed. The file may use an unsupported format.\n"
-            "The raw text will be sent directly to Claude.",
+            "Warning: no structured messages found — sending raw text.",
             file=sys.stderr,
         )
         chat_text = raw_text
         stats: dict = {}
     else:
-        # Trim if needed to stay within context limits
         if len(messages) > args.max_messages:
             print(
-                f"Trimming to last {args.max_messages} messages "
-                f"(found {len(messages)} total)."
+                f"Keeping the last {args.max_messages} of {len(messages)} messages.",
+                file=sys.stderr,
             )
-            messages = messages[-args.max_messages :]
+            messages = messages[-args.max_messages:]
+        stats = chat_stats(messages)
+        chat_text = format_messages(messages)
+        print(
+            f"Parsed {stats['total']} messages | "
+            f"participants: {', '.join(stats['participants'])} | "
+            f"range: {stats['date_range']}",
+            file=sys.stderr,
+        )
 
-        stats = get_chat_stats(messages)
-        chat_text = format_messages_for_claude(messages)
+    # Trim to character budget
+    if len(chat_text) > _MAX_CHARS:
+        chat_text = chat_text[-_MAX_CHARS:]
+        print(
+            f"Chat trimmed to last {_MAX_CHARS:,} characters to fit claude.ai's context.",
+            file=sys.stderr,
+        )
 
-        print(f"Parsed {stats['total_messages']} messages")
-        print(f"Participants: {', '.join(stats['participants'])}")
-        print(f"Date range: {stats['date_range']}")
+    prompt = build_prompt(chat_text, stats)
 
-    # Generate summary via Claude
-    summary = summarize_with_claude(chat_text, stats)
-
-    # Save to memory file
-    save_summary(summary, args.output, stats)
-
-    print("\nDone! You can reference this summary in future Claude sessions.")
+    if args.output:
+        out = Path(args.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(prompt, encoding="utf-8")
+        print(f"\n✓ Prompt saved to: {out.resolve()}", file=sys.stderr)
+        print(f"  → Open claude.ai, start a new chat, and paste the contents of that file.")
+    else:
+        print(prompt)
+        print(
+            "\n--- Copy everything above and paste it into claude.ai ---",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":
