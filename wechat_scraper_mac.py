@@ -152,12 +152,33 @@ def chat_region(win_x: int, win_y: int, win_w: int, win_h: int) -> tuple[int, in
     return cx, cy, max(cw, 100), max(ch, 100)
 
 
+def screen_recording_permitted() -> bool:
+    """
+    Test whether this process has Screen Recording permission by attempting
+    a tiny 1×1 screencapture. Returns False if permission is denied.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        tmp = f.name
+    try:
+        r = subprocess.run(
+            ["screencapture", "-x", "-R", "0,0,1,1", tmp],
+            capture_output=True, timeout=5,
+        )
+        # If permission is denied the file is either missing or 0 bytes
+        p = Path(tmp)
+        ok = r.returncode == 0 and p.exists() and p.stat().st_size > 0
+        p.unlink(missing_ok=True)
+        return ok
+    except Exception:
+        return False
+
+
 def screenshot_region(x: int, y: int, w: int, h: int, path: str) -> bool:
     r = subprocess.run(
         ["screencapture", "-x", "-R", f"{x},{y},{w},{h}", path],
         capture_output=True,
     )
-    return r.returncode == 0
+    return r.returncode == 0 and Path(path).exists() and Path(path).stat().st_size > 0
 
 
 def scroll_up_page(n_pages: int = 1) -> None:
@@ -337,6 +358,23 @@ def main() -> None:
     use_ocr = vision_available() and not args.screenshots_only
     mode_label = "Screenshot + Vision OCR" if use_ocr else "Screenshots"
 
+    # ── Screen Recording permission check ─────────────────────────────────
+    if not screen_recording_permitted():
+        print(
+            "\n✗ Screen Recording permission denied.\n"
+            "  Fix: System Preferences → Privacy & Security → Screen Recording\n"
+            "       → click the + button → add Terminal (or iTerm2)\n"
+            "       → restart Terminal and run the script again.",
+            file=sys.stderr,
+        )
+        if collected_lines:
+            print("\n  (Accessibility captured some text — saving what we have...)",
+                  file=sys.stderr)
+        else:
+            sys.exit(1)
+        # skip screenshot loop
+        args.scrolls = -1
+
     if args.screenshots_only:
         out_dir = Path(args.output) if Path(args.output).suffix == "" else Path("wechat_screenshots")
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -357,7 +395,7 @@ def main() -> None:
     ocr_lines: list[str] = []
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        for i in range(args.scrolls + 1):
+        for i in range(max(args.scrolls + 1, 0)):
             if i > 0:
                 scroll_up_page(1)
                 time.sleep(0.4)   # let the UI settle
