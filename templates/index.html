@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Telegram Chat Exporter</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 1rem;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px rgba(0,0,0,.1);
+      padding: 2rem;
+      width: 100%;
+      max-width: 440px;
+    }
+
+    h1 {
+      font-size: 1.3rem;
+      margin-bottom: 1.5rem;
+      color: #1a1a2e;
+    }
+
+    label {
+      display: block;
+      font-size: .85rem;
+      font-weight: 600;
+      color: #444;
+      margin-bottom: .3rem;
+    }
+
+    input {
+      width: 100%;
+      padding: .55rem .75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: .95rem;
+      margin-bottom: 1rem;
+      transition: border-color .2s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #2AABEE;
+    }
+
+    .hint {
+      font-size: .78rem;
+      color: #888;
+      margin-top: -.7rem;
+      margin-bottom: 1rem;
+    }
+
+    button {
+      width: 100%;
+      padding: .65rem;
+      background: #2AABEE;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+    }
+
+    button:hover { background: #1a9bde; }
+    button:disabled { background: #a0c8e8; cursor: not-allowed; }
+
+    .note {
+      margin-top: 1.2rem;
+      font-size: .8rem;
+      color: #777;
+      line-height: 1.5;
+    }
+
+    .note a { color: #2AABEE; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Telegram Chat Exporter</h1>
+    <form id="form" action="/export" method="POST">
+
+      <label for="api_id">API ID</label>
+      <input id="api_id" name="api_id" type="text" placeholder="12345678" required />
+
+      <label for="api_hash">API Hash</label>
+      <input id="api_hash" name="api_hash" type="password" placeholder="abc123..." required />
+      <p class="hint">Get both at <a href="https://my.telegram.org" target="_blank">my.telegram.org</a> → API development tools</p>
+
+      <label for="chat">Chat name / username</label>
+      <input id="chat" name="chat" type="text" placeholder="Argus" required />
+
+      <label for="limit">Message limit <span style="font-weight:400">(0 = all)</span></label>
+      <input id="limit" name="limit" type="number" min="0" value="0" />
+
+      <button id="btn" type="submit">Download CSV</button>
+    </form>
+
+    <p class="note">
+      On first use you will be prompted in the terminal to enter your phone number
+      and a Telegram login code. After that a session file is saved locally so you
+      only need to do this once.
+    </p>
+  </div>
+
+  <script>
+    document.getElementById("form").addEventListener("submit", function () {
+      const btn = document.getElementById("btn");
+      btn.disabled = true;
+      btn.textContent = "Fetching messages…";
+      // Re-enable after a few seconds in case of error redirect
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = "Download CSV";
+      }, 15000);
+    });
+  </script>
+</body>
+</html>
