@@ -1,0 +1,2 @@
+# Required only for --api (live fetch) mode
+telethon>=1.34
