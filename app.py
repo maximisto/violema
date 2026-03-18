@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Flask web app — export a Telegram chat to CSV."""
 
+import asyncio
 import csv
 import io
 import os
@@ -16,9 +17,11 @@ def iter_messages(api_id: int, api_hash: str, chat: str, limit: int):
     from telethon.sync import TelegramClient          # type: ignore
     from telethon.tl.types import User, Chat, Channel # type: ignore
 
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     session = os.path.join(os.path.dirname(__file__), "tg_session")
     rows = []
-    with TelegramClient(session, api_id, api_hash) as client:
+    with TelegramClient(session, api_id, api_hash, loop=loop) as client:
         entity = client.get_entity(chat)
         for msg in client.iter_messages(entity, limit=limit or None):
             if not (msg.text or msg.message):
