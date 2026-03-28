@@ -1,10 +1,15 @@
+export type AutonomyMode = 'autonomous' | 'cautious' | 'supervised';
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
   toolCalls?: ToolCall[];
+  thinking?: string;
   isStreaming?: boolean;
+  isThinking?: boolean;
+  reaction?: 'positive' | 'negative' | null;
 }
 
 export interface ToolCall {
@@ -15,6 +20,7 @@ export interface ToolCall {
   status: 'running' | 'complete' | 'error';
   startedAt?: number;
   elapsedMs?: number;
+  confidence?: number;
 }
 
 export interface Conversation {
@@ -35,4 +41,5 @@ export interface SSEEvent {
   message?: string;
   started_at?: number;
   elapsed_ms?: number;
+  confidence?: number;
 }

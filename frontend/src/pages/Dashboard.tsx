@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   Plus, MessageSquare, Settings, ChevronRight, Zap, LogOut,
   X, CheckSquare, Clock, AlertCircle, Sparkles, PanelLeftClose, PanelLeftOpen, Trash2,
+  Eye, Shield,
 } from 'lucide-react';
 import ChatInterface from '../components/ChatInterface';
-import type { Conversation, Message } from '../types';
+import type { Conversation, Message, AutonomyMode } from '../types';
 
 // Serialise/deserialise conversations for localStorage (dates need special handling)
 function saveConvos(convos: Conversation[]) {
@@ -78,6 +79,7 @@ export default function Dashboard() {
   const [taskPanelOpen, setTaskPanelOpen] = useState(true);
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
   const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
+  const [autonomyMode, setAutonomyMode] = useState<AutonomyMode>('cautious');
 
   // Persist conversations on change
   useEffect(() => {
@@ -253,26 +255,43 @@ export default function Dashboard() {
           <div className="flex-1 min-w-0">
             <h1 className="text-sm font-semibold text-white truncate">{convoTitle}</h1>
             <div className="flex items-center gap-2 mt-0.5">
-              <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-xs text-slate-500">Nexus is ready</span>
+              <div className="w-1.5 h-1.5 bg-green-400 rounded-full" />
+              <span className="text-xs text-slate-500">Nexus ready</span>
               {currentMessages.length > 0 && (
                 <>
                   <span className="text-slate-700">·</span>
                   <span className="text-xs text-slate-500">{currentMessages.length} messages</span>
                 </>
               )}
+              <span className="text-slate-700">·</span>
+              <span className={`text-xs ${autonomyMode === 'autonomous' ? 'text-green-500' : autonomyMode === 'supervised' ? 'text-cyan-500' : 'text-yellow-500'}`}>
+                {autonomyMode === 'autonomous' ? '⚡ Autonomous' : autonomyMode === 'supervised' ? '👁 Supervised' : '🛡 Cautious'}
+              </span>
             </div>
           </div>
 
-          {/* Tool indicators */}
-          <div className="hidden md:flex items-center gap-1.5">
-            {['Web Search', 'Code', 'Tasks', 'Messaging'].map((tool) => (
-              <span
-                key={tool}
-                className="text-[10px] bg-navy-800 border border-navy-700 text-slate-400 rounded-md px-2 py-1"
+          {/* Autonomy mode selector */}
+          <div className="hidden md:flex items-center gap-1 bg-navy-800 border border-navy-700 rounded-xl p-1">
+            {(
+              [
+                { mode: 'autonomous' as AutonomyMode, label: 'Auto', icon: Zap, activeClass: 'bg-green-900/50 text-green-300 border-green-800/50' },
+                { mode: 'cautious' as AutonomyMode, label: 'Cautious', icon: Shield, activeClass: 'bg-yellow-900/50 text-yellow-300 border-yellow-800/50' },
+                { mode: 'supervised' as AutonomyMode, label: 'Supervised', icon: Eye, activeClass: 'bg-cyan-900/50 text-cyan-300 border-cyan-800/50' },
+              ] as const
+            ).map(({ mode, label, icon: Icon, activeClass }) => (
+              <button
+                key={mode}
+                onClick={() => setAutonomyMode(mode)}
+                title={mode === 'autonomous' ? 'Acts without confirmation' : mode === 'cautious' ? 'Explains before acting' : 'Full step-by-step reasoning'}
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all duration-150 ${
+                  autonomyMode === mode
+                    ? activeClass + ' border'
+                    : 'text-slate-500 border-transparent hover:text-slate-300'
+                }`}
               >
-                {tool}
-              </span>
+                <Icon className="w-3 h-3" />
+                {label}
+              </button>
             ))}
           </div>
 
@@ -297,6 +316,7 @@ export default function Dashboard() {
               conversationId={activeConvoId}
               initialMessages={currentMessages}
               onMessagesChange={handleMessagesChange}
+              autonomyMode={autonomyMode}
             />
           </div>
 
