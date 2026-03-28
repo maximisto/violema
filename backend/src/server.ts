@@ -711,6 +711,47 @@ app.post('/api/summarize', async (req: Request, res: Response) => {
   }
 });
 
+// ── Waitlist ──────────────────────────────────────────────────────────────────
+import fs from 'fs';
+import path from 'path';
+
+const WAITLIST_FILE = path.join(process.cwd(), 'waitlist.json');
+
+function loadWaitlist(): { email: string; name?: string; source: string; ts: string }[] {
+  try {
+    if (fs.existsSync(WAITLIST_FILE)) {
+      return JSON.parse(fs.readFileSync(WAITLIST_FILE, 'utf-8'));
+    }
+  } catch { /* ignore */ }
+  return [];
+}
+
+function saveWaitlist(list: ReturnType<typeof loadWaitlist>) {
+  fs.writeFileSync(WAITLIST_FILE, JSON.stringify(list, null, 2));
+}
+
+app.post('/api/waitlist', (req: Request, res: Response) => {
+  const { email, name, source = 'footer' } = req.body as { email?: string; name?: string; source?: string };
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    res.status(400).json({ error: 'Invalid email address.' });
+    return;
+  }
+
+  const list = loadWaitlist();
+  const duplicate = list.find((e) => e.email.toLowerCase() === email.toLowerCase());
+  if (duplicate) {
+    res.json({ ok: true, duplicate: true, position: list.indexOf(duplicate) + 1 });
+    return;
+  }
+
+  list.push({ email: email.toLowerCase(), name, source, ts: new Date().toISOString() });
+  saveWaitlist(list);
+
+  console.log(`[waitlist] #${list.length} — ${email}`);
+  res.json({ ok: true, duplicate: false, position: list.length });
+});
+
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
