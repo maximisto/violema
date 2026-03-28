@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'nexus-backend',
-      script: './backend/dist/server.js',
-      cwd: '/var/www/nexus',
+      script: './dist/server.js',
+      cwd: '/var/www/nexus/backend',
       instances: 1,
       autorestart: true,
       watch: false,
