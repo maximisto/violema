@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-navy-900 text-slate-100 font-sans antialiased;
+    background-color: #0f172a;
+    color: #f1f5f9;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-navy-900;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-navy-700 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-navy-600;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg transition-all duration-200 shadow-glow-violet hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 border border-slate-700 hover:border-violet-500 text-slate-300 hover:text-white font-semibold rounded-lg transition-all duration-200 hover:bg-navy-800;
+  }
+
+  .card {
+    @apply bg-navy-800 border border-navy-700 rounded-xl p-6 shadow-card hover:shadow-card-hover transition-shadow duration-300;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-violet-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent;
+  }
+
+  .tool-block {
+    @apply bg-navy-950 border border-navy-700 rounded-lg p-4 my-3 font-mono text-sm;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animate-in {
+    animation: fadeInUp 0.5s ease-out both;
+  }
+
+  .bg-noise {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  }
+}
+
+/* Prose / markdown rendering */
+.prose-nexus {
+  @apply text-slate-300 leading-relaxed;
+}
+
+.prose-nexus h1, .prose-nexus h2, .prose-nexus h3 {
+  @apply text-white font-semibold mt-4 mb-2;
+}
+
+.prose-nexus h1 { @apply text-xl; }
+.prose-nexus h2 { @apply text-lg; }
+.prose-nexus h3 { @apply text-base; }
+
+.prose-nexus p {
+  @apply mb-3;
+}
+
+.prose-nexus ul, .prose-nexus ol {
+  @apply pl-5 mb-3 space-y-1;
+}
+
+.prose-nexus ul { @apply list-disc; }
+.prose-nexus ol { @apply list-decimal; }
+
+.prose-nexus li { @apply text-slate-300; }
+
+.prose-nexus strong {
+  @apply text-white font-semibold;
+}
+
+.prose-nexus em {
+  @apply text-slate-200 italic;
+}
+
+.prose-nexus code {
+  @apply bg-navy-900 text-violet-300 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.prose-nexus pre {
+  @apply bg-navy-950 border border-navy-700 rounded-lg p-4 overflow-x-auto my-3;
+}
+
+.prose-nexus pre code {
+  @apply bg-transparent text-cyan-300 p-0;
+}
+
+.prose-nexus blockquote {
+  @apply border-l-2 border-violet-500 pl-4 text-slate-400 italic my-3;
+}
+
+.prose-nexus a {
+  @apply text-violet-400 hover:text-violet-300 underline underline-offset-2;
+}
+
+.prose-nexus hr {
+  @apply border-navy-700 my-4;
+}
+
+.prose-nexus table {
+  @apply w-full border-collapse my-3;
+}
+
+.prose-nexus th {
+  @apply bg-navy-800 text-slate-200 font-semibold px-3 py-2 text-left border border-navy-700;
+}
+
+.prose-nexus td {
+  @apply px-3 py-2 border border-navy-700 text-slate-300;
+}
+
+/* Chat input auto-resize */
+.chat-input {
+  resize: none;
+  min-height: 44px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Typing cursor blink */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.cursor-blink::after {
+  content: '▋';
+  @apply text-violet-400 ml-0.5;
+  animation: cursor-blink 1s ease-in-out infinite;
+}
+
+/* Gradient border */
+.gradient-border {
+  position: relative;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #7c3aed, #06b6d4);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
