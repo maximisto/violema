@@ -301,7 +301,7 @@ export default function Footer() {
         {/* ── Bottom bar ───────────────────────────────────────────────── */}
         <div className="py-6 border-t border-navy-800 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-slate-600 text-sm">
-            © {new Date().getFullYear()} Purple Orange AI, LLC. All rights reserved.
+            © {new Date().getFullYear()} Purple Orange LLC. All rights reserved.
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 justify-center sm:justify-end">
             <Link to="/privacy" className="text-slate-600 hover:text-slate-400 text-xs transition-colors">Privacy</Link>
