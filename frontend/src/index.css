@@ -212,6 +212,9 @@
 .po-logo {
   animation: po-spin 10s linear infinite;
   will-change: transform;
+  mix-blend-mode: multiply;
+  /* Compensate for multiply darkening: boost brightness/saturation first */
+  filter: brightness(1.1) saturate(1.4);
 }
 
 .po-logo:hover {
