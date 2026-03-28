@@ -18,6 +18,20 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+/**
+ * Model Tier Configuration
+ * ─────────────────────────────────────────────────────────────────
+ * Opus 4.6   → Complex reasoning, multi-step tool orchestration,
+ *              report generation, strategic thinking. High cost.
+ * Haiku 4.5  → Fast, cheap utility tasks: title generation,
+ *              conversation summarisation, intent classification,
+ *              anything that doesn't need deep reasoning.
+ */
+const MODELS = {
+  primary: 'claude-opus-4-6',
+  utility: 'claude-haiku-4-5-20251001',
+} as const;
+
 function buildSystemPrompt(autonomyMode: string): string {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -508,7 +522,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
 
     while (continueLoop) {
       const stream = client.messages.stream({
-        model: 'claude-opus-4-6',
+        model: MODELS.primary,
         max_tokens: 16000,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         thinking: { type: 'adaptive' } as any,
@@ -622,12 +636,81 @@ app.post('/api/chat', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Title generation — uses Haiku (fast & cheap).
+ * Called after the first assistant reply to produce a smart title
+ * instead of naively slicing the user message.
+ */
+app.post('/api/title', async (req: Request, res: Response) => {
+  const { messages } = req.body as { messages: ChatMessage[] };
+  if (!messages || messages.length < 1) {
+    res.json({ title: 'New conversation' });
+    return;
+  }
+  try {
+    const excerpt = messages
+      .slice(0, 4)
+      .map((m) => `${m.role === 'user' ? 'User' : 'Nexus'}: ${m.content.slice(0, 300)}`)
+      .join('\n');
+
+    const response = await client.messages.create({
+      model: MODELS.utility,
+      max_tokens: 20,
+      system: 'Return ONLY a conversation title: 3-6 words, no quotes, no ending punctuation. Nothing else.',
+      messages: [{ role: 'user', content: `Title this AI coworker conversation:\n${excerpt}` }],
+    });
+
+    const block = response.content[0];
+    const title = block.type === 'text' ? block.text.trim().slice(0, 60) : 'New conversation';
+    res.json({ title, model: MODELS.utility });
+  } catch {
+    const fallback = messages[0]?.content?.slice(0, 45) || 'New conversation';
+    res.json({ title: fallback });
+  }
+});
+
+/**
+ * Conversation summary — uses Haiku.
+ * Produces a 1-sentence summary for sidebar preview.
+ */
+app.post('/api/summarize', async (req: Request, res: Response) => {
+  const { messages } = req.body as { messages: ChatMessage[] };
+  if (!messages || messages.length < 2) {
+    res.json({ summary: '' });
+    return;
+  }
+  try {
+    const text = messages
+      .slice(-6)
+      .map((m) => `${m.role === 'user' ? 'User' : 'Nexus'}: ${m.content.slice(0, 200)}`)
+      .join('\n');
+
+    const response = await client.messages.create({
+      model: MODELS.utility,
+      max_tokens: 40,
+      system: 'Return ONE short sentence (max 12 words) summarising the outcome of this conversation. No quotes.',
+      messages: [{ role: 'user', content: text }],
+    });
+
+    const block = response.content[0];
+    const summary = block.type === 'text' ? block.text.trim() : '';
+    res.json({ summary, model: MODELS.utility });
+  } catch {
+    res.json({ summary: '' });
+  }
+});
+
 app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', service: 'nexus-backend', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    service: 'nexus-by-purple-orange-ai',
+    models: MODELS,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.listen(PORT, () => {
-  console.log(`Nexus backend running on http://localhost:${PORT}`);
+  console.log(`Nexus by Purple Orange AI — backend running on http://localhost:${PORT}`);
 });
 
 export default app;

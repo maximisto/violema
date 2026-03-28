@@ -42,17 +42,22 @@ export default function Footer() {
         <div className="py-16 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
           {/* Logo + description */}
           <div className="col-span-2 md:col-span-4 lg:col-span-1">
-            <div
-              className="flex items-center gap-2 cursor-pointer mb-4"
+            <button
+              className="flex items-center gap-2.5 mb-4 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-lg"
               onClick={() => navigate('/')}
             >
-              <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-violet-700 rounded-lg flex items-center justify-center">
+              <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-violet-700 rounded-lg flex items-center justify-center group-hover:shadow-glow-violet transition-all">
                 <Zap className="w-3.5 h-3.5 text-white" fill="white" />
               </div>
-              <span className="text-white font-bold">Nexus</span>
-            </div>
+              <div className="flex flex-col">
+                <span className="text-white font-bold text-sm leading-tight">Nexus</span>
+                <span className="text-[9px] text-violet-400/60 leading-none font-medium tracking-widest uppercase">
+                  by Purple Orange AI
+                </span>
+              </div>
+            </button>
             <p className="text-slate-500 text-sm leading-relaxed mb-4">
-              Your AI coworker that proactively executes tasks and gets things done.
+              Your AI coworker that proactively executes tasks, coordinates your tools, and gets things done — autonomously.
             </p>
             <div className="flex gap-3">
               {['twitter', 'linkedin', 'github'].map((social) => (
@@ -90,7 +95,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="py-6 border-t border-navy-800 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-slate-600 text-sm">
-            © {new Date().getFullYear()} Nexus AI, Inc. All rights reserved.
+            © {new Date().getFullYear()} Purple Orange AI, Inc. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
             <span className="text-slate-700 text-xs">SOC 2 Certified</span>

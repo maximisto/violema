@@ -31,15 +31,21 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <div
-            className="flex items-center gap-2 cursor-pointer group"
+          <button
+            className="flex items-center gap-2.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-lg"
             onClick={() => navigate('/')}
+            aria-label="Nexus home"
           >
             <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-violet-700 rounded-lg flex items-center justify-center shadow-glow-violet group-hover:shadow-lg transition-all duration-200">
               <Zap className="w-4 h-4 text-white" fill="white" />
             </div>
-            <span className="text-white font-bold text-lg tracking-tight">Nexus</span>
-          </div>
+            <div className="flex flex-col">
+              <span className="text-white font-bold text-base leading-tight tracking-tight">Nexus</span>
+              <span className="text-[9px] text-violet-400/70 leading-none font-medium tracking-widest uppercase">
+                by Purple Orange AI
+              </span>
+            </div>
+          </button>
 
           {/* Desktop nav links */}
           <div className="hidden md:flex items-center gap-8">
@@ -75,8 +81,10 @@ export default function Navbar() {
 
           {/* Mobile menu toggle */}
           <button
-            className="md:hidden text-slate-400 hover:text-white"
+            className="md:hidden text-slate-400 hover:text-white p-1 rounded-lg focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
             onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileOpen}
           >
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>

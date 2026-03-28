@@ -177,3 +177,37 @@
   -webkit-mask-composite: xor;
   mask-composite: exclude;
 }
+
+/* ── Focus-visible: keyboard navigation ring ──────────────────────── */
+:focus-visible {
+  outline: 2px solid #7c3aed;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Suppress mouse-click outlines — only show on keyboard nav */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── Thinking block readable text ─────────────────────────────────── */
+.thinking-text {
+  color: rgba(196, 181, 253, 0.65); /* violet-300 at 65% — passes AA */
+}
+
+/* ── Model tier badge ─────────────────────────────────────────────── */
+.model-badge-opus {
+  @apply text-[9px] font-mono text-violet-500/60 border border-violet-900/40 bg-violet-950/30 rounded-full px-1.5 py-0.5;
+}
+.model-badge-haiku {
+  @apply text-[9px] font-mono text-cyan-500/60 border border-cyan-900/40 bg-cyan-950/30 rounded-full px-1.5 py-0.5;
+}
+
+/* ── Smooth sidebar collapse ──────────────────────────────────────── */
+.sidebar-enter {
+  animation: sidebarSlideIn 0.2s ease-out;
+}
+@keyframes sidebarSlideIn {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}

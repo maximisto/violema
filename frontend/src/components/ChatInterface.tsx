@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
   Send, ChevronDown, AlertCircle, Square, ChevronDownCircle,
-  Copy, Check, Clock, Brain, ThumbsUp, ThumbsDown, Zap, Shield, Eye,
+  Copy, Check, Clock, Brain, ThumbsUp, ThumbsDown, Zap, Shield, Eye, RefreshCw,
 } from 'lucide-react';
 import type { Message, ToolCall, SSEEvent, AutonomyMode } from '../types';
 
@@ -101,7 +101,7 @@ const SUGGESTIONS_BY_MODE: Record<AutonomyMode, string[]> = {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function CopyButton({ text, className = '' }: { text: string; className?: string }) {
+const CopyButton = memo(function CopyButton({ text, className = '' }: { text: string; className?: string }) {
   const [copied, setCopied] = useState(false);
   const copy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -124,9 +124,9 @@ function CopyButton({ text, className = '' }: { text: string; className?: string
       {copied ? 'Copied' : 'Copy'}
     </button>
   );
-}
+});
 
-function ConfidenceBar({ score }: { score: number }) {
+const ConfidenceBar = memo(function ConfidenceBar({ score }: { score: number }) {
   const color =
     score >= 90 ? 'bg-green-400' : score >= 75 ? 'bg-yellow-400' : 'bg-red-400';
   const label =
@@ -142,7 +142,7 @@ function ConfidenceBar({ score }: { score: number }) {
       <span className="text-[10px] text-slate-600">{score}%</span>
     </div>
   );
-}
+});
 
 function ThinkingBlock({
   content,
@@ -190,7 +190,7 @@ function ThinkingBlock({
       </button>
       {expanded && content && (
         <div className="px-3.5 pb-3 border-t border-violet-900/20">
-          <p className="text-[11px] text-violet-300/50 font-mono leading-relaxed mt-2.5 whitespace-pre-wrap">
+          <p className="thinking-text text-[11px] font-mono leading-relaxed mt-2.5 whitespace-pre-wrap">
             {content}
             {isStreaming && (
               <span className="inline-block w-1 h-3 bg-violet-400 ml-0.5 animate-pulse" />
@@ -202,7 +202,7 @@ function ThinkingBlock({
   );
 }
 
-function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
+const ToolCallBlock = memo(function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
   const icon = TOOL_ICONS[toolCall.name] || '🔧';
   const label = TOOL_LABELS[toolCall.name] || toolCall.name;
@@ -281,7 +281,7 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
       )}
     </div>
   );
-}
+});
 
 function MessageBubble({
   message,
@@ -318,8 +318,9 @@ function MessageBubble({
 
       <div className="flex-1 min-w-0">
         {/* Header */}
-        <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
           <span className="text-sm font-semibold text-violet-300">Nexus</span>
+          {!message.isStreaming && <ModelBadge />}
           <span className="text-xs text-slate-600">
             {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
@@ -408,6 +409,15 @@ interface ChatInterfaceProps {
   autonomyMode?: AutonomyMode;
 }
 
+// Model tier badge shown on assistant messages
+function ModelBadge() {
+  return (
+    <span className="model-badge-opus" title="Powered by claude-opus-4-6">
+      opus-4
+    </span>
+  );
+}
+
 export default function ChatInterface({
   conversationId,
   initialMessages = [],
@@ -420,6 +430,7 @@ export default function ChatInterface({
   const [error, setError] = useState<string | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [agentStatus, setAgentStatus] = useState<'idle' | 'thinking' | 'working'>('idle');
+  const [lastUserInput, setLastUserInput] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -490,6 +501,7 @@ export default function ChatInterface({
 
       setMessages((prev) => [...prev, userMsg, assistantMsg]);
       setInput('');
+      setLastUserInput(text.trim());
       setIsLoading(true);
       setAgentStatus('thinking');
 
@@ -691,12 +703,13 @@ export default function ChatInterface({
             <div className="w-16 h-16 bg-gradient-to-br from-violet-500 to-violet-700 rounded-2xl flex items-center justify-center shadow-glow-violet mb-6">
               <span className="text-2xl font-bold text-white">N</span>
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Hey, I'm Nexus</h2>
+            <h2 className="text-2xl font-bold text-white mb-1">Hey, I'm Nexus</h2>
+            <p className="text-[11px] text-violet-400/60 font-medium tracking-widest uppercase mb-3">by Purple Orange AI</p>
             <p className="text-slate-400 mb-2 leading-relaxed">
               Your AI coworker — running in{' '}
               <span className={`font-semibold ${modeConfig.color}`}>{modeConfig.label} mode</span>.
             </p>
-            <p className="text-slate-500 text-sm mb-8">{modeConfig.description}. Switch modes in the header.</p>
+            <p className="text-slate-500 text-sm mb-8">{modeConfig.description}. Switch modes in the sidebar.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
               {suggestions.map((suggestion, i) => (
                 <button
@@ -731,6 +744,7 @@ export default function ChatInterface({
             setIsAtBottom(true);
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
           }}
+          aria-label="Scroll to bottom"
           className="absolute bottom-24 right-6 w-9 h-9 bg-navy-800 border border-navy-700 hover:border-violet-600 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 z-10"
         >
           <ChevronDownCircle className="w-5 h-5 text-slate-400" />
@@ -741,9 +755,23 @@ export default function ChatInterface({
       {error && (
         <div className="mx-4 mb-2 px-4 py-3 bg-red-950/60 border border-red-800/60 rounded-xl flex items-center gap-3">
           <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-          <p className="text-red-300 text-sm">{error}</p>
-          <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-300 text-xs">
-            Dismiss
+          <p className="text-red-300 text-sm flex-1">{error}</p>
+          {lastUserInput && (
+            <button
+              onClick={() => { setError(null); sendMessage(lastUserInput); }}
+              className="flex items-center gap-1 text-xs text-red-300 hover:text-red-200 border border-red-800/50 rounded-lg px-2.5 py-1.5 hover:bg-red-900/30 transition-colors flex-shrink-0"
+              aria-label="Retry last message"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Retry
+            </button>
+          )}
+          <button
+            onClick={() => setError(null)}
+            className="text-red-500 hover:text-red-300 text-xs ml-1 flex-shrink-0"
+            aria-label="Dismiss error"
+          >
+            ✕
           </button>
         </div>
       )}
@@ -769,7 +797,7 @@ export default function ChatInterface({
               <button
                 onClick={stopGeneration}
                 className="flex-shrink-0 w-9 h-9 bg-red-600/80 hover:bg-red-500 rounded-xl flex items-center justify-center transition-all duration-200"
-                title="Stop generating"
+                aria-label="Stop generating"
               >
                 <Square className="w-3.5 h-3.5 text-white fill-white" />
               </button>
@@ -777,6 +805,7 @@ export default function ChatInterface({
               <button
                 onClick={() => sendMessage(input)}
                 disabled={!input.trim()}
+                aria-label="Send message"
                 className="flex-shrink-0 w-9 h-9 bg-violet-600 hover:bg-violet-500 disabled:bg-navy-700 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-all duration-200 shadow-glow-violet disabled:shadow-none"
               >
                 <Send className="w-4 h-4 text-white" />
