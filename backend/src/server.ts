@@ -347,17 +347,14 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       const stream = client.messages.stream({
         model: 'claude-opus-4-6',
         max_tokens: 16000,
-        thinking: {
-          type: 'enabled',
-          budget_tokens: 10000,
-        },
+        thinking: { type: 'adaptive' },
         system: NEXUS_SYSTEM_PROMPT,
         tools: NEXUS_TOOLS,
         messages: currentMessages,
       });
 
       const toolUseBlocks: Anthropic.ToolUseBlock[] = [];
-      let currentToolUse: { id: string; name: string; input: string } | null = null;
+      let currentToolUse: { id: string; name: string; input: string; startedAt: number } | null = null;
       let hasToolUse = false;
 
       for await (const event of stream) {
@@ -368,11 +365,13 @@ app.post('/api/chat', async (req: Request, res: Response) => {
               id: event.content_block.id,
               name: event.content_block.name,
               input: '',
+              startedAt: Date.now(),
             };
             sendEvent({
               type: 'tool_start',
               tool_name: event.content_block.name,
               tool_id: event.content_block.id,
+              started_at: currentToolUse.startedAt,
             });
           } else if (event.content_block.type === 'thinking') {
             sendEvent({ type: 'thinking_start' });
@@ -429,13 +428,16 @@ app.post('/api/chat', async (req: Request, res: Response) => {
 
         for (const toolUseBlock of toolUseBlocks) {
           const toolInput = toolUseBlock.input as Record<string, unknown>;
+          const toolStart = Date.now();
           const result = executeToolCall(toolUseBlock.name, toolInput);
+          const elapsed = Date.now() - toolStart;
 
           sendEvent({
             type: 'tool_result',
             tool_id: toolUseBlock.id,
             tool_name: toolUseBlock.name,
             result: JSON.parse(result),
+            elapsed_ms: elapsed,
           });
 
           toolResults.push({

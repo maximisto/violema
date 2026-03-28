@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, ChevronDown, AlertCircle } from 'lucide-react';
+import { Send, ChevronDown, AlertCircle, Square, ChevronDownCircle, Copy, Check, Clock } from 'lucide-react';
 import type { Message, ToolCall, SSEEvent } from '../types';
 
 // Simple markdown renderer
@@ -55,11 +55,42 @@ const TOOL_LABELS: Record<string, string> = {
   query_data: 'Querying data',
 };
 
+function CopyButton({ text, className = '' }: { text: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button
+      onClick={copy}
+      className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border transition-all duration-150 ${
+        copied
+          ? 'bg-green-900/40 border-green-700/50 text-green-400'
+          : 'bg-navy-800 border-navy-700 text-slate-500 hover:text-slate-300 hover:border-navy-600'
+      } ${className}`}
+      title="Copy"
+    >
+      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
 function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
   const icon = TOOL_ICONS[toolCall.name] || '🔧';
   const label = TOOL_LABELS[toolCall.name] || toolCall.name;
   const isDone = toolCall.status === 'complete';
+  const elapsed = toolCall.elapsedMs;
+
+  // Summary line from input
+  const inputSummary = toolCall.input
+    ? Object.values(toolCall.input)[0] as string | undefined
+    : undefined;
 
   return (
     <div className="my-2 bg-navy-950 border border-navy-700/60 rounded-xl overflow-hidden">
@@ -67,35 +98,46 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-navy-900/60 transition-colors text-left"
       >
-        <span className="text-base">{icon}</span>
+        <span className="text-base leading-none">{icon}</span>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-slate-200">{label}</span>
             {isDone ? (
-              <span className="text-xs text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full">Done</span>
+              <span className="text-[10px] text-green-400 bg-green-400/10 border border-green-400/20 px-2 py-0.5 rounded-full">
+                ✓ Done
+              </span>
             ) : (
-              <span className="text-xs text-violet-400 bg-violet-400/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="text-[10px] text-violet-400 bg-violet-400/10 border border-violet-400/20 px-2 py-0.5 rounded-full flex items-center gap-1">
                 <span className="inline-block w-1.5 h-1.5 bg-violet-400 rounded-full animate-pulse" />
                 Running
               </span>
             )}
+            {isDone && elapsed !== undefined && (
+              <span className="text-[10px] text-slate-600 flex items-center gap-1">
+                <Clock className="w-2.5 h-2.5" />
+                {elapsed < 1000 ? `${elapsed}ms` : `${(elapsed / 1000).toFixed(1)}s`}
+              </span>
+            )}
           </div>
-          {toolCall.input && (
+          {inputSummary && typeof inputSummary === 'string' && (
             <p className="text-xs text-slate-500 truncate mt-0.5 font-mono">
-              {JSON.stringify(toolCall.input).slice(0, 80)}...
+              {inputSummary.slice(0, 72)}{inputSummary.length > 72 ? '…' : ''}
             </p>
           )}
         </div>
         <ChevronDown
-          className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-slate-600 transition-transform duration-200 flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
         />
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 space-y-3 border-t border-navy-800">
+        <div className="px-4 pb-4 space-y-3 border-t border-navy-800/60">
           {toolCall.input && (
             <div>
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mt-3 mb-1.5">Input</p>
+              <div className="flex items-center justify-between mt-3 mb-1.5">
+                <p className="text-[10px] text-slate-600 font-semibold uppercase tracking-wider">Input</p>
+                <CopyButton text={JSON.stringify(toolCall.input, null, 2)} />
+              </div>
               <pre className="text-xs text-cyan-300 font-mono bg-black/30 rounded-lg p-3 overflow-x-auto">
                 {JSON.stringify(toolCall.input, null, 2)}
               </pre>
@@ -103,8 +145,11 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
           )}
           {toolCall.result && (
             <div>
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-1.5">Output</p>
-              <pre className="text-xs text-green-300 font-mono bg-black/30 rounded-lg p-3 overflow-x-auto max-h-48">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] text-slate-600 font-semibold uppercase tracking-wider">Output</p>
+                <CopyButton text={JSON.stringify(toolCall.result, null, 2)} />
+              </div>
+              <pre className="text-xs text-green-300 font-mono bg-black/30 rounded-lg p-3 overflow-x-auto max-h-52">
                 {JSON.stringify(toolCall.result, null, 2)}
               </pre>
             </div>
@@ -117,6 +162,7 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === 'user';
+  const [hovered, setHovered] = useState(false);
 
   if (isUser) {
     return (
@@ -129,7 +175,11 @@ function MessageBubble({ message }: { message: Message }) {
   }
 
   return (
-    <div className="flex gap-3 mb-6">
+    <div
+      className="flex gap-3 mb-6"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex-shrink-0 flex items-center justify-center shadow-glow-violet mt-0.5">
         <span className="text-xs text-white font-bold">N</span>
       </div>
@@ -139,6 +189,9 @@ function MessageBubble({ message }: { message: Message }) {
           <span className="text-xs text-slate-600">
             {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
+          {message.content && !message.isStreaming && hovered && (
+            <CopyButton text={message.content} className="ml-1" />
+          )}
         </div>
 
         {/* Tool calls */}
@@ -185,13 +238,27 @@ export default function ChatInterface({ conversationId, initialMessages = [], on
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Ref to always have latest messages in async callbacks (fixes stale closure)
+  const messagesRef = useRef<Message[]>(messages);
+  messagesRef.current = messages;
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (isAtBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isAtBottom]);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    setIsAtBottom(atBottom);
+  }, []);
 
   useEffect(() => {
     if (onMessagesChange) {
@@ -240,7 +307,8 @@ export default function ChatInterface({ conversationId, initialMessages = [], on
       textareaRef.current.style.height = 'auto';
     }
 
-    const allMessages = [...messages, userMsg].map((m) => ({
+    // Use ref to get latest messages and avoid stale closure
+    const allMessages = [...messagesRef.current.filter(m => !m.isStreaming), userMsg].map((m) => ({
       role: m.role,
       content: m.content,
     }));
@@ -293,6 +361,7 @@ export default function ChatInterface({ conversationId, initialMessages = [], on
               id: event.tool_id!,
               name: event.tool_name!,
               status: 'running',
+              startedAt: event.started_at ?? Date.now(),
             };
             updateStreamingMessage(assistantId, (m) => ({
               ...m,
@@ -309,7 +378,9 @@ export default function ChatInterface({ conversationId, initialMessages = [], on
             updateStreamingMessage(assistantId, (m) => ({
               ...m,
               toolCalls: (m.toolCalls || []).map((tc) =>
-                tc.id === event.tool_id ? { ...tc, result: event.result, status: 'complete' as const } : tc
+                tc.id === event.tool_id
+                  ? { ...tc, result: event.result, status: 'complete' as const, elapsedMs: event.elapsed_ms }
+                  : tc
               ),
             }));
           } else if (event.type === 'done') {
@@ -340,7 +411,13 @@ export default function ChatInterface({ conversationId, initialMessages = [], on
       setIsLoading(false);
       updateStreamingMessage(assistantId, (m) => ({ ...m, isStreaming: false }));
     }
-  }, [messages, isLoading, conversationId, updateStreamingMessage]);
+  }, [isLoading, conversationId, updateStreamingMessage]);
+
+  const stopGeneration = useCallback(() => {
+    abortControllerRef.current?.abort();
+    setIsLoading(false);
+    setMessages((prev) => prev.map((m) => m.isStreaming ? { ...m, isStreaming: false } : m));
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -356,10 +433,26 @@ export default function ChatInterface({ conversationId, initialMessages = [], on
     'Create a task: Review Q1 metrics by end of week',
   ];
 
+  // ⌘K / Ctrl+K to focus input
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        textareaRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 sm:px-6 py-6"
+      >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center max-w-xl mx-auto">
             <div className="w-16 h-16 bg-gradient-to-br from-violet-500 to-violet-700 rounded-2xl flex items-center justify-center shadow-glow-violet mb-6">
@@ -391,6 +484,19 @@ export default function ChatInterface({ conversationId, initialMessages = [], on
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Scroll-to-bottom button */}
+      {!isAtBottom && (
+        <button
+          onClick={() => {
+            setIsAtBottom(true);
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }}
+          className="absolute bottom-24 right-6 w-9 h-9 bg-navy-800 border border-navy-700 hover:border-violet-600 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 z-10"
+        >
+          <ChevronDownCircle className="w-5 h-5 text-slate-400" />
+        </button>
+      )}
+
       {/* Error */}
       {error && (
         <div className="mx-4 mb-2 px-4 py-3 bg-red-950/60 border border-red-800/60 rounded-xl flex items-center gap-3">
@@ -417,16 +523,27 @@ export default function ChatInterface({ conversationId, initialMessages = [], on
               rows={1}
               disabled={isLoading}
             />
-            <button
-              onClick={() => sendMessage(input)}
-              disabled={!input.trim() || isLoading}
-              className="flex-shrink-0 w-9 h-9 bg-violet-600 hover:bg-violet-500 disabled:bg-navy-700 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-all duration-200 shadow-glow-violet disabled:shadow-none"
-            >
-              <Send className="w-4 h-4 text-white" />
-            </button>
+            {isLoading ? (
+              <button
+                onClick={stopGeneration}
+                className="flex-shrink-0 w-9 h-9 bg-red-600/80 hover:bg-red-500 rounded-xl flex items-center justify-center transition-all duration-200"
+                title="Stop generating"
+              >
+                <Square className="w-3.5 h-3.5 text-white fill-white" />
+              </button>
+            ) : (
+              <button
+                onClick={() => sendMessage(input)}
+                disabled={!input.trim()}
+                className="flex-shrink-0 w-9 h-9 bg-violet-600 hover:bg-violet-500 disabled:bg-navy-700 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-all duration-200 shadow-glow-violet disabled:shadow-none"
+              >
+                <Send className="w-4 h-4 text-white" />
+              </button>
+            )}
           </div>
           <p className="text-center text-xs text-slate-700 mt-2">
             Nexus can make mistakes. Verify important information.
+            <kbd className="ml-2 text-[10px] bg-navy-800 border border-navy-700 px-1.5 py-0.5 rounded font-mono">⌘K</kbd> to focus
           </p>
         </div>
       </div>

@@ -1,6 +1,31 @@
 import { useNavigate } from 'react-router-dom';
 import { Play, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+
+function useCountUp(target: number, duration = 1800, start = false) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!start) return;
+    let startTime: number | null = null;
+    const step = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(Math.floor(eased * target));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [target, duration, start]);
+  return count;
+}
+
+const STATS = [
+  { value: 2847, suffix: '', label: 'Tasks completed today', prefix: '' },
+  { value: 47, suffix: 'ms', label: 'Avg response time', prefix: '' },
+  { value: 3000, suffix: '+', label: 'Integrations', prefix: '' },
+  { value: 118, suffix: '%', label: 'Net revenue retention', prefix: '' },
+];
 
 const TERMINAL_MESSAGES = [
   { role: 'user', content: '@nexus pull the MRR from Stripe and compare to last month' },
@@ -53,9 +78,23 @@ function TerminalMessage({ msg, visible }: { msg: typeof TERMINAL_MESSAGES[0]; v
   );
 }
 
+function StatItem({ stat, animate }: { stat: typeof STATS[0]; animate: boolean }) {
+  const count = useCountUp(stat.value, 1800, animate);
+  return (
+    <div className="text-center px-6 first:pl-0 last:pr-0">
+      <p className="text-3xl font-extrabold text-white tabular-nums">
+        {stat.prefix}{count.toLocaleString()}{stat.suffix}
+      </p>
+      <p className="text-xs text-slate-500 mt-1 font-medium">{stat.label}</p>
+    </div>
+  );
+}
+
 export default function Hero() {
   const navigate = useNavigate();
   const [visibleMessages, setVisibleMessages] = useState<number[]>([]);
+  const statsRef = useRef<HTMLDivElement>(null);
+  const [statsVisible, setStatsVisible] = useState(false);
 
   useEffect(() => {
     let idx = 0;
@@ -68,6 +107,15 @@ export default function Hero() {
       }
     }, 1100);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setStatsVisible(true); observer.disconnect(); } },
+      { threshold: 0.3 }
+    );
+    if (statsRef.current) observer.observe(statsRef.current);
+    return () => observer.disconnect();
   }, []);
 
   return (
@@ -188,6 +236,18 @@ export default function Hero() {
             <div className="absolute -top-3 -right-3 bg-violet-600 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-glow-violet animate-float">
               Nexus is working...
             </div>
+          </div>
+        </div>
+
+        {/* Stats bar */}
+        <div
+          ref={statsRef}
+          className="mt-20 pt-8 border-t border-navy-800/60"
+        >
+          <div className="flex flex-wrap items-center justify-center gap-x-0 gap-y-6 divide-x divide-navy-800">
+            {STATS.map((stat, i) => (
+              <StatItem key={i} stat={stat} animate={statsVisible} />
+            ))}
           </div>
         </div>
       </div>

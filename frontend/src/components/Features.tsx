@@ -1,4 +1,19 @@
 import { Globe, Code2, ListTodo, Clock, Plug, Brain } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+
+function useInView(threshold = 0.15) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setInView(true); observer.disconnect(); } },
+      { threshold }
+    );
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [threshold]);
+  return { ref, inView };
+}
 
 const FEATURES = [
   {
@@ -70,6 +85,9 @@ const STEPS = [
 ];
 
 export default function Features() {
+  const { ref: stepsRef, inView: stepsInView } = useInView();
+  const { ref: featuresRef, inView: featuresInView } = useInView();
+
   return (
     <>
       {/* How it works */}
@@ -87,9 +105,13 @@ export default function Features() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div ref={stepsRef} className="grid md:grid-cols-3 gap-8">
             {STEPS.map((step, i) => (
-              <div key={i} className="relative">
+              <div
+                key={i}
+                className={`relative transition-all duration-700 ${stepsInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                style={{ transitionDelay: `${i * 150}ms` }}
+              >
                 {i < STEPS.length - 1 && (
                   <div className="hidden md:block absolute top-8 left-full w-full h-px bg-gradient-to-r from-violet-600/40 to-transparent z-0" />
                 )}
@@ -123,30 +145,41 @@ export default function Features() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div ref={featuresRef} className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {FEATURES.map((feature, i) => {
               const Icon = feature.icon;
               return (
                 <div
                   key={i}
-                  className={`group relative bg-gradient-to-br ${feature.gradient} border ${feature.border} rounded-2xl p-6 hover:scale-[1.02] transition-all duration-300 cursor-default`}
+                  className={`group relative bg-gradient-to-br ${feature.gradient} border ${feature.border} rounded-2xl p-6 hover:scale-[1.02] hover:shadow-lg transition-all duration-300 cursor-default ${
+                    feature.color === 'violet'
+                      ? 'hover:border-violet-600/60 hover:shadow-violet-900/30'
+                      : 'hover:border-cyan-700/60 hover:shadow-cyan-900/20'
+                  } ${featuresInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                  style={{ transitionDelay: `${i * 80}ms`, transitionProperty: 'opacity, transform, border-color, box-shadow, scale' }}
                 >
                   <div
-                    className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${
+                    className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors duration-300 ${
                       feature.color === 'violet'
-                        ? 'bg-violet-600/20 text-violet-400'
-                        : 'bg-cyan-600/20 text-cyan-400'
+                        ? 'bg-violet-600/20 text-violet-400 group-hover:bg-violet-600/35'
+                        : 'bg-cyan-600/20 text-cyan-400 group-hover:bg-cyan-600/35'
                     }`}
                   >
                     <Icon className="w-6 h-6" />
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-violet-200 transition-colors">
+                  <h3 className={`text-lg font-semibold text-white mb-2 transition-colors duration-300 ${
+                    feature.color === 'violet' ? 'group-hover:text-violet-200' : 'group-hover:text-cyan-200'
+                  }`}>
                     {feature.title}
                   </h3>
                   <p className="text-slate-400 text-sm leading-relaxed">{feature.description}</p>
 
-                  {/* Hover shine */}
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-white/0 via-white/[0.02] to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                  {/* Hover glow overlay */}
+                  <div className={`absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${
+                    feature.color === 'violet'
+                      ? 'bg-gradient-to-tr from-violet-600/5 via-transparent to-transparent'
+                      : 'bg-gradient-to-tr from-cyan-600/5 via-transparent to-transparent'
+                  }`} />
                 </div>
               );
             })}

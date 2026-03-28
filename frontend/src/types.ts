@@ -13,6 +13,8 @@ export interface ToolCall {
   input?: Record<string, unknown>;
   result?: Record<string, unknown>;
   status: 'running' | 'complete' | 'error';
+  startedAt?: number;
+  elapsedMs?: number;
 }
 
 export interface Conversation {
@@ -31,4 +33,6 @@ export interface SSEEvent {
   input?: Record<string, unknown>;
   result?: Record<string, unknown>;
   message?: string;
+  started_at?: number;
+  elapsed_ms?: number;
 }

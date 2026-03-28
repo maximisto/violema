@@ -1,11 +1,31 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, MessageSquare, Settings, ChevronRight, Zap, LogOut,
-  X, CheckSquare, Clock, AlertCircle, Sparkles,
+  X, CheckSquare, Clock, AlertCircle, Sparkles, PanelLeftClose, PanelLeftOpen, Trash2,
 } from 'lucide-react';
 import ChatInterface from '../components/ChatInterface';
 import type { Conversation, Message } from '../types';
+
+// Serialise/deserialise conversations for localStorage (dates need special handling)
+function saveConvos(convos: Conversation[]) {
+  try {
+    localStorage.setItem('nexus_convos', JSON.stringify(convos));
+  } catch { /* ignore quota errors */ }
+}
+
+function loadConvos(): Conversation[] {
+  try {
+    const raw = localStorage.getItem('nexus_convos');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Array<Conversation & { timestamp: string; messages: Array<Message & { timestamp: string }> }>;
+    return parsed.map((c) => ({
+      ...c,
+      timestamp: new Date(c.timestamp),
+      messages: c.messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })),
+    }));
+  } catch { return []; }
+}
 
 const SAMPLE_CONVOS: Conversation[] = [
   {
@@ -49,16 +69,34 @@ function formatTime(date: Date) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [conversations, setConversations] = useState<Conversation[]>(SAMPLE_CONVOS);
+  const [conversations, setConversations] = useState<Conversation[]>(() => {
+    const saved = loadConvos();
+    return saved.length > 0 ? saved : SAMPLE_CONVOS;
+  });
   const [activeConvoId, setActiveConvoId] = useState<string>('new');
-  const [sidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [taskPanelOpen, setTaskPanelOpen] = useState(true);
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
+  const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
+
+  // Persist conversations on change
+  useEffect(() => {
+    saveConvos(conversations);
+  }, [conversations]);
 
   const handleNewChat = () => {
     setActiveConvoId('new');
     setNewConvoMessages([]);
   };
+
+  const handleDeleteConvo = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    if (activeConvoId === id) {
+      setActiveConvoId('new');
+      setNewConvoMessages([]);
+    }
+  }, [activeConvoId]);
 
   const handleMessagesChange = useCallback(
     (messages: Message[]) => {
@@ -111,6 +149,13 @@ export default function Dashboard() {
             <span className="ml-auto text-[10px] bg-violet-900/50 text-violet-300 border border-violet-800/50 rounded-full px-2 py-0.5 font-medium">
               Beta
             </span>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="ml-1 text-slate-600 hover:text-slate-400 transition-colors"
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
           </div>
 
           {/* New chat */}
@@ -128,26 +173,41 @@ export default function Dashboard() {
           <div className="flex-1 overflow-y-auto px-2 space-y-0.5">
             <p className="px-2 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Recent</p>
             {conversations.map((convo) => (
-              <button
+              <div
                 key={convo.id}
-                onClick={() => setActiveConvoId(convo.id)}
-                className={`w-full text-left px-3 py-2.5 rounded-lg transition-all group ${
-                  activeConvoId === convo.id
-                    ? 'bg-navy-800 text-white'
-                    : 'text-slate-400 hover:bg-navy-800/60 hover:text-slate-200'
-                }`}
+                onMouseEnter={() => setHoveredConvoId(convo.id)}
+                onMouseLeave={() => setHoveredConvoId(null)}
+                className="relative"
               >
-                <div className="flex items-start gap-2">
-                  <MessageSquare className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 opacity-60" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{convo.title}</p>
-                    {convo.lastMessage && (
-                      <p className="text-xs text-slate-500 truncate mt-0.5">{convo.lastMessage}</p>
-                    )}
-                    <p className="text-[10px] text-slate-600 mt-0.5">{formatTime(convo.timestamp)}</p>
+                <button
+                  onClick={() => setActiveConvoId(convo.id)}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-all ${
+                    activeConvoId === convo.id
+                      ? 'bg-navy-800 text-white'
+                      : 'text-slate-400 hover:bg-navy-800/60 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-2 pr-5">
+                    <MessageSquare className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 opacity-60" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{convo.title}</p>
+                      {convo.lastMessage && (
+                        <p className="text-xs text-slate-500 truncate mt-0.5">{convo.lastMessage}</p>
+                      )}
+                      <p className="text-[10px] text-slate-600 mt-0.5">{formatTime(convo.timestamp)}</p>
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+                {hoveredConvoId === convo.id && (
+                  <button
+                    onClick={(e) => handleDeleteConvo(convo.id, e)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-600 hover:text-red-400 transition-colors"
+                    title="Delete conversation"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
 
@@ -180,7 +240,16 @@ export default function Dashboard() {
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="flex items-center gap-4 px-6 py-3.5 border-b border-navy-800 bg-navy-900/50 backdrop-blur-sm flex-shrink-0">
+        <header className="flex items-center gap-3 px-4 sm:px-6 py-3.5 border-b border-navy-800 bg-navy-900/50 backdrop-blur-sm flex-shrink-0">
+          {!sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="text-slate-500 hover:text-slate-300 transition-colors mr-1"
+              title="Open sidebar"
+            >
+              <PanelLeftOpen className="w-4 h-4" />
+            </button>
+          )}
           <div className="flex-1 min-w-0">
             <h1 className="text-sm font-semibold text-white truncate">{convoTitle}</h1>
             <div className="flex items-center gap-2 mt-0.5">
@@ -224,6 +293,7 @@ export default function Dashboard() {
         <div className="flex-1 flex min-h-0">
           <div className="flex-1 min-w-0">
             <ChatInterface
+              key={activeConvoId}
               conversationId={activeConvoId}
               initialMessages={currentMessages}
               onMessagesChange={handleMessagesChange}
