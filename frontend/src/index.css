@@ -203,6 +203,21 @@
   @apply text-[9px] font-mono text-cyan-500/60 border border-cyan-900/40 bg-cyan-950/30 rounded-full px-1.5 py-0.5;
 }
 
+/* ── Purple Orange logo spin ──────────────────────────────────────── */
+@keyframes po-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.po-logo {
+  animation: po-spin 10s linear infinite;
+  will-change: transform;
+}
+
+.po-logo:hover {
+  animation-play-state: paused;
+}
+
 /* ── Smooth sidebar collapse ──────────────────────────────────────── */
 .sidebar-enter {
   animation: sidebarSlideIn 0.2s ease-out;

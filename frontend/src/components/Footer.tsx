@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Zap, ArrowRight, Sparkles, Check, Loader2 } from 'lucide-react';
+import { ArrowRight, Sparkles, Check, Loader2 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
+
+const PO_LOGO = 'https://drive.google.com/uc?export=view&id=1POD-QYqKrUwRpWQqs7-l37NciVtux0oa';
 
 const LINKS = {
   Product: [
@@ -257,8 +259,8 @@ export default function Footer() {
               className="flex items-center gap-2.5 mb-4 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-lg"
               onClick={() => navigate('/')}
             >
-              <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-violet-700 rounded-lg flex items-center justify-center group-hover:shadow-glow-violet transition-all">
-                <Zap className="w-3.5 h-3.5 text-white" fill="white" />
+              <div className="w-8 h-8 rounded-full bg-white/95 shadow-md overflow-hidden flex-shrink-0 p-0.5 group-hover:shadow-glow-violet transition-all">
+                <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
               </div>
               <div className="flex flex-col">
                 <span className="text-white font-bold text-sm leading-tight">Nexus</span>
@@ -300,9 +302,14 @@ export default function Footer() {
 
         {/* ── Bottom bar ───────────────────────────────────────────────── */}
         <div className="py-6 border-t border-navy-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-slate-600 text-sm">
-            © {new Date().getFullYear()} Purple Orange LLC. All rights reserved.
-          </p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-5 h-5 rounded-full bg-white/90 overflow-hidden flex-shrink-0 p-px">
+              <img src={PO_LOGO} alt="Purple Orange LLC" className="po-logo w-full h-full object-contain" />
+            </div>
+            <p className="text-slate-600 text-sm">
+              © {new Date().getFullYear()} Purple Orange LLC. All rights reserved.
+            </p>
+          </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 justify-center sm:justify-end">
             <Link to="/privacy" className="text-slate-600 hover:text-slate-400 text-xs transition-colors">Privacy</Link>
             <Link to="/terms" className="text-slate-600 hover:text-slate-400 text-xs transition-colors">Terms</Link>

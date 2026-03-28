@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
+
+const PO_LOGO = 'https://drive.google.com/uc?export=view&id=1POD-QYqKrUwRpWQqs7-l37NciVtux0oa';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -36,8 +38,8 @@ export default function Navbar() {
             onClick={() => navigate('/')}
             aria-label="Nexus home"
           >
-            <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-violet-700 rounded-lg flex items-center justify-center shadow-glow-violet group-hover:shadow-lg transition-all duration-200">
-              <Zap className="w-4 h-4 text-white" fill="white" />
+            <div className="w-8 h-8 rounded-full bg-white/95 shadow-glow-violet overflow-hidden flex-shrink-0 p-0.5">
+              <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
             </div>
             <div className="flex flex-col">
               <span className="text-white font-bold text-base leading-tight tracking-tight">Nexus</span>
