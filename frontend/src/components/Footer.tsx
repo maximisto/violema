@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowRight, Sparkles, Check, Loader2 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 
-const PO_LOGO = 'https://drive.google.com/uc?export=view&id=1POD-QYqKrUwRpWQqs7-l37NciVtux0oa';
+const PO_LOGO = '/po-logo.png';
 
 const LINKS = {
   Product: [

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
-const PO_LOGO = 'https://drive.google.com/uc?export=view&id=1POD-QYqKrUwRpWQqs7-l37NciVtux0oa';
+const PO_LOGO = '/po-logo.png';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
