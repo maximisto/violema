@@ -39,7 +39,7 @@ const client = new Anthropic({
  *              anything that doesn't need deep reasoning.
  */
 const MODELS = {
-  primary: 'claude-opus-4-6',
+  primary: 'claude-sonnet-4-6',
   utility: 'claude-haiku-4-5-20251001',
 } as const;
 
@@ -532,17 +532,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     let currentMessages = [...anthropicMessages];
 
     while (continueLoop) {
-      // Thinking budget: only enable in supervised mode (users expect slow + transparent),
-      // keep disabled in autonomous/cautious for fast responses.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const thinkingParam: any = autonomyMode === 'supervised'
-        ? { thinking: { type: 'enabled', budget_tokens: 2000 } }
-        : {};
-
       const stream = client.messages.stream({
         model: MODELS.primary,
         max_tokens: 8000,
-        ...thinkingParam,
         system: buildSystemPrompt(autonomyMode),
         tools: NEXUS_TOOLS,
         messages: currentMessages,
