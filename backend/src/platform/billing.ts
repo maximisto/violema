@@ -286,7 +286,15 @@ export function shouldGrantMonthlyCredits(workspaceId: string, now = new Date())
   });
 }
 
-export function purchaseTopUp(workspaceId: string, offerId: string) {
+export function purchaseTopUp(
+  workspaceId: string,
+  offerId: string,
+  options?: {
+    referenceId?: string;
+    note?: string;
+    metadata?: Record<string, unknown>;
+  }
+) {
   const offer = listTopUpOffers().find((item) => item.id === offerId);
   if (!offer) {
     throw new Error(`Unknown top-up offer: ${offerId}`);
@@ -298,9 +306,13 @@ export function purchaseTopUp(workspaceId: string, offerId: string) {
     source: 'top_up',
     deltaCredits: credits,
     referenceType: 'promotion',
-    referenceId: offer.id,
-    note: `Top-up purchase: ${offer.credits} credits`,
-    metadata: { priceUsd: offer.priceUsd, bonusCredits: offer.bonusCredits || 0 },
+    referenceId: options?.referenceId || offer.id,
+    note: options?.note || `Top-up purchase: ${offer.credits} credits`,
+    metadata: {
+      priceUsd: offer.priceUsd,
+      bonusCredits: offer.bonusCredits || 0,
+      ...(options?.metadata || {}),
+    },
   });
 
   return { offer, entry, status: buildPlanSummary(workspaceId) };

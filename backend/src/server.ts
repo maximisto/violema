@@ -38,6 +38,8 @@ import {
   listTopUpOffers,
   createSubscriptionCheckoutSession,
   createTopUpCheckoutSession,
+  constructStripeWebhookEvent,
+  fulfillStripeWebhookEvent,
 } from './platform';
 import {
   generateText,
@@ -72,7 +74,11 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+  },
+}));
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 app.use('/api/generated-screenshots', express.static(SCREENSHOT_DIR));
 
@@ -1361,6 +1367,24 @@ app.post('/api/billing/top-up', (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Could not apply top-up' });
+  }
+});
+
+app.post('/api/billing/stripe/webhook', async (req: Request, res: Response) => {
+  const signature = req.header('stripe-signature');
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+
+  if (!signature || !rawBody) {
+    res.status(400).json({ error: 'Missing Stripe signature or raw request body' });
+    return;
+  }
+
+  try {
+    const event = constructStripeWebhookEvent(rawBody, signature);
+    const result = await fulfillStripeWebhookEvent(event);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Stripe webhook verification failed' });
   }
 });
 

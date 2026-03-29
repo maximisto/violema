@@ -1,5 +1,8 @@
+import path from 'path';
 import Stripe from 'stripe';
-import { getBillingStatus, getPlanDefinition, listPlanDefinitions, listTopUpOffers } from './billing';
+import { listLedgerEntries } from './store';
+import { getBillingStatus, getPlanDefinition, listPlanDefinitions, listTopUpOffers, purchaseTopUp, upsertBillingConfig } from './billing';
+import { readJsonFile, writeJsonFile } from './jsonStore';
 import type { BillingPlanId, PlanDefinition, TopUpOffer } from './types';
 
 export type BillingCheckoutMode = 'payment' | 'subscription';
@@ -52,6 +55,7 @@ export interface BillingCheckoutSessionResult {
 const DEFAULT_SUCCESS_URL = 'https://nexus.purpleorange.io/settings/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}';
 const DEFAULT_CANCEL_URL = 'https://nexus.purpleorange.io/settings/billing?checkout=cancel';
 const DEFAULT_CURRENCY = 'usd';
+export const STRIPE_EVENTS_FILE = path.join(process.cwd(), 'platform-stripe-events.json');
 
 let cachedStripe: Stripe | null = null;
 let cachedStripeKey: string | null = null;
@@ -59,6 +63,10 @@ let cachedStripeKey: string | null = null;
 function getEnv(name: string): string | null {
   const value = process.env[name]?.trim();
   return value ? value : null;
+}
+
+function getWebhookSecret(): string | null {
+  return getEnv('STRIPE_WEBHOOK_SECRET');
 }
 
 function getStripeClient(): Stripe | null {
@@ -229,4 +237,117 @@ export async function createTopUpCheckoutSession(
     priceId,
     amountUsd
   );
+}
+
+interface ProcessedStripeEvent {
+  id: string;
+  type: string;
+  processedAt: string;
+  workspaceId?: string;
+  referenceId?: string;
+}
+
+function listProcessedEvents(): ProcessedStripeEvent[] {
+  return readJsonFile<ProcessedStripeEvent[]>(STRIPE_EVENTS_FILE, []);
+}
+
+function saveProcessedEvent(event: ProcessedStripeEvent) {
+  const items = listProcessedEvents();
+  if (items.some((item) => item.id === event.id)) return;
+  writeJsonFile(STRIPE_EVENTS_FILE, [event, ...items].slice(0, 500));
+}
+
+export function hasProcessedStripeEvent(eventId: string): boolean {
+  return listProcessedEvents().some((item) => item.id === eventId);
+}
+
+export function constructStripeWebhookEvent(rawBody: Buffer, signature: string): Stripe.Event {
+  const stripe = getStripeClient();
+  const secret = getWebhookSecret();
+  if (!stripe || !secret) {
+    throw new Error('Stripe webhook verification is not configured.');
+  }
+  return stripe.webhooks.constructEvent(rawBody, signature, secret);
+}
+
+function extractMetadata(metadata?: Record<string, string | null> | null): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(metadata || {})
+      .filter(([, value]) => typeof value === 'string' && value.length > 0)
+      .map(([key, value]) => [key, value as string])
+  );
+}
+
+function hasLedgerReference(workspaceId: string, referenceId: string): boolean {
+  return listLedgerEntries(workspaceId).some((entry) => entry.referenceId === referenceId);
+}
+
+async function fulfillCheckoutSessionCompleted(event: Stripe.Event, session: Stripe.Checkout.Session) {
+  const metadata = extractMetadata(session.metadata);
+  const workspaceId = metadata.workspaceId || session.client_reference_id || undefined;
+  if (!workspaceId) {
+    return { applied: false, reason: 'missing_workspace' as const };
+  }
+
+  if (session.mode === 'payment') {
+    const offerId = metadata.offerId;
+    if (!offerId) {
+      return { applied: false, reason: 'missing_offer' as const };
+    }
+    if (hasLedgerReference(workspaceId, session.id)) {
+      return { applied: false, reason: 'duplicate_topup' as const };
+    }
+
+    purchaseTopUp(workspaceId, offerId, {
+      referenceId: session.id,
+      note: `Stripe top-up checkout completed: ${offerId}`,
+      metadata: { stripeEventId: event.id, stripeSessionId: session.id, paymentStatus: session.payment_status || 'unknown' },
+    });
+
+    return { applied: true, workspaceId, kind: 'top_up' as const };
+  }
+
+  if (session.mode === 'subscription') {
+    const planId = metadata.planId as BillingPlanId | undefined;
+    if (!planId || !['starter', 'pro', 'team'].includes(planId)) {
+      return { applied: false, reason: 'missing_plan' as const };
+    }
+
+    upsertBillingConfig(workspaceId, { planId });
+    return { applied: true, workspaceId, kind: 'subscription' as const };
+  }
+
+  return { applied: false, reason: 'unsupported_mode' as const };
+}
+
+export async function fulfillStripeWebhookEvent(event: Stripe.Event) {
+  if (hasProcessedStripeEvent(event.id)) {
+    return { duplicate: true, eventId: event.id };
+  }
+
+  let result: Record<string, unknown> = { applied: false, ignored: true };
+
+  if (event.type === 'checkout.session.completed') {
+    result = await fulfillCheckoutSessionCompleted(event, event.data.object as Stripe.Checkout.Session);
+  } else if (event.type === 'checkout.session.async_payment_succeeded') {
+    result = await fulfillCheckoutSessionCompleted(event, event.data.object as Stripe.Checkout.Session);
+  }
+
+  saveProcessedEvent({
+    id: event.id,
+    type: event.type,
+    processedAt: new Date().toISOString(),
+    workspaceId: typeof result.workspaceId === 'string' ? result.workspaceId : undefined,
+    referenceId:
+      event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded'
+        ? (event.data.object as Stripe.Checkout.Session).id
+        : undefined,
+  });
+
+  return {
+    duplicate: false,
+    eventId: event.id,
+    eventType: event.type,
+    ...result,
+  };
 }
