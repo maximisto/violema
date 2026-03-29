@@ -8,7 +8,7 @@ import {
   useCreditSnapshot,
 } from '../lib/credits';
 
-export default function BillingGateBar() {
+export default function BillingGateBar({ compact = false }: { compact?: boolean }) {
   const { snapshot } = useCreditSnapshot();
   const [status, setStatus] = useState<string | null>(null);
   const recommendation = getCreditRecommendation(snapshot);
@@ -31,22 +31,22 @@ export default function BillingGateBar() {
   }
 
   return (
-    <div className={`rounded-[1.15rem] border px-3.5 py-3 sm:px-4 ${runwayClass}`}>
-      <div className="flex items-start gap-2.5 sm:gap-3">
-        <div className="mt-0.5 flex h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0 items-center justify-center rounded-xl border border-current/20 bg-current/10">
+    <div className={`rounded-[1.15rem] border ${compact ? 'px-3 py-2.5 sm:px-3.5' : 'px-3.5 py-3 sm:px-4'} ${runwayClass}`}>
+      <div className={`flex items-start gap-2.5 ${compact ? 'sm:gap-3' : 'sm:gap-3'}`}>
+        <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl border border-current/20 bg-current/10 ${compact ? '' : 'sm:h-8 sm:w-8'}`}>
           <Sparkles className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-[13px] sm:text-sm font-semibold text-white">Billing {snapshot.planName}</p>
+            <p className={`${compact ? 'text-[12px]' : 'text-[13px] sm:text-sm'} font-semibold text-white`}>Billing {snapshot.planName}</p>
             <span className="rounded-full border border-current/20 bg-current/10 px-2 py-0.5 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.18em]">
               {formatCredits(snapshot.creditsRemaining)} left
             </span>
           </div>
-          <p className="mt-1 text-[10px] sm:text-[11px] text-slate-300">
+          <p className={`mt-1 ${compact ? 'text-[10px]' : 'text-[10px] sm:text-[11px]'} text-slate-300`}>
             {recommendation.title}. {recommendation.detail}
           </p>
-          <p className="mt-1 text-[9px] sm:text-[10px] text-slate-400">
+          <p className={`mt-1 ${compact ? 'text-[9px]' : 'text-[9px] sm:text-[10px]'} text-slate-400`}>
             Workspace: {snapshot.workspaceName}
           </p>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -66,16 +66,18 @@ export default function BillingGateBar() {
               <ArrowUpRight className="h-3 w-3" />
               Upgrade
             </button>
-            <button
-              type="button"
-              onClick={() => copy(buildReferralMessage(snapshot), 'Referral message')}
-              className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-navy-950/50 px-2.5 py-1.5 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.14em] text-white/85 transition-colors hover:border-white/20 hover:text-white"
-            >
-              <Gift className="h-3 w-3" />
-              Refer
-            </button>
+            {!compact && (
+              <button
+                type="button"
+                onClick={() => copy(buildReferralMessage(snapshot), 'Referral message')}
+                className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-navy-950/50 px-2.5 py-1.5 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.14em] text-white/85 transition-colors hover:border-white/20 hover:text-white"
+              >
+                <Gift className="h-3 w-3" />
+                Refer
+              </button>
+            )}
           </div>
-          <p className="mt-2 text-[9px] sm:text-[10px] text-slate-500">
+          <p className={`mt-2 ${compact ? 'text-[9px]' : 'text-[9px] sm:text-[10px]'} text-slate-500`}>
             {status || `Estimated task cost: ${formatCredits(snapshot.estimatedTaskCost)} credits`}
           </p>
         </div>

@@ -306,12 +306,12 @@ export default function Dashboard() {
         <aside
           className={`${
             isMobileSidebar
-              ? 'absolute inset-y-0 left-0 z-40 w-[18rem] max-w-[88vw] shadow-[0_24px_64px_rgba(2,6,23,0.55)]'
+              ? 'fixed inset-y-2 left-2 z-40 w-[calc(100vw-1rem)] max-w-[19rem] rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.55)]'
               : 'w-[15.25rem] xl:w-[15.75rem] flex-shrink-0'
-          } bg-navy-900/98 border-r border-navy-800 flex flex-col sidebar-enter backdrop-blur-sm`}
+          } bg-gradient-to-b from-navy-900/98 via-navy-900/96 to-navy-950/98 border-r border-navy-800 flex flex-col sidebar-enter backdrop-blur-sm`}
         >
           {/* Logo */}
-          <div className="flex items-center gap-2 px-3.5 py-3 border-b border-navy-800">
+          <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-navy-800/80 bg-navy-950/25">
             <button
               onClick={() => navigate('/')}
               className="flex items-center gap-3.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-1"
@@ -329,7 +329,7 @@ export default function Dashboard() {
                 </span>
               </div>
             </button>
-            <span className="ml-auto text-[10px] bg-violet-900/50 text-violet-300 border border-violet-800/50 rounded-full px-2 py-0.5 font-medium flex-shrink-0">
+            <span className="ml-auto text-[10px] bg-violet-900/50 text-violet-300 border border-violet-800/50 rounded-full px-2 py-0.5 font-medium flex-shrink-0 shadow-sm">
               Beta
             </span>
             <button
@@ -342,6 +342,9 @@ export default function Dashboard() {
           </div>
 
           <div className="px-2.5 pt-2.5">
+            <div className="mb-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">
+              Workspace
+            </div>
             <CreditSurface compact={isMobileSidebar} />
           </div>
 
@@ -349,17 +352,23 @@ export default function Dashboard() {
           <div className="px-2.5 pt-2.5 pb-2 space-y-2">
             <button
               onClick={handleNewChat}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors shadow-glow-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-500 hover:from-violet-500 hover:via-violet-500 hover:to-fuchsia-400 text-white text-sm font-medium transition-all duration-200 shadow-glow-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 border border-white/10"
             >
               <Plus className="w-4 h-4" />
               New conversation
             </button>
             {/* Mode selector visible on ALL screen sizes via sidebar */}
+            <div className="px-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">
+              Autonomy
+            </div>
             <ModeSelector compact />
           </div>
 
           {/* Search */}
           <div className="px-2.5 pb-2">
+            <div className="px-1.5 mb-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">
+              Search
+            </div>
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
               <input
@@ -385,9 +394,12 @@ export default function Dashboard() {
 
           {/* Conversation list */}
           <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
-            <p className="px-2 py-1 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+            <div className="px-2 pt-1 pb-1.5 flex items-center justify-between">
+              <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
               {searchQuery ? `${filteredConvos.length} result${filteredConvos.length !== 1 ? 's' : ''}` : 'Recent'}
-            </p>
+              </p>
+              <span className="text-[10px] text-slate-700">{conversations.length} total</span>
+            </div>
 
             {filteredConvos.length === 0 && searchQuery && (
               <p className="px-3 py-4 text-xs text-slate-600 text-center">No conversations found</p>
@@ -410,14 +422,14 @@ export default function Dashboard() {
                   }}
                   className={`w-full text-left px-3 py-2 rounded-xl transition-all ${
                     activeConvoId === convo.id
-                      ? 'bg-navy-800/95 text-white border border-navy-700/70'
+                      ? 'bg-navy-800/95 text-white border border-violet-700/40 shadow-[0_10px_24px_rgba(2,6,23,0.22)]'
                       : 'text-slate-400 border border-transparent hover:bg-navy-800/60 hover:text-slate-200 hover:border-navy-700/60'
                   }`}
                 >
                   <div className="flex items-start gap-2 pr-6">
-                    <MessageSquare className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 opacity-50" />
+                    <MessageSquare className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 opacity-60" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium truncate leading-snug">{convo.title}</p>
+                      <p className="text-[13px] font-medium truncate leading-snug tracking-[-0.01em]">{convo.title}</p>
                       {convo.lastMessage && (
                         <p className="text-[10px] text-slate-500 truncate mt-0.5 leading-snug">
                           {convo.lastMessage}
@@ -463,22 +475,22 @@ export default function Dashboard() {
           </div>
 
           {/* User / settings */}
-          <div className="border-t border-navy-800 px-2.5 py-2 space-y-1">
+          <div className="border-t border-navy-800/80 px-2.5 py-2 space-y-1 bg-navy-950/15">
             <button
               onClick={() => {/* settings panel placeholder */}}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-2xl text-slate-400 hover:bg-navy-800/70 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
             >
               <Settings className="w-4 h-4" />
               Settings
             </button>
             <button
               onClick={() => navigate('/')}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-2xl text-slate-400 hover:bg-navy-800/70 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
             >
               <LogOut className="w-4 h-4" />
               Back to home
             </button>
-            <div className="flex items-center gap-2.5 px-3 py-2 mt-1">
+            <div className="flex items-center gap-2.5 px-3 py-2.5 mt-1 rounded-2xl border border-navy-800/60 bg-navy-900/40">
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-700/40 to-navy-700 border border-violet-800/40 flex items-center justify-center text-xs font-bold text-violet-300 flex-shrink-0">
                 U
               </div>
@@ -494,7 +506,7 @@ export default function Dashboard() {
       {/* ── Main chat area ───────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="flex items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-navy-800 bg-navy-900/50 backdrop-blur-sm flex-shrink-0">
+        <header className="flex items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-navy-800/80 bg-gradient-to-r from-navy-950/92 via-navy-900/70 to-navy-950/92 backdrop-blur-md flex-shrink-0 shadow-[0_12px_30px_rgba(2,6,23,0.16)]">
           {(!sidebarOpen || isMobileSidebar) && (
             <button
               onClick={() => setSidebarOpen(true)}
@@ -506,9 +518,14 @@ export default function Dashboard() {
           )}
 
           <div className="flex-1 min-w-0">
-            <h1 className="text-[13px] sm:text-sm font-semibold text-white truncate">{convoTitle}</h1>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              <div className="w-1.5 h-1.5 bg-green-400 rounded-full" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-[13px] sm:text-sm font-semibold text-white truncate tracking-[-0.01em]">{convoTitle}</h1>
+              <span className="rounded-full border border-green-500/15 bg-green-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-green-300">
+                Ready
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <div className="w-1.5 h-1.5 bg-green-400 rounded-full shadow-[0_0_0_4px_rgba(74,222,128,0.08)]" />
               <span className="text-xs text-slate-500">Nexus ready</span>
               {currentMessages.length > 0 && (
                 <>
@@ -532,10 +549,10 @@ export default function Dashboard() {
             onClick={() => setTaskPanelOpen((v) => !v)}
             aria-pressed={taskPanelOpen}
             aria-label="Toggle tasks panel"
-            className={`hidden sm:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+            className={`hidden sm:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
               taskPanelOpen
-                ? 'bg-violet-900/30 border-violet-700/50 text-violet-300'
-                : 'bg-navy-800 border-navy-700 text-slate-400 hover:text-slate-200'
+                ? 'bg-violet-900/30 border-violet-700/50 text-violet-300 shadow-sm'
+                : 'bg-navy-800/80 border-navy-700 text-slate-400 hover:text-slate-200'
             }`}
           >
             <CheckSquare className="w-3.5 h-3.5" />
@@ -557,11 +574,16 @@ export default function Dashboard() {
 
           {/* Task panel */}
           {taskPanelOpen && (
-            <aside className="w-72 flex-shrink-0 border-l border-navy-800 bg-navy-900/30 flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3.5 border-b border-navy-800">
+            <aside className="w-72 flex-shrink-0 border-l border-navy-800/80 bg-gradient-to-b from-navy-900/46 via-navy-900/32 to-navy-950/56 flex flex-col overflow-hidden backdrop-blur-sm">
+              <div className="flex items-center justify-between px-4 py-3.5 border-b border-navy-800/80 bg-navy-950/20">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-violet-400" />
-                  <h3 className="text-sm font-semibold text-white">Automations</h3>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-xl border border-violet-500/15 bg-violet-500/8">
+                    <Sparkles className="w-4 h-4 text-violet-400" />
+                  </span>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.22em] text-slate-600">Workspace</p>
+                    <h3 className="text-sm font-semibold text-white">Automations</h3>
+                  </div>
                 </div>
                 <button
                   onClick={() => setTaskPanelOpen(false)}
@@ -578,7 +600,7 @@ export default function Dashboard() {
                   return (
                     <div
                       key={task.id}
-                      className="bg-navy-800 border border-navy-700 rounded-xl p-3 hover:border-navy-600 transition-colors cursor-pointer group"
+                      className="bg-gradient-to-br from-navy-800/82 to-navy-900/72 border border-navy-700/70 rounded-2xl p-3.5 hover:border-violet-600/30 transition-colors cursor-pointer group shadow-[0_12px_28px_rgba(2,6,23,0.14)]"
                     >
                       <div className="flex items-start gap-2.5">
                         <div
@@ -593,7 +615,7 @@ export default function Dashboard() {
                           <Icon className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-slate-200 font-medium truncate">{task.title}</p>
+                          <p className="text-sm text-slate-100 font-medium truncate">{task.title}</p>
                           <div className="flex items-center gap-2 mt-1">
                             <span
                               className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
@@ -616,8 +638,8 @@ export default function Dashboard() {
                 })}
               </div>
 
-              <div className="p-3 border-t border-navy-800">
-                <button className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-navy-700 text-slate-500 hover:border-violet-700 hover:text-violet-400 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
+              <div className="p-3 border-t border-navy-800/80 bg-navy-950/20">
+                <button className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-2xl border border-dashed border-navy-700/80 text-slate-500 hover:border-violet-700 hover:text-violet-400 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 bg-navy-950/30">
                   <Plus className="w-4 h-4" />
                   Schedule automation
                 </button>

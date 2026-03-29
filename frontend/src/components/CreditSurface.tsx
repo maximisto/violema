@@ -78,22 +78,33 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
     copyToClipboard(buildReferralMessage(snapshot), 'Referral message');
   }
 
+  const topUpLabel = compact ? 'Top up' : 'Top up now';
+  const referralLabel = compact ? 'Refer' : 'Refer for 2k';
+
   return (
-    <section className={`rounded-[1.3rem] border border-violet-500/15 bg-gradient-to-br from-navy-900/90 via-navy-900/75 to-navy-950/95 ${compact ? 'p-3' : 'p-3.5 sm:p-4'} shadow-[0_18px_42px_rgba(2,6,23,0.24)] overflow-hidden`}>
+    <section
+      className={`overflow-hidden rounded-[1.3rem] border border-violet-500/15 bg-gradient-to-br from-navy-900/90 via-navy-900/75 to-navy-950/95 ${
+        compact ? 'p-2.5' : 'p-3.5 sm:p-4'
+      } shadow-[0_18px_42px_rgba(2,6,23,0.24)]`}
+    >
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/15 bg-violet-500/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300">
-            <Sparkles className="w-3 h-3" />
+        <div className="min-w-0">
+          <div
+            className={`inline-flex items-center gap-2 rounded-full border border-violet-500/15 bg-violet-500/8 ${
+              compact ? 'px-2 py-0.5' : 'px-2.5 py-1'
+            } text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300`}
+          >
+            <Sparkles className="h-3 w-3" />
             Credits
           </div>
-          <h3 className="mt-2 text-sm font-semibold text-white">Nexus Credits</h3>
-          <p className="mt-0.5 text-[11px] text-slate-500">
+          <h3 className={`mt-2 ${compact ? 'text-[13px]' : 'text-sm'} font-semibold text-white`}>Nexus Credits</h3>
+          <p className={`mt-0.5 ${compact ? 'text-[10px]' : 'text-[11px]'} text-slate-500`}>
             {snapshot.workspaceName} · {snapshot.planName} plan · {isLoading ? 'syncing…' : snapshot.source === 'api' ? 'live' : 'preview'}
           </p>
         </div>
-        <div className="rounded-xl border border-navy-700/60 bg-navy-950/60 px-3 py-2 text-right">
+        <div className={`rounded-xl border border-navy-700/60 bg-navy-950/60 ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'} text-right`}>
           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Remaining</p>
-          <p className={`mt-1 text-lg font-extrabold ${lowBalance ? 'text-amber-300' : 'text-white'}`}>
+          <p className={`mt-1 ${compact ? 'text-[1.05rem]' : 'text-lg'} font-extrabold ${lowBalance ? 'text-amber-300' : 'text-white'}`}>
             {formatCredits(snapshot.creditsRemaining)}
           </p>
           <p className="text-[10px] text-slate-600">of {formatCredits(snapshot.creditsTotal)}</p>
@@ -105,111 +116,133 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
           <span>Usage</span>
           <span>{Math.round(progress)}%</span>
         </div>
-        <div className="mt-1.5 h-2 rounded-full bg-navy-950/80 overflow-hidden border border-navy-800/60">
+        <div className="mt-1.5 h-2 overflow-hidden rounded-full border border-navy-800/60 bg-navy-950/80">
           <div
-            className={`h-full rounded-full transition-all duration-700 ${lowBalance ? 'bg-gradient-to-r from-amber-500 to-orange-400' : 'bg-gradient-to-r from-violet-500 via-fuchsia-500 to-cyan-400'}`}
+            className={`h-full rounded-full transition-all duration-700 ${
+              lowBalance
+                ? 'bg-gradient-to-r from-amber-500 to-orange-400'
+                : 'bg-gradient-to-r from-violet-500 via-fuchsia-500 to-cyan-400'
+            }`}
             style={{ width: `${progress}%` }}
           />
         </div>
       </div>
 
-      <div className={`mt-4 grid grid-cols-1 ${compact ? 'gap-1.5' : 'gap-2'}`}>
+      <div className={`mt-4 grid grid-cols-1 ${compact ? 'gap-1' : 'gap-2'}`}>
         <Stat label="Task cost" value={`${formatCredits(snapshot.estimatedTaskCost)} credits`} />
         <Stat label="Auto burn" value={`${formatCredits(snapshot.automationBurnMonthly)}/mo`} />
-        <Stat label="Top up" value={`+${formatCredits(snapshot.topUpSuggestion)} credits`} />
+        {!compact && <Stat label="Top up" value={`+${formatCredits(snapshot.topUpSuggestion)} credits`} />}
       </div>
 
-      <div className={`mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 ${compact ? 'p-2.5' : 'p-3'}`}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-            <History className="w-3 h-3" />
-            <span>Recent usage</span>
-          </div>
-          <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600">
-            {usageLoading ? 'loading' : 'live preview'}
-          </span>
+      {compact ? (
+        <div className="mt-3 rounded-2xl border border-violet-500/15 bg-violet-500/6 p-2.5">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Billing insight</p>
+          <p className="mt-1 text-[13px] leading-snug text-white">
+            Burn is roughly {formatCredits(Math.round(burnRate))} credits/day.
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            {snapshot.projectedDaysLeft} days left · Referral grant +{formatCredits(snapshot.referralBonus)} credits.
+          </p>
         </div>
-        <div className={`mt-2 ${compact ? 'space-y-1.5' : 'space-y-2'}`}>
-          {recentUsage.slice(0, compact ? 2 : 3).map((item) => (
-            <div
-              key={item.id}
-              className={`flex items-start justify-between gap-3 rounded-xl border border-navy-700/60 bg-navy-900/45 ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}
-            >
-              <div className="min-w-0">
-                <p className={`${compact ? 'text-[13px]' : 'text-sm'} font-medium text-white leading-snug`}>{item.title}</p>
-                <p className="text-[10px] sm:text-[11px] text-slate-500">{item.detail}</p>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <p
-                  className={`text-[11px] font-semibold ${
-                    item.tone === 'amber'
-                      ? 'text-amber-300'
-                      : item.tone === 'cyan'
-                        ? 'text-cyan-300'
-                        : 'text-violet-300'
-                  }`}
-                >
-                  -{formatCredits(item.credits)}
-                </p>
-                <p className="text-[10px] text-slate-600">{formatRelativeTime(item.timestamp)}</p>
-              </div>
+      ) : (
+        <div className="mt-3 rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Billing insight</p>
+              <p className="mt-1 text-sm leading-snug text-white">
+                Burn is roughly {formatCredits(Math.round(burnRate))} credits/day.
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                At this rate, you have about {snapshot.projectedDaysLeft} days left on the current plan.
+              </p>
+              <p
+                className={`mt-2 text-[11px] font-medium ${
+                  recommendation.tone === 'urgent'
+                    ? 'text-amber-300'
+                    : recommendation.tone === 'watch'
+                      ? 'text-cyan-300'
+                      : 'text-violet-300'
+                }`}
+              >
+                {recommendation.title}: {recommendation.detail}
+              </p>
+              <p className="mt-2 text-[11px] text-violet-300/80">
+                Referral grant: +{formatCredits(snapshot.referralBonus)} credits.
+              </p>
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div className={`mt-3 rounded-2xl border border-violet-500/15 bg-violet-500/6 ${compact ? 'p-2.5' : 'p-3'}`}>
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Billing insight</p>
-            <p className={`${compact ? 'mt-1 text-[13px]' : 'mt-1 text-sm'} text-white leading-snug`}>
-              Burn is roughly {formatCredits(Math.round(burnRate))} credits/day.
-            </p>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              At this rate, you have about {snapshot.projectedDaysLeft} days left on the current plan.
-            </p>
-            <p className={`mt-2 text-[11px] font-medium ${
-              recommendation.tone === 'urgent'
-                ? 'text-amber-300'
-                : recommendation.tone === 'watch'
-                  ? 'text-cyan-300'
-                  : 'text-violet-300'
-            }`}>
-              {recommendation.title}: {recommendation.detail}
-            </p>
-            <p className="mt-2 text-[11px] text-violet-300/80">
-              Referral grant: +{formatCredits(snapshot.referralBonus)} credits.
-            </p>
+            <ChevronRight className="h-4 w-4 flex-shrink-0 text-violet-300/70" />
           </div>
-          {!compact && <ChevronRight className="w-4 h-4 text-violet-300/70 flex-shrink-0" />}
         </div>
-      </div>
+      )}
 
-      <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-3 sm:gap-2">
+      {!compact && (
+        <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <History className="h-3 w-3" />
+              <span>Recent usage</span>
+            </div>
+            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600">
+              {usageLoading ? 'loading' : 'live preview'}
+            </span>
+          </div>
+          <div className="mt-2 space-y-2">
+            {recentUsage.slice(0, 3).map((item) => (
+              <div
+                key={item.id}
+                className="flex items-start justify-between gap-3 rounded-xl border border-navy-700/60 bg-navy-900/45 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium leading-snug text-white">{item.title}</p>
+                  <p className="text-[10px] text-slate-500 sm:text-[11px]">{item.detail}</p>
+                </div>
+                <div className="flex-shrink-0 text-right">
+                  <p
+                    className={`text-[11px] font-semibold ${
+                      item.tone === 'amber'
+                        ? 'text-amber-300'
+                        : item.tone === 'cyan'
+                          ? 'text-cyan-300'
+                          : 'text-violet-300'
+                    }`}
+                  >
+                    -{formatCredits(item.credits)}
+                  </p>
+                  <p className="text-[10px] text-slate-600">{formatRelativeTime(item.timestamp)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className={`mt-3 grid ${compact ? 'grid-cols-2 gap-1' : 'grid-cols-1 gap-1.5 sm:grid-cols-3 sm:gap-2'}`}>
         <button
           type="button"
           onClick={handleTopUp}
-          className="inline-flex items-center justify-center gap-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12"
+          className="inline-flex items-center justify-center gap-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12 sm:text-[10px]"
         >
-          <CreditCard className="w-3 h-3" />
-          Top up now
+          <CreditCard className="h-3 w-3" />
+          {topUpLabel}
         </button>
         <button
           type="button"
           onClick={openPricing}
-          className="inline-flex items-center justify-center gap-1 rounded-xl border border-cyan-500/20 bg-cyan-500/8 px-3 py-2 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300 transition-colors hover:bg-cyan-500/12"
+          className="inline-flex items-center justify-center gap-1 rounded-xl border border-cyan-500/20 bg-cyan-500/8 px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-cyan-300 transition-colors hover:bg-cyan-500/12 sm:text-[10px]"
         >
-          <ArrowUpRight className="w-3 h-3" />
+          <ArrowUpRight className="h-3 w-3" />
           Upgrade plan
         </button>
-        <button
-          type="button"
-          onClick={handleReferral}
-          className="inline-flex items-center justify-center gap-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12"
-        >
-          <Gift className="w-3 h-3" />
-          Refer for 2k
-        </button>
+        {!compact && (
+          <button
+            type="button"
+            onClick={handleReferral}
+            className="inline-flex items-center justify-center gap-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12 sm:text-[10px]"
+          >
+            <Gift className="h-3 w-3" />
+            {referralLabel}
+          </button>
+        )}
       </div>
 
       <div className={`mt-2 flex items-center justify-between gap-3 ${compact ? 'px-0.5' : 'px-1'}`}>
@@ -219,9 +252,9 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
         <button
           type="button"
           onClick={() => copyToClipboard(`Nexus workspace ${snapshot.planName}`, 'Workspace summary')}
-          className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 hover:text-slate-300 transition-colors"
+          className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 transition-colors hover:text-slate-300"
         >
-          <ExternalLink className="w-3 h-3" />
+          <ExternalLink className="h-3 w-3" />
           {actionState || 'Copy summary'}
         </button>
       </div>
