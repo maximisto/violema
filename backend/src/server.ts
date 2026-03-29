@@ -7,6 +7,7 @@ import path from 'path';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
 import { createAutomation, loadPersistedAutomations } from './scheduler';
+import { generateText, getChatClient, getChatModelConfig, getModelRoutingStatus, getUtilityModelConfig } from './models';
 
 dotenv.config();
 
@@ -33,10 +34,6 @@ app.use(express.json());
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 app.use('/api/generated-screenshots', express.static(SCREENSHOT_DIR));
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
 /**
  * Model Tier Configuration
  * ─────────────────────────────────────────────────────────────────
@@ -46,11 +43,6 @@ const client = new Anthropic({
  *              conversation summarisation, intent classification,
  *              anything that doesn't need deep reasoning.
  */
-const MODELS = {
-  primary: 'claude-sonnet-4-6',
-  utility: 'claude-haiku-4-5-20251001',
-} as const;
-
 function buildSystemPrompt(autonomyMode: string): string {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -85,6 +77,7 @@ function buildSystemPrompt(autonomyMode: string): string {
 - Data queries: Pull live data from Stripe, HubSpot, GitHub, Linear, Salesforce
 - Report generation: Create structured reports, analyses, summaries
 - Automation scheduling: Set up recurring tasks and monitoring workflows
+- Model routing: Match harder tasks to stronger models and cheaper tasks to more efficient models
 
 **When executing tasks:**
 1. Break complex requests into clear steps
@@ -523,6 +516,7 @@ interface ChatRequest {
   messages: ChatMessage[];
   conversationId?: string;
   autonomyMode?: string;
+  modelProfile?: 'balanced' | 'frontier' | 'operations';
 }
 
 async function runAutomation(automation: {
@@ -556,7 +550,7 @@ async function runAutomation(automation: {
 }
 
 app.post('/api/chat', async (req: Request, res: Response) => {
-  const { messages, autonomyMode = 'cautious' } = req.body as ChatRequest;
+  const { messages, autonomyMode = 'cautious', modelProfile = 'balanced' } = req.body as ChatRequest;
 
   if (!messages || !Array.isArray(messages)) {
     res.status(400).json({ error: 'Invalid request: messages array required' });
@@ -574,6 +568,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
   };
 
   try {
+    const { client, route } = getChatClient(modelProfile);
     const anthropicMessages: Anthropic.MessageParam[] = messages.map(m => ({
       role: m.role,
       content: m.content,
@@ -584,7 +579,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
 
     while (continueLoop) {
       const stream = client.messages.stream({
-        model: MODELS.primary,
+        model: route.model,
         max_tokens: 8000,
         system: buildSystemPrompt(autonomyMode),
         tools: NEXUS_TOOLS,
@@ -713,16 +708,14 @@ app.post('/api/title', async (req: Request, res: Response) => {
       .map((m) => `${m.role === 'user' ? 'User' : 'Nexus'}: ${m.content.slice(0, 300)}`)
       .join('\n');
 
-    const response = await client.messages.create({
-      model: MODELS.utility,
-      max_tokens: 20,
-      system: 'Return ONLY a conversation title: 3-6 words, no quotes, no ending punctuation. Nothing else.',
-      messages: [{ role: 'user', content: `Title this AI coworker conversation:\n${excerpt}` }],
-    });
+    const title = (await generateText(
+      'utility',
+      'Return ONLY a conversation title: 3-6 words, no quotes, no ending punctuation. Nothing else.',
+      [{ role: 'user', content: `Title this AI coworker conversation:\n${excerpt}` }],
+      20
+    )).trim().slice(0, 60) || 'New conversation';
 
-    const block = response.content[0];
-    const title = block.type === 'text' ? block.text.trim().slice(0, 60) : 'New conversation';
-    res.json({ title, model: MODELS.utility });
+    res.json({ title, model: getUtilityModelConfig().model });
   } catch {
     const fallback = messages[0]?.content?.slice(0, 45) || 'New conversation';
     res.json({ title: fallback });
@@ -745,16 +738,14 @@ app.post('/api/summarize', async (req: Request, res: Response) => {
       .map((m) => `${m.role === 'user' ? 'User' : 'Nexus'}: ${m.content.slice(0, 200)}`)
       .join('\n');
 
-    const response = await client.messages.create({
-      model: MODELS.utility,
-      max_tokens: 40,
-      system: 'Return ONE short sentence (max 12 words) summarising the outcome of this conversation. No quotes.',
-      messages: [{ role: 'user', content: text }],
-    });
+    const summary = await generateText(
+      'utility',
+      'Return ONE short sentence (max 12 words) summarising the outcome of this conversation. No quotes.',
+      [{ role: 'user', content: text }],
+      40
+    );
 
-    const block = response.content[0];
-    const summary = block.type === 'text' ? block.text.trim() : '';
-    res.json({ summary, model: MODELS.utility });
+    res.json({ summary, model: getUtilityModelConfig().model });
   } catch {
     res.json({ summary: '' });
   }
@@ -802,7 +793,13 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
     service: 'nexus-by-purple-orange-ai',
-    models: MODELS,
+    models: {
+      balanced: getChatModelConfig('balanced').model,
+      frontier: getChatModelConfig('frontier').model,
+      operations: getChatModelConfig('operations').model,
+      utility: getUtilityModelConfig().model,
+    },
+    model_routing: getModelRoutingStatus(),
     integrations: getIntegrationStatus(),
     timestamp: new Date().toISOString(),
   });
