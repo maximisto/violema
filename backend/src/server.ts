@@ -568,7 +568,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
   };
 
   try {
-    const { client, route } = getChatClient(modelProfile);
+    const { client, executingRoute, requestedRoute, fallbackApplied } = getChatClient(modelProfile);
     const anthropicMessages: Anthropic.MessageParam[] = messages.map(m => ({
       role: m.role,
       content: m.content,
@@ -579,7 +579,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
 
     while (continueLoop) {
       const stream = client.messages.stream({
-        model: route.model,
+        model: executingRoute.model,
         max_tokens: 8000,
         system: buildSystemPrompt(autonomyMode),
         tools: NEXUS_TOOLS,
@@ -800,6 +800,13 @@ app.get('/api/health', (_req: Request, res: Response) => {
       utility: getUtilityModelConfig().model,
     },
     model_routing: getModelRoutingStatus(),
+    chat_execution: {
+      balanced: getChatClient('balanced').executingRoute.model,
+      frontier: getChatClient('frontier').executingRoute.model,
+      operations_requested: getChatClient('operations').requestedRoute.model,
+      operations_executed: getChatClient('operations').executingRoute.model,
+      operations_fallback: getChatClient('operations').fallbackApplied,
+    },
     integrations: getIntegrationStatus(),
     timestamp: new Date().toISOString(),
   });

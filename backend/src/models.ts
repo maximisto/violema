@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages/messages';
 
-type Provider = 'anthropic' | 'minimax' | 'openai' | 'mistral';
+type Provider = 'anthropic' | 'minimax' | 'openai' | 'openrouter' | 'mistral';
 type TextProfile = 'balanced' | 'frontier' | 'operations' | 'utility';
 type EmbeddingProfile = 'memory';
 
@@ -38,10 +38,10 @@ function getTextRoute(profile: TextProfile): ModelRoute {
       baseUrl: env('ANTHROPIC_BASE_URL'),
     },
     operations: {
-      provider: 'minimax',
-      model: 'MiniMax-M2.5',
-      apiKeyEnv: 'MINIMAX_API_KEY',
-      baseUrl: env('MINIMAX_ANTHROPIC_BASE_URL') || 'https://api.minimax.io/anthropic',
+      provider: 'openrouter',
+      model: 'minimax:minimax-2.7',
+      apiKeyEnv: 'OPENROUTER_API_KEY',
+      baseUrl: env('OPENROUTER_BASE_URL') || 'https://openrouter.ai/api/v1',
     },
     utility: {
       provider: 'openai',
@@ -107,12 +107,16 @@ export function getModelRoutingStatus() {
   const memory = getEmbeddingRoute('memory');
 
   return {
-    balanced: { provider: balanced.provider, model: balanced.model, configured: Boolean(env(balanced.apiKeyEnv)) },
-    frontier: { provider: frontier.provider, model: frontier.model, configured: Boolean(env(frontier.apiKeyEnv)) },
-    operations: { provider: operations.provider, model: operations.model, configured: Boolean(env(operations.apiKeyEnv)) },
-    utility: { provider: utility.provider, model: utility.model, configured: Boolean(env(utility.apiKeyEnv)) },
-    memory: { provider: memory.provider, model: memory.model, configured: Boolean(env(memory.apiKeyEnv)) },
+    balanced: { provider: balanced.provider, model: balanced.model, configured: Boolean(env(balanced.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(balanced.provider) },
+    frontier: { provider: frontier.provider, model: frontier.model, configured: Boolean(env(frontier.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(frontier.provider) },
+    operations: { provider: operations.provider, model: operations.model, configured: Boolean(env(operations.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(operations.provider) },
+    utility: { provider: utility.provider, model: utility.model, configured: Boolean(env(utility.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(utility.provider) },
+    memory: { provider: memory.provider, model: memory.model, configured: Boolean(env(memory.apiKeyEnv)), tool_loop_compatible: false },
   };
+}
+
+function isToolLoopCompatible(provider: Provider): boolean {
+  return provider === 'anthropic' || provider === 'minimax';
 }
 
 function anthropicTextFromResponse(response: { content: Array<{ type: string; text?: string }> }): string {
@@ -124,12 +128,19 @@ function anthropicTextFromResponse(response: { content: Array<{ type: string; te
 }
 
 async function generateWithOpenAI(route: ModelRoute, system: string, messages: MessageParam[], maxTokens: number) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${requireEnv(route.apiKeyEnv)}`,
+  };
+
+  if (route.provider === 'openrouter') {
+    headers['HTTP-Referer'] = env('OPENROUTER_SITE_URL') || 'https://nexus.purpleorange.io';
+    headers['X-Title'] = env('OPENROUTER_APP_NAME') || 'Nexus';
+  }
+
   const response = await fetch(`${route.baseUrl}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${requireEnv(route.apiKeyEnv)}`,
-    },
+    headers,
     body: JSON.stringify({
       model: route.model,
       max_completion_tokens: maxTokens,
@@ -179,7 +190,7 @@ async function generateWithAnthropicLike(profile: TextProfile, system: string, m
 export async function generateText(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number) {
   const route = getTextRoute(profile);
 
-  if (route.provider === 'openai') {
+  if (route.provider === 'openai' || route.provider === 'openrouter') {
     return generateWithOpenAI(route, system, messages, maxTokens);
   }
 
@@ -191,7 +202,24 @@ export async function generateText(profile: TextProfile, system: string, message
 }
 
 export function getChatClient(profile: 'balanced' | 'frontier' | 'operations' = 'balanced') {
-  return getAnthropicCompatibleClient(profile);
+  const requestedRoute = getTextRoute(profile);
+  if (isToolLoopCompatible(requestedRoute.provider)) {
+    const resolved = getAnthropicCompatibleClient(profile);
+    return {
+      ...resolved,
+      requestedRoute,
+      executingRoute: resolved.route,
+      fallbackApplied: false,
+    };
+  }
+
+  const resolved = getAnthropicCompatibleClient('balanced');
+  return {
+    ...resolved,
+    requestedRoute,
+    executingRoute: resolved.route,
+    fallbackApplied: true,
+  };
 }
 
 export async function createMemoryEmbeddings(input: string | string[]) {
