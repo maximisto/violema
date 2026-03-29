@@ -142,6 +142,7 @@ interface DashboardTaskItem {
 }
 
 interface AutomationEditorDraft {
+  mode: 'create' | 'edit';
   id: string;
   name: string;
   schedule: string;
@@ -570,6 +571,7 @@ export default function Dashboard() {
   const handleAutomationEdit = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
     setAutomationEditor({
+      mode: 'edit',
       id: task.automationId,
       name: task.title,
       schedule: task.schedule || task.time,
@@ -581,6 +583,20 @@ export default function Dashboard() {
     });
   }, []);
 
+  const handleAutomationCreate = useCallback(() => {
+    setAutomationEditor({
+      mode: 'create',
+      id: `draft-${Date.now()}`,
+      name: '',
+      schedule: 'every monday at 9am',
+      description: '',
+      notify: '#ops-alerts',
+      condition: '',
+      actionsText: 'Query Stripe failed payments\nGenerate summary\nSend alert to Slack',
+      destinationType: 'slack',
+    });
+  }, []);
+
   const handleAutomationEditorSave = useCallback(async () => {
     if (!automationEditor) return;
     setActionBusy('save');
@@ -589,8 +605,10 @@ export default function Dashboard() {
         .split('\n')
         .map((item) => item.trim())
         .filter(Boolean);
-      const response = await fetch(`/api/automations/${automationEditor.id}`, {
-        method: 'PATCH',
+      const response = await fetch(
+        automationEditor.mode === 'create' ? '/api/automations' : `/api/automations/${automationEditor.id}`,
+        {
+        method: automationEditor.mode === 'create' ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: automationEditor.name.trim(),
@@ -602,11 +620,15 @@ export default function Dashboard() {
         }),
       });
       if (!response.ok) throw new Error('Could not save automation');
+      const payload = await response.json() as { item?: { id?: string } };
       await refreshAutomations();
+      if (automationEditor.mode === 'create' && payload.item?.id) {
+        setSelectedTaskId(payload.item.id);
+      }
       setAutomationEditor(null);
-      showNotice('success', `Updated "${automationEditor.name.trim() || 'automation'}"`);
+      showNotice('success', `${automationEditor.mode === 'create' ? 'Created' : 'Updated'} "${automationEditor.name.trim() || 'automation'}"`);
     } catch {
-      showNotice('error', 'Could not save automation changes');
+      showNotice('error', automationEditor.mode === 'create' ? 'Could not create automation' : 'Could not save automation changes');
     } finally {
       setActionBusy(null);
     }
@@ -1238,7 +1260,10 @@ export default function Dashboard() {
               </div>
 
               <div className="p-3 border-t border-navy-800/80 bg-gradient-to-r from-navy-950/35 via-violet-500/6 to-navy-950/35">
-                <button className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-2xl border border-dashed border-violet-500/25 text-slate-300 hover:border-violet-400/50 hover:text-white text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 bg-navy-950/30 shadow-[0_8px_24px_rgba(2,6,23,0.12)]">
+                <button
+                  onClick={handleAutomationCreate}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-2xl border border-dashed border-violet-500/25 text-slate-300 hover:border-violet-400/50 hover:text-white text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 bg-navy-950/30 shadow-[0_8px_24px_rgba(2,6,23,0.12)]"
+                >
                   <Plus className="w-4 h-4" />
                   Schedule automation
                 </button>
@@ -1263,7 +1288,9 @@ export default function Dashboard() {
             <div className="flex items-center justify-between border-b border-navy-800/80 px-5 py-4">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">Automation editor</p>
-                <h3 className="mt-1 text-lg font-semibold text-white">Edit workflow</h3>
+                <h3 className="mt-1 text-lg font-semibold text-white">
+                  {automationEditor.mode === 'create' ? 'Create workflow' : 'Edit workflow'}
+                </h3>
               </div>
               <button
                 onClick={() => setAutomationEditor(null)}

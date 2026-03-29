@@ -3,8 +3,10 @@ import { ArrowUpRight, CreditCard, Gift, Sparkles } from 'lucide-react';
 import {
   buildReferralMessage,
   buildTopUpRequest,
+  getSuggestedTopUpOfferId,
   formatCredits,
   getCreditRecommendation,
+  openBillingCheckout,
   useCreditSnapshot,
 } from '../lib/credits';
 
@@ -30,6 +32,32 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
     }
   }
 
+  async function handleUpgrade() {
+    try {
+      const upgraded = await openBillingCheckout({
+        kind: 'subscription',
+        planId: snapshot.planName === 'Starter' ? 'pro' : 'team',
+      });
+      if (upgraded) return;
+    } catch {
+      // fall through to pricing
+    }
+    window.location.assign('/#pricing');
+  }
+
+  async function handleTopUp() {
+    try {
+      const started = await openBillingCheckout({
+        kind: 'top-up',
+        offerId: getSuggestedTopUpOfferId(snapshot),
+      });
+      if (started) return;
+    } catch {
+      // fall through to copy
+    }
+    void copy(buildTopUpRequest(snapshot), 'Top-up request');
+  }
+
   return (
     <div className={`ui-panel border ${compact ? 'px-3 py-2.5 sm:px-3.5' : 'px-3.5 py-3 sm:px-4'} ${runwayClass}`}>
       <div className={`flex items-start gap-2.5 ${compact ? 'sm:gap-3' : 'sm:gap-3'}`}>
@@ -52,7 +80,7 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             <button
               type="button"
-              onClick={() => copy(buildTopUpRequest(snapshot), 'Top-up request')}
+              onClick={() => { void handleTopUp(); }}
               className="ui-pill text-[9px] sm:text-[10px]"
             >
               <CreditCard className="h-3 w-3" />
@@ -60,7 +88,7 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
             </button>
             <button
               type="button"
-              onClick={() => window.location.assign('/#pricing')}
+              onClick={() => { void handleUpgrade(); }}
               className="ui-pill text-[9px] sm:text-[10px]"
             >
               <ArrowUpRight className="h-3 w-3" />

@@ -1548,6 +1548,37 @@ app.get('/api/automations', (_req: Request, res: Response) => {
   res.json({ items: listAutomations() });
 });
 
+app.post('/api/automations', (req: Request, res: Response) => {
+  const body = req.body as {
+    name?: string;
+    description?: string;
+    schedule?: string;
+    actions?: unknown[];
+    notify?: string | null;
+    condition?: string | null;
+  };
+
+  if (!body.name || !body.schedule || !Array.isArray(body.actions) || body.actions.length === 0) {
+    res.status(400).json({ error: 'name, schedule, and at least one action are required' });
+    return;
+  }
+
+  try {
+    const record = createAutomation({
+      name: body.name.trim(),
+      description: typeof body.description === 'string' ? body.description.trim() || undefined : undefined,
+      schedule: body.schedule.trim(),
+      actions: body.actions.map((item) => String(item).trim()).filter(Boolean),
+      notify: typeof body.notify === 'string' ? body.notify.trim() || undefined : undefined,
+      condition: typeof body.condition === 'string' ? body.condition.trim() || undefined : undefined,
+    }, runAutomation);
+
+    res.status(201).json({ ok: true, item: record });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not create automation' });
+  }
+});
+
 app.post('/api/automations/:id/run', (req: Request, res: Response) => {
   const record = triggerAutomationNow(req.params.id, runAutomation);
   if (!record) {

@@ -4,7 +4,7 @@ import {
   Copy, Check, Clock, Brain, ThumbsUp, ThumbsDown, Zap, Shield, Eye, RefreshCw, Sparkles,
 } from 'lucide-react';
 import type { Message, ToolCall, SSEEvent, AutonomyMode } from '../types';
-import { fetchCreditEstimate, formatCredits, useCreditSnapshot } from '../lib/credits';
+import { fetchCreditEstimate, formatCredits, getSuggestedTopUpOfferId, openBillingCheckout, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import BillingGateBar from './BillingGateBar';
 
@@ -939,6 +939,32 @@ export default function ChatInterface({
     );
   }, []);
 
+  const handleUpgradeCheckout = useCallback(async () => {
+    try {
+      const opened = await openBillingCheckout({
+        kind: 'subscription',
+        planId: snapshot.planName === 'Starter' ? 'pro' : 'team',
+      });
+      if (opened) return;
+    } catch {
+      // fall through
+    }
+    window.location.assign('/#pricing');
+  }, [snapshot.planName]);
+
+  const handleTopUpCheckout = useCallback(async () => {
+    try {
+      const opened = await openBillingCheckout({
+        kind: 'top-up',
+        offerId: getSuggestedTopUpOfferId(snapshot),
+      });
+      if (opened) return;
+    } catch {
+      // fall through
+    }
+    window.location.assign('/#pricing');
+  }, [snapshot]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -1108,16 +1134,16 @@ export default function ChatInterface({
             {isCreditError && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <button
-                  onClick={() => window.location.assign('/#pricing')}
+                  onClick={() => { void handleUpgradeCheckout(); }}
                   className="rounded-lg border border-red-800/50 px-2.5 py-1.5 text-[11px] text-red-200 hover:bg-red-900/30 transition-colors"
                 >
                   Upgrade plan
                 </button>
                 <button
-                  onClick={() => window.location.assign('/dashboard')}
+                  onClick={() => { void handleTopUpCheckout(); }}
                   className="rounded-lg border border-red-800/50 px-2.5 py-1.5 text-[11px] text-red-200 hover:bg-red-900/30 transition-colors"
                 >
-                  Open billing
+                  Top up credits
                 </button>
               </div>
             )}
@@ -1165,13 +1191,22 @@ export default function ChatInterface({
                   )}
                 </div>
                 {(draftWillPressureCredits || lowRunway) && (
-                  <button
-                    type="button"
-                    onClick={() => window.location.assign('/#pricing')}
-                    className="text-[11px] font-medium text-cyan-300 transition-colors hover:text-cyan-200"
-                  >
-                    Upgrade or top up
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { void handleTopUpCheckout(); }}
+                      className="text-[11px] font-medium text-cyan-300 transition-colors hover:text-cyan-200"
+                    >
+                      Top up
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { void handleUpgradeCheckout(); }}
+                      className="text-[11px] font-medium text-violet-300 transition-colors hover:text-violet-200"
+                    >
+                      Upgrade
+                    </button>
+                  </div>
                 )}
               </div>
             )}

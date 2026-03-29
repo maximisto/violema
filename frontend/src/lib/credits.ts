@@ -333,3 +333,12 @@ export async function createBillingCheckout(input: { kind: 'subscription' | 'top
     session?: { checkoutUrl: string; provider: 'stripe' | 'mock'; status: 'ready' | 'mocked' };
   }>;
 }
+
+export async function openBillingCheckout(input: { kind: 'subscription' | 'top-up'; planId?: 'starter' | 'pro' | 'team'; offerId?: string }) {
+  const result = await createBillingCheckout(input);
+  if (result.session?.checkoutUrl) {
+    window.location.assign(result.session.checkoutUrl);
+    return true;
+  }
+  return false;
+}
