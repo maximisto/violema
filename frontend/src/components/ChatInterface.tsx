@@ -708,7 +708,7 @@ export default function ChatInterface({
         </div>
       </div>
 
-      <div className="px-3 sm:px-6 pt-2.5 sm:pt-3">
+      <div className="px-3 sm:px-6 pt-2 sm:pt-3">
         <div className="max-w-3xl mx-auto">
           <BillingGateBar />
         </div>
@@ -721,23 +721,23 @@ export default function ChatInterface({
         className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-6"
       >
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center max-w-xl mx-auto">
-            <div className="w-16 h-16 bg-gradient-to-br from-violet-500 to-violet-700 rounded-2xl flex items-center justify-center shadow-glow-violet mb-6">
-              <span className="text-2xl font-bold text-white">N</span>
+          <div className="flex flex-col items-center justify-center h-full text-center max-w-xl mx-auto py-6 sm:py-10">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-violet-500 to-violet-700 rounded-2xl flex items-center justify-center shadow-glow-violet mb-5 sm:mb-6">
+              <span className="text-xl sm:text-2xl font-bold text-white">N</span>
             </div>
-            <h2 className="text-2xl font-bold text-white mb-1">Hey, I'm Nexus</h2>
-            <p className="text-[11px] text-violet-400/60 font-medium tracking-widest uppercase mb-3">by Purple Orange AI</p>
-            <p className="text-slate-400 mb-2 leading-relaxed">
+            <h2 className="text-[1.65rem] sm:text-2xl font-bold text-white mb-1">Hey, I'm Nexus</h2>
+            <p className="text-[10px] sm:text-[11px] text-violet-400/60 font-medium tracking-[0.28em] uppercase mb-3">by Purple Orange AI</p>
+            <p className="text-slate-400 mb-2 leading-relaxed max-w-lg">
               Your AI coworker — running in{' '}
               <span className={`font-semibold ${modeConfig.color}`}>{modeConfig.label} mode</span>.
             </p>
-            <p className="text-slate-500 text-sm mb-8">{modeConfig.description}. Switch modes in the sidebar.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+            <p className="text-slate-500 text-sm mb-6 sm:mb-8">{modeConfig.description}. Switch modes in the sidebar.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 w-full">
               {suggestions.map((suggestion, i) => (
                 <button
                   key={i}
                   onClick={() => sendMessage(suggestion)}
-                  className="text-left px-4 py-3 bg-navy-800/60 border border-navy-700/60 hover:border-violet-600/50 hover:bg-navy-700/60 rounded-xl text-sm text-slate-400 hover:text-slate-200 transition-all duration-200"
+                  className="text-left px-4 py-3 bg-navy-800/60 border border-navy-700/60 hover:border-violet-600/50 hover:bg-navy-700/60 rounded-2xl text-sm text-slate-400 hover:text-slate-200 transition-all duration-200 leading-snug"
                 >
                   {suggestion}
                 </button>
@@ -817,7 +817,7 @@ export default function ChatInterface({
       )}
 
       {/* Input */}
-      <div className="px-3 sm:px-6 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2 border-t border-navy-800/60">
+      <div className="px-3 sm:px-6 pb-[calc(0.8rem+env(safe-area-inset-bottom))] pt-2 border-t border-navy-800/60">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-end gap-2.5 bg-navy-800/60 border border-navy-700/60 focus-within:border-violet-600/50 rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 transition-all duration-200">
             <textarea
@@ -852,7 +852,7 @@ export default function ChatInterface({
               </button>
             )}
           </div>
-          <p className="text-center text-xs text-slate-700 mt-2">
+          <p className="text-center text-[11px] text-slate-700 mt-2 leading-tight">
             Nexus can make mistakes. Verify important information.
             <kbd className="ml-2 text-[10px] bg-navy-800 border border-navy-700 px-1.5 py-0.5 rounded font-mono">
               ⌘K

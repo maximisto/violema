@@ -27,7 +27,7 @@ function Stat({
   );
 }
 
-export default function CreditSurface() {
+export default function CreditSurface({ compact = false }: { compact?: boolean }) {
   const { snapshot, isLoading } = useCreditSnapshot();
   const { items: recentUsage, isLoading: usageLoading } = useRecentCreditUsage();
   const [actionState, setActionState] = useState<string | null>(null);
@@ -79,7 +79,7 @@ export default function CreditSurface() {
   }
 
   return (
-    <section className="rounded-[1.3rem] border border-violet-500/15 bg-gradient-to-br from-navy-900/90 via-navy-900/75 to-navy-950/95 p-3.5 sm:p-4 shadow-[0_18px_42px_rgba(2,6,23,0.24)] overflow-hidden">
+    <section className={`rounded-[1.3rem] border border-violet-500/15 bg-gradient-to-br from-navy-900/90 via-navy-900/75 to-navy-950/95 ${compact ? 'p-3' : 'p-3.5 sm:p-4'} shadow-[0_18px_42px_rgba(2,6,23,0.24)] overflow-hidden`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/15 bg-violet-500/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300">
@@ -113,13 +113,13 @@ export default function CreditSurface() {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-2">
+      <div className={`mt-4 grid grid-cols-1 ${compact ? 'gap-1.5' : 'gap-2'}`}>
         <Stat label="Task cost" value={`${formatCredits(snapshot.estimatedTaskCost)} credits`} />
         <Stat label="Auto burn" value={`${formatCredits(snapshot.automationBurnMonthly)}/mo`} />
         <Stat label="Top up" value={`+${formatCredits(snapshot.topUpSuggestion)} credits`} />
       </div>
 
-      <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 p-3">
+      <div className={`mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 ${compact ? 'p-2.5' : 'p-3'}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <History className="w-3 h-3" />
@@ -129,15 +129,15 @@ export default function CreditSurface() {
             {usageLoading ? 'loading' : 'live preview'}
           </span>
         </div>
-        <div className="mt-2 space-y-2">
-          {recentUsage.slice(0, 3).map((item) => (
+        <div className={`mt-2 ${compact ? 'space-y-1.5' : 'space-y-2'}`}>
+          {recentUsage.slice(0, compact ? 2 : 3).map((item) => (
             <div
               key={item.id}
-              className="flex items-start justify-between gap-3 rounded-xl border border-navy-700/60 bg-navy-900/45 px-3 py-2"
+              className={`flex items-start justify-between gap-3 rounded-xl border border-navy-700/60 bg-navy-900/45 ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}
             >
               <div className="min-w-0">
-                <p className="text-sm font-medium text-white">{item.title}</p>
-                <p className="text-[11px] text-slate-500">{item.detail}</p>
+                <p className={`${compact ? 'text-[13px]' : 'text-sm'} font-medium text-white leading-snug`}>{item.title}</p>
+                <p className="text-[10px] sm:text-[11px] text-slate-500">{item.detail}</p>
               </div>
               <div className="text-right flex-shrink-0">
                 <p
@@ -158,11 +158,11 @@ export default function CreditSurface() {
         </div>
       </div>
 
-      <div className="mt-3 rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
+      <div className={`mt-3 rounded-2xl border border-violet-500/15 bg-violet-500/6 ${compact ? 'p-2.5' : 'p-3'}`}>
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Billing insight</p>
-            <p className="mt-1 text-sm text-white">
+            <p className={`${compact ? 'mt-1 text-[13px]' : 'mt-1 text-sm'} text-white leading-snug`}>
               Burn is roughly {formatCredits(Math.round(burnRate))} credits/day.
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500">
@@ -181,7 +181,7 @@ export default function CreditSurface() {
               Referral grant: +{formatCredits(snapshot.referralBonus)} credits.
             </p>
           </div>
-          <ChevronRight className="w-4 h-4 text-violet-300/70 flex-shrink-0" />
+          {!compact && <ChevronRight className="w-4 h-4 text-violet-300/70 flex-shrink-0" />}
         </div>
       </div>
 
@@ -212,7 +212,7 @@ export default function CreditSurface() {
         </button>
       </div>
 
-      <div className="mt-2 flex items-center justify-between gap-3 px-1">
+      <div className={`mt-2 flex items-center justify-between gap-3 ${compact ? 'px-0.5' : 'px-1'}`}>
         <p className="text-[10px] text-slate-600">
           {snapshot.source === 'api' ? 'Live usage' : 'Preview data'} · workspace-aware billing is ready for a live API.
         </p>

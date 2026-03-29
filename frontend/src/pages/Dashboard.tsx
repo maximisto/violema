@@ -307,24 +307,24 @@ export default function Dashboard() {
           className={`${
             isMobileSidebar
               ? 'absolute inset-y-0 left-0 z-40 w-[18rem] max-w-[88vw] shadow-[0_24px_64px_rgba(2,6,23,0.55)]'
-              : 'w-60 xl:w-64 flex-shrink-0'
-          } bg-navy-900 border-r border-navy-800 flex flex-col sidebar-enter`}
+              : 'w-[15.25rem] xl:w-[15.75rem] flex-shrink-0'
+          } bg-navy-900/98 border-r border-navy-800 flex flex-col sidebar-enter backdrop-blur-sm`}
         >
           {/* Logo */}
-          <div className="flex items-center gap-2 px-4 py-4 border-b border-navy-800">
+          <div className="flex items-center gap-2 px-3.5 py-3 border-b border-navy-800">
             <button
               onClick={() => navigate('/')}
               className="flex items-center gap-3.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-1"
               aria-label="Go to Nexus home"
             >
-              <div className="w-9 h-9 overflow-hidden flex-shrink-0">
+              <div className="w-8 h-8 overflow-hidden flex-shrink-0">
                 <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
               </div>
-              <div className="brand-lockup w-[8.95rem]">
-                <span className="brand-wordmark text-[0.98rem]">
+              <div className="brand-lockup w-[8rem]">
+                <span className="brand-wordmark text-[0.9rem]">
                   NEXUS
                 </span>
-                <span className="brand-submark text-[7.9px]">
+                <span className="brand-submark text-[7.2px]">
                   by Purple Orange AI
                 </span>
               </div>
@@ -342,14 +342,14 @@ export default function Dashboard() {
           </div>
 
           <div className="px-2.5 pt-2.5">
-            <CreditSurface />
+            <CreditSurface compact={isMobileSidebar} />
           </div>
 
           {/* New chat + Mode selector */}
           <div className="px-2.5 pt-2.5 pb-2 space-y-2">
             <button
               onClick={handleNewChat}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors shadow-glow-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors shadow-glow-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
               <Plus className="w-4 h-4" />
               New conversation
@@ -408,18 +408,18 @@ export default function Dashboard() {
                     setActiveConvoId(convo.id);
                     if (isMobileSidebar) setSidebarOpen(false);
                   }}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-all ${
+                  className={`w-full text-left px-3 py-2 rounded-xl transition-all ${
                     activeConvoId === convo.id
-                      ? 'bg-navy-800 text-white'
-                      : 'text-slate-400 hover:bg-navy-800/60 hover:text-slate-200'
+                      ? 'bg-navy-800/95 text-white border border-navy-700/70'
+                      : 'text-slate-400 border border-transparent hover:bg-navy-800/60 hover:text-slate-200 hover:border-navy-700/60'
                   }`}
                 >
                   <div className="flex items-start gap-2 pr-6">
                     <MessageSquare className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 opacity-50" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate leading-snug">{convo.title}</p>
+                      <p className="text-[13px] font-medium truncate leading-snug">{convo.title}</p>
                       {convo.lastMessage && (
-                        <p className="text-[11px] text-slate-500 truncate mt-0.5 leading-snug">
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5 leading-snug">
                           {convo.lastMessage}
                         </p>
                       )}
@@ -463,17 +463,17 @@ export default function Dashboard() {
           </div>
 
           {/* User / settings */}
-          <div className="border-t border-navy-800 px-2.5 py-2.5 space-y-1">
+          <div className="border-t border-navy-800 px-2.5 py-2 space-y-1">
             <button
               onClick={() => {/* settings panel placeholder */}}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
             >
               <Settings className="w-4 h-4" />
               Settings
             </button>
             <button
               onClick={() => navigate('/')}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
             >
               <LogOut className="w-4 h-4" />
               Back to home
@@ -506,7 +506,7 @@ export default function Dashboard() {
           )}
 
           <div className="flex-1 min-w-0">
-            <h1 className="text-sm font-semibold text-white truncate">{convoTitle}</h1>
+            <h1 className="text-[13px] sm:text-sm font-semibold text-white truncate">{convoTitle}</h1>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               <div className="w-1.5 h-1.5 bg-green-400 rounded-full" />
               <span className="text-xs text-slate-500">Nexus ready</span>
