@@ -34,16 +34,19 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <button
-            className="flex items-center gap-2.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-lg"
+            className="flex items-center gap-3.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-2"
             onClick={() => navigate('/')}
             aria-label="Nexus home"
           >
-            <div className="w-8 h-8 rounded-full bg-white/95 shadow-glow-violet overflow-hidden flex-shrink-0 p-0.5">
+            <div className="w-9 h-9 rounded-full bg-white/95 shadow-glow-violet overflow-hidden flex-shrink-0 p-0.5 ring-1 ring-violet-300/25">
               <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
             </div>
-            <div className="flex flex-col">
-              <span className="text-white font-bold text-base leading-tight tracking-tight">Nexus</span>
-              <span className="text-[9px] text-violet-400/70 leading-none font-medium tracking-widest uppercase">
+            <div className="flex flex-col leading-none">
+              <span className="brand-wordmark text-[1.05rem] sm:text-[1.22rem]">
+                NEXUS
+              </span>
+              <span className="brand-submark mt-1 inline-flex items-center gap-1.5 text-[10px] sm:text-[11px]">
+                <span className="brand-submark-dot" aria-hidden="true" />
                 by Purple Orange AI
               </span>
             </div>

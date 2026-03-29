@@ -268,17 +268,18 @@ export default function Dashboard() {
           <div className="flex items-center gap-2 px-4 py-4 border-b border-navy-800">
             <button
               onClick={() => navigate('/')}
-              className="flex items-center gap-2 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-lg"
+              className="flex items-center gap-3 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-1"
               aria-label="Go to Nexus home"
             >
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-glow-violet">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-orange-400 flex items-center justify-center shadow-glow-violet ring-1 ring-violet-300/20">
                 <Zap className="w-4 h-4 text-white" />
               </div>
-              <div className="flex flex-col">
-                <span className="font-bold text-white text-sm leading-tight group-hover:text-violet-300 transition-colors">
-                  Nexus
+              <div className="flex flex-col leading-none">
+                <span className="brand-wordmark text-[0.95rem]">
+                  NEXUS
                 </span>
-                <span className="text-[8px] text-violet-400/60 leading-none font-medium tracking-widest uppercase">
+                <span className="brand-submark mt-1 inline-flex items-center gap-1.5 text-[9px]">
+                  <span className="brand-submark-dot" aria-hidden="true" />
                   by Purple Orange AI
                 </span>
               </div>
