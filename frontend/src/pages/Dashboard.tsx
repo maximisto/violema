@@ -69,6 +69,42 @@ const SAMPLE_TASKS = [
   { id: 4, title: 'Anomaly alert: CAC spike', status: 'alert', time: '2h ago', icon: AlertCircle },
 ];
 
+type DashboardTaskStatus = 'scheduled' | 'complete' | 'alert';
+
+interface PlatformTaskRecord {
+  id: string;
+  title: string;
+  description?: string;
+  status: string;
+  kind: string;
+  updatedAt: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface PlatformTaskRunRecord {
+  id: string;
+  taskId: string;
+  status: string;
+  modelTier: string;
+  agentRole: string;
+  startedAt: string;
+  finishedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface DashboardTaskItem {
+  id: string | number;
+  title: string;
+  status: DashboardTaskStatus;
+  time: string;
+  icon: typeof Clock;
+  description?: string;
+  source: 'sample' | 'live';
+  modelTier?: string;
+  agentRole?: string;
+  runStatus?: string;
+}
+
 // ─── Mode config (single source of truth) ────────────────────────────────────
 
 const MODE_BUTTONS = [
@@ -114,6 +150,22 @@ function formatTime(date: Date) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function formatRelativeTimeFromIso(iso: string) {
+  return formatTime(new Date(iso));
+}
+
+function mapPlatformStatus(status: string): DashboardTaskStatus {
+  if (status === 'failed' || status === 'blocked' || status === 'canceled') return 'alert';
+  if (status === 'completed' || status === 'succeeded') return 'complete';
+  return 'scheduled';
+}
+
+function mapTaskIcon(status: DashboardTaskStatus) {
+  if (status === 'alert') return AlertCircle;
+  if (status === 'complete') return CheckSquare;
+  return Clock;
 }
 
 const getTaskStatusMeta = (status: 'scheduled' | 'complete' | 'alert') => {
@@ -186,12 +238,14 @@ export default function Dashboard() {
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
   const [taskPanelOpen, setTaskPanelOpen] = useState(false); // hidden by default on mobile feel
-  const [selectedTaskId, setSelectedTaskId] = useState<number>(SAMPLE_TASKS[0]?.id ?? 0);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | number>(SAMPLE_TASKS[0]?.id ?? 0);
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
   const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [autonomyMode, setAutonomyMode] = useState<AutonomyMode>('cautious');
   const [searchQuery, setSearchQuery] = useState('');
+  const [platformTasks, setPlatformTasks] = useState<DashboardTaskItem[]>([]);
+  const [automationSource, setAutomationSource] = useState<'sample' | 'live'>('sample');
   const searchRef = useRef<HTMLInputElement>(null);
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
@@ -209,6 +263,72 @@ export default function Dashboard() {
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const workspace = resolveWorkspaceContext();
+    const headers = {
+      'X-Workspace-Id': workspace.workspaceId,
+      'X-Workspace-Name': workspace.workspaceName,
+    };
+
+    Promise.all([
+      fetch(`/api/platform/tasks?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
+        headers,
+        signal: controller.signal,
+      }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('tasks')))),
+      fetch(`/api/platform/task-runs?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
+        headers,
+        signal: controller.signal,
+      }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('runs')))),
+    ])
+      .then(([taskPayload, runPayload]) => {
+        const tasks = Array.isArray(taskPayload?.items) ? taskPayload.items as PlatformTaskRecord[] : [];
+        const runs = Array.isArray(runPayload?.items) ? runPayload.items as PlatformTaskRunRecord[] : [];
+        const latestRunByTask = new Map<string, PlatformTaskRunRecord>();
+
+        runs.forEach((run) => {
+          const existing = latestRunByTask.get(run.taskId);
+          const runTime = Date.parse(run.finishedAt || run.startedAt || '');
+          const existingTime = existing ? Date.parse(existing.finishedAt || existing.startedAt || '') : 0;
+          if (!existing || runTime > existingTime) latestRunByTask.set(run.taskId, run);
+        });
+
+        const liveTasks = tasks
+          .slice(0, 12)
+          .map((task) => {
+            const latestRun = latestRunByTask.get(task.id);
+            const status = mapPlatformStatus(latestRun?.status || task.status);
+            return {
+              id: task.id,
+              title: task.title,
+              status,
+              time: formatRelativeTimeFromIso(latestRun?.finishedAt || latestRun?.startedAt || task.updatedAt),
+              icon: mapTaskIcon(status),
+              description: task.description,
+              source: 'live' as const,
+              modelTier: latestRun?.modelTier,
+              agentRole: latestRun?.agentRole,
+              runStatus: latestRun?.status,
+            };
+          });
+
+        if (liveTasks.length > 0) {
+          setPlatformTasks(liveTasks);
+          setAutomationSource('live');
+          setSelectedTaskId((current) => current || liveTasks[0].id);
+        } else {
+          setPlatformTasks([]);
+          setAutomationSource('sample');
+        }
+      })
+      .catch(() => {
+        setPlatformTasks([]);
+        setAutomationSource('sample');
+      });
+
+    return () => controller.abort();
   }, []);
 
   // Close delete confirm on outside activity
@@ -297,21 +417,30 @@ export default function Dashboard() {
       (c.lastMessage ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const taskSummary = SAMPLE_TASKS.reduce(
+  const taskItems: DashboardTaskItem[] = platformTasks.length > 0
+    ? platformTasks
+    : SAMPLE_TASKS.map((task) => ({
+        ...task,
+        status: task.status as DashboardTaskStatus,
+        description: undefined,
+        source: 'sample' as const,
+      }));
+
+  const taskSummary = taskItems.reduce(
     (acc, task) => {
-      acc[task.status as 'scheduled' | 'complete' | 'alert'] += 1;
+      acc[task.status as DashboardTaskStatus] += 1;
       return acc;
     },
     { scheduled: 0, complete: 0, alert: 0 }
   );
-  const selectedTask = SAMPLE_TASKS.find((task) => task.id === selectedTaskId) ?? SAMPLE_TASKS[0];
+  const selectedTask = taskItems.find((task) => task.id === selectedTaskId) ?? taskItems[0];
   const selectedTaskMeta = selectedTask ? getTaskStatusMeta(selectedTask.status as 'scheduled' | 'complete' | 'alert') : null;
 
   useEffect(() => {
-    if (!selectedTask && SAMPLE_TASKS[0]) {
-      setSelectedTaskId(SAMPLE_TASKS[0].id);
+    if (!selectedTask && taskItems[0]) {
+      setSelectedTaskId(taskItems[0].id);
     }
-  }, [selectedTask]);
+  }, [selectedTask, taskItems]);
 
   const ModeSelector = ({ compact = false }: { compact?: boolean }) => (
     <div className={`ui-input-shell flex items-center gap-1 p-1 ${compact ? 'w-full' : ''}`}>
@@ -620,6 +749,27 @@ export default function Dashboard() {
           </button>
         </header>
 
+        {isMobileSidebar && (
+          <div className="border-b border-navy-800/70 bg-navy-950/55 px-3 py-2 backdrop-blur-sm sm:hidden">
+            <div className="mx-auto flex max-w-3xl items-center gap-2">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="ui-button-ghost flex-1 justify-center py-2 text-[11px]"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Conversations
+              </button>
+              <button
+                onClick={() => setTaskPanelOpen(true)}
+                className="ui-button-ghost flex-1 justify-center py-2 text-[11px]"
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+                Automations
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Chat body */}
         <div className="flex-1 flex min-h-0">
           <div className="flex-1 min-w-0">
@@ -705,8 +855,25 @@ export default function Dashboard() {
                       <p className="mt-1 text-slate-200">Review / run / pause</p>
                     </div>
                   </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
+                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                      {selectedTask?.source === 'live' ? 'Live task' : 'Preview task'}
+                    </span>
+                    {selectedTask?.agentRole && (
+                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                        {selectedTask.agentRole}
+                      </span>
+                    )}
+                    {selectedTask?.modelTier && (
+                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                        {selectedTask.modelTier}
+                      </span>
+                    )}
+                  </div>
                   <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
-                    {selectedTask?.status === 'alert'
+                    {selectedTask?.description
+                      ? selectedTask.description
+                      : selectedTask?.status === 'alert'
                       ? 'This automation needs attention. Use the controls below to inspect, pause, or update it before the next run.'
                       : selectedTask?.status === 'complete'
                         ? 'This workflow is running cleanly. Keep it active or copy the pattern into another workflow.'
@@ -727,7 +894,7 @@ export default function Dashboard() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                {SAMPLE_TASKS.map((task) => {
+                {taskItems.map((task) => {
                   const Icon = task.icon;
                   const meta = getTaskStatusMeta(task.status as 'scheduled' | 'complete' | 'alert');
                   const isSelected = selectedTaskId === task.id;

@@ -14,6 +14,7 @@ function renderMarkdown(text: string): string {
     .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-white mt-4 mb-2">$1</h3>')
     .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold text-white mt-5 mb-2">$1</h2>')
     .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-white mt-5 mb-3">$1</h1>')
+    .replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '<figure class="my-4 overflow-hidden rounded-2xl border border-navy-700/70 bg-navy-950/60"><img src="$2" alt="$1" class="w-full object-cover" /><figcaption class="px-3 py-2 text-[11px] text-slate-500">$1</figcaption></figure>')
     .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
     .replace(/\*(.+?)\*/g, '<em class="italic text-slate-200">$1</em>')
     .replace(/```(\w+)?\n([\s\S]+?)```/g, (_, lang, code) => {
@@ -28,6 +29,7 @@ function renderMarkdown(text: string): string {
     .replace(/^\d+\. (.+)$/gm, '<li class="text-slate-300 ml-4 list-decimal">$1</li>')
     .replace(/(<li[^>]*>.*<\/li>\n?)+/g, (m) => `<ul class="list-disc pl-5 my-2 space-y-1">${m}</ul>`)
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-violet-400 hover:text-violet-300 underline underline-offset-2" target="_blank" rel="noopener">$1</a>')
+    .replace(/(?<!["(])(https?:\/\/[^\s<]+?\.(?:png|jpe?g|gif|webp))(?![^<]*>)/gi, '<figure class="my-4 overflow-hidden rounded-2xl border border-navy-700/70 bg-navy-950/60"><img src="$1" alt="Shared image" class="w-full object-cover" /></figure>')
     .replace(/\n\n/g, '</p><p class="mb-3 text-slate-300 leading-relaxed">')
     .replace(/\n/g, '<br />')
     .replace(/^/, '<p class="mb-3 text-slate-300 leading-relaxed">')
