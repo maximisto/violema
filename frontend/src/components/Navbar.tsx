@@ -33,7 +33,7 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-[4.9rem] sm:h-[5.4rem]">
           {/* Logo */}
           <button
-            className="brand-shell flex items-center gap-4 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-2xl px-3 py-2 sm:px-4 sm:py-2.5"
+            className="flex items-center gap-4 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-2xl"
             onClick={() => navigate('/')}
             aria-label="Nexus home"
           >
