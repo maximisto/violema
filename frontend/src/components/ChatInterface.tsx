@@ -4,36 +4,169 @@ import {
   Copy, Check, Clock, Brain, ThumbsUp, ThumbsDown, Zap, Shield, Eye, RefreshCw, Sparkles,
 } from 'lucide-react';
 import type { Message, ToolCall, SSEEvent, AutonomyMode } from '../types';
+import { fetchCreditEstimate, formatCredits, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import BillingGateBar from './BillingGateBar';
 
 // ─── Markdown renderer ───────────────────────────────────────────────────────
 
-function renderMarkdown(text: string): string {
-  return text
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold text-white mt-4 mb-2">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold text-white mt-5 mb-2">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-white mt-5 mb-3">$1</h1>')
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderInlineMarkdown(text: string) {
+  return escapeHtml(text)
     .replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '<figure class="my-4 overflow-hidden rounded-2xl border border-navy-700/70 bg-navy-950/60"><img src="$2" alt="$1" class="w-full object-cover" /><figcaption class="px-3 py-2 text-[11px] text-slate-500">$1</figcaption></figure>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" class="text-violet-400 hover:text-violet-300 underline underline-offset-2" target="_blank" rel="noopener">$1</a>')
+    .replace(/`([^`]+)`/g, '<code class="bg-navy-900 text-violet-300 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>')
     .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
     .replace(/\*(.+?)\*/g, '<em class="italic text-slate-200">$1</em>')
-    .replace(/```(\w+)?\n([\s\S]+?)```/g, (_, lang, code) => {
-      const langLabel = lang ? `<span class="absolute top-2 right-3 text-[10px] text-slate-500 font-mono uppercase tracking-wider">${lang}</span>` : '';
-      return `<div class="relative my-3"><pre class="bg-[#0d1117] border border-navy-700 rounded-xl p-4 overflow-x-auto">${langLabel}<code class="text-cyan-300 text-sm font-mono leading-relaxed">${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre></div>`;
-    })
-    .replace(/`([^`]+)`/g, '<code class="bg-navy-900 text-violet-300 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>')
-    .replace(/^> (.+)$/gm, '<blockquote class="border-l-2 border-violet-500 pl-4 text-slate-400 italic my-2">$1</blockquote>')
-    .replace(/^---$/gm, '<hr class="border-navy-700 my-4" />')
-    .replace(/^- (.+)$/gm, '<li class="text-slate-300 ml-4">$1</li>')
-    .replace(/^• (.+)$/gm, '<li class="text-slate-300 ml-4">$1</li>')
-    .replace(/^\d+\. (.+)$/gm, '<li class="text-slate-300 ml-4 list-decimal">$1</li>')
-    .replace(/(<li[^>]*>.*<\/li>\n?)+/g, (m) => `<ul class="list-disc pl-5 my-2 space-y-1">${m}</ul>`)
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-violet-400 hover:text-violet-300 underline underline-offset-2" target="_blank" rel="noopener">$1</a>')
-    .replace(/(?<!["(])(https?:\/\/[^\s<]+?\.(?:png|jpe?g|gif|webp))(?![^<]*>)/gi, '<figure class="my-4 overflow-hidden rounded-2xl border border-navy-700/70 bg-navy-950/60"><img src="$1" alt="Shared image" class="w-full object-cover" /></figure>')
-    .replace(/\n\n/g, '</p><p class="mb-3 text-slate-300 leading-relaxed">')
-    .replace(/\n/g, '<br />')
-    .replace(/^/, '<p class="mb-3 text-slate-300 leading-relaxed">')
-    .replace(/$/, '</p>');
+    .replace(/(?<!["(])(https?:\/\/[^\s<]+?\.(?:png|jpe?g|gif|webp))(?![^<]*>)/gi, '<figure class="my-4 overflow-hidden rounded-2xl border border-navy-700/70 bg-navy-950/60"><img src="$1" alt="Shared image" class="w-full object-cover" /></figure>');
+}
+
+function renderMarkdownTable(lines: string[]) {
+  const rows = lines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^\||\|$/g, '').split('|').map((cell) => renderInlineMarkdown(cell.trim())));
+  if (rows.length < 2) return '';
+  const [header, , ...body] = rows;
+  return `<div class="my-4 overflow-x-auto rounded-2xl border border-navy-700/70"><table class="min-w-full bg-navy-950/40"><thead><tr>${header.map((cell) => `<th class="border-b border-navy-700/70 bg-navy-900/85 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">${cell}</th>`).join('')}</tr></thead><tbody>${body.map((row) => `<tr>${row.map((cell) => `<td class="border-t border-navy-800/60 px-3 py-2 text-sm text-slate-300">${cell}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function renderMarkdown(text: string): string {
+  const lines = text.split('\n');
+  const html: string[] = [];
+  let paragraphBuffer: string[] = [];
+  let listBuffer: string[] = [];
+  let listType: 'ul' | 'ol' | null = null;
+  let tableBuffer: string[] = [];
+  let inCodeBlock = false;
+  let codeLanguage = '';
+  let codeLines: string[] = [];
+
+  const flushParagraph = () => {
+    if (!paragraphBuffer.length) return;
+    html.push(`<p class="mb-3 text-slate-300 leading-relaxed">${renderInlineMarkdown(paragraphBuffer.join(' '))}</p>`);
+    paragraphBuffer = [];
+  };
+
+  const flushList = () => {
+    if (!listBuffer.length || !listType) return;
+    const tag = listType === 'ol' ? 'ol' : 'ul';
+    const classes = listType === 'ol' ? 'list-decimal' : 'list-disc';
+    html.push(`<${tag} class="${classes} mb-3 space-y-1 pl-5">${listBuffer.map((item) => `<li class="text-slate-300">${renderInlineMarkdown(item)}</li>`).join('')}</${tag}>`);
+    listBuffer = [];
+    listType = null;
+  };
+
+  const flushTable = () => {
+    if (!tableBuffer.length) return;
+    html.push(renderMarkdownTable(tableBuffer));
+    tableBuffer = [];
+  };
+
+  const flushCode = () => {
+    const langLabel = codeLanguage ? `<span class="absolute right-3 top-2 text-[10px] font-mono uppercase tracking-[0.18em] text-slate-500">${escapeHtml(codeLanguage)}</span>` : '';
+    html.push(`<div class="relative my-4 overflow-hidden rounded-2xl border border-navy-700/70 bg-[#0d1117]"><pre class="overflow-x-auto p-4">${langLabel}<code class="text-sm leading-relaxed text-cyan-300">${escapeHtml(codeLines.join('\n'))}</code></pre></div>`);
+    codeLines = [];
+    codeLanguage = '';
+  };
+
+  lines.forEach((line) => {
+    if (line.startsWith('```')) {
+      flushParagraph();
+      flushList();
+      flushTable();
+      if (inCodeBlock) {
+        flushCode();
+        inCodeBlock = false;
+      } else {
+        inCodeBlock = true;
+        codeLanguage = line.slice(3).trim();
+      }
+      return;
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(line);
+      return;
+    }
+
+    if (/^\|.+\|$/.test(line.trim())) {
+      flushParagraph();
+      flushList();
+      tableBuffer.push(line);
+      return;
+    }
+
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      flushTable();
+      return;
+    }
+
+    flushTable();
+
+    if (/^---+$/.test(line.trim())) {
+      flushParagraph();
+      flushList();
+      html.push('<hr class="my-4 border-navy-700" />');
+      return;
+    }
+
+    const orderedMatch = line.match(/^\d+\.\s+(.+)$/);
+    if (orderedMatch) {
+      flushParagraph();
+      if (listType && listType !== 'ol') flushList();
+      listType = 'ol';
+      listBuffer.push(orderedMatch[1]);
+      return;
+    }
+
+    const unorderedMatch = line.match(/^[-•]\s+(.+)$/);
+    if (unorderedMatch) {
+      flushParagraph();
+      if (listType && listType !== 'ul') flushList();
+      listType = 'ul';
+      listBuffer.push(unorderedMatch[1]);
+      return;
+    }
+
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      const level = headingMatch[1].length;
+      const tag = `h${level}`;
+      const size = level === 1 ? 'text-xl font-bold' : level === 2 ? 'text-lg font-semibold' : 'text-base font-semibold';
+      html.push(`<${tag} class="${size} mb-2 mt-5 text-white">${renderInlineMarkdown(headingMatch[2])}</${tag}>`);
+      return;
+    }
+
+    const quoteMatch = line.match(/^>\s+(.+)$/);
+    if (quoteMatch) {
+      flushParagraph();
+      flushList();
+      html.push(`<blockquote class="my-3 border-l-2 border-violet-500 pl-4 italic text-slate-400">${renderInlineMarkdown(quoteMatch[1])}</blockquote>`);
+      return;
+    }
+
+    paragraphBuffer.push(line.trim());
+  });
+
+  flushParagraph();
+  flushList();
+  flushTable();
+  if (inCodeBlock) flushCode();
+
+  return html.join('');
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -82,6 +215,31 @@ function extractResultLinks(result?: Record<string, unknown>) {
       return [];
     })
     .slice(0, 3);
+}
+
+function extractResultImages(result?: Record<string, unknown>) {
+  if (!result) return [];
+
+  return Object.values(result)
+    .flatMap((value) => {
+      if (typeof value === 'string' && /^https?:\/\/.+\.(png|jpe?g|gif|webp)$/i.test(value)) return [value];
+      if (Array.isArray(value)) {
+        return value.filter((item): item is string => typeof item === 'string' && /^https?:\/\/.+\.(png|jpe?g|gif|webp)$/i.test(item));
+      }
+      return [];
+    })
+    .slice(0, 3);
+}
+
+function extractResultMetrics(result?: Record<string, unknown>) {
+  if (!result) return [];
+  return Object.entries(result)
+    .filter(([, value]) => ['string', 'number', 'boolean'].includes(typeof value))
+    .slice(0, 4)
+    .map(([key, value]) => ({
+      label: key.replace(/_/g, ' '),
+      value: typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value),
+    }));
 }
 
 const MODE_CONFIG = {
@@ -240,6 +398,8 @@ const ToolCallBlock = memo(function ToolCallBlock({ toolCall }: { toolCall: Tool
   const elapsed = toolCall.elapsedMs;
   const confidence = toolCall.confidence;
   const resultLinks = extractResultLinks(toolCall.result);
+  const resultImages = extractResultImages(toolCall.result);
+  const resultMetrics = extractResultMetrics(toolCall.result);
 
   const inputSummary = toolCall.input
     ? (Object.values(toolCall.input)[0] as string | undefined)
@@ -314,6 +474,31 @@ const ToolCallBlock = memo(function ToolCallBlock({ toolCall }: { toolCall: Tool
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Result</p>
                 <CopyButton text={formatJsonBlock(toolCall.result)} />
               </div>
+              {resultMetrics.length > 0 && (
+                <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                  {resultMetrics.map((metric) => (
+                    <div key={metric.label} className="rounded-lg border border-navy-700/70 bg-navy-950/45 px-3 py-2">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">{metric.label}</p>
+                      <p className="mt-1 text-sm font-medium text-white">{metric.value}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {resultImages.length > 0 && (
+                <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                  {resultImages.map((imageUrl) => (
+                    <a
+                      key={imageUrl}
+                      href={imageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="overflow-hidden rounded-xl border border-navy-700/70 bg-navy-950/45"
+                    >
+                      <img src={imageUrl} alt="Tool result" className="h-40 w-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              )}
               <pre className="max-h-52 overflow-x-auto rounded-lg bg-black/30 p-3 font-mono text-xs text-green-300">
                 {formatJsonBlock(toolCall.result)}
               </pre>
@@ -488,12 +673,14 @@ export default function ChatInterface({
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [agentStatus, setAgentStatus] = useState<'idle' | 'thinking' | 'working'>('idle');
   const [lastUserInput, setLastUserInput] = useState('');
+  const [draftEstimate, setDraftEstimate] = useState<number | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<Message[]>(messages);
+  const { snapshot } = useCreditSnapshot();
   messagesRef.current = messages;
 
   useEffect(() => {
@@ -511,6 +698,44 @@ export default function ChatInterface({
   useEffect(() => {
     if (onMessagesChange) onMessagesChange(messages);
   }, [messages, onMessagesChange]);
+
+  useEffect(() => {
+    const trimmed = input.trim();
+    if (!trimmed) {
+      setDraftEstimate(null);
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(async () => {
+      const lowered = trimmed.toLowerCase();
+      const taskKind =
+        /report|summary|brief/.test(lowered) ? 'report'
+        : /analy|debug|investigate/.test(lowered) ? 'analysis'
+        : /build|write code|implement|fix/.test(lowered) ? 'engineering'
+        : /schedule|every hour|daily|automation/.test(lowered) ? 'automation'
+        : /search|research|find/.test(lowered) ? 'research'
+        : 'chat';
+      const toolCalls =
+        (/search|find|browser|screenshot|slack|email|schedule|report|data/.test(lowered) ? 1 : 0) +
+        (/ and | then | compare | summarize /.test(lowered) ? 1 : 0);
+      const complexity =
+        trimmed.length > 320 || /step-by-step|multi-step|compare|debug|architecture/.test(lowered)
+          ? 'high'
+          : trimmed.length > 120 || toolCalls > 1
+            ? 'medium'
+            : 'low';
+      const modelTier = complexity === 'high' ? 'hard' : taskKind === 'automation' ? 'ops' : 'default';
+      const estimate = await fetchCreditEstimate({
+        taskKind,
+        modelTier,
+        toolCalls,
+        complexity,
+      });
+      setDraftEstimate(estimate?.estimatedCredits ?? null);
+    }, 220);
+
+    return () => window.clearTimeout(timeout);
+  }, [input]);
 
   const adjustTextarea = () => {
     const ta = textareaRef.current;
@@ -737,6 +962,8 @@ export default function ChatInterface({
   const modeLabel = modeConfig.label || 'Supervised';
   const ModeIcon = modeConfig.icon;
   const isCreditError = Boolean(error && /insufficient credits|credits exhausted|add a top-up|upgrade your plan/i.test(error));
+  const draftWillPressureCredits = draftEstimate !== null && draftEstimate > snapshot.creditsRemaining;
+  const lowRunway = snapshot.projectedDaysLeft <= 7;
 
   const statusText = {
     idle: 'Ready',
@@ -919,6 +1146,35 @@ export default function ChatInterface({
       <div className="border-t border-navy-800/60 bg-gradient-to-t from-navy-950/50 via-navy-950/20 to-transparent px-3 pt-2 pb-[calc(0.8rem+env(safe-area-inset-bottom))] sm:px-6">
         <div className="max-w-3xl mx-auto">
           <div className="rounded-[1.45rem] border border-navy-700/60 bg-gradient-to-br from-navy-800/72 via-navy-800/58 to-navy-900/76 shadow-[0_18px_42px_rgba(2,6,23,0.24)] transition-all duration-200 focus-within:border-violet-600/50">
+            {(draftEstimate !== null || lowRunway) && (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 px-3 py-2 text-[11px] sm:px-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  {draftEstimate !== null && (
+                    <span className={`rounded-full border px-2 py-1 font-medium ${
+                      draftWillPressureCredits
+                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                        : 'border-violet-500/20 bg-violet-500/10 text-violet-200'
+                    }`}>
+                      Estimated run: {formatCredits(draftEstimate)} credits
+                    </span>
+                  )}
+                  {lowRunway && (
+                    <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 font-medium text-amber-200">
+                      Low runway: {snapshot.projectedDaysLeft} days left
+                    </span>
+                  )}
+                </div>
+                {(draftWillPressureCredits || lowRunway) && (
+                  <button
+                    type="button"
+                    onClick={() => window.location.assign('/#pricing')}
+                    className="text-[11px] font-medium text-cyan-300 transition-colors hover:text-cyan-200"
+                  >
+                    Upgrade or top up
+                  </button>
+                )}
+              </div>
+            )}
             <div className="flex items-end gap-2 px-3 py-3 sm:gap-2.5 sm:px-4 sm:py-3.5">
               <textarea
                 ref={textareaRef}

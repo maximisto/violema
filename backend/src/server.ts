@@ -1566,6 +1566,9 @@ app.patch('/api/automations/:id', (req: Request, res: Response) => {
   if (typeof req.body.schedule === 'string') patch.schedule = req.body.schedule.trim();
   if (typeof req.body.notify === 'string') patch.notify = req.body.notify.trim();
   if (typeof req.body.condition === 'string') patch.condition = req.body.condition.trim();
+  if (Array.isArray(req.body.actions)) {
+    patch.actions = req.body.actions.map((item: unknown) => String(item).trim()).filter(Boolean);
+  }
   if (req.body.notify === null) patch.notify = undefined;
   if (req.body.condition === null) patch.condition = undefined;
   if (req.body.description === null) patch.description = undefined;

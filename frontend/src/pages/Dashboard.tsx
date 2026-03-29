@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, MessageSquare, Settings, ChevronRight, Zap, LogOut,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import ChatInterface from '../components/ChatInterface';
 import CreditSurface from '../components/CreditSurface';
+import { fetchCreditEstimate, formatCredits } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
@@ -67,6 +68,23 @@ const SAMPLE_TASKS = [
   { id: 2, title: 'PR review digest', status: 'scheduled', time: 'Daily 5pm', icon: Clock },
   { id: 3, title: 'Lead enrichment batch', status: 'complete', time: 'Just now', icon: CheckSquare },
   { id: 4, title: 'Anomaly alert: CAC spike', status: 'alert', time: '2h ago', icon: AlertCircle },
+];
+
+const SCHEDULE_PRESETS = [
+  { label: 'Hourly', value: 'every hour' },
+  { label: 'Every 4 hours', value: 'every 4 hours' },
+  { label: 'Daily 9am', value: 'daily at 9am' },
+  { label: 'Every monday', value: 'every monday at 9am' },
+];
+
+const ACTION_TEMPLATES = [
+  'Query Stripe failed payments',
+  'Query PostHog funnel',
+  'Search the web for competitor moves',
+  'Capture a browser screenshot',
+  'Generate summary',
+  'Send alert to Slack',
+  'Send email digest',
 ];
 
 type DashboardTaskStatus = 'scheduled' | 'complete' | 'alert';
@@ -131,6 +149,12 @@ interface AutomationEditorDraft {
   notify: string;
   condition: string;
   actionsText: string;
+  destinationType: 'slack' | 'email' | 'custom' | 'none';
+}
+
+interface CreditEstimatePreview {
+  estimatedCredits: number;
+  monthlyCredits: number;
 }
 
 // ─── Mode config (single source of truth) ────────────────────────────────────
@@ -194,6 +218,22 @@ function mapTaskIcon(status: DashboardTaskStatus) {
   if (status === 'alert') return AlertCircle;
   if (status === 'complete') return CheckSquare;
   return Clock;
+}
+
+function estimateMonthlyRunsFromSchedule(schedule: string) {
+  const normalized = schedule.trim().toLowerCase();
+  if (!normalized) return 0;
+  if (normalized === 'hourly' || normalized === 'every hour') return 24 * 30;
+
+  const everyHours = normalized.match(/^every\s+(\d+)\s+hours?$/);
+  if (everyHours) {
+    const interval = Number(everyHours[1]) || 1;
+    return Math.ceil((24 / interval) * 30);
+  }
+
+  if (normalized.startsWith('daily') || normalized.startsWith('every day')) return 30;
+  if (normalized.startsWith('every monday')) return 4;
+  return 12;
 }
 
 const getTaskStatusMeta = (status: 'scheduled' | 'complete' | 'alert') => {
@@ -277,6 +317,7 @@ export default function Dashboard() {
   const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | null>(null);
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
+  const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
@@ -403,6 +444,38 @@ export default function Dashboard() {
     return () => window.clearTimeout(timeout);
   }, [uiNotice]);
 
+  useEffect(() => {
+    if (!automationEditor) {
+      setAutomationEstimate(null);
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(async () => {
+      const actionCount = automationEditor.actionsText
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean).length;
+      const estimate = await fetchCreditEstimate({
+        taskKind: 'automation',
+        modelTier: actionCount > 3 ? 'ops' : 'default',
+        toolCalls: Math.max(1, actionCount),
+        automationRuns: 1,
+        complexity: actionCount > 4 ? 'high' : actionCount > 2 ? 'medium' : 'low',
+      });
+      if (!estimate) {
+        setAutomationEstimate(null);
+        return;
+      }
+
+      setAutomationEstimate({
+        estimatedCredits: estimate.estimatedCredits,
+        monthlyCredits: estimate.estimatedCredits * estimateMonthlyRunsFromSchedule(automationEditor.schedule),
+      });
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [automationEditor]);
+
   const handleNewChat = useCallback(() => {
     setActiveConvoId('new');
     setNewConvoMessages([]);
@@ -504,6 +577,7 @@ export default function Dashboard() {
       notify: task.notify || '',
       condition: task.condition || '',
       actionsText: Array.isArray(task.actions) ? task.actions.join('\n') : '',
+      destinationType: task.notify?.startsWith('#') ? 'slack' : task.notify?.includes('@') ? 'email' : task.notify ? 'custom' : 'none',
     });
   }, []);
 
@@ -616,6 +690,13 @@ export default function Dashboard() {
   );
   const selectedTask = taskItems.find((task) => task.id === selectedTaskId) ?? taskItems[0];
   const selectedTaskMeta = selectedTask ? getTaskStatusMeta(selectedTask.status as 'scheduled' | 'complete' | 'alert') : null;
+  const automationActionCount = useMemo(() => {
+    if (!automationEditor) return 0;
+    return automationEditor.actionsText
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean).length;
+  }, [automationEditor]);
 
   useEffect(() => {
     if (!selectedTask && taskItems[0]) {
@@ -1097,6 +1178,11 @@ export default function Dashboard() {
                       Edit
                     </button>
                   </div>
+                  {selectedTask?.source === 'live' && (
+                    <p className="mt-2 text-[11px] text-slate-500">
+                      Open the builder to tune cadence, action steps, destinations, and monthly burn without leaving the dashboard.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1189,6 +1275,11 @@ export default function Dashboard() {
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+              <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/80">Builder</p>
+                <p className="mt-1 text-sm text-white">Set the cadence, stack the steps, pick the destination, and watch the credit pressure update.</p>
+              </div>
+
               <label className="block">
                 <span className="ui-section-label px-1">Name</span>
                 <div className="ui-input-shell mt-1">
@@ -1203,6 +1294,22 @@ export default function Dashboard() {
 
               <label className="block">
                 <span className="ui-section-label px-1">Schedule</span>
+                <div className="mt-1 flex flex-wrap gap-2 px-1">
+                  {SCHEDULE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setAutomationEditor((current) => current ? { ...current, schedule: preset.value } : current)}
+                      className={`ui-pill px-2.5 py-1 text-[10px] normal-case tracking-normal ${
+                        automationEditor.schedule.trim().toLowerCase() === preset.value
+                          ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
+                          : 'text-slate-300'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
                 <div className="ui-input-shell mt-1">
                   <input
                     value={automationEditor.schedule}
@@ -1229,6 +1336,23 @@ export default function Dashboard() {
 
               <label className="block">
                 <span className="ui-section-label px-1">Actions</span>
+                <div className="mt-1 flex flex-wrap gap-2 px-1">
+                  {ACTION_TEMPLATES.map((template) => (
+                    <button
+                      key={template}
+                      type="button"
+                      onClick={() => setAutomationEditor((current) => {
+                        if (!current) return current;
+                        const currentActions = current.actionsText.split('\n').map((item) => item.trim()).filter(Boolean);
+                        if (currentActions.includes(template)) return current;
+                        return { ...current, actionsText: [...currentActions, template].join('\n') };
+                      })}
+                      className="ui-pill px-2.5 py-1 text-[10px] normal-case tracking-normal text-slate-300"
+                    >
+                      + {template}
+                    </button>
+                  ))}
+                </div>
                 <div className="ui-input-shell mt-1">
                   <textarea
                     value={automationEditor.actionsText}
@@ -1244,12 +1368,43 @@ export default function Dashboard() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
                   <span className="ui-section-label px-1">Notify</span>
+                  <div className="mt-1 flex flex-wrap gap-2 px-1">
+                    {[
+                      { label: 'Slack', value: 'slack', placeholder: '#ops-alerts' },
+                      { label: 'Email', value: 'email', placeholder: 'max@purpleorange.io' },
+                      { label: 'Custom', value: 'custom', placeholder: '' },
+                      { label: 'None', value: 'none', placeholder: '' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setAutomationEditor((current) => {
+                          if (!current) return current;
+                          return {
+                            ...current,
+                            destinationType: option.value as AutomationEditorDraft['destinationType'],
+                            notify: option.value === 'none'
+                              ? ''
+                              : current.notify || option.placeholder,
+                          };
+                        })}
+                        className={`ui-pill px-2.5 py-1 text-[10px] normal-case tracking-normal ${
+                          automationEditor.destinationType === option.value
+                            ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
+                            : 'text-slate-300'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                   <div className="ui-input-shell mt-1">
                     <input
                       value={automationEditor.notify}
                       onChange={(event) => setAutomationEditor((current) => current ? { ...current, notify: event.target.value } : current)}
                       className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
                       placeholder="#ops-alerts or max@purpleorange.io"
+                      disabled={automationEditor.destinationType === 'none'}
                     />
                   </div>
                 </label>
@@ -1266,6 +1421,36 @@ export default function Dashboard() {
                   </div>
                 </label>
               </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Actions</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{automationActionCount}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">Each line becomes a live automation step.</p>
+                </div>
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Per run</p>
+                  <p className="mt-1 text-lg font-semibold text-white">
+                    {automationEstimate ? `${formatCredits(automationEstimate.estimatedCredits)} cr` : '—'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500">Estimate based on model tier, tools, and complexity.</p>
+                </div>
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Monthly burn</p>
+                  <p className="mt-1 text-lg font-semibold text-white">
+                    {automationEstimate ? `${formatCredits(automationEstimate.monthlyCredits)} cr` : '—'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500">Cadence-aware pressure against the current credit balance.</p>
+                </div>
+              </div>
+
+              {automationEstimate && automationEstimate.monthlyCredits > 600 && (
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/8 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300/80">Budget pressure</p>
+                  <p className="mt-1 text-sm text-white">This workflow is expensive relative to a normal workspace run rate.</p>
+                  <p className="mt-1 text-[11px] text-amber-200/90">Reduce cadence, cut action count, or expect a top-up or upgrade prompt soon.</p>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-navy-800/80 px-5 py-4">

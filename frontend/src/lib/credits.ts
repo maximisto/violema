@@ -27,6 +27,32 @@ export interface RecentCreditUsage {
   tone: 'violet' | 'cyan' | 'amber';
 }
 
+export interface CreditEstimateInput {
+  taskKind?: 'chat' | 'research' | 'analysis' | 'engineering' | 'automation' | 'message' | 'report' | 'review' | 'scheduling';
+  modelTier?: 'micro' | 'default' | 'hard' | 'critical' | 'ops';
+  toolCalls?: number;
+  automationRuns?: number;
+  reviewRequired?: boolean;
+  artifactCount?: number;
+  complexity?: 'low' | 'medium' | 'high';
+  durationSeconds?: number;
+}
+
+export interface CreditEstimate {
+  estimatedCredits: number;
+  breakdown: {
+    baseCredits: number;
+    modelCredits: number;
+    toolCredits: number;
+    automationCredits: number;
+    reviewCredits: number;
+    artifactCredits: number;
+    durationCredits: number;
+    complexityCredits: number;
+  };
+  rationale: string[];
+}
+
 const MOCK_CREDIT_SNAPSHOT: CreditSnapshot = {
   source: 'mock',
   workspaceId: 'workspace_default',
@@ -199,6 +225,25 @@ export function useRecentCreditUsage() {
   }, []);
 
   return { items, isLoading };
+}
+
+export async function fetchCreditEstimate(input: CreditEstimateInput): Promise<CreditEstimate | null> {
+  try {
+    const workspace = resolveWorkspaceContext();
+    const response = await fetch('/api/billing/estimate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Workspace-Id': workspace.workspaceId,
+        'X-Workspace-Name': workspace.workspaceName,
+      },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) return null;
+    return await response.json() as CreditEstimate;
+  } catch {
+    return null;
+  }
 }
 
 export function formatCredits(value: number) {
