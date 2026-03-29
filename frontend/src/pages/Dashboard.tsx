@@ -123,6 +123,16 @@ interface DashboardTaskItem {
   automationStatus?: 'active' | 'paused';
 }
 
+interface AutomationEditorDraft {
+  id: string;
+  name: string;
+  schedule: string;
+  description: string;
+  notify: string;
+  condition: string;
+  actionsText: string;
+}
+
 // ─── Mode config (single source of truth) ────────────────────────────────────
 
 const MODE_BUTTONS = [
@@ -264,6 +274,9 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [platformTasks, setPlatformTasks] = useState<DashboardTaskItem[]>([]);
   const [liveAutomations, setLiveAutomations] = useState<DashboardTaskItem[]>([]);
+  const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | null>(null);
+  const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
@@ -384,6 +397,12 @@ export default function Dashboard() {
     }
   }, [deleteConfirmId]);
 
+  useEffect(() => {
+    if (!uiNotice) return undefined;
+    const timeout = window.setTimeout(() => setUiNotice(null), 3200);
+    return () => window.clearTimeout(timeout);
+  }, [uiNotice]);
+
   const handleNewChat = useCallback(() => {
     setActiveConvoId('new');
     setNewConvoMessages([]);
@@ -430,37 +449,94 @@ export default function Dashboard() {
       automationStatus: automation.status,
     }));
     setLiveAutomations(mapped);
+    setSelectedTaskId((current) => {
+      if (!mapped.length) return current;
+      return mapped.some((item) => item.id === current) ? current : mapped[0].id;
+    });
+  }, []);
+
+  const showNotice = useCallback((tone: 'success' | 'error', message: string) => {
+    setUiNotice({ tone, message });
   }, []);
 
   const handleAutomationRun = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
-    await fetch(`/api/automations/${task.automationId}/run`, { method: 'POST' });
-  }, []);
+    setActionBusy('run');
+    try {
+      const response = await fetch(`/api/automations/${task.automationId}/run`, { method: 'POST' });
+      if (!response.ok) throw new Error('Could not run automation');
+      await refreshAutomations();
+      showNotice('success', `Started "${task.title}"`);
+    } catch {
+      showNotice('error', `Could not run "${task.title}"`);
+    } finally {
+      setActionBusy(null);
+    }
+  }, [refreshAutomations, showNotice]);
 
   const handleAutomationPauseToggle = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
-    const nextStatus = task.automationStatus === 'paused' ? 'active' : 'paused';
-    const response = await fetch(`/api/automations/${task.automationId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: nextStatus }),
-    });
-    if (!response.ok) throw new Error('Could not update automation');
-    await refreshAutomations();
-  }, [refreshAutomations]);
+    setActionBusy('pause');
+    try {
+      const nextStatus = task.automationStatus === 'paused' ? 'active' : 'paused';
+      const response = await fetch(`/api/automations/${task.automationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!response.ok) throw new Error('Could not update automation');
+      await refreshAutomations();
+      showNotice('success', `${nextStatus === 'paused' ? 'Paused' : 'Resumed'} "${task.title}"`);
+    } catch {
+      showNotice('error', `Could not update "${task.title}"`);
+    } finally {
+      setActionBusy(null);
+    }
+  }, [refreshAutomations, showNotice]);
 
   const handleAutomationEdit = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
-    const nextSchedule = window.prompt('Update schedule', task.schedule || task.time);
-    if (!nextSchedule || nextSchedule === task.schedule) return;
-    const response = await fetch(`/api/automations/${task.automationId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ schedule: nextSchedule }),
+    setAutomationEditor({
+      id: task.automationId,
+      name: task.title,
+      schedule: task.schedule || task.time,
+      description: task.description || '',
+      notify: task.notify || '',
+      condition: task.condition || '',
+      actionsText: Array.isArray(task.actions) ? task.actions.join('\n') : '',
     });
-    if (!response.ok) throw new Error('Could not update schedule');
-    await refreshAutomations();
-  }, [refreshAutomations]);
+  }, []);
+
+  const handleAutomationEditorSave = useCallback(async () => {
+    if (!automationEditor) return;
+    setActionBusy('save');
+    try {
+      const actions = automationEditor.actionsText
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const response = await fetch(`/api/automations/${automationEditor.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: automationEditor.name.trim(),
+          schedule: automationEditor.schedule.trim(),
+          description: automationEditor.description.trim() || null,
+          notify: automationEditor.notify.trim() || null,
+          condition: automationEditor.condition.trim() || null,
+          actions,
+        }),
+      });
+      if (!response.ok) throw new Error('Could not save automation');
+      await refreshAutomations();
+      setAutomationEditor(null);
+      showNotice('success', `Updated "${automationEditor.name.trim() || 'automation'}"`);
+    } catch {
+      showNotice('error', 'Could not save automation changes');
+    } finally {
+      setActionBusy(null);
+    }
+  }, [automationEditor, refreshAutomations, showNotice]);
 
   const handleMessagesChange = useCallback(
     (messages: Message[]) => {
@@ -573,6 +649,20 @@ export default function Dashboard() {
 
   return (
     <div className="relative flex h-[100dvh] min-h-[100dvh] bg-navy-950 overflow-hidden">
+      {uiNotice && (
+        <div className="pointer-events-none absolute inset-x-3 top-3 z-50 flex justify-center">
+          <div
+            className={`pointer-events-auto max-w-md rounded-2xl border px-4 py-3 shadow-[0_18px_50px_rgba(2,6,23,0.42)] backdrop-blur-md ${
+              uiNotice.tone === 'success'
+                ? 'border-green-500/20 bg-green-500/12 text-green-100'
+                : 'border-red-500/20 bg-red-500/12 text-red-100'
+            }`}
+          >
+            <p className="text-sm font-medium">{uiNotice.message}</p>
+          </div>
+        </div>
+      )}
+
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
       {sidebarOpen && isMobileSidebar && (
         <button
@@ -987,21 +1077,21 @@ export default function Dashboard() {
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       onClick={() => { void handleAutomationRun(selectedTask); }}
-                      disabled={selectedTask?.source !== 'live'}
+                      disabled={selectedTask?.source !== 'live' || actionBusy !== null}
                       className="flex-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Run now
+                      {actionBusy === 'run' ? 'Running…' : 'Run now'}
                     </button>
                     <button
                       onClick={() => { void handleAutomationPauseToggle(selectedTask); }}
-                      disabled={selectedTask?.source !== 'live'}
+                      disabled={selectedTask?.source !== 'live' || actionBusy !== null}
                       className="flex-1 rounded-xl border border-navy-700/70 bg-navy-950/35 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition-colors hover:bg-navy-900/70 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {selectedTask?.automationStatus === 'paused' ? 'Resume' : 'Pause'}
+                      {actionBusy === 'pause' ? 'Saving…' : selectedTask?.automationStatus === 'paused' ? 'Resume' : 'Pause'}
                     </button>
                     <button
                       onClick={() => { void handleAutomationEdit(selectedTask); }}
-                      disabled={selectedTask?.source !== 'live'}
+                      disabled={selectedTask?.source !== 'live' || actionBusy !== null}
                       className="flex-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Edit
@@ -1074,6 +1164,130 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {automationEditor && (
+        <>
+          <button
+            type="button"
+            aria-label="Close automation editor"
+            onClick={() => setAutomationEditor(null)}
+            className="absolute inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
+          />
+          <aside className="absolute right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col border-l border-navy-700/80 bg-gradient-to-b from-navy-900/98 via-navy-900/96 to-navy-950/98 shadow-[0_24px_64px_rgba(2,6,23,0.58)]">
+            <div className="flex items-center justify-between border-b border-navy-800/80 px-5 py-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">Automation editor</p>
+                <h3 className="mt-1 text-lg font-semibold text-white">Edit workflow</h3>
+              </div>
+              <button
+                onClick={() => setAutomationEditor(null)}
+                className="rounded-xl border border-navy-700/80 bg-navy-900/55 p-2 text-slate-400 transition-colors hover:text-white"
+                aria-label="Close automation editor"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+              <label className="block">
+                <span className="ui-section-label px-1">Name</span>
+                <div className="ui-input-shell mt-1">
+                  <input
+                    value={automationEditor.name}
+                    onChange={(event) => setAutomationEditor((current) => current ? { ...current, name: event.target.value } : current)}
+                    className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                    placeholder="Stripe failed payments monitor"
+                  />
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="ui-section-label px-1">Schedule</span>
+                <div className="ui-input-shell mt-1">
+                  <input
+                    value={automationEditor.schedule}
+                    onChange={(event) => setAutomationEditor((current) => current ? { ...current, schedule: event.target.value } : current)}
+                    className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                    placeholder="Every monday at 9am"
+                  />
+                </div>
+                <p className="mt-1 px-1 text-[11px] text-slate-500">Use plain language like “every hour”, “daily at 6pm”, or “every monday at 9am”.</p>
+              </label>
+
+              <label className="block">
+                <span className="ui-section-label px-1">Description</span>
+                <div className="ui-input-shell mt-1">
+                  <textarea
+                    value={automationEditor.description}
+                    onChange={(event) => setAutomationEditor((current) => current ? { ...current, description: event.target.value } : current)}
+                    rows={3}
+                    className="w-full resize-none bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                    placeholder="What this workflow is responsible for."
+                  />
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="ui-section-label px-1">Actions</span>
+                <div className="ui-input-shell mt-1">
+                  <textarea
+                    value={automationEditor.actionsText}
+                    onChange={(event) => setAutomationEditor((current) => current ? { ...current, actionsText: event.target.value } : current)}
+                    rows={5}
+                    className="w-full resize-none bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                    placeholder={'Query Stripe failed payments\nDraft summary\nSend alert to Slack'}
+                  />
+                </div>
+                <p className="mt-1 px-1 text-[11px] text-slate-500">One action per line.</p>
+              </label>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="ui-section-label px-1">Notify</span>
+                  <div className="ui-input-shell mt-1">
+                    <input
+                      value={automationEditor.notify}
+                      onChange={(event) => setAutomationEditor((current) => current ? { ...current, notify: event.target.value } : current)}
+                      className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                      placeholder="#ops-alerts or max@purpleorange.io"
+                    />
+                  </div>
+                </label>
+
+                <label className="block">
+                  <span className="ui-section-label px-1">Condition</span>
+                  <div className="ui-input-shell mt-1">
+                    <input
+                      value={automationEditor.condition}
+                      onChange={(event) => setAutomationEditor((current) => current ? { ...current, condition: event.target.value } : current)}
+                      className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                      placeholder="Only if failure count exceeds 3"
+                    />
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="border-t border-navy-800/80 px-5 py-4">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  onClick={() => setAutomationEditor(null)}
+                  className="ui-button-ghost"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { void handleAutomationEditorSave(); }}
+                  disabled={actionBusy === 'save' || !automationEditor.name.trim() || !automationEditor.schedule.trim()}
+                  className="ui-button-surface disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {actionBusy === 'save' ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          </aside>
+        </>
+      )}
     </div>
   );
 }
