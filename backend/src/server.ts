@@ -92,6 +92,262 @@ function buildSystemPrompt(autonomyMode: string): string {
 Format responses with markdown: **bold** for key data points, bullet lists for clarity, code blocks for code. Be action-oriented.`;
 }
 
+function getRequiredEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  return value;
+}
+
+function buildOpenAIHeaders(route: { provider: string; apiKeyEnv: string }) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${getRequiredEnv(route.apiKeyEnv)}`,
+  };
+
+  if (route.provider === 'openrouter') {
+    headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL || 'https://nexus.purpleorange.io';
+    headers['X-Title'] = process.env.OPENROUTER_APP_NAME || 'Nexus';
+  }
+
+  return headers;
+}
+
+function buildOpenAITools() {
+  return NEXUS_TOOLS.map((tool) => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.input_schema,
+    },
+  }));
+}
+
+async function runAnthropicChatLoop(
+  client: Anthropic,
+  route: { model: string },
+  anthropicMessages: Anthropic.MessageParam[],
+  autonomyMode: string,
+  sendEvent: (data: Record<string, unknown>) => void
+) {
+  let continueLoop = true;
+  let currentMessages = [...anthropicMessages];
+
+  while (continueLoop) {
+    const stream = client.messages.stream({
+      model: route.model,
+      max_tokens: 8000,
+      system: buildSystemPrompt(autonomyMode),
+      tools: NEXUS_TOOLS,
+      messages: currentMessages,
+    });
+
+    const toolUseBlocks: Anthropic.ToolUseBlock[] = [];
+    let currentToolUse: { id: string; name: string; input: string; startedAt: number } | null = null;
+    let hasToolUse = false;
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_start') {
+        if (event.content_block.type === 'tool_use') {
+          hasToolUse = true;
+          currentToolUse = {
+            id: event.content_block.id,
+            name: event.content_block.name,
+            input: '',
+            startedAt: Date.now(),
+          };
+          sendEvent({
+            type: 'tool_start',
+            tool_name: event.content_block.name,
+            tool_id: event.content_block.id,
+            started_at: currentToolUse.startedAt,
+          });
+        } else if (event.content_block.type === 'thinking') {
+          sendEvent({ type: 'thinking_start' });
+        }
+      } else if (event.type === 'content_block_delta') {
+        if (event.delta.type === 'text_delta') {
+          sendEvent({ type: 'text', content: event.delta.text });
+        } else if (event.delta.type === 'input_json_delta' && currentToolUse) {
+          currentToolUse.input += event.delta.partial_json;
+        } else if (event.delta.type === 'thinking_delta') {
+          sendEvent({ type: 'thinking', content: event.delta.thinking });
+        }
+      } else if (event.type === 'content_block_stop') {
+        if (currentToolUse) {
+          let parsedInput: Record<string, unknown> = {};
+          try {
+            parsedInput = JSON.parse(currentToolUse.input);
+          } catch {
+            parsedInput = {};
+          }
+
+          toolUseBlocks.push({
+            type: 'tool_use',
+            id: currentToolUse.id,
+            name: currentToolUse.name,
+            input: parsedInput,
+          });
+
+          sendEvent({
+            type: 'tool_input',
+            tool_id: currentToolUse.id,
+            tool_name: currentToolUse.name,
+            input: parsedInput,
+          });
+
+          currentToolUse = null;
+        }
+      }
+    }
+
+    const finalMessage = await stream.finalMessage();
+
+    if (finalMessage.stop_reason === 'tool_use' && hasToolUse) {
+      currentMessages.push({ role: 'assistant', content: finalMessage.content });
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+      for (const toolUseBlock of toolUseBlocks) {
+        const toolInput = toolUseBlock.input as Record<string, unknown>;
+        const toolStart = Date.now();
+        const result = await executeToolCall(toolUseBlock.name, toolInput);
+        const elapsed = Date.now() - toolStart;
+        const confidence = randomConfidence(toolUseBlock.name);
+
+        sendEvent({
+          type: 'tool_result',
+          tool_id: toolUseBlock.id,
+          tool_name: toolUseBlock.name,
+          result: JSON.parse(result),
+          elapsed_ms: elapsed,
+          confidence,
+        });
+
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: toolUseBlock.id,
+          content: result,
+        });
+      }
+
+      currentMessages.push({ role: 'user', content: toolResults });
+    } else {
+      continueLoop = false;
+    }
+  }
+}
+
+async function runOpenAIChatLoop(
+  route: { provider: string; model: string; apiKeyEnv: string; baseUrl?: string },
+  messages: ChatMessage[],
+  autonomyMode: string,
+  sendEvent: (data: Record<string, unknown>) => void
+) {
+  const currentMessages: Array<Record<string, unknown>> = [
+    { role: 'system', content: buildSystemPrompt(autonomyMode) },
+    ...messages.map((message) => ({ role: message.role, content: message.content })),
+  ];
+
+  let continueLoop = true;
+
+  while (continueLoop) {
+    const response = await fetch(`${route.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: buildOpenAIHeaders(route),
+      body: JSON.stringify({
+        model: route.model,
+        messages: currentMessages,
+        tools: buildOpenAITools(),
+        tool_choice: 'auto',
+      }),
+    });
+
+    const data = await response.json() as {
+      error?: { message?: string };
+      choices?: Array<{
+        finish_reason?: string;
+        message?: {
+          role?: string;
+          content?: string | null;
+          tool_calls?: Array<{
+            id?: string;
+            type?: string;
+            function?: { name?: string; arguments?: string };
+          }>;
+        };
+      }>;
+    };
+
+    if (!response.ok) {
+      throw new Error(`OpenAI-compatible chat failed: ${data.error?.message || response.statusText}`);
+    }
+
+    const choice = data.choices?.[0];
+    const assistantMessage = choice?.message;
+    const assistantContent = assistantMessage?.content || '';
+    if (assistantContent) {
+      sendEvent({ type: 'text', content: assistantContent });
+    }
+
+    const toolCalls = assistantMessage?.tool_calls || [];
+    if (toolCalls.length > 0) {
+      currentMessages.push({
+        role: 'assistant',
+        content: assistantContent || null,
+        tool_calls: toolCalls,
+      });
+
+      for (const toolCall of toolCalls) {
+        const toolId = toolCall.id || `tool_${Date.now()}`;
+        const toolName = toolCall.function?.name || 'unknown_tool';
+        const startedAt = Date.now();
+        sendEvent({
+          type: 'tool_start',
+          tool_name: toolName,
+          tool_id: toolId,
+          started_at: startedAt,
+        });
+
+        let parsedInput: Record<string, unknown> = {};
+        try {
+          parsedInput = JSON.parse(toolCall.function?.arguments || '{}') as Record<string, unknown>;
+        } catch {
+          parsedInput = {};
+        }
+
+        sendEvent({
+          type: 'tool_input',
+          tool_id: toolId,
+          tool_name: toolName,
+          input: parsedInput,
+        });
+
+        const result = await executeToolCall(toolName, parsedInput);
+        const elapsed = Date.now() - startedAt;
+        const confidence = randomConfidence(toolName);
+
+        sendEvent({
+          type: 'tool_result',
+          tool_id: toolId,
+          tool_name: toolName,
+          result: JSON.parse(result),
+          elapsed_ms: elapsed,
+          confidence,
+        });
+
+        currentMessages.push({
+          role: 'tool',
+          tool_call_id: toolId,
+          content: result,
+        });
+      }
+    } else {
+      continueLoop = false;
+    }
+  }
+}
+
 const NEXUS_TOOLS: Anthropic.Tool[] = [
   {
     name: 'web_search',
@@ -568,117 +824,18 @@ app.post('/api/chat', async (req: Request, res: Response) => {
   };
 
   try {
-    const { client, executingRoute, requestedRoute, fallbackApplied } = getChatClient(modelProfile);
+    const { client, executingRoute } = getChatClient(modelProfile);
+    const requestedRoute = getChatModelConfig(modelProfile);
     const anthropicMessages: Anthropic.MessageParam[] = messages.map(m => ({
       role: m.role,
       content: m.content,
     }));
 
-    let continueLoop = true;
-    let currentMessages = [...anthropicMessages];
-
-    while (continueLoop) {
-      const stream = client.messages.stream({
-        model: executingRoute.model,
-        max_tokens: 8000,
-        system: buildSystemPrompt(autonomyMode),
-        tools: NEXUS_TOOLS,
-        messages: currentMessages,
-      });
-
-      const toolUseBlocks: Anthropic.ToolUseBlock[] = [];
-      let currentToolUse: { id: string; name: string; input: string; startedAt: number } | null = null;
-      let hasToolUse = false;
-
-      for await (const event of stream) {
-        if (event.type === 'content_block_start') {
-          if (event.content_block.type === 'tool_use') {
-            hasToolUse = true;
-            currentToolUse = {
-              id: event.content_block.id,
-              name: event.content_block.name,
-              input: '',
-              startedAt: Date.now(),
-            };
-            sendEvent({
-              type: 'tool_start',
-              tool_name: event.content_block.name,
-              tool_id: event.content_block.id,
-              started_at: currentToolUse.startedAt,
-            });
-          } else if (event.content_block.type === 'thinking') {
-            sendEvent({ type: 'thinking_start' });
-          }
-        } else if (event.type === 'content_block_delta') {
-          if (event.delta.type === 'text_delta') {
-            sendEvent({ type: 'text', content: event.delta.text });
-          } else if (event.delta.type === 'input_json_delta' && currentToolUse) {
-            currentToolUse.input += event.delta.partial_json;
-          } else if (event.delta.type === 'thinking_delta') {
-            sendEvent({ type: 'thinking', content: event.delta.thinking });
-          }
-        } else if (event.type === 'content_block_stop') {
-          if (currentToolUse) {
-            let parsedInput: Record<string, unknown> = {};
-            try {
-              parsedInput = JSON.parse(currentToolUse.input);
-            } catch {
-              parsedInput = {};
-            }
-
-            toolUseBlocks.push({
-              type: 'tool_use',
-              id: currentToolUse.id,
-              name: currentToolUse.name,
-              input: parsedInput,
-            });
-
-            sendEvent({
-              type: 'tool_input',
-              tool_id: currentToolUse.id,
-              tool_name: currentToolUse.name,
-              input: parsedInput,
-            });
-
-            currentToolUse = null;
-          }
-        }
-      }
-
-      const finalMessage = await stream.finalMessage();
-
-      if (finalMessage.stop_reason === 'tool_use' && hasToolUse) {
-        currentMessages.push({ role: 'assistant', content: finalMessage.content });
-
-        const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-        for (const toolUseBlock of toolUseBlocks) {
-          const toolInput = toolUseBlock.input as Record<string, unknown>;
-          const toolStart = Date.now();
-          const result = await executeToolCall(toolUseBlock.name, toolInput);
-          const elapsed = Date.now() - toolStart;
-          const confidence = randomConfidence(toolUseBlock.name);
-
-          sendEvent({
-            type: 'tool_result',
-            tool_id: toolUseBlock.id,
-            tool_name: toolUseBlock.name,
-            result: JSON.parse(result),
-            elapsed_ms: elapsed,
-            confidence,
-          });
-
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: toolUseBlock.id,
-            content: result,
-          });
-        }
-
-        currentMessages.push({ role: 'user', content: toolResults });
-      } else {
-        continueLoop = false;
-      }
+    if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
+      if (!client) throw new Error('Missing Anthropic-compatible client.');
+      await runAnthropicChatLoop(client, executingRoute, anthropicMessages, autonomyMode, sendEvent);
+    } else {
+      await runOpenAIChatLoop(requestedRoute, messages, autonomyMode, sendEvent);
     }
 
     sendEvent({ type: 'done' });

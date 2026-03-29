@@ -116,7 +116,7 @@ export function getModelRoutingStatus() {
 }
 
 function isToolLoopCompatible(provider: Provider): boolean {
-  return provider === 'anthropic' || provider === 'minimax';
+  return provider === 'anthropic' || provider === 'minimax' || provider === 'openrouter' || provider === 'openai';
 }
 
 function anthropicTextFromResponse(response: { content: Array<{ type: string; text?: string }> }): string {
@@ -203,7 +203,7 @@ export async function generateText(profile: TextProfile, system: string, message
 
 export function getChatClient(profile: 'balanced' | 'frontier' | 'operations' = 'balanced') {
   const requestedRoute = getTextRoute(profile);
-  if (isToolLoopCompatible(requestedRoute.provider)) {
+  if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
     const resolved = getAnthropicCompatibleClient(profile);
     return {
       ...resolved,
@@ -213,12 +213,12 @@ export function getChatClient(profile: 'balanced' | 'frontier' | 'operations' = 
     };
   }
 
-  const resolved = getAnthropicCompatibleClient('balanced');
   return {
-    ...resolved,
+    client: null,
+    route: requestedRoute,
     requestedRoute,
-    executingRoute: resolved.route,
-    fallbackApplied: true,
+    executingRoute: requestedRoute,
+    fallbackApplied: false,
   };
 }
 
