@@ -7,7 +7,16 @@ import path from 'path';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
 import { createAutomation, loadPersistedAutomations } from './scheduler';
-import { generateText, getChatClient, getChatModelConfig, getModelRoutingStatus, getUtilityModelConfig } from './models';
+import {
+  generateText,
+  getChatClient,
+  getChatModelConfig,
+  getMicroModelConfig,
+  getModelRoutingStatus,
+  getUtilityModelConfig,
+  routeChatProfile,
+  type TextProfile,
+} from './models';
 
 dotenv.config();
 
@@ -34,15 +43,6 @@ app.use(express.json());
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 app.use('/api/generated-screenshots', express.static(SCREENSHOT_DIR));
 
-/**
- * Model Tier Configuration
- * ─────────────────────────────────────────────────────────────────
- * Opus 4.6   → Complex reasoning, multi-step tool orchestration,
- *              report generation, strategic thinking. High cost.
- * Haiku 4.5  → Fast, cheap utility tasks: title generation,
- *              conversation summarisation, intent classification,
- *              anything that doesn't need deep reasoning.
- */
 function buildSystemPrompt(autonomyMode: string): string {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -772,7 +772,7 @@ interface ChatRequest {
   messages: ChatMessage[];
   conversationId?: string;
   autonomyMode?: string;
-  modelProfile?: 'balanced' | 'frontier' | 'operations';
+  modelProfile?: TextProfile | 'auto';
 }
 
 async function runAutomation(automation: {
@@ -806,7 +806,7 @@ async function runAutomation(automation: {
 }
 
 app.post('/api/chat', async (req: Request, res: Response) => {
-  const { messages, autonomyMode = 'cautious', modelProfile = 'balanced' } = req.body as ChatRequest;
+  const { messages, autonomyMode = 'cautious', modelProfile = 'auto' } = req.body as ChatRequest;
 
   if (!messages || !Array.isArray(messages)) {
     res.status(400).json({ error: 'Invalid request: messages array required' });
@@ -824,12 +824,26 @@ app.post('/api/chat', async (req: Request, res: Response) => {
   };
 
   try {
-    const { client, executingRoute } = getChatClient(modelProfile);
-    const requestedRoute = getChatModelConfig(modelProfile);
+    const routingDecision = modelProfile === 'auto'
+      ? await routeChatProfile(messages)
+      : null;
+    const resolvedProfile: TextProfile = routingDecision?.profile || (modelProfile === 'auto' ? 'default' : modelProfile);
+    const { client, executingRoute } = getChatClient(resolvedProfile);
+    const requestedRoute = getChatModelConfig(resolvedProfile);
     const anthropicMessages: Anthropic.MessageParam[] = messages.map(m => ({
       role: m.role,
       content: m.content,
     }));
+
+    sendEvent({
+      type: 'routing',
+      requested_profile: modelProfile,
+      selected_profile: resolvedProfile,
+      selected_model: requestedRoute.model,
+      reason: routingDecision?.reason || 'explicit_profile',
+      risk: routingDecision?.risk || 'low',
+      needs_tools: routingDecision?.needsTools ?? true,
+    });
 
     if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
       if (!client) throw new Error('Missing Anthropic-compatible client.');
@@ -947,22 +961,30 @@ app.post('/api/waitlist', (req: Request, res: Response) => {
 });
 
 app.get('/api/health', (_req: Request, res: Response) => {
+  const defaultClient = getChatClient('default');
+  const hardClient = getChatClient('hard');
+  const criticalClient = getChatClient('critical');
+  const opsClient = getChatClient('ops');
+
   res.json({
     status: 'ok',
     service: 'nexus-by-purple-orange-ai',
     models: {
-      balanced: getChatModelConfig('balanced').model,
-      frontier: getChatModelConfig('frontier').model,
-      operations: getChatModelConfig('operations').model,
+      micro: getMicroModelConfig().model,
+      default: getChatModelConfig('default').model,
+      hard: getChatModelConfig('hard').model,
+      critical: getChatModelConfig('critical').model,
+      ops: getChatModelConfig('ops').model,
       utility: getUtilityModelConfig().model,
     },
     model_routing: getModelRoutingStatus(),
     chat_execution: {
-      balanced: getChatClient('balanced').executingRoute.model,
-      frontier: getChatClient('frontier').executingRoute.model,
-      operations_requested: getChatClient('operations').requestedRoute.model,
-      operations_executed: getChatClient('operations').executingRoute.model,
-      operations_fallback: getChatClient('operations').fallbackApplied,
+      default: defaultClient.executingRoute.model,
+      hard: hardClient.executingRoute.model,
+      critical: criticalClient.executingRoute.model,
+      ops_requested: opsClient.requestedRoute.model,
+      ops_executed: opsClient.executingRoute.model,
+      ops_fallback: opsClient.fallbackApplied,
     },
     integrations: getIntegrationStatus(),
     timestamp: new Date().toISOString(),

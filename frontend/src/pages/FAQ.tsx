@@ -75,7 +75,7 @@ const CATEGORIES = [
       },
       {
         q: 'Who builds the AI that powers Nexus?',
-        a: 'Nexus is powered by Anthropic\'s Claude — currently the claude-opus-4-6 model for core reasoning and tool orchestration, with claude-haiku-4-5 handling lightweight utility tasks like title generation and summarization. Anthropic\'s models are industry-leading on safety, reliability, and instruction-following.',
+        a: 'Nexus uses a routed model stack rather than a single model. Claude Sonnet handles most interactive work, GPT-5 covers harder reasoning, Claude Opus is reserved for critical high-stakes tasks, MiniMax powers heavy operational runs, and Mistral handles embeddings and memory. That keeps the system both capable and efficient.',
       },
       {
         q: 'Can I connect Nexus to my internal tools without exposing credentials?',

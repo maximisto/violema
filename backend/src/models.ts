@@ -2,8 +2,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages/messages';
 
 type Provider = 'anthropic' | 'minimax' | 'openai' | 'openrouter' | 'mistral';
-type TextProfile = 'balanced' | 'frontier' | 'operations' | 'utility';
-type EmbeddingProfile = 'memory';
+type CanonicalTextProfile = 'micro' | 'default' | 'hard' | 'critical' | 'ops';
+type LegacyTextProfile = 'balanced' | 'frontier' | 'operations' | 'utility';
+export type TextProfile = CanonicalTextProfile | LegacyTextProfile;
+type CanonicalEmbeddingProfile = 'memory_text' | 'memory_code';
+type LegacyEmbeddingProfile = 'memory';
+type EmbeddingProfile = CanonicalEmbeddingProfile | LegacyEmbeddingProfile;
 
 interface ModelRoute {
   provider: Provider;
@@ -11,6 +15,13 @@ interface ModelRoute {
   apiKeyEnv: string;
   baseUrl?: string;
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+}
+
+export interface RoutingDecision {
+  profile: CanonicalTextProfile;
+  reason: string;
+  risk: 'low' | 'medium' | 'high';
+  needsTools: boolean;
 }
 
 function env(name: string): string | undefined {
@@ -23,56 +34,143 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function resolveTextProfile(profile: TextProfile): CanonicalTextProfile {
+  switch (profile) {
+    case 'balanced':
+      return 'default';
+    case 'frontier':
+      return 'critical';
+    case 'operations':
+      return 'ops';
+    case 'utility':
+      return 'micro';
+    default:
+      return profile;
+  }
+}
+
+function resolveEmbeddingProfile(profile: EmbeddingProfile): CanonicalEmbeddingProfile {
+  if (profile === 'memory') return 'memory_text';
+  return profile;
+}
+
 function getTextRoute(profile: TextProfile): ModelRoute {
-  const defaults: Record<TextProfile, ModelRoute> = {
-    balanced: {
+  const resolvedProfile = resolveTextProfile(profile);
+  const defaults: Record<CanonicalTextProfile, ModelRoute> = {
+    micro: {
+      provider: 'openai',
+      model: 'gpt-5.4-nano',
+      apiKeyEnv: 'OPENAI_API_KEY',
+      baseUrl: env('OPENAI_BASE_URL') || 'https://api.openai.com/v1',
+      reasoningEffort: 'minimal',
+    },
+    default: {
       provider: 'anthropic',
       model: 'claude-sonnet-4-20250514',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       baseUrl: env('ANTHROPIC_BASE_URL'),
     },
-    frontier: {
+    hard: {
+      provider: 'openai',
+      model: 'gpt-5.4',
+      apiKeyEnv: 'OPENAI_API_KEY',
+      baseUrl: env('OPENAI_BASE_URL') || 'https://api.openai.com/v1',
+      reasoningEffort: 'medium',
+    },
+    critical: {
       provider: 'anthropic',
       model: 'claude-opus-4-1-20250805',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       baseUrl: env('ANTHROPIC_BASE_URL'),
     },
-    operations: {
+    ops: {
       provider: 'openrouter',
       model: 'minimax/minimax-m2.7',
       apiKeyEnv: 'OPENROUTER_API_KEY',
       baseUrl: env('OPENROUTER_BASE_URL') || 'https://openrouter.ai/api/v1',
     },
+  };
+
+  const legacyOverrides: Partial<Record<LegacyTextProfile, Partial<ModelRoute>>> = {
+    balanced: {
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-20250514',
+      apiKeyEnv: 'ANTHROPIC_API_KEY',
+    },
+    frontier: {
+      provider: 'anthropic',
+      model: 'claude-opus-4-1-20250805',
+      apiKeyEnv: 'ANTHROPIC_API_KEY',
+    },
+    operations: {
+      provider: 'openrouter',
+      model: 'minimax/minimax-m2.7',
+      apiKeyEnv: 'OPENROUTER_API_KEY',
+    },
     utility: {
       provider: 'openai',
-      model: 'gpt-5-mini',
+      model: 'gpt-5.4-nano',
       apiKeyEnv: 'OPENAI_API_KEY',
       baseUrl: env('OPENAI_BASE_URL') || 'https://api.openai.com/v1',
       reasoningEffort: 'minimal',
     },
   };
 
-  const prefix = `MODEL_${profile.toUpperCase()}`;
+  const prefix = `MODEL_${resolvedProfile.toUpperCase()}`;
+  const route = {
+    ...defaults[resolvedProfile],
+    provider: (env(`${prefix}_PROVIDER`) as Provider | undefined) || defaults[resolvedProfile].provider,
+    model: env(`${prefix}_MODEL`) || defaults[resolvedProfile].model,
+    apiKeyEnv: env(`${prefix}_API_KEY_ENV`) || defaults[resolvedProfile].apiKeyEnv,
+    baseUrl: env(`${prefix}_BASE_URL`) || defaults[resolvedProfile].baseUrl,
+    reasoningEffort: (env(`${prefix}_REASONING_EFFORT`) as ModelRoute['reasoningEffort'] | undefined) || defaults[resolvedProfile].reasoningEffort,
+  };
+
+  if (profile === resolvedProfile) {
+    return route;
+  }
+
+  const legacyPrefix = `MODEL_${profile.toUpperCase()}`;
   return {
-    ...defaults[profile],
-    provider: (env(`${prefix}_PROVIDER`) as Provider | undefined) || defaults[profile].provider,
-    model: env(`${prefix}_MODEL`) || defaults[profile].model,
-    apiKeyEnv: env(`${prefix}_API_KEY_ENV`) || defaults[profile].apiKeyEnv,
-    baseUrl: env(`${prefix}_BASE_URL`) || defaults[profile].baseUrl,
-    reasoningEffort: (env(`${prefix}_REASONING_EFFORT`) as ModelRoute['reasoningEffort'] | undefined) || defaults[profile].reasoningEffort,
+    ...route,
+    ...legacyOverrides[profile as LegacyTextProfile],
+    provider: (env(`${legacyPrefix}_PROVIDER`) as Provider | undefined) || route.provider,
+    model: env(`${legacyPrefix}_MODEL`) || route.model,
+    apiKeyEnv: env(`${legacyPrefix}_API_KEY_ENV`) || route.apiKeyEnv,
+    baseUrl: env(`${legacyPrefix}_BASE_URL`) || route.baseUrl,
+    reasoningEffort: (env(`${legacyPrefix}_REASONING_EFFORT`) as ModelRoute['reasoningEffort'] | undefined) || route.reasoningEffort,
   };
 }
 
-function getEmbeddingRoute(_profile: EmbeddingProfile): ModelRoute {
+function getEmbeddingRoute(profile: EmbeddingProfile): ModelRoute {
+  const resolvedProfile = resolveEmbeddingProfile(profile);
+  const defaults: Record<CanonicalEmbeddingProfile, ModelRoute> = {
+    memory_text: {
+      provider: 'mistral',
+      model: env('MODEL_MEMORY_TEXT_MODEL') || env('MODEL_MEMORY_MODEL') || 'mistral-embed',
+      apiKeyEnv: env('MODEL_MEMORY_TEXT_API_KEY_ENV') || env('MODEL_MEMORY_API_KEY_ENV') || 'MISTRAL_API_KEY',
+      baseUrl: env('MISTRAL_BASE_URL') || 'https://api.mistral.ai/v1',
+    },
+    memory_code: {
+      provider: 'mistral',
+      model: env('MODEL_MEMORY_CODE_MODEL') || 'codestral-embed',
+      apiKeyEnv: env('MODEL_MEMORY_CODE_API_KEY_ENV') || 'MISTRAL_API_KEY',
+      baseUrl: env('MISTRAL_BASE_URL') || 'https://api.mistral.ai/v1',
+    },
+  };
+
+  const prefix = `MODEL_${resolvedProfile.toUpperCase()}`;
   return {
-    provider: 'mistral',
-    model: env('MODEL_MEMORY_MODEL') || 'mistral-embed',
-    apiKeyEnv: env('MODEL_MEMORY_API_KEY_ENV') || 'MISTRAL_API_KEY',
-    baseUrl: env('MISTRAL_BASE_URL') || 'https://api.mistral.ai/v1',
+    ...defaults[resolvedProfile],
+    provider: (env(`${prefix}_PROVIDER`) as Provider | undefined) || defaults[resolvedProfile].provider,
+    model: env(`${prefix}_MODEL`) || defaults[resolvedProfile].model,
+    apiKeyEnv: env(`${prefix}_API_KEY_ENV`) || defaults[resolvedProfile].apiKeyEnv,
+    baseUrl: env(`${prefix}_BASE_URL`) || defaults[resolvedProfile].baseUrl,
+    reasoningEffort: (env(`${prefix}_REASONING_EFFORT`) as ModelRoute['reasoningEffort'] | undefined) || defaults[resolvedProfile].reasoningEffort,
   };
 }
 
-function getAnthropicCompatibleClient(profile: 'balanced' | 'frontier' | 'operations') {
+function getAnthropicCompatibleClient(profile: TextProfile) {
   const route = getTextRoute(profile);
   if (route.provider !== 'anthropic' && route.provider !== 'minimax') {
     throw new Error(`${profile} profile must use an Anthropic-compatible provider.`);
@@ -87,31 +185,43 @@ function getAnthropicCompatibleClient(profile: 'balanced' | 'frontier' | 'operat
   };
 }
 
-export function getChatModelConfig(profile: 'balanced' | 'frontier' | 'operations' = 'balanced') {
+export function getChatModelConfig(profile: TextProfile = 'default') {
   return getTextRoute(profile);
 }
 
 export function getUtilityModelConfig() {
-  return getTextRoute('utility');
+  return getTextRoute('micro');
+}
+
+export function getMicroModelConfig() {
+  return getTextRoute('micro');
 }
 
 export function getMemoryEmbeddingConfig() {
-  return getEmbeddingRoute('memory');
+  return getEmbeddingRoute('memory_text');
+}
+
+export function getCodeEmbeddingConfig() {
+  return getEmbeddingRoute('memory_code');
 }
 
 export function getModelRoutingStatus() {
-  const balanced = getTextRoute('balanced');
-  const frontier = getTextRoute('frontier');
-  const operations = getTextRoute('operations');
-  const utility = getTextRoute('utility');
-  const memory = getEmbeddingRoute('memory');
+  const micro = getTextRoute('micro');
+  const defaultRoute = getTextRoute('default');
+  const hard = getTextRoute('hard');
+  const critical = getTextRoute('critical');
+  const ops = getTextRoute('ops');
+  const memoryText = getEmbeddingRoute('memory_text');
+  const memoryCode = getEmbeddingRoute('memory_code');
 
   return {
-    balanced: { provider: balanced.provider, model: balanced.model, configured: Boolean(env(balanced.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(balanced.provider) },
-    frontier: { provider: frontier.provider, model: frontier.model, configured: Boolean(env(frontier.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(frontier.provider) },
-    operations: { provider: operations.provider, model: operations.model, configured: Boolean(env(operations.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(operations.provider) },
-    utility: { provider: utility.provider, model: utility.model, configured: Boolean(env(utility.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(utility.provider) },
-    memory: { provider: memory.provider, model: memory.model, configured: Boolean(env(memory.apiKeyEnv)), tool_loop_compatible: false },
+    micro: { provider: micro.provider, model: micro.model, configured: Boolean(env(micro.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(micro.provider) },
+    default: { provider: defaultRoute.provider, model: defaultRoute.model, configured: Boolean(env(defaultRoute.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(defaultRoute.provider) },
+    hard: { provider: hard.provider, model: hard.model, configured: Boolean(env(hard.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(hard.provider) },
+    critical: { provider: critical.provider, model: critical.model, configured: Boolean(env(critical.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(critical.provider) },
+    ops: { provider: ops.provider, model: ops.model, configured: Boolean(env(ops.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(ops.provider) },
+    memory_text: { provider: memoryText.provider, model: memoryText.model, configured: Boolean(env(memoryText.apiKeyEnv)), tool_loop_compatible: false },
+    memory_code: { provider: memoryCode.provider, model: memoryCode.model, configured: Boolean(env(memoryCode.apiKeyEnv)), tool_loop_compatible: false },
   };
 }
 
@@ -172,7 +282,8 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
 }
 
 async function generateWithAnthropicLike(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number) {
-  if (profile !== 'balanced' && profile !== 'frontier' && profile !== 'operations') {
+  const resolvedProfile = resolveTextProfile(profile);
+  if (resolvedProfile !== 'default' && resolvedProfile !== 'critical' && resolvedProfile !== 'ops') {
     throw new Error(`Unsupported Anthropic-compatible profile: ${profile}`);
   }
 
@@ -201,7 +312,7 @@ export async function generateText(profile: TextProfile, system: string, message
   throw new Error(`Unsupported text provider for ${profile}: ${route.provider}`);
 }
 
-export function getChatClient(profile: 'balanced' | 'frontier' | 'operations' = 'balanced') {
+export function getChatClient(profile: TextProfile = 'default') {
   const requestedRoute = getTextRoute(profile);
   if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
     const resolved = getAnthropicCompatibleClient(profile);
@@ -220,6 +331,91 @@ export function getChatClient(profile: 'balanced' | 'frontier' | 'operations' = 
     executingRoute: requestedRoute,
     fallbackApplied: false,
   };
+}
+
+function truncateForRouting(content: string): string {
+  return content.replace(/\s+/g, ' ').trim().slice(0, 1200);
+}
+
+function heuristicRoute(messages: Array<{ role: string; content: string }>): RoutingDecision {
+  const userText = messages
+    .filter((message) => message.role === 'user')
+    .map((message) => truncateForRouting(message.content))
+    .join('\n\n');
+  const text = userText.toLowerCase();
+
+  const needsTools = /(search|latest|current|news|price|email|slack|screenshot|screen shot|browser|schedule|automation|report|github|jira|linear|hubspot|stripe|salesforce|ga4|google analytics|run code|write code|debug)/.test(text);
+  const highRisk = /(legal|medical|financial|security|production|incident|outage|migration|contract|board|investor|customer-facing|root cause|architecture)/.test(text);
+  const heavyOps = /(batch|bulk|pipeline|queue|throughput|monitor|cron|scheduler|automation|backfill|process thousands|large volume|operational)/.test(text);
+  const complex = /(design|plan|strategy|compare|tradeoff|root cause|refactor|debug|implement|analyze|investigate|architecture|system prompt|multi-step)/.test(text) || userText.length > 1800;
+
+  if (highRisk) {
+    return { profile: 'critical', reason: 'high_risk_task', risk: 'high', needsTools };
+  }
+
+  if (heavyOps && needsTools) {
+    return { profile: 'ops', reason: 'operational_workload', risk: 'medium', needsTools };
+  }
+
+  if (complex || (needsTools && userText.length > 600)) {
+    return { profile: 'hard', reason: 'complex_multi_step_request', risk: 'medium', needsTools };
+  }
+
+  if (!needsTools && userText.length < 240) {
+    return { profile: 'micro', reason: 'small_text_task', risk: 'low', needsTools: false };
+  }
+
+  return { profile: 'default', reason: needsTools ? 'tool_using_default' : 'general_default', risk: 'low', needsTools };
+}
+
+export async function routeChatProfile(messages: Array<{ role: string; content: string }>): Promise<RoutingDecision> {
+  const microConfigured = Boolean(env(getTextRoute('micro').apiKeyEnv));
+  const promptMessages = messages
+    .slice(-8)
+    .map((message) => ({
+      role: message.role,
+      content: truncateForRouting(message.content),
+    }))
+    .filter((message) => message.content);
+
+  if (!microConfigured || promptMessages.length === 0) {
+    return heuristicRoute(messages);
+  }
+
+  try {
+    const response = await generateText(
+      'micro',
+      'Classify the task for routing. Return JSON only with keys: profile, reason, risk, needsTools. Valid profile values: micro, default, hard, critical, ops. Valid risk values: low, medium, high.',
+      [{
+        role: 'user',
+        content: JSON.stringify({
+          messages: promptMessages,
+          instructions: 'Choose the cheapest model that can reliably complete the task. Use ops for long-running or operational workloads, critical for high-stakes work, hard for complex reasoning or coding, default for normal tool-using chat, micro for short low-risk text tasks.',
+        }),
+      }],
+      120
+    );
+
+    const parsed = JSON.parse(response) as Partial<RoutingDecision>;
+    if (
+      parsed.profile &&
+      ['micro', 'default', 'hard', 'critical', 'ops'].includes(parsed.profile) &&
+      parsed.reason &&
+      parsed.risk &&
+      ['low', 'medium', 'high'].includes(parsed.risk)
+    ) {
+      return {
+        profile: parsed.profile as CanonicalTextProfile,
+        reason: String(parsed.reason),
+        risk: parsed.risk as RoutingDecision['risk'],
+        needsTools: Boolean(parsed.needsTools),
+      };
+    }
+  } catch {
+    // Fall back to deterministic routing if the cheap router fails.
+  }
+
+  return heuristicRoute(messages);
 }
 
 export async function createMemoryEmbeddings(input: string | string[]) {
