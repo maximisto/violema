@@ -92,6 +92,18 @@ interface PlatformTaskRunRecord {
   metadata?: Record<string, unknown>;
 }
 
+interface AutomationApiRecord {
+  id: string;
+  name: string;
+  description?: string;
+  schedule: string;
+  actions: string[];
+  notify?: string;
+  condition?: string;
+  status: 'active' | 'paused';
+  created_at: string;
+}
+
 interface DashboardTaskItem {
   id: string | number;
   title: string;
@@ -103,6 +115,12 @@ interface DashboardTaskItem {
   modelTier?: string;
   agentRole?: string;
   runStatus?: string;
+  automationId?: string;
+  schedule?: string;
+  notify?: string;
+  condition?: string;
+  actions?: string[];
+  automationStatus?: 'active' | 'paused';
 }
 
 // ─── Mode config (single source of truth) ────────────────────────────────────
@@ -245,7 +263,7 @@ export default function Dashboard() {
   const [autonomyMode, setAutonomyMode] = useState<AutonomyMode>('cautious');
   const [searchQuery, setSearchQuery] = useState('');
   const [platformTasks, setPlatformTasks] = useState<DashboardTaskItem[]>([]);
-  const [automationSource, setAutomationSource] = useState<'sample' | 'live'>('sample');
+  const [liveAutomations, setLiveAutomations] = useState<DashboardTaskItem[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
@@ -274,6 +292,10 @@ export default function Dashboard() {
     };
 
     Promise.all([
+      fetch('/api/automations', {
+        headers,
+        signal: controller.signal,
+      }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('automations')))),
       fetch(`/api/platform/tasks?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
         headers,
         signal: controller.signal,
@@ -283,7 +305,8 @@ export default function Dashboard() {
         signal: controller.signal,
       }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('runs')))),
     ])
-      .then(([taskPayload, runPayload]) => {
+      .then(([automationPayload, taskPayload, runPayload]) => {
+        const automations = Array.isArray(automationPayload?.items) ? automationPayload.items as AutomationApiRecord[] : [];
         const tasks = Array.isArray(taskPayload?.items) ? taskPayload.items as PlatformTaskRecord[] : [];
         const runs = Array.isArray(runPayload?.items) ? runPayload.items as PlatformTaskRunRecord[] : [];
         const latestRunByTask = new Map<string, PlatformTaskRunRecord>();
@@ -314,18 +337,40 @@ export default function Dashboard() {
             };
           });
 
+        const automationItems = automations
+          .slice(0, 12)
+          .map((automation) => ({
+            id: automation.id,
+            title: automation.name,
+            status: automation.status === 'paused' ? 'alert' as DashboardTaskStatus : 'scheduled' as DashboardTaskStatus,
+            time: automation.schedule,
+            icon: automation.status === 'paused' ? AlertCircle : Clock,
+            description: automation.description,
+            source: 'live' as const,
+            automationId: automation.id,
+            schedule: automation.schedule,
+            notify: automation.notify,
+            condition: automation.condition,
+            actions: automation.actions,
+            automationStatus: automation.status,
+          }));
+
+        if (automationItems.length > 0) {
+          setLiveAutomations(automationItems);
+          setSelectedTaskId((current) => current || automationItems[0].id);
+        } else {
+          setLiveAutomations([]);
+        }
+
         if (liveTasks.length > 0) {
           setPlatformTasks(liveTasks);
-          setAutomationSource('live');
-          setSelectedTaskId((current) => current || liveTasks[0].id);
         } else {
           setPlatformTasks([]);
-          setAutomationSource('sample');
         }
       })
       .catch(() => {
+        setLiveAutomations([]);
         setPlatformTasks([]);
-        setAutomationSource('sample');
       });
 
     return () => controller.abort();
@@ -358,6 +403,64 @@ export default function Dashboard() {
     },
     [activeConvoId, isMobileSidebar]
   );
+
+  const refreshAutomations = useCallback(async () => {
+    const workspace = resolveWorkspaceContext();
+    const headers = {
+      'X-Workspace-Id': workspace.workspaceId,
+      'X-Workspace-Name': workspace.workspaceName,
+    };
+    const response = await fetch('/api/automations', { headers });
+    if (!response.ok) throw new Error('Could not refresh automations');
+    const payload = await response.json() as { items?: AutomationApiRecord[] };
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    const mapped = items.slice(0, 12).map((automation) => ({
+      id: automation.id,
+      title: automation.name,
+      status: automation.status === 'paused' ? 'alert' as DashboardTaskStatus : 'scheduled' as DashboardTaskStatus,
+      time: automation.schedule,
+      icon: automation.status === 'paused' ? AlertCircle : Clock,
+      description: automation.description,
+      source: 'live' as const,
+      automationId: automation.id,
+      schedule: automation.schedule,
+      notify: automation.notify,
+      condition: automation.condition,
+      actions: automation.actions,
+      automationStatus: automation.status,
+    }));
+    setLiveAutomations(mapped);
+  }, []);
+
+  const handleAutomationRun = useCallback(async (task: DashboardTaskItem | undefined) => {
+    if (!task?.automationId) return;
+    await fetch(`/api/automations/${task.automationId}/run`, { method: 'POST' });
+  }, []);
+
+  const handleAutomationPauseToggle = useCallback(async (task: DashboardTaskItem | undefined) => {
+    if (!task?.automationId) return;
+    const nextStatus = task.automationStatus === 'paused' ? 'active' : 'paused';
+    const response = await fetch(`/api/automations/${task.automationId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: nextStatus }),
+    });
+    if (!response.ok) throw new Error('Could not update automation');
+    await refreshAutomations();
+  }, [refreshAutomations]);
+
+  const handleAutomationEdit = useCallback(async (task: DashboardTaskItem | undefined) => {
+    if (!task?.automationId) return;
+    const nextSchedule = window.prompt('Update schedule', task.schedule || task.time);
+    if (!nextSchedule || nextSchedule === task.schedule) return;
+    const response = await fetch(`/api/automations/${task.automationId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ schedule: nextSchedule }),
+    });
+    if (!response.ok) throw new Error('Could not update schedule');
+    await refreshAutomations();
+  }, [refreshAutomations]);
 
   const handleMessagesChange = useCallback(
     (messages: Message[]) => {
@@ -417,7 +520,9 @@ export default function Dashboard() {
       (c.lastMessage ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const taskItems: DashboardTaskItem[] = platformTasks.length > 0
+  const taskItems: DashboardTaskItem[] = liveAutomations.length > 0
+    ? liveAutomations
+    : platformTasks.length > 0
     ? platformTasks
     : SAMPLE_TASKS.map((task) => ({
         ...task,
@@ -880,13 +985,25 @@ export default function Dashboard() {
                         : 'This workflow is on schedule. Open it for details or tweak the cadence before the next run.'}
                   </p>
                   <div className="mt-3 flex items-center gap-2">
-                    <button className="flex-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12">
-                      Open
+                    <button
+                      onClick={() => { void handleAutomationRun(selectedTask); }}
+                      disabled={selectedTask?.source !== 'live'}
+                      className="flex-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Run now
                     </button>
-                    <button className="flex-1 rounded-xl border border-navy-700/70 bg-navy-950/35 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition-colors hover:bg-navy-900/70">
-                      Pause
+                    <button
+                      onClick={() => { void handleAutomationPauseToggle(selectedTask); }}
+                      disabled={selectedTask?.source !== 'live'}
+                      className="flex-1 rounded-xl border border-navy-700/70 bg-navy-950/35 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition-colors hover:bg-navy-900/70 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {selectedTask?.automationStatus === 'paused' ? 'Resume' : 'Pause'}
                     </button>
-                    <button className="flex-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12">
+                    <button
+                      onClick={() => { void handleAutomationEdit(selectedTask); }}
+                      disabled={selectedTask?.source !== 'live'}
+                      className="flex-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
                       Edit
                     </button>
                   </div>

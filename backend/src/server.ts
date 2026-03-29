@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
-import { createAutomation, loadPersistedAutomations } from './scheduler';
+import { createAutomation, getAutomationById, listAutomations, loadPersistedAutomations, triggerAutomationNow, updateAutomation } from './scheduler';
 import {
   addLedgerEntry,
   assertCanSpendCredits,
@@ -1542,6 +1542,47 @@ app.post('/api/billing/referrals/:id/reward', (req: Request, res: Response) => {
     summary: summarizeReferralRewards(workspaceId),
     billing: getBillingStatus(workspaceId),
   });
+});
+
+app.get('/api/automations', (_req: Request, res: Response) => {
+  res.json({ items: listAutomations() });
+});
+
+app.post('/api/automations/:id/run', (req: Request, res: Response) => {
+  const record = triggerAutomationNow(req.params.id, runAutomation);
+  if (!record) {
+    res.status(404).json({ error: 'Automation not found' });
+    return;
+  }
+
+  res.json({ ok: true, item: record, message: `Triggered ${record.name}` });
+});
+
+app.patch('/api/automations/:id', (req: Request, res: Response) => {
+  const patch: Record<string, unknown> = {};
+
+  if (typeof req.body.name === 'string') patch.name = req.body.name.trim();
+  if (typeof req.body.description === 'string') patch.description = req.body.description.trim();
+  if (typeof req.body.schedule === 'string') patch.schedule = req.body.schedule.trim();
+  if (typeof req.body.notify === 'string') patch.notify = req.body.notify.trim();
+  if (typeof req.body.condition === 'string') patch.condition = req.body.condition.trim();
+  if (req.body.notify === null) patch.notify = undefined;
+  if (req.body.condition === null) patch.condition = undefined;
+  if (req.body.description === null) patch.description = undefined;
+  if (req.body.status === 'active' || req.body.status === 'paused') {
+    patch.status = req.body.status;
+  }
+
+  try {
+    const updated = updateAutomation(req.params.id, patch, runAutomation);
+    if (!updated) {
+      res.status(404).json({ error: 'Automation not found' });
+      return;
+    }
+    res.json({ ok: true, item: updated });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not update automation' });
+  }
 });
 
 app.get('/api/platform/tasks', (req: Request, res: Response) => {

@@ -11,7 +11,7 @@ export interface AutomationRecord {
   actions: string[];
   notify?: string;
   condition?: string;
-  status: 'active';
+  status: 'active' | 'paused';
   created_at: string;
 }
 
@@ -104,6 +104,11 @@ function scheduleAutomationTask(record: AutomationRecord, onTrigger: (record: Au
   existing?.stop();
   existing?.destroy();
 
+  if (record.status === 'paused') {
+    scheduledTasks.delete(record.id);
+    return;
+  }
+
   const task = cron.schedule(record.cron_expression, () => {
     void onTrigger(record);
   });
@@ -114,9 +119,55 @@ function scheduleAutomationTask(record: AutomationRecord, onTrigger: (record: Au
 export function loadPersistedAutomations(onTrigger: (record: AutomationRecord) => Promise<void> | void) {
   const items = readAutomations();
   for (const item of items) {
-    scheduleAutomationTask(item, onTrigger);
+    if (item.status !== 'paused') {
+      scheduleAutomationTask(item, onTrigger);
+    }
   }
   return items;
+}
+
+export function listAutomations() {
+  return readAutomations().sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+}
+
+export function getAutomationById(id: string) {
+  return readAutomations().find((item) => item.id === id) || null;
+}
+
+export function updateAutomation(
+  id: string,
+  patch: Partial<Omit<AutomationRecord, 'id' | 'created_at'>>,
+  onTrigger: (record: AutomationRecord) => Promise<void> | void
+) {
+  const items = readAutomations();
+  const index = items.findIndex((item) => item.id === id);
+  if (index === -1) return null;
+
+  const current = items[index];
+  const nextSchedule = patch.schedule ?? current.schedule;
+  const nextCronExpression =
+    patch.cron_expression ??
+    (patch.schedule && patch.schedule !== current.schedule ? normalizeSchedule(nextSchedule) : current.cron_expression);
+
+  const updated: AutomationRecord = {
+    ...current,
+    ...patch,
+    schedule: nextSchedule,
+    cron_expression: nextCronExpression,
+    status: patch.status ?? current.status,
+  };
+
+  items[index] = updated;
+  writeAutomations(items);
+  scheduleAutomationTask(updated, onTrigger);
+  return updated;
+}
+
+export function triggerAutomationNow(id: string, onTrigger: (record: AutomationRecord) => Promise<void> | void) {
+  const record = getAutomationById(id);
+  if (!record) return null;
+  void onTrigger(record);
+  return record;
 }
 
 export function createAutomation(
