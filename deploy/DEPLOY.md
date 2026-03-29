@@ -16,6 +16,10 @@ sudo bash deploy.sh
 sudo mkdir -p /var/www/nexus/backend
 sudo tee /var/www/nexus/backend/.env >/dev/null <<'EOF'
 ANTHROPIC_API_KEY=your_real_key
+TAVILY_API_KEY=your_tavily_key
+SENDGRID_API_KEY=your_sendgrid_key
+SENDGRID_FROM_EMAIL=demo@yourdomain.com
+SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
 PORT=3001
 NODE_ENV=production
 EOF
@@ -28,8 +32,10 @@ pm2 status
 pm2 logs nexus-backend
 sudo systemctl status nginx
 curl -I https://nexus.purpleorange.io
+curl https://nexus.purpleorange.io/api/health
 ```
 
 Notes:
 - The deploy script now bootstraps nginx over HTTP first, then switches to the full HTTPS config after Certbot succeeds.
 - The frontend is served from `frontend/dist` and `/api/*` is proxied to the Express backend on port `3001`.
+- `/api/health` now reports which real integrations are configured: Anthropic, Tavily, SendGrid, and Slack.

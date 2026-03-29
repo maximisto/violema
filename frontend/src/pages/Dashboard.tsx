@@ -90,11 +90,11 @@ const MODE_BUTTONS = [
   },
   {
     mode: 'supervised' as AutonomyMode,
-    label: 'Supervised',
+    label: '',
     fullLabel: 'Supervised',
     icon: Eye,
-    activeClass: 'bg-cyan-900/50 text-cyan-300 border-cyan-800/50',
-    statusColor: 'text-cyan-500',
+    activeClass: 'bg-red-950/60 text-red-300 border-red-800/60',
+    statusColor: 'text-red-400',
     statusIcon: '👁',
     tooltip: 'Full reasoning visible at every step',
   },
@@ -242,6 +242,7 @@ export default function Dashboard() {
           key={mode}
           onClick={() => setAutonomyMode(mode)}
           title={tooltip}
+          aria-label={tooltip}
           aria-pressed={autonomyMode === mode}
           className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all duration-150 ${
             compact ? 'flex-1 justify-center' : ''
@@ -251,8 +252,8 @@ export default function Dashboard() {
               : 'text-slate-500 border-transparent hover:text-slate-300'
           }`}
         >
-          <Icon className="w-3 h-3" />
-          {label}
+          <Icon className={mode === 'supervised' ? 'w-5 h-5 text-red-400' : 'w-3 h-3'} />
+          {label && <span>{label}</span>}
         </button>
       ))}
     </div>

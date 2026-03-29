@@ -5,6 +5,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs';
 import path from 'path';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
+import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
+import { createAutomation, loadPersistedAutomations } from './scheduler';
 
 dotenv.config();
 
@@ -76,6 +78,7 @@ function buildSystemPrompt(autonomyMode: string): string {
 
 **Your capabilities:**
 - Web research: Search for current information, market data, news
+- Visual website inspection: Capture real browser screenshots of public pages
 - Code execution: Write and run code in Python, JS, TypeScript, bash
 - Task management: Create, assign, and track tasks in Linear/Jira
 - Communication: Draft and send Slack messages, emails, team updates
@@ -89,6 +92,9 @@ function buildSystemPrompt(autonomyMode: string): string {
 3. Chain multiple tools when a workflow requires it
 4. Always summarize results and suggest next actions
 5. Flag any uncertainties clearly
+6. Use \`browser_screenshot\` when the user asks to inspect a page visually or compare UI states
+7. Use \`web_search\` for current information instead of inventing citations or market facts
+8. If a real integration is missing configuration, say exactly which credential is missing
 
 Format responses with markdown: **bold** for key data points, bullet lists for clarity, code blocks for code. Be action-oriented.`;
 }
@@ -244,33 +250,8 @@ async function executeToolCall(toolName: string, toolInput: Record<string, unkno
   switch (toolName) {
     case 'web_search': {
       const query = toolInput.query as string;
-      const results = [
-        {
-          title: `${query} — Comprehensive Analysis 2025`,
-          url: `https://example.com/search?q=${encodeURIComponent(query)}`,
-          snippet: `Comprehensive overview of ${query}. Recent data shows significant growth with key metrics up 23% year-over-year. Industry experts predict continued expansion through Q4 2025.`,
-          published: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-        },
-        {
-          title: `${query}: Trends & Insights | TechCrunch`,
-          url: `https://techcrunch.com/${query.toLowerCase().replace(/\s+/g, '-')}`,
-          snippet: `Deep-dive analysis: ${query} continues to dominate the market. Key players including major enterprises are investing heavily, with combined investment up $2.3B this quarter.`,
-          published: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString(),
-        },
-        {
-          title: `${query} — Wikipedia`,
-          url: `https://en.wikipedia.org/wiki/${encodeURIComponent(query)}`,
-          snippet: `${query} refers to the technology and practices enabling... [background, history, key concepts, notable examples, and current developments as of 2025]`,
-          published: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(),
-        },
-        {
-          title: `State of ${query} Report — Gartner 2025`,
-          url: `https://gartner.com/reports/${query.toLowerCase().replace(/\s+/g, '-')}`,
-          snippet: `Gartner's annual report finds ${query} adoption has reached 51% among Fortune 500 companies, up from 23% in 2023. Cost savings average 34% in first-year implementations.`,
-          published: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-        },
-      ];
-      return JSON.stringify({ query, results, total_results: results.length, search_time_ms: 342 });
+      const numResults = toolInput.num_results as number | undefined;
+      return JSON.stringify(await searchWeb(query, numResults));
     }
 
     case 'browser_screenshot': {
@@ -350,16 +331,12 @@ async function executeToolCall(toolName: string, toolInput: Record<string, unkno
     }
 
     case 'send_message': {
-      return JSON.stringify({
-        success: true,
-        message_id: `msg_${Date.now()}`,
-        to: toolInput.to,
-        subject: toolInput.subject || null,
-        channel: toolInput.channel || 'slack',
-        sent_at: new Date().toISOString(),
-        status: 'delivered',
-        delivery_ms: Math.floor(Math.random() * 150) + 50,
-      });
+      return JSON.stringify(await sendMessage({
+        to: String(toolInput.to || ''),
+        subject: toolInput.subject ? String(toolInput.subject) : undefined,
+        body: String(toolInput.body || ''),
+        channel: toolInput.channel ? String(toolInput.channel) : undefined,
+      }));
     }
 
     case 'query_data': {
@@ -508,20 +485,27 @@ async function executeToolCall(toolName: string, toolInput: Record<string, unkno
     }
 
     case 'schedule_automation': {
-      const automationId = `auto_${Date.now()}`;
+      const record = createAutomation({
+        name: String(toolInput.name || ''),
+        description: toolInput.description ? String(toolInput.description) : undefined,
+        schedule: String(toolInput.schedule || ''),
+        actions: Array.isArray(toolInput.actions) ? toolInput.actions.map((item) => String(item)) : [],
+        notify: toolInput.notify ? String(toolInput.notify) : undefined,
+        condition: toolInput.condition ? String(toolInput.condition) : undefined,
+      }, runAutomation);
+
       return JSON.stringify({
         success: true,
-        automation_id: automationId,
-        name: toolInput.name,
-        description: toolInput.description,
-        schedule: toolInput.schedule,
-        actions: toolInput.actions,
-        notify: toolInput.notify || null,
-        condition: toolInput.condition || null,
-        next_run: new Date(Date.now() + 1000 * 60 * 60 * 8).toISOString(),
-        status: 'active',
-        created_at: new Date().toISOString(),
-        url: `https://nexus.app/automations/${automationId}`,
+        automation_id: record.id,
+        name: record.name,
+        description: record.description || null,
+        schedule: record.schedule,
+        cron_expression: record.cron_expression,
+        actions: record.actions,
+        notify: record.notify || null,
+        condition: record.condition || null,
+        status: record.status,
+        created_at: record.created_at,
       });
     }
 
@@ -539,6 +523,36 @@ interface ChatRequest {
   messages: ChatMessage[];
   conversationId?: string;
   autonomyMode?: string;
+}
+
+async function runAutomation(automation: {
+  id: string;
+  name: string;
+  description?: string;
+  actions: string[];
+  notify?: string;
+  condition?: string;
+}) {
+  const summary = [
+    `Automation: ${automation.name}`,
+    automation.description ? `Description: ${automation.description}` : null,
+    `Actions:\n- ${automation.actions.join('\n- ')}`,
+    automation.condition ? `Condition note: ${automation.condition}` : null,
+  ].filter(Boolean).join('\n\n');
+
+  try {
+    if (automation.notify) {
+      await sendMessage({
+        to: automation.notify,
+        subject: `Automation run: ${automation.name}`,
+        body: summary,
+      });
+    } else {
+      console.log(`[automation] ${automation.id}\n${summary}`);
+    }
+  } catch (error) {
+    console.error(`[automation] ${automation.id} failed`, error);
+  }
 }
 
 app.post('/api/chat', async (req: Request, res: Response) => {
@@ -789,9 +803,12 @@ app.get('/api/health', (_req: Request, res: Response) => {
     status: 'ok',
     service: 'nexus-by-purple-orange-ai',
     models: MODELS,
+    integrations: getIntegrationStatus(),
     timestamp: new Date().toISOString(),
   });
 });
+
+loadPersistedAutomations(runAutomation);
 
 app.listen(PORT, () => {
   console.log(`Nexus by Purple Orange AI — backend running on http://localhost:${PORT}`);
