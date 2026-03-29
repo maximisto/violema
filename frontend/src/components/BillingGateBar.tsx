@@ -31,7 +31,7 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
   }
 
   return (
-    <div className={`rounded-[1.15rem] border ${compact ? 'px-3 py-2.5 sm:px-3.5' : 'px-3.5 py-3 sm:px-4'} ${runwayClass}`}>
+    <div className={`ui-panel border ${compact ? 'px-3 py-2.5 sm:px-3.5' : 'px-3.5 py-3 sm:px-4'} ${runwayClass}`}>
       <div className={`flex items-start gap-2.5 ${compact ? 'sm:gap-3' : 'sm:gap-3'}`}>
         <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl border border-current/20 bg-current/10 ${compact ? '' : 'sm:h-8 sm:w-8'}`}>
           <Sparkles className="h-4 w-4" />
@@ -53,7 +53,7 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
             <button
               type="button"
               onClick={() => copy(buildTopUpRequest(snapshot), 'Top-up request')}
-              className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-navy-950/50 px-2.5 py-1.5 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.14em] text-white/85 transition-colors hover:border-white/20 hover:text-white"
+              className="ui-pill text-[9px] sm:text-[10px]"
             >
               <CreditCard className="h-3 w-3" />
               Top up
@@ -61,7 +61,7 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
             <button
               type="button"
               onClick={() => window.location.assign('/#pricing')}
-              className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-navy-950/50 px-2.5 py-1.5 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.14em] text-white/85 transition-colors hover:border-white/20 hover:text-white"
+              className="ui-pill text-[9px] sm:text-[10px]"
             >
               <ArrowUpRight className="h-3 w-3" />
               Upgrade
@@ -70,7 +70,7 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
               <button
                 type="button"
                 onClick={() => copy(buildReferralMessage(snapshot), 'Referral message')}
-                className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-navy-950/50 px-2.5 py-1.5 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.14em] text-white/85 transition-colors hover:border-white/20 hover:text-white"
+                className="ui-pill text-[9px] sm:text-[10px]"
               >
                 <Gift className="h-3 w-3" />
                 Refer

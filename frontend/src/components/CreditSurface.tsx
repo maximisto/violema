@@ -20,7 +20,7 @@ function Stat({
   value: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-navy-700/60 bg-navy-950/50 px-3 py-2.5">
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-navy-700/60 bg-navy-950/50 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">{label}</p>
       <p className="text-sm font-semibold text-white tabular-nums">{value}</p>
     </div>
@@ -83,9 +83,9 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
 
   return (
     <section
-      className={`overflow-hidden rounded-[1.3rem] border border-violet-500/15 bg-gradient-to-br from-navy-900/90 via-navy-900/75 to-navy-950/95 ${
+      className={`ui-panel overflow-hidden border-violet-500/15 ${
         compact ? 'p-2.5' : 'p-3.5 sm:p-4'
-      } shadow-[0_18px_42px_rgba(2,6,23,0.24)]`}
+      }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -102,7 +102,7 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
             {snapshot.workspaceName} · {snapshot.planName} plan · {isLoading ? 'syncing…' : snapshot.source === 'api' ? 'live' : 'preview'}
           </p>
         </div>
-        <div className={`rounded-xl border border-navy-700/60 bg-navy-950/60 ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'} text-right`}>
+        <div className={`rounded-xl border border-navy-700/60 bg-navy-950/60 ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'} text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]`}>
           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Remaining</p>
           <p className={`mt-1 ${compact ? 'text-[1.05rem]' : 'text-lg'} font-extrabold ${lowBalance ? 'text-amber-300' : 'text-white'}`}>
             {formatCredits(snapshot.creditsRemaining)}
@@ -220,7 +220,7 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
         <button
           type="button"
           onClick={handleTopUp}
-          className="inline-flex items-center justify-center gap-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12 sm:text-[10px]"
+          className="ui-pill rounded-xl text-[9px] sm:text-[10px]"
         >
           <CreditCard className="h-3 w-3" />
           {topUpLabel}
@@ -228,7 +228,7 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
         <button
           type="button"
           onClick={openPricing}
-          className="inline-flex items-center justify-center gap-1 rounded-xl border border-cyan-500/20 bg-cyan-500/8 px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-cyan-300 transition-colors hover:bg-cyan-500/12 sm:text-[10px]"
+          className="ui-pill rounded-xl border-cyan-500/20 bg-cyan-500/8 text-[9px] text-cyan-300 sm:text-[10px]"
         >
           <ArrowUpRight className="h-3 w-3" />
           Upgrade plan
@@ -237,7 +237,7 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
           <button
             type="button"
             onClick={handleReferral}
-            className="inline-flex items-center justify-center gap-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12 sm:text-[10px]"
+            className="ui-pill rounded-xl border-amber-500/20 bg-amber-500/8 text-[9px] text-amber-300 sm:text-[10px]"
           >
             <Gift className="h-3 w-3" />
             {referralLabel}

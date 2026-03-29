@@ -302,8 +302,8 @@ function MessageBubble({
 
   if (isUser) {
     return (
-      <div className="flex justify-end mb-6">
-        <div className="max-w-[75%] bg-violet-600/20 border border-violet-600/30 rounded-2xl rounded-tr-sm px-4 py-3">
+      <div className="flex justify-end">
+        <div className="max-w-[78%] rounded-[1.35rem] rounded-tr-md border border-violet-500/25 bg-gradient-to-br from-violet-600/20 via-violet-600/16 to-fuchsia-500/10 px-4 py-3 shadow-[0_12px_30px_rgba(91,33,182,0.12)]">
           <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
         </div>
       </div>
@@ -312,18 +312,18 @@ function MessageBubble({
 
   return (
     <div
-      className="flex gap-3 mb-6 group"
+      className="group flex gap-3"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex-shrink-0 flex items-center justify-center shadow-glow-violet mt-0.5">
+      <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-violet-700 shadow-glow-violet ring-1 ring-white/10">
         <span className="text-xs text-white font-bold">N</span>
       </div>
 
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1 rounded-[1.45rem] border border-navy-800/75 bg-gradient-to-br from-navy-900/82 via-navy-900/58 to-navy-950/72 px-4 py-3.5 shadow-[0_16px_34px_rgba(2,6,23,0.18)]">
         {/* Header */}
-        <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <span className="text-sm font-semibold text-violet-300">Nexus</span>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-violet-200">Nexus</span>
           {!message.isStreaming && <ModelBadge />}
           <span className="text-xs text-slate-600">
             {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -341,7 +341,7 @@ function MessageBubble({
                 className={`p-1.5 rounded-lg transition-colors ${
                   message.reaction === 'positive'
                     ? 'bg-green-900/40 text-green-400'
-                    : 'text-slate-600 hover:bg-navy-800 hover:text-slate-300'
+                    : 'text-slate-600 hover:bg-navy-800/80 hover:text-slate-300'
                 }`}
                 title="Good response"
               >
@@ -352,7 +352,7 @@ function MessageBubble({
                 className={`p-1.5 rounded-lg transition-colors ${
                   message.reaction === 'negative'
                     ? 'bg-red-900/40 text-red-400'
-                    : 'text-slate-600 hover:bg-navy-800 hover:text-slate-300'
+                    : 'text-slate-600 hover:bg-navy-800/80 hover:text-slate-300'
                 }`}
                 title="Bad response"
               >
@@ -373,7 +373,7 @@ function MessageBubble({
 
         {/* Tool calls */}
         {message.toolCalls && message.toolCalls.length > 0 && (
-          <div className="mb-3">
+          <div className="mb-4">
             {message.toolCalls.map((tc) => (
               <ToolCallBlock key={tc.id} toolCall={tc} />
             ))}
@@ -701,11 +701,25 @@ export default function ChatInterface({
     <div className="flex flex-col h-full relative">
       {/* Agent status bar */}
       <div className="flex items-center gap-2 px-3.5 sm:px-4 py-2 border-b border-navy-800/40 bg-gradient-to-r from-navy-900/30 via-navy-900/20 to-violet-950/10 backdrop-blur-sm">
-        <div className={`w-1.5 h-1.5 rounded-full ${statusColor} ${agentStatus !== 'idle' ? 'animate-pulse' : ''}`} />
-        <span className="text-xs text-slate-500">{statusText}</span>
-        <div className={`ml-auto flex items-center gap-1.5 text-[10px] border rounded-full px-2.5 py-1 ${modeConfig.bg} ${modeConfig.color} shadow-sm`}>
-          <ModeIcon className="w-3 h-3" />
-          {modeConfig.label}
+        <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-2xl border border-white/5 bg-navy-950/35 px-3.5 py-2.5 shadow-[0_12px_34px_rgba(2,6,23,0.16)] backdrop-blur-sm">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-2 h-2 rounded-full ${statusColor} ${agentStatus !== 'idle' ? 'animate-pulse' : ''}`} />
+            <div className="leading-tight">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-600">Session</p>
+              <p className="text-xs font-medium text-slate-300">{statusText}</p>
+            </div>
+          </div>
+          <div className="hidden min-[540px]:flex items-center gap-2 text-[10px] text-slate-600">
+            <span className="text-slate-700">•</span>
+            <span>{messages.length === 0 ? 'Fresh workspace' : `${messages.length} messages`}</span>
+          </div>
+          <div className="ml-auto flex items-center gap-2 text-[10px] text-slate-500">
+            <span className="hidden uppercase tracking-[0.24em] text-slate-700 sm:inline">Mode</span>
+            <div className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${modeConfig.bg} ${modeConfig.color} shadow-sm`}>
+              <ModeIcon className="w-3 h-3" />
+              {modeConfig.label}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -723,18 +737,20 @@ export default function ChatInterface({
       >
         {messages.length === 0 ? (
           <div className="flex min-h-full items-center justify-center px-1 py-6 sm:py-10">
-            <div className="relative w-full max-w-2xl overflow-hidden rounded-[1.8rem] border border-violet-500/12 bg-gradient-to-br from-navy-900/86 via-navy-900/72 to-navy-950/94 px-4 py-5 sm:px-6 sm:py-7 shadow-[0_24px_64px_rgba(2,6,23,0.34)]">
+            <div className="ui-panel-strong relative w-full max-w-2xl overflow-hidden px-4 py-6 sm:px-7 sm:py-8">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.18),transparent_48%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.08),transparent_35%)]" />
               <div className="relative flex flex-col items-center text-center">
-                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-500/15 bg-violet-500/8 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-violet-300">
+                <div className="ui-pill mb-4 px-3 py-1 text-violet-300">
                   <Sparkles className="h-3 w-3" />
                   Nexus workspace
                 </div>
-                <div className="mb-5 w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-violet-500 to-violet-700 rounded-[1.15rem] flex items-center justify-center shadow-glow-violet ring-1 ring-white/10">
+                <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-[1.15rem] bg-gradient-to-br from-violet-500 to-violet-700 shadow-glow-violet ring-1 ring-white/10 sm:h-16 sm:w-16">
                   <span className="text-xl sm:text-2xl font-bold text-white">N</span>
                 </div>
-                <h2 className="text-[1.55rem] sm:text-2xl font-bold text-white">Hey, I'm Nexus</h2>
-                <p className="mt-1 text-[10px] sm:text-[11px] text-violet-400/60 font-medium tracking-[0.28em] uppercase">by Purple Orange AI</p>
+                <h2 className="text-[1.6rem] font-bold text-white sm:text-[2.1rem]">Hey, I'm Nexus</h2>
+                <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.32em] text-violet-300/70 sm:text-[11px]">
+                  by Purple Orange AI
+                </p>
                 <p className="mt-4 max-w-xl text-slate-300 leading-relaxed">
                   Your AI coworker, tuned for{' '}
                   <span className={`font-semibold ${modeConfig.color}`}>{modeLabel.toLowerCase()}</span>
@@ -743,39 +759,39 @@ export default function ChatInterface({
                 <p className="mt-2 text-slate-500 text-sm">{modeConfig.description}. Switch modes in the sidebar.</p>
 
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                  <span className="rounded-full border border-navy-700/80 bg-navy-950/60 px-3 py-1 text-[10px] font-medium text-slate-400">Research</span>
-                  <span className="rounded-full border border-navy-700/80 bg-navy-950/60 px-3 py-1 text-[10px] font-medium text-slate-400">Automate</span>
-                  <span className="rounded-full border border-navy-700/80 bg-navy-950/60 px-3 py-1 text-[10px] font-medium text-slate-400">Inspect</span>
-                  <span className="rounded-full border border-navy-700/80 bg-navy-950/60 px-3 py-1 text-[10px] font-medium text-slate-400">Draft</span>
+                  <span className="ui-pill">Research</span>
+                  <span className="ui-pill">Automate</span>
+                  <span className="ui-pill">Inspect</span>
+                  <span className="ui-pill">Draft</span>
                 </div>
 
                 <div className="mt-6 grid w-full grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
-                  <div className="rounded-2xl border border-navy-700/70 bg-navy-950/50 p-3 text-left">
+                  <div className="ui-panel p-3 text-left shadow-none">
                     <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/70">Start here</p>
                     <p className="mt-1 text-sm font-medium text-white">Ask for a search, a summary, or a plan.</p>
                   </div>
-                  <div className="rounded-2xl border border-navy-700/70 bg-navy-950/50 p-3 text-left">
+                  <div className="ui-panel p-3 text-left shadow-none">
                     <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">System state</p>
                     <p className="mt-1 text-sm font-medium text-white">Mode, credits, and automation gate are visible above.</p>
                   </div>
                 </div>
 
-                <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 w-full">
-              {suggestions.map((suggestion, i) => (
-                <button
-                  key={i}
-                  onClick={() => sendMessage(suggestion)}
-                  className="text-left px-4 py-3 bg-navy-800/60 border border-navy-700/60 hover:border-violet-600/50 hover:bg-navy-700/70 rounded-2xl text-sm text-slate-400 hover:text-slate-200 transition-all duration-200 leading-snug shadow-[0_12px_30px_rgba(2,6,23,0.16)]"
-                >
-                  {suggestion}
-                </button>
-              ))}
+                <div className="mt-5 grid w-full grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
+                  {suggestions.map((suggestion, i) => (
+                    <button
+                      key={i}
+                      onClick={() => sendMessage(suggestion)}
+                      className="rounded-2xl border border-navy-700/60 bg-navy-800/60 px-4 py-3 text-left text-sm leading-snug text-slate-400 shadow-[0_12px_30px_rgba(2,6,23,0.16)] transition-all duration-200 hover:border-violet-600/50 hover:bg-navy-700/70 hover:text-slate-200"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto">
+          <div className="mx-auto max-w-3xl space-y-5">
             {messages.map((msg) => (
               <MessageBubble
                 key={msg.id}
@@ -847,47 +863,51 @@ export default function ChatInterface({
       )}
 
       {/* Input */}
-      <div className="px-3 sm:px-6 pb-[calc(0.8rem+env(safe-area-inset-bottom))] pt-2 border-t border-navy-800/60 bg-gradient-to-t from-navy-950/40 to-transparent">
+      <div className="px-3 sm:px-6 pb-[calc(0.8rem+env(safe-area-inset-bottom))] pt-2 border-t border-navy-800/60 bg-gradient-to-t from-navy-950/50 via-navy-950/20 to-transparent">
         <div className="max-w-3xl mx-auto">
-          <div className="flex items-end gap-2.5 rounded-[1.35rem] border border-navy-700/60 bg-gradient-to-br from-navy-800/72 via-navy-800/58 to-navy-900/72 px-3.5 py-2.5 shadow-[0_18px_42px_rgba(2,6,23,0.24)] transition-all duration-200 focus-within:border-violet-600/50 sm:px-4 sm:py-3">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                adjustTextarea();
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder="Message Nexus… (Shift+Enter for new line)"
-              className="flex-1 bg-transparent text-slate-100 placeholder-slate-600 resize-none outline-none text-sm leading-relaxed chat-input"
-              rows={1}
-              disabled={isLoading}
-            />
-            {isLoading ? (
-              <button
-                onClick={stopGeneration}
-                className="flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 bg-red-600/80 hover:bg-red-500 rounded-xl flex items-center justify-center transition-all duration-200 shadow-sm"
-                aria-label="Stop generating"
-              >
-                <Square className="w-3.5 h-3.5 text-white fill-white" />
-              </button>
-            ) : (
-              <button
-                onClick={() => sendMessage(input)}
-                disabled={!input.trim()}
-                aria-label="Send message"
-                className="flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 bg-violet-600 hover:bg-violet-500 disabled:bg-navy-700 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-all duration-200 shadow-glow-violet disabled:shadow-none ring-1 ring-white/10"
-              >
-                <Send className="w-4 h-4 text-white" />
-              </button>
-            )}
-          </div>
-          <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-slate-700 leading-tight">
-            Nexus can make mistakes. Verify important information.
-            <kbd className="ml-2 text-[10px] bg-navy-800 border border-navy-700 px-1.5 py-0.5 rounded font-mono">
-              ⌘K
-            </kbd>{' '}
-            to focus
+          <div className="rounded-[1.45rem] border border-navy-700/60 bg-gradient-to-br from-navy-800/72 via-navy-800/58 to-navy-900/76 shadow-[0_18px_42px_rgba(2,6,23,0.24)] transition-all duration-200 focus-within:border-violet-600/50">
+            <div className="flex items-end gap-2.5 px-3.5 py-3 sm:px-4 sm:py-3.5">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  adjustTextarea();
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder="Message Nexus… (Shift+Enter for new line)"
+                className="min-h-[2.75rem] flex-1 resize-none bg-transparent text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-600 chat-input"
+                rows={1}
+                disabled={isLoading}
+              />
+              {isLoading ? (
+                <button
+                  onClick={stopGeneration}
+                  className="flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-xl bg-red-600/80 shadow-sm transition-all duration-200 hover:bg-red-500 sm:h-10 sm:w-10"
+                  aria-label="Stop generating"
+                >
+                  <Square className="h-3.5 w-3.5 fill-white text-white" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => sendMessage(input)}
+                  disabled={!input.trim()}
+                  aria-label="Send message"
+                  className="flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 shadow-glow-violet ring-1 ring-white/10 transition-all duration-200 hover:bg-violet-500 disabled:cursor-not-allowed disabled:bg-navy-700 disabled:shadow-none sm:h-10 sm:w-10"
+                >
+                  <Send className="h-4 w-4 text-white" />
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 px-3.5 py-2 text-[11px] text-slate-700 sm:px-4">
+              <span>Nexus can make mistakes. Verify important information.</span>
+              <span className="inline-flex items-center gap-2">
+                <kbd className="text-[10px] bg-navy-800 border border-navy-700 px-1.5 py-0.5 rounded font-mono">
+                  ⌘K
+                </kbd>
+                to focus
+              </span>
+            </div>
           </div>
         </div>
       </div>

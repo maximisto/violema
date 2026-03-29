@@ -116,7 +116,37 @@ function formatTime(date: Date) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-async function fetchSmartTitle(messages: { role: string; content: string }[]): Promise<string> {
+const getTaskStatusMeta = (status: 'scheduled' | 'complete' | 'alert') => {
+  if (status === 'alert') {
+    return {
+      label: 'Needs attention',
+      accent: 'from-red-950/28 via-navy-900/85 to-navy-950/92',
+      iconColor: 'text-red-400',
+      chip: 'border-red-900/70 bg-red-950/45 text-red-300',
+      dot: 'bg-red-400',
+    };
+  }
+
+  if (status === 'complete') {
+    return {
+      label: 'Completed',
+      accent: 'from-green-950/24 via-navy-900/84 to-navy-950/92',
+      iconColor: 'text-green-400',
+      chip: 'border-green-900/70 bg-green-950/35 text-green-300',
+      dot: 'bg-green-400',
+    };
+  }
+
+  return {
+    label: 'On schedule',
+    accent: 'from-violet-950/24 via-navy-900/84 to-navy-950/92',
+    iconColor: 'text-violet-400',
+    chip: 'border-violet-900/70 bg-violet-950/35 text-violet-300',
+    dot: 'bg-violet-400',
+  };
+};
+
+const fetchSmartTitle = async (messages: { role: string; content: string }[]): Promise<string> => {
   try {
     const workspace = resolveWorkspaceContext();
     const res = await fetch('/api/title', {
@@ -138,7 +168,7 @@ async function fetchSmartTitle(messages: { role: string; content: string }[]): P
   } catch {
     return messages[0]?.content?.slice(0, 45) || 'New conversation';
   }
-}
+};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -266,8 +296,16 @@ export default function Dashboard() {
       (c.lastMessage ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const taskSummary = SAMPLE_TASKS.reduce(
+    (acc, task) => {
+      acc[task.status as 'scheduled' | 'complete' | 'alert'] += 1;
+      return acc;
+    },
+    { scheduled: 0, complete: 0, alert: 0 }
+  );
+
   const ModeSelector = ({ compact = false }: { compact?: boolean }) => (
-    <div className={`flex items-center gap-1 bg-navy-800 border border-navy-700 rounded-xl p-1 ${compact ? 'w-full' : ''}`}>
+    <div className={`ui-input-shell flex items-center gap-1 p-1 ${compact ? 'w-full' : ''}`}>
       {MODE_BUTTONS.map(({ mode, label, icon: Icon, activeClass, tooltip }) => (
         <button
           key={mode}
@@ -279,8 +317,8 @@ export default function Dashboard() {
             compact ? 'flex-1 justify-center' : ''
           } ${
             autonomyMode === mode
-              ? `${activeClass} border`
-              : 'text-slate-500 border-transparent hover:text-slate-300'
+              ? `${activeClass} border shadow-[0_8px_18px_rgba(2,6,23,0.18)]`
+              : 'text-slate-500 border-transparent hover:bg-navy-800/80 hover:text-slate-300'
           }`}
         >
           <Icon className={mode === 'supervised' ? 'w-5 h-5 text-red-400' : 'w-3 h-3'} />
@@ -342,9 +380,6 @@ export default function Dashboard() {
           </div>
 
           <div className="px-2.5 pt-2.5">
-            <div className="mb-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">
-              Workspace
-            </div>
             <CreditSurface compact={isMobileSidebar} />
           </div>
 
@@ -352,13 +387,13 @@ export default function Dashboard() {
           <div className="px-2.5 pt-2.5 pb-2 space-y-2">
             <button
               onClick={handleNewChat}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-500 hover:from-violet-500 hover:via-violet-500 hover:to-fuchsia-400 text-white text-sm font-medium transition-all duration-200 shadow-glow-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 border border-white/10"
+              className="ui-button-surface w-full justify-start"
             >
               <Plus className="w-4 h-4" />
               New conversation
             </button>
             {/* Mode selector visible on ALL screen sizes via sidebar */}
-            <div className="px-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">
+            <div className="px-1.5 ui-section-label">
               Autonomy
             </div>
             <ModeSelector compact />
@@ -366,10 +401,10 @@ export default function Dashboard() {
 
           {/* Search */}
           <div className="px-2.5 pb-2">
-            <div className="px-1.5 mb-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">
+            <div className="px-1.5 mb-1 ui-section-label">
               Search
             </div>
-            <div className="relative">
+            <div className="ui-input-shell relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
               <input
                 ref={searchRef}
@@ -378,7 +413,7 @@ export default function Dashboard() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search conversations…"
                 aria-label="Search conversations"
-                className="w-full bg-navy-800 border border-navy-700 focus:border-violet-700 rounded-lg text-xs text-slate-300 placeholder-slate-600 pl-8 pr-3 py-1.5 outline-none transition-colors"
+                className="w-full bg-transparent text-xs text-slate-300 placeholder-slate-600 pl-8 pr-3 py-2 outline-none"
               />
               {searchQuery && (
                 <button
@@ -394,15 +429,27 @@ export default function Dashboard() {
 
           {/* Conversation list */}
           <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
-            <div className="px-2 pt-1 pb-1.5 flex items-center justify-between">
-              <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-              {searchQuery ? `${filteredConvos.length} result${filteredConvos.length !== 1 ? 's' : ''}` : 'Recent'}
-              </p>
-              <span className="text-[10px] text-slate-700">{conversations.length} total</span>
+            <div className="px-2 pt-1 pb-2 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-600">
+                  {searchQuery ? 'Search results' : 'Recent conversations'}
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {searchQuery
+                    ? `${filteredConvos.length} match${filteredConvos.length !== 1 ? 'es' : ''}`
+                    : 'Active threads and recent work'}
+                </p>
+              </div>
+              <span className="rounded-full border border-navy-700/70 bg-navy-900/60 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                {conversations.length} total
+              </span>
             </div>
 
             {filteredConvos.length === 0 && searchQuery && (
-              <p className="px-3 py-4 text-xs text-slate-600 text-center">No conversations found</p>
+              <div className="mx-2 rounded-2xl border border-dashed border-navy-700/70 bg-navy-900/35 px-3 py-5 text-center">
+                <p className="text-xs text-slate-500">No conversations found</p>
+                <p className="mt-1 text-[11px] text-slate-600">Try a shorter or different search term.</p>
+              </div>
             )}
 
             {filteredConvos.map((convo) => (
@@ -422,20 +469,24 @@ export default function Dashboard() {
                   }}
                   className={`w-full text-left px-3 py-2 rounded-xl transition-all ${
                     activeConvoId === convo.id
-                      ? 'bg-navy-800/95 text-white border border-violet-700/40 shadow-[0_10px_24px_rgba(2,6,23,0.22)]'
-                      : 'text-slate-400 border border-transparent hover:bg-navy-800/60 hover:text-slate-200 hover:border-navy-700/60'
+                      ? 'bg-gradient-to-r from-violet-500/15 via-navy-800/95 to-navy-800/90 text-white border border-violet-500/25 shadow-[0_12px_28px_rgba(2,6,23,0.24)]'
+                      : 'text-slate-400 border border-transparent bg-navy-900/20 hover:bg-navy-800/65 hover:text-slate-200 hover:border-navy-700/70'
                   }`}
                 >
-                  <div className="flex items-start gap-2 pr-6">
-                    <MessageSquare className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 opacity-60" />
+                  <div className="flex items-start gap-2.5 pr-7">
+                    <div
+                      className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${
+                        activeConvoId === convo.id ? 'bg-violet-400 shadow-[0_0_0_4px_rgba(168,85,247,0.12)]' : 'bg-slate-700'
+                      }`}
+                    />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium truncate leading-snug tracking-[-0.01em]">{convo.title}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[13px] font-medium truncate leading-snug tracking-[-0.01em]">{convo.title}</p>
+                        <span className="text-[10px] text-slate-600 flex-shrink-0">{formatTime(convo.timestamp)}</span>
+                      </div>
                       {convo.lastMessage && (
-                        <p className="text-[10px] text-slate-500 truncate mt-0.5 leading-snug">
-                          {convo.lastMessage}
-                        </p>
+                        <p className="text-[10px] text-slate-500 truncate mt-1 leading-snug">{convo.lastMessage}</p>
                       )}
-                      <p className="text-[10px] text-slate-700 mt-0.5">{formatTime(convo.timestamp)}</p>
                     </div>
                   </div>
                 </button>
@@ -443,18 +494,18 @@ export default function Dashboard() {
                 {/* Delete button / confirm */}
                 {hoveredConvoId === convo.id && (
                   deleteConfirmId === convo.id ? (
-                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-navy-900 border border-red-800/60 rounded-lg px-2 py-1 shadow-lg z-10">
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-navy-950 border border-red-800/60 rounded-xl px-2.5 py-1.5 shadow-[0_10px_24px_rgba(2,6,23,0.32)] z-10">
                       <span className="text-[10px] text-red-400 font-medium">Delete?</span>
                       <button
                         onClick={(e) => handleDeleteConvo(convo.id, e)}
-                        className="text-[10px] text-red-400 hover:text-red-300 font-semibold ml-1"
+                        className="text-[10px] text-red-400 hover:text-red-300 font-semibold ml-1 px-1"
                         aria-label="Confirm delete"
                       >
                         Yes
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null); }}
-                        className="text-[10px] text-slate-500 hover:text-slate-300"
+                        className="text-[10px] text-slate-500 hover:text-slate-300 px-1"
                         aria-label="Cancel delete"
                       >
                         No
@@ -475,22 +526,22 @@ export default function Dashboard() {
           </div>
 
           {/* User / settings */}
-          <div className="border-t border-navy-800/80 px-2.5 py-2 space-y-1 bg-navy-950/15">
+          <div className="border-t border-navy-800/80 px-2.5 py-2 space-y-1.5 bg-navy-950/15">
             <button
               onClick={() => {/* settings panel placeholder */}}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-2xl text-slate-400 hover:bg-navy-800/70 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="ui-button-ghost w-full justify-start"
             >
               <Settings className="w-4 h-4" />
               Settings
             </button>
             <button
               onClick={() => navigate('/')}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-2xl text-slate-400 hover:bg-navy-800/70 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="ui-button-ghost w-full justify-start"
             >
               <LogOut className="w-4 h-4" />
               Back to home
             </button>
-            <div className="flex items-center gap-2.5 px-3 py-2.5 mt-1 rounded-2xl border border-navy-800/60 bg-navy-900/40">
+            <div className="ui-panel mt-1 flex items-center gap-2.5 px-3 py-2.5 border-navy-800/60 shadow-none">
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-700/40 to-navy-700 border border-violet-800/40 flex items-center justify-center text-xs font-bold text-violet-300 flex-shrink-0">
                 U
               </div>
@@ -574,10 +625,10 @@ export default function Dashboard() {
 
           {/* Task panel */}
           {taskPanelOpen && (
-            <aside className="w-72 flex-shrink-0 border-l border-navy-800/80 bg-gradient-to-b from-navy-900/46 via-navy-900/32 to-navy-950/56 flex flex-col overflow-hidden backdrop-blur-sm">
-              <div className="flex items-center justify-between px-4 py-3.5 border-b border-navy-800/80 bg-navy-950/20">
+            <aside className="w-72 flex-shrink-0 border-l border-navy-800/80 bg-gradient-to-b from-navy-900/60 via-navy-900/36 to-navy-950/60 flex flex-col overflow-hidden backdrop-blur-md shadow-[inset_1px_0_0_rgba(255,255,255,0.03)]">
+              <div className="flex items-center justify-between px-4 py-3.5 border-b border-navy-800/80 bg-gradient-to-r from-violet-500/8 via-navy-950/30 to-cyan-500/6">
                 <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-xl border border-violet-500/15 bg-violet-500/8">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-xl border border-violet-500/15 bg-violet-500/8 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
                     <Sparkles className="w-4 h-4 text-violet-400" />
                   </span>
                   <div>
@@ -594,55 +645,73 @@ export default function Dashboard() {
                 </button>
               </div>
 
+              <div className="px-3 pt-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: 'Scheduled', value: taskSummary.scheduled, tone: 'violet' },
+                    { label: 'Done', value: taskSummary.complete, tone: 'green' },
+                    { label: 'Alerts', value: taskSummary.alert, tone: 'amber' },
+                  ].map((stat) => (
+                    <div
+                      key={stat.label}
+                      className={`rounded-2xl border px-2.5 py-2 ${
+                        stat.tone === 'violet'
+                          ? 'border-violet-500/15 bg-violet-500/6'
+                          : stat.tone === 'green'
+                            ? 'border-green-500/15 bg-green-500/6'
+                            : 'border-amber-500/15 bg-amber-500/6'
+                      }`}
+                    >
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">{stat.label}</p>
+                      <p className="mt-1 text-lg font-bold text-white">{stat.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex-1 overflow-y-auto p-3 space-y-2">
                 {SAMPLE_TASKS.map((task) => {
                   const Icon = task.icon;
+                  const meta = getTaskStatusMeta(task.status as 'scheduled' | 'complete' | 'alert');
                   return (
                     <div
                       key={task.id}
-                      className="bg-gradient-to-br from-navy-800/82 to-navy-900/72 border border-navy-700/70 rounded-2xl p-3.5 hover:border-violet-600/30 transition-colors cursor-pointer group shadow-[0_12px_28px_rgba(2,6,23,0.14)]"
+                      className={`bg-gradient-to-br ${meta.accent} border border-navy-700/70 rounded-2xl p-3.5 hover:border-violet-600/30 transition-all cursor-pointer group shadow-[0_12px_28px_rgba(2,6,23,0.14)] hover:shadow-[0_16px_34px_rgba(2,6,23,0.22)]`}
                     >
                       <div className="flex items-start gap-2.5">
                         <div
-                          className={`mt-0.5 flex-shrink-0 ${
-                            task.status === 'alert'
-                              ? 'text-red-400'
-                              : task.status === 'complete'
-                              ? 'text-green-400'
-                              : 'text-violet-400'
-                          }`}
+                          className={`mt-0.5 flex-shrink-0 ${meta.iconColor}`}
                         >
                           <Icon className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-slate-100 font-medium truncate">{task.title}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span
-                              className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                                task.status === 'alert'
-                                  ? 'bg-red-950 text-red-400 border border-red-900'
-                                  : task.status === 'complete'
-                                  ? 'bg-green-950 text-green-400 border border-green-900'
-                                  : 'bg-violet-950 text-violet-400 border border-violet-900'
-                              }`}
-                            >
-                              {task.status}
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm text-slate-100 font-medium truncate">{task.title}</p>
+                            <span className="text-[10px] text-slate-500 flex-shrink-0">{task.time}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${meta.chip}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+                              {meta.label}
                             </span>
-                            <span className="text-[10px] text-slate-500">{task.time}</span>
+                            <span className="text-[10px] text-slate-600">Automation pulse</span>
                           </div>
                         </div>
-                        <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 mt-0.5 transition-colors flex-shrink-0" />
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-300 mt-0.5 transition-colors flex-shrink-0" />
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              <div className="p-3 border-t border-navy-800/80 bg-navy-950/20">
-                <button className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-2xl border border-dashed border-navy-700/80 text-slate-500 hover:border-violet-700 hover:text-violet-400 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 bg-navy-950/30">
+              <div className="p-3 border-t border-navy-800/80 bg-gradient-to-r from-navy-950/35 via-violet-500/6 to-navy-950/35">
+                <button className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-2xl border border-dashed border-violet-500/25 text-slate-300 hover:border-violet-400/50 hover:text-white text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 bg-navy-950/30 shadow-[0_8px_24px_rgba(2,6,23,0.12)]">
                   <Plus className="w-4 h-4" />
                   Schedule automation
                 </button>
+                <p className="mt-2 text-center text-[10px] text-slate-600">
+                  Recurring work stays visible, metered, and easy to adjust.
+                </p>
               </div>
             </aside>
           )}

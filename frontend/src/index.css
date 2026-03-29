@@ -55,6 +55,42 @@
   .tool-block {
     @apply bg-navy-950 border border-navy-700 rounded-lg p-4 my-3 font-mono text-sm;
   }
+
+  .ui-panel {
+    border-radius: 1rem;
+    border: 1px solid rgba(51, 65, 85, 0.7);
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.72), rgba(2, 6, 23, 0.92));
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.18);
+  }
+
+  .ui-panel-strong {
+    border-radius: 1.4rem;
+    border: 1px solid rgba(168, 85, 247, 0.12);
+    background:
+      radial-gradient(circle at top, rgba(168, 85, 247, 0.12), transparent 40%),
+      linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(15, 23, 42, 0.8), rgba(2, 6, 23, 0.94));
+    box-shadow: 0 24px 64px rgba(2, 6, 23, 0.3);
+  }
+
+  .ui-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-navy-950/55 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-300;
+  }
+
+  .ui-section-label {
+    @apply text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600;
+  }
+
+  .ui-button-surface {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-500 px-3 py-2.5 text-sm font-semibold text-white shadow-glow-violet transition-all duration-200 hover:from-violet-500 hover:via-violet-500 hover:to-fuchsia-400;
+  }
+
+  .ui-button-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-navy-700/80 bg-navy-900/55 px-3 py-2.5 text-sm font-medium text-slate-300 transition-all duration-200 hover:border-violet-700/60 hover:bg-navy-800/70 hover:text-white;
+  }
+
+  .ui-input-shell {
+    @apply rounded-2xl border border-navy-700/80 bg-navy-900/55 shadow-[0_10px_24px_rgba(2,6,23,0.14)] transition-all duration-200;
+  }
 }
 
 @layer utilities {
