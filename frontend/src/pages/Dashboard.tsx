@@ -991,7 +991,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Main chat area ───────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex min-h-0 flex-1 flex-col min-w-0">
         {/* Top bar */}
         <header className="flex items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-navy-800/80 bg-gradient-to-r from-navy-950/92 via-navy-900/70 to-navy-950/92 backdrop-blur-md flex-shrink-0 shadow-[0_12px_30px_rgba(2,6,23,0.16)]">
           {(!sidebarOpen || isMobileSidebar) && (
@@ -1069,8 +1069,8 @@ export default function Dashboard() {
         )}
 
         {/* Chat body */}
-        <div className="flex-1 flex min-h-0">
-          <div className="flex-1 min-w-0">
+        <div className="flex flex-1 min-h-0">
+          <div className="flex min-h-0 flex-1 min-w-0">
             <ChatInterface
               key={activeConvoId}
               conversationId={activeConvoId}
