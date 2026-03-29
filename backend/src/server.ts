@@ -2,11 +2,15 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import Anthropic from '@anthropic-ai/sdk';
+import fs from 'fs';
+import path from 'path';
+import { takeBrowserScreenshot } from './tools/browserScreenshot';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const SCREENSHOT_DIR = path.join(process.cwd(), 'generated-screenshots');
 
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
@@ -24,6 +28,8 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+app.use('/generated-screenshots', express.static(SCREENSHOT_DIR));
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -98,6 +104,25 @@ const NEXUS_TOOLS: Anthropic.Tool[] = [
         num_results: { type: 'number', description: 'Number of results to return (default: 5)' },
       },
       required: ['query'],
+    },
+  },
+  {
+    name: 'browser_screenshot',
+    description: 'Open a public web page in a real browser and capture a screenshot. Returns a saved image URL and metadata.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        url: { type: 'string', description: 'Public URL to capture' },
+        full_page: { type: 'boolean', description: 'Whether to capture the full page (default: true)' },
+        width: { type: 'number', description: 'Viewport width in pixels (default: 1440)' },
+        height: { type: 'number', description: 'Viewport height in pixels (default: 900)' },
+        wait_until: {
+          type: 'string',
+          enum: ['load', 'domcontentloaded', 'networkidle'],
+          description: 'How long to wait before capturing the screenshot',
+        },
+      },
+      required: ['url'],
     },
   },
   {
@@ -201,6 +226,7 @@ const NEXUS_TOOLS: Anthropic.Tool[] = [
 // Confidence scores by tool type (realistic ranges)
 const TOOL_CONFIDENCE: Record<string, [number, number]> = {
   web_search: [72, 88],
+  browser_screenshot: [89, 97],
   run_code: [91, 99],
   create_task: [94, 99],
   send_message: [96, 99],
@@ -214,7 +240,7 @@ function randomConfidence(toolName: string): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function executeToolCall(toolName: string, toolInput: Record<string, unknown>): string {
+async function executeToolCall(toolName: string, toolInput: Record<string, unknown>): Promise<string> {
   switch (toolName) {
     case 'web_search': {
       const query = toolInput.query as string;
@@ -245,6 +271,17 @@ function executeToolCall(toolName: string, toolInput: Record<string, unknown>): 
         },
       ];
       return JSON.stringify({ query, results, total_results: results.length, search_time_ms: 342 });
+    }
+
+    case 'browser_screenshot': {
+      const result = await takeBrowserScreenshot({
+        url: String(toolInput.url || ''),
+        full_page: toolInput.full_page as boolean | undefined,
+        width: toolInput.width as number | undefined,
+        height: toolInput.height as number | undefined,
+        wait_until: toolInput.wait_until as 'load' | 'domcontentloaded' | 'networkidle' | undefined,
+      });
+      return JSON.stringify(result);
     }
 
     case 'run_code': {
@@ -609,7 +646,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         for (const toolUseBlock of toolUseBlocks) {
           const toolInput = toolUseBlock.input as Record<string, unknown>;
           const toolStart = Date.now();
-          const result = executeToolCall(toolUseBlock.name, toolInput);
+          const result = await executeToolCall(toolUseBlock.name, toolInput);
           const elapsed = Date.now() - toolStart;
           const confidence = randomConfidence(toolUseBlock.name);
 
@@ -710,9 +747,6 @@ app.post('/api/summarize', async (req: Request, res: Response) => {
 });
 
 // ── Waitlist ──────────────────────────────────────────────────────────────────
-import fs from 'fs';
-import path from 'path';
-
 const WAITLIST_FILE = path.join(process.cwd(), 'waitlist.json');
 
 function loadWaitlist(): { email: string; name?: string; source: string; ts: string }[] {

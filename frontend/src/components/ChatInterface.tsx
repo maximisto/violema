@@ -36,6 +36,7 @@ function renderMarkdown(text: string): string {
 
 const TOOL_ICONS: Record<string, string> = {
   web_search: '🔍',
+  browser_screenshot: '📸',
   run_code: '⚡',
   create_task: '✅',
   send_message: '📨',
@@ -46,6 +47,7 @@ const TOOL_ICONS: Record<string, string> = {
 
 const TOOL_LABELS: Record<string, string> = {
   web_search: 'Searching the web',
+  browser_screenshot: 'Capturing screenshot',
   run_code: 'Running code',
   create_task: 'Creating task',
   send_message: 'Sending message',

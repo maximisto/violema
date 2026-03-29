@@ -11,11 +11,44 @@ APP_DIR="/var/www/nexus"
 REPO_URL="https://github.com/maximisto/test-repo.git"
 BRANCH="claude/build-ai-assistant-platform-BsdRr"
 LOG_DIR="/var/log/nexus"
+NGINX_SITE="/etc/nginx/sites-available/$DOMAIN"
+SSL_CERT_PATH="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
+
+write_bootstrap_nginx_config() {
+  cat >"$NGINX_SITE" <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+
+    root $APP_DIR/frontend/dist;
+    index index.html;
+
+    location /api/ {
+        proxy_pass         http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              \$host;
+        proxy_set_header   X-Real-IP         \$remote_addr;
+        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+        proxy_set_header   Connection        '';
+        proxy_buffering    off;
+        proxy_cache        off;
+        chunked_transfer_encoding on;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+}
+EOF
+}
 
 # ── 1. Dependencies ──────────────────────────────────────────────────────────
 if [[ "${1:-}" != "--skip-deps" ]]; then
@@ -56,6 +89,7 @@ if [[ ! -f ".env" ]]; then
 fi
 
 npm ci --prefer-offline
+npx playwright install --with-deps chromium
 npm run build
 info "Backend build complete."
 
@@ -72,24 +106,33 @@ chown -R www-data:www-data "$APP_DIR/frontend/dist" 2>/dev/null || true
 
 # ── 6. nginx ─────────────────────────────────────────────────────────────────
 info "Configuring nginx…"
-cp "$APP_DIR/deploy/nginx.conf" "/etc/nginx/sites-available/$DOMAIN"
-ln -sf "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
+if [[ -f "$SSL_CERT_PATH" ]]; then
+  cp "$APP_DIR/deploy/nginx.conf" "$NGINX_SITE"
+else
+  info "No SSL certificate found yet, writing bootstrap HTTP-only nginx config…"
+  write_bootstrap_nginx_config
+fi
+ln -sf "$NGINX_SITE" "/etc/nginx/sites-enabled/$DOMAIN"
 
 # Remove default site if still linked
 rm -f /etc/nginx/sites-enabled/default
 
-nginx -t || die "nginx config test failed — check /etc/nginx/sites-available/$DOMAIN"
+nginx -t || die "nginx config test failed — check $NGINX_SITE"
 systemctl reload nginx
 
 # ── 7. SSL with Let's Encrypt ────────────────────────────────────────────────
-if [[ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]]; then
+if [[ ! -f "$SSL_CERT_PATH" ]]; then
   info "Obtaining SSL certificate for $DOMAIN…"
-  # Temporarily serve HTTP so certbot can complete the ACME challenge.
-  # The nginx.conf above redirects 80→443 which blocks certbot's HTTP challenge,
-  # so we use --nginx mode which temporarily edits the config.
   certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos \
     --redirect --email "admin@purpleorange.io" || \
   warn "Certbot failed. Run manually: certbot --nginx -d $DOMAIN"
+
+  if [[ -f "$SSL_CERT_PATH" ]]; then
+    info "SSL certificate issued, switching nginx to the production HTTPS config…"
+    cp "$APP_DIR/deploy/nginx.conf" "$NGINX_SITE"
+    nginx -t || die "nginx config test failed after SSL issuance — check $NGINX_SITE"
+    systemctl reload nginx
+  fi
 else
   info "SSL certificate already exists, renewing if needed…"
   certbot renew --quiet
