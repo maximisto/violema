@@ -274,12 +274,11 @@ export default function Dashboard() {
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-orange-400 flex items-center justify-center shadow-glow-violet ring-1 ring-violet-300/20">
                 <Zap className="w-4 h-4 text-white" />
               </div>
-              <div className="flex flex-col leading-none">
-                <span className="brand-wordmark text-[0.95rem]">
+              <div className="brand-lockup w-[8.4rem]">
+                <span className="brand-wordmark text-[0.9rem]">
                   NEXUS
                 </span>
-                <span className="brand-submark mt-1 inline-flex items-center gap-1.5 text-[9px]">
-                  <span className="brand-submark-dot" aria-hidden="true" />
+                <span className="brand-submark text-[7.5px]">
                   by Purple Orange AI
                 </span>
               </div>

@@ -41,12 +41,11 @@ export default function Navbar() {
             <div className="w-9 h-9 rounded-full bg-white/95 shadow-glow-violet overflow-hidden flex-shrink-0 p-0.5 ring-1 ring-violet-300/25">
               <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
             </div>
-            <div className="flex flex-col leading-none">
-              <span className="brand-wordmark text-[1.05rem] sm:text-[1.22rem]">
+            <div className="brand-lockup w-[9.7rem] sm:w-[10.8rem]">
+              <span className="brand-wordmark text-[1rem] sm:text-[1.18rem]">
                 NEXUS
               </span>
-              <span className="brand-submark mt-1 inline-flex items-center gap-1.5 text-[10px] sm:text-[11px]">
-                <span className="brand-submark-dot" aria-hidden="true" />
+              <span className="brand-submark text-[8.5px] sm:text-[9.5px]">
                 by Purple Orange AI
               </span>
             </div>
