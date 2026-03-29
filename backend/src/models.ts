@@ -48,7 +48,7 @@ function getTextRoute(profile: TextProfile): ModelRoute {
       model: 'gpt-5-mini',
       apiKeyEnv: 'OPENAI_API_KEY',
       baseUrl: env('OPENAI_BASE_URL') || 'https://api.openai.com/v1',
-      reasoningEffort: 'none',
+      reasoningEffort: 'minimal',
     },
   };
 
@@ -144,7 +144,7 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
     body: JSON.stringify({
       model: route.model,
       max_completion_tokens: maxTokens,
-      reasoning_effort: route.reasoningEffort,
+      ...(route.reasoningEffort ? { reasoning_effort: route.reasoningEffort } : {}),
       messages: [
         { role: 'system', content: system },
         ...messages.map((message) => ({
