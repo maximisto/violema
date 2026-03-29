@@ -29,7 +29,7 @@ app.use(cors({
 }));
 app.use(express.json());
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
-app.use('/generated-screenshots', express.static(SCREENSHOT_DIR));
+app.use('/api/generated-screenshots', express.static(SCREENSHOT_DIR));
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,

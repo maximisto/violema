@@ -103,7 +103,7 @@ export async function takeBrowserScreenshot(input: BrowserScreenshotInput) {
       height,
       full_page: fullPage,
       screenshot_path: filePath,
-      screenshot_url: `/generated-screenshots/${fileName}`,
+      screenshot_url: `/api/generated-screenshots/${fileName}`,
       captured_at: new Date().toISOString(),
     };
   } finally {
