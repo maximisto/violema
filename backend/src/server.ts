@@ -9,18 +9,29 @@ import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
 import { createAutomation, loadPersistedAutomations } from './scheduler';
 import {
   addLedgerEntry,
+  assertCanSpendCredits,
   buildCreditSnapshot,
   createTask,
   createTaskRun,
   DEFAULT_WORKSPACE_ID,
+  evaluatePlanEnforcement,
   ensureWorkspaceCredits,
   estimateCreditCost,
   finalizeTaskRun,
+  getBillingStatus,
   listLedgerEntries,
+  listReferralEvents,
   listTaskRuns,
   listTasks,
+  markReferralQualified,
+  markReferralRewarded,
+  purchaseTopUp,
+  recordReferralEvent,
+  summarizeReferralRewards,
   mapTaskRunToStatus,
   updateTask,
+  upsertBillingConfig,
+  listTopUpOffers,
 } from './platform';
 import {
   generateText,
@@ -38,6 +49,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 const SCREENSHOT_DIR = path.join(process.cwd(), 'generated-screenshots');
+const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
 
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
@@ -105,6 +117,16 @@ function buildSystemPrompt(autonomyMode: string): string {
 8. If a real integration is missing configuration, say exactly which credential is missing
 
 Format responses with markdown: **bold** for key data points, bullet lists for clarity, code blocks for code. Be action-oriented.`;
+}
+
+function getPersistedAutomationCount(): number {
+  try {
+    if (!fs.existsSync(AUTOMATIONS_FILE)) return 0;
+    const items = JSON.parse(fs.readFileSync(AUTOMATIONS_FILE, 'utf-8')) as unknown[];
+    return Array.isArray(items) ? items.length : 0;
+  } catch {
+    return 0;
+  }
 }
 
 function getRequiredEnv(name: string): string {
@@ -841,6 +863,7 @@ async function runAutomation(automation: {
     automationRuns: 1,
     complexity: automation.actions.length > 2 ? 'medium' : 'low',
   });
+  assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimate.estimatedCredits);
   const taskRun = createTaskRun({
     workspaceId: DEFAULT_WORKSPACE_ID,
     taskId: task.id,
@@ -960,6 +983,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       toolCalls: 0,
       complexity: combinedContent.length > 1200 ? 'high' : combinedContent.length > 500 ? 'medium' : 'low',
     });
+    assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimatedCost.estimatedCredits);
     const taskRun = createTaskRun({
       workspaceId: DEFAULT_WORKSPACE_ID,
       taskId: task.id,
@@ -1179,6 +1203,146 @@ app.post('/api/billing/estimate', (req: Request, res: Response) => {
   });
 
   res.json(estimate);
+});
+
+app.get('/api/billing/config', (_req: Request, res: Response) => {
+  const status = getBillingStatus(DEFAULT_WORKSPACE_ID);
+  const enforcement = evaluatePlanEnforcement({
+    workspaceId: DEFAULT_WORKSPACE_ID,
+    automationCount: getPersistedAutomationCount(),
+  });
+
+  res.json({
+    ...status,
+    enforcement,
+  });
+});
+
+app.post('/api/billing/config', (req: Request, res: Response) => {
+  const patch = req.body as Record<string, unknown>;
+  const next = upsertBillingConfig(DEFAULT_WORKSPACE_ID, {
+    planId: typeof patch.planId === 'string' ? patch.planId as 'starter' | 'pro' | 'team' : undefined,
+    autoTopUpEnabled: typeof patch.autoTopUpEnabled === 'boolean' ? patch.autoTopUpEnabled : undefined,
+    autoTopUpThresholdCredits:
+      typeof patch.autoTopUpThresholdCredits === 'number' ? patch.autoTopUpThresholdCredits : undefined,
+    autoTopUpAmountCredits:
+      typeof patch.autoTopUpAmountCredits === 'number' ? patch.autoTopUpAmountCredits : undefined,
+  });
+
+  res.json({
+    ok: true,
+    config: next,
+    status: getBillingStatus(DEFAULT_WORKSPACE_ID),
+  });
+});
+
+app.get('/api/billing/offers', (_req: Request, res: Response) => {
+  res.json({ items: listTopUpOffers() });
+});
+
+app.post('/api/billing/top-up', (req: Request, res: Response) => {
+  const { offerId } = req.body as { offerId?: string };
+  if (!offerId) {
+    res.status(400).json({ error: 'offerId is required' });
+    return;
+  }
+
+  try {
+    res.json({
+      ok: true,
+      ...purchaseTopUp(DEFAULT_WORKSPACE_ID, offerId),
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not apply top-up' });
+  }
+});
+
+app.get('/api/billing/referrals', (_req: Request, res: Response) => {
+  res.json({
+    items: listReferralEvents(DEFAULT_WORKSPACE_ID),
+    summary: summarizeReferralRewards(DEFAULT_WORKSPACE_ID),
+    billing: getBillingStatus(DEFAULT_WORKSPACE_ID),
+  });
+});
+
+app.post('/api/billing/referrals', (req: Request, res: Response) => {
+  const { referredEmail, source, referrerEmail } = req.body as {
+    referredEmail?: string;
+    source?: 'invite' | 'manual' | 'campaign';
+    referrerEmail?: string;
+  };
+
+  if (!referredEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(referredEmail)) {
+    res.status(400).json({ error: 'Valid referredEmail is required' });
+    return;
+  }
+
+  const event = recordReferralEvent({
+    workspaceId: DEFAULT_WORKSPACE_ID,
+    referredEmail,
+    referrerEmail,
+    source,
+  });
+
+  res.json({
+    ok: true,
+    event,
+    summary: summarizeReferralRewards(DEFAULT_WORKSPACE_ID),
+  });
+});
+
+app.post('/api/billing/referrals/:id/qualify', (req: Request, res: Response) => {
+  const event = markReferralQualified(req.params.id);
+  if (!event) {
+    res.status(404).json({ error: 'Referral not found' });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    event,
+    summary: summarizeReferralRewards(DEFAULT_WORKSPACE_ID),
+  });
+});
+
+app.post('/api/billing/referrals/:id/reward', (req: Request, res: Response) => {
+  const current = listReferralEvents(DEFAULT_WORKSPACE_ID).find((item) => item.id === req.params.id);
+  if (!current) {
+    res.status(404).json({ error: 'Referral not found' });
+    return;
+  }
+  if (current.status === 'rewarded') {
+    res.json({
+      ok: true,
+      event: current,
+      summary: summarizeReferralRewards(DEFAULT_WORKSPACE_ID),
+      billing: getBillingStatus(DEFAULT_WORKSPACE_ID),
+    });
+    return;
+  }
+
+  const rewarded = markReferralRewarded(req.params.id);
+  if (!rewarded) {
+    res.status(404).json({ error: 'Referral not found' });
+    return;
+  }
+
+  addLedgerEntry({
+    workspaceId: DEFAULT_WORKSPACE_ID,
+    source: 'referral_bonus',
+    deltaCredits: rewarded.rewardCredits,
+    referenceType: 'referral',
+    referenceId: rewarded.id,
+    note: `Referral reward for ${rewarded.referredEmail}`,
+    metadata: { friendRewardCredits: rewarded.friendRewardCredits },
+  });
+
+  res.json({
+    ok: true,
+    event: rewarded,
+    summary: summarizeReferralRewards(DEFAULT_WORKSPACE_ID),
+    billing: getBillingStatus(DEFAULT_WORKSPACE_ID),
+  });
 });
 
 app.get('/api/platform/tasks', (_req: Request, res: Response) => {

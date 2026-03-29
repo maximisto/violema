@@ -127,3 +127,34 @@ export interface PlatformPlan {
   createdAt: string;
   updatedAt: string;
 }
+
+export type BillingPlanId = 'starter' | 'pro' | 'team';
+
+export interface PlanDefinition {
+  id: BillingPlanId;
+  name: string;
+  monthlyPriceUsd: number;
+  includedCredits: number;
+  maxAutomations: number;
+  supportsMultiAgent: boolean;
+  supportsApprovals: boolean;
+  topUpEnabled: boolean;
+}
+
+export interface WorkspaceBillingConfig {
+  workspaceId: string;
+  planId: BillingPlanId;
+  autoTopUpEnabled: boolean;
+  autoTopUpThresholdCredits?: number;
+  autoTopUpAmountCredits?: number;
+  referralCode: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TopUpOffer {
+  id: string;
+  credits: number;
+  priceUsd: number;
+  bonusCredits?: number;
+}

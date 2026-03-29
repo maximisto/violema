@@ -180,3 +180,44 @@ export function formatRelativeTime(isoString: string) {
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
 }
+
+export function getCreditRecommendation(snapshot: CreditSnapshot) {
+  if (snapshot.projectedDaysLeft <= 7) {
+    return {
+      tone: 'urgent' as const,
+      title: 'Low runway',
+      detail: 'Add credits or upgrade before automation burn becomes visible to users.',
+    };
+  }
+
+  if (snapshot.projectedDaysLeft <= 18) {
+    return {
+      tone: 'watch' as const,
+      title: 'Healthy, but watch burn',
+      detail: 'You can keep the current plan, but a top-up would smooth the next two weeks.',
+    };
+  }
+
+  return {
+    tone: 'good' as const,
+    title: 'Comfortable runway',
+    detail: 'You have room to experiment. Referral credits and top-ups are optional for now.',
+  };
+}
+
+export function buildTopUpRequest(snapshot: CreditSnapshot) {
+  return [
+    'Hi team, I would like to add credits to my Nexus workspace.',
+    `Current plan: ${snapshot.planName}`,
+    `Suggested top-up: ${formatCredits(snapshot.topUpSuggestion)} credits`,
+    `Current balance: ${formatCredits(snapshot.creditsRemaining)} / ${formatCredits(snapshot.creditsTotal)}`,
+  ].join('\n');
+}
+
+export function buildReferralMessage(snapshot: CreditSnapshot) {
+  return [
+    'Try Nexus: an AI coworker for chat, research, automations, and delegated work.',
+    `New users get a bonus, and I get ${formatCredits(snapshot.referralBonus)} credits when you join.`,
+    'Start here: https://nexus.purpleorange.io',
+  ].join('\n');
+}

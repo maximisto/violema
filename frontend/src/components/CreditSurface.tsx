@@ -1,5 +1,14 @@
-import { ArrowUpRight, CreditCard, Gift, Sparkles, ChevronRight, History } from 'lucide-react';
-import { formatCredits, formatRelativeTime, useCreditSnapshot, useRecentCreditUsage } from '../lib/credits';
+import { useState } from 'react';
+import { ArrowUpRight, CreditCard, Gift, Sparkles, ChevronRight, History, ExternalLink } from 'lucide-react';
+import {
+  buildReferralMessage,
+  buildTopUpRequest,
+  formatCredits,
+  formatRelativeTime,
+  getCreditRecommendation,
+  useCreditSnapshot,
+  useRecentCreditUsage,
+} from '../lib/credits';
 
 function Stat({
   label,
@@ -19,9 +28,35 @@ function Stat({
 export default function CreditSurface() {
   const { snapshot, isLoading } = useCreditSnapshot();
   const { items: recentUsage, isLoading: usageLoading } = useRecentCreditUsage();
+  const [actionState, setActionState] = useState<string | null>(null);
   const progress = Math.max(0, Math.min(100, (snapshot.creditsRemaining / snapshot.creditsTotal) * 100));
   const lowBalance = progress < 25;
   const burnRate = snapshot.automationBurnMonthly / 30;
+  const recommendation = getCreditRecommendation(snapshot);
+
+  async function copyToClipboard(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setActionState(`${label} copied`);
+      window.setTimeout(() => setActionState(null), 2200);
+    } catch {
+      setActionState(`Could not copy ${label.toLowerCase()}`);
+      window.setTimeout(() => setActionState(null), 2200);
+    }
+  }
+
+  function openPricing() {
+    window.location.assign('/#pricing');
+    setActionState('Opening pricing');
+  }
+
+  function handleTopUp() {
+    copyToClipboard(buildTopUpRequest(snapshot), 'Top-up request');
+  }
+
+  function handleReferral() {
+    copyToClipboard(buildReferralMessage(snapshot), 'Referral message');
+  }
 
   return (
     <section className="rounded-2xl border border-violet-500/15 bg-gradient-to-br from-navy-900/90 via-navy-900/75 to-navy-950/95 p-4 shadow-[0_18px_42px_rgba(2,6,23,0.24)] overflow-hidden">
@@ -113,6 +148,15 @@ export default function CreditSurface() {
             <p className="mt-0.5 text-[11px] text-slate-500">
               At this rate, you have about {snapshot.projectedDaysLeft} days left on the current plan.
             </p>
+            <p className={`mt-2 text-[11px] font-medium ${
+              recommendation.tone === 'urgent'
+                ? 'text-amber-300'
+                : recommendation.tone === 'watch'
+                  ? 'text-cyan-300'
+                  : 'text-violet-300'
+            }`}>
+              {recommendation.title}: {recommendation.detail}
+            </p>
           </div>
           <ChevronRight className="w-4 h-4 text-violet-300/70 flex-shrink-0" />
         </div>
@@ -121,6 +165,7 @@ export default function CreditSurface() {
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
         <button
           type="button"
+          onClick={handleTopUp}
           className="inline-flex items-center justify-center gap-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12"
         >
           <CreditCard className="w-3 h-3" />
@@ -128,6 +173,7 @@ export default function CreditSurface() {
         </button>
         <button
           type="button"
+          onClick={openPricing}
           className="inline-flex items-center justify-center gap-1 rounded-xl border border-cyan-500/20 bg-cyan-500/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300 transition-colors hover:bg-cyan-500/12"
         >
           <ArrowUpRight className="w-3 h-3" />
@@ -135,10 +181,25 @@ export default function CreditSurface() {
         </button>
         <button
           type="button"
+          onClick={handleReferral}
           className="inline-flex items-center justify-center gap-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12"
         >
           <Gift className="w-3 h-3" />
           Refer a friend
+        </button>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-3 px-1">
+        <p className="text-[10px] text-slate-600">
+          {snapshot.source === 'api' ? 'Live usage' : 'Preview data'} · top-ups and referrals are copy-ready until billing is connected.
+        </p>
+        <button
+          type="button"
+          onClick={() => copyToClipboard(`Nexus workspace ${snapshot.planName}`, 'Workspace summary')}
+          className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          <ExternalLink className="w-3 h-3" />
+          {actionState || 'Copy summary'}
         </button>
       </div>
     </section>

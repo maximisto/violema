@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { DEFAULT_AUTOMATION_RUN_CREDIT_COST } from './cost';
-import { ensureWorkspaceCredits, getWorkspaceLedgerSummary } from './store';
+import { getBillingStatus, getApplicableTopUpOffer } from './billing';
 
 interface AutomationLike {
   cron_expression?: string;
@@ -22,10 +22,7 @@ export interface CreditSnapshot {
 const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
 const DAYS_IN_MONTH = 30;
 export const DEFAULT_WORKSPACE_ID = 'workspace_default';
-const DEFAULT_PLAN_NAME = 'Pro';
-const DEFAULT_PLAN_CREDITS = 1000;
 const DEFAULT_REFERRAL_BONUS = 2000;
-const DEFAULT_TOP_UP_SUGGESTION = 500;
 const DEFAULT_ESTIMATED_TASK_COST = 18;
 
 function estimateMonthlyRuns(cronExpression?: string): number {
@@ -67,21 +64,24 @@ export function buildCreditSnapshot(): CreditSnapshot {
   const automationBurnMonthly = automations.reduce((sum, automation) => {
     return sum + estimateMonthlyRuns(automation.cron_expression) * DEFAULT_AUTOMATION_RUN_CREDIT_COST;
   }, 0);
-  ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID, DEFAULT_PLAN_NAME, DEFAULT_PLAN_CREDITS);
-  const ledger = getWorkspaceLedgerSummary(DEFAULT_WORKSPACE_ID);
+  const billing = getBillingStatus(DEFAULT_WORKSPACE_ID);
   const dailyBurn = automationBurnMonthly / DAYS_IN_MONTH + 8;
   const projectedDaysLeft = dailyBurn > 0
-    ? Math.max(1, Math.floor(ledger.balanceCredits / dailyBurn))
+    ? Math.max(1, Math.floor(billing.summary.balanceCredits / dailyBurn))
     : 999;
+  const topUpSuggestion = getApplicableTopUpOffer(
+    billing.summary.balanceCredits,
+    Math.max(DEFAULT_ESTIMATED_TASK_COST, Math.ceil(dailyBurn * 7))
+  );
 
   return {
-    planName: DEFAULT_PLAN_NAME,
-    creditsRemaining: ledger.balanceCredits,
-    creditsTotal: DEFAULT_PLAN_CREDITS,
+    planName: billing.plan.name,
+    creditsRemaining: billing.summary.balanceCredits,
+    creditsTotal: billing.plan.includedCredits,
     estimatedTaskCost: DEFAULT_ESTIMATED_TASK_COST,
     automationBurnMonthly,
     referralBonus: DEFAULT_REFERRAL_BONUS,
-    topUpSuggestion: DEFAULT_TOP_UP_SUGGESTION,
+    topUpSuggestion: topUpSuggestion.credits + (topUpSuggestion.bonusCredits || 0),
     projectedDaysLeft,
     lastUpdatedAt: new Date().toISOString(),
   };
