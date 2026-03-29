@@ -39,7 +39,7 @@ function getTextRoute(profile: TextProfile): ModelRoute {
     },
     operations: {
       provider: 'openrouter',
-      model: 'minimax/minimax-m2.5',
+      model: 'minimax/minimax-m2.7',
       apiKeyEnv: 'OPENROUTER_API_KEY',
       baseUrl: env('OPENROUTER_BASE_URL') || 'https://openrouter.ai/api/v1',
     },
