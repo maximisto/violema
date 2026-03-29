@@ -8,6 +8,8 @@ import {
 import ChatInterface from '../components/ChatInterface';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
+const PO_LOGO = '/po-logo.png';
+
 // ─── Persistence ──────────────────────────────────────────────────────────────
 
 function saveConvos(convos: Conversation[]) {
@@ -271,8 +273,8 @@ export default function Dashboard() {
               className="flex items-center gap-3.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-1"
               aria-label="Go to Nexus home"
             >
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-orange-400 flex items-center justify-center shadow-glow-violet ring-1 ring-violet-300/20">
-                <Zap className="w-[1.05rem] h-[1.05rem] text-white" />
+              <div className="w-9 h-9 overflow-hidden flex-shrink-0">
+                <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
               </div>
               <div className="brand-lockup w-[8.95rem]">
                 <span className="brand-wordmark text-[0.98rem]">

@@ -37,7 +37,7 @@ export default function Navbar() {
             onClick={() => navigate('/')}
             aria-label="Nexus home"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/95 shadow-glow-violet overflow-hidden flex-shrink-0 p-0.5 ring-1 ring-violet-300/25">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 overflow-hidden flex-shrink-0">
               <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
             </div>
             <div className="brand-lockup w-[10.4rem] sm:w-[11.7rem]">
