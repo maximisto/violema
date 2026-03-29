@@ -31,28 +31,28 @@ export default function Navbar() {
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-[4.6rem] sm:h-20">
           {/* Logo */}
           <button
-            className="flex items-center gap-3.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-2"
+            className="flex items-center gap-4 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-2"
             onClick={() => navigate('/')}
             aria-label="Nexus home"
           >
-            <div className="w-9 h-9 rounded-full bg-white/95 shadow-glow-violet overflow-hidden flex-shrink-0 p-0.5 ring-1 ring-violet-300/25">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/95 shadow-glow-violet overflow-hidden flex-shrink-0 p-0.5 ring-1 ring-violet-300/25">
               <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
             </div>
-            <div className="brand-lockup w-[9.7rem] sm:w-[10.8rem]">
-              <span className="brand-wordmark text-[1rem] sm:text-[1.18rem]">
+            <div className="brand-lockup w-[10.4rem] sm:w-[11.7rem]">
+              <span className="brand-wordmark text-[1.08rem] sm:text-[1.34rem]">
                 NEXUS
               </span>
-              <span className="brand-submark text-[8.5px] sm:text-[9.5px]">
+              <span className="brand-submark text-[8.7px] sm:text-[10px]">
                 by Purple Orange AI
               </span>
             </div>
           </button>
 
           {/* Desktop nav links */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-7">
             {navLinks.map((link) => (
               <a
                 key={link.label}
