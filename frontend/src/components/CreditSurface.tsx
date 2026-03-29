@@ -79,7 +79,7 @@ export default function CreditSurface() {
   }
 
   return (
-    <section className="rounded-2xl border border-violet-500/15 bg-gradient-to-br from-navy-900/90 via-navy-900/75 to-navy-950/95 p-4 shadow-[0_18px_42px_rgba(2,6,23,0.24)] overflow-hidden">
+    <section className="rounded-[1.3rem] border border-violet-500/15 bg-gradient-to-br from-navy-900/90 via-navy-900/75 to-navy-950/95 p-3.5 sm:p-4 shadow-[0_18px_42px_rgba(2,6,23,0.24)] overflow-hidden">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/15 bg-violet-500/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300">
@@ -185,11 +185,11 @@ export default function CreditSurface() {
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-3 sm:gap-2">
         <button
           type="button"
           onClick={handleTopUp}
-          className="inline-flex items-center justify-center gap-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12"
+          className="inline-flex items-center justify-center gap-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12"
         >
           <CreditCard className="w-3 h-3" />
           Top up now
@@ -197,7 +197,7 @@ export default function CreditSurface() {
         <button
           type="button"
           onClick={openPricing}
-          className="inline-flex items-center justify-center gap-1 rounded-xl border border-cyan-500/20 bg-cyan-500/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300 transition-colors hover:bg-cyan-500/12"
+          className="inline-flex items-center justify-center gap-1 rounded-xl border border-cyan-500/20 bg-cyan-500/8 px-3 py-2 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300 transition-colors hover:bg-cyan-500/12"
         >
           <ArrowUpRight className="w-3 h-3" />
           Upgrade plan
@@ -205,7 +205,7 @@ export default function CreditSurface() {
         <button
           type="button"
           onClick={handleReferral}
-          className="inline-flex items-center justify-center gap-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12"
+          className="inline-flex items-center justify-center gap-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12"
         >
           <Gift className="w-3 h-3" />
           Refer for 2k

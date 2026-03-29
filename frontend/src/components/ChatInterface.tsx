@@ -708,7 +708,7 @@ export default function ChatInterface({
         </div>
       </div>
 
-      <div className="px-4 sm:px-6 pt-3">
+      <div className="px-3 sm:px-6 pt-2.5 sm:pt-3">
         <div className="max-w-3xl mx-auto">
           <BillingGateBar />
         </div>
@@ -718,7 +718,7 @@ export default function ChatInterface({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 sm:px-6 py-6"
+        className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-6"
       >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center max-w-xl mx-auto">
@@ -817,9 +817,9 @@ export default function ChatInterface({
       )}
 
       {/* Input */}
-      <div className="px-4 sm:px-6 pb-4 pt-2 border-t border-navy-800/60">
+      <div className="px-3 sm:px-6 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2 border-t border-navy-800/60">
         <div className="max-w-3xl mx-auto">
-          <div className="flex items-end gap-3 bg-navy-800/60 border border-navy-700/60 focus-within:border-violet-600/50 rounded-2xl px-4 py-3 transition-all duration-200">
+          <div className="flex items-end gap-2.5 bg-navy-800/60 border border-navy-700/60 focus-within:border-violet-600/50 rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 transition-all duration-200">
             <textarea
               ref={textareaRef}
               value={input}
@@ -836,7 +836,7 @@ export default function ChatInterface({
             {isLoading ? (
               <button
                 onClick={stopGeneration}
-                className="flex-shrink-0 w-9 h-9 bg-red-600/80 hover:bg-red-500 rounded-xl flex items-center justify-center transition-all duration-200"
+                className="flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 bg-red-600/80 hover:bg-red-500 rounded-xl flex items-center justify-center transition-all duration-200"
                 aria-label="Stop generating"
               >
                 <Square className="w-3.5 h-3.5 text-white fill-white" />
@@ -846,7 +846,7 @@ export default function ChatInterface({
                 onClick={() => sendMessage(input)}
                 disabled={!input.trim()}
                 aria-label="Send message"
-                className="flex-shrink-0 w-9 h-9 bg-violet-600 hover:bg-violet-500 disabled:bg-navy-700 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-all duration-200 shadow-glow-violet disabled:shadow-none"
+                className="flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 bg-violet-600 hover:bg-violet-500 disabled:bg-navy-700 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-all duration-200 shadow-glow-violet disabled:shadow-none"
               >
                 <Send className="w-4 h-4 text-white" />
               </button>

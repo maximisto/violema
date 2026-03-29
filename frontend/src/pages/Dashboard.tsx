@@ -144,12 +144,17 @@ async function fetchSmartTitle(messages: { role: string; content: string }[]): P
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [isMobileSidebar, setIsMobileSidebar] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 1024 : false
+  );
   const [conversations, setConversations] = useState<Conversation[]>(() => {
     const saved = loadConvos();
     return saved.length > 0 ? saved : SAMPLE_CONVOS;
   });
   const [activeConvoId, setActiveConvoId] = useState<string>('new');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
   const [taskPanelOpen, setTaskPanelOpen] = useState(false); // hidden by default on mobile feel
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
   const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
@@ -163,6 +168,18 @@ export default function Dashboard() {
   // Persist conversations
   useEffect(() => { saveConvos(conversations); }, [conversations]);
 
+  useEffect(() => {
+    const onResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobileSidebar(mobile);
+      if (!mobile) setSidebarOpen(true);
+    };
+
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   // Close delete confirm on outside activity
   useEffect(() => {
     if (deleteConfirmId) {
@@ -175,6 +192,7 @@ export default function Dashboard() {
     setActiveConvoId('new');
     setNewConvoMessages([]);
     setSearchQuery('');
+    if (isMobileSidebar) setSidebarOpen(false);
   }, []);
 
   const handleDeleteConvo = useCallback(
@@ -187,7 +205,7 @@ export default function Dashboard() {
         setNewConvoMessages([]);
       }
     },
-    [activeConvoId]
+    [activeConvoId, isMobileSidebar]
   );
 
   const handleMessagesChange = useCallback(
@@ -273,10 +291,25 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="flex h-screen bg-navy-950 overflow-hidden">
+    <div className="relative flex h-[100dvh] min-h-[100dvh] bg-navy-950 overflow-hidden">
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
+      {sidebarOpen && isMobileSidebar && (
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close sidebar overlay"
+          className="absolute inset-0 z-30 bg-black/55 backdrop-blur-[1px] lg:hidden"
+        />
+      )}
+
       {sidebarOpen && (
-        <aside className="w-64 flex-shrink-0 bg-navy-900 border-r border-navy-800 flex flex-col sidebar-enter">
+        <aside
+          className={`${
+            isMobileSidebar
+              ? 'absolute inset-y-0 left-0 z-40 w-[18rem] max-w-[88vw] shadow-[0_24px_64px_rgba(2,6,23,0.55)]'
+              : 'w-60 xl:w-64 flex-shrink-0'
+          } bg-navy-900 border-r border-navy-800 flex flex-col sidebar-enter`}
+        >
           {/* Logo */}
           <div className="flex items-center gap-2 px-4 py-4 border-b border-navy-800">
             <button
@@ -308,12 +341,12 @@ export default function Dashboard() {
             </button>
           </div>
 
-          <div className="px-3 pt-3">
+          <div className="px-2.5 pt-2.5">
             <CreditSurface />
           </div>
 
           {/* New chat + Mode selector */}
-          <div className="px-3 pt-3 pb-2 space-y-2">
+          <div className="px-2.5 pt-2.5 pb-2 space-y-2">
             <button
               onClick={handleNewChat}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors shadow-glow-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
@@ -326,7 +359,7 @@ export default function Dashboard() {
           </div>
 
           {/* Search */}
-          <div className="px-3 pb-2">
+          <div className="px-2.5 pb-2">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
               <input
@@ -351,7 +384,7 @@ export default function Dashboard() {
           </div>
 
           {/* Conversation list */}
-          <div className="flex-1 overflow-y-auto px-2 space-y-0.5">
+          <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
             <p className="px-2 py-1 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
               {searchQuery ? `${filteredConvos.length} result${filteredConvos.length !== 1 ? 's' : ''}` : 'Recent'}
             </p>
@@ -371,7 +404,10 @@ export default function Dashboard() {
                 className="relative"
               >
                 <button
-                  onClick={() => setActiveConvoId(convo.id)}
+                  onClick={() => {
+                    setActiveConvoId(convo.id);
+                    if (isMobileSidebar) setSidebarOpen(false);
+                  }}
                   className={`w-full text-left px-3 py-2.5 rounded-lg transition-all ${
                     activeConvoId === convo.id
                       ? 'bg-navy-800 text-white'
@@ -427,7 +463,7 @@ export default function Dashboard() {
           </div>
 
           {/* User / settings */}
-          <div className="border-t border-navy-800 px-3 py-3 space-y-1">
+          <div className="border-t border-navy-800 px-2.5 py-2.5 space-y-1">
             <button
               onClick={() => {/* settings panel placeholder */}}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
@@ -458,8 +494,8 @@ export default function Dashboard() {
       {/* ── Main chat area ───────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-navy-800 bg-navy-900/50 backdrop-blur-sm flex-shrink-0">
-          {!sidebarOpen && (
+        <header className="flex items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-navy-800 bg-navy-900/50 backdrop-blur-sm flex-shrink-0">
+          {(!sidebarOpen || isMobileSidebar) && (
             <button
               onClick={() => setSidebarOpen(true)}
               className="text-slate-500 hover:text-slate-300 transition-colors mr-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded p-0.5"
@@ -496,7 +532,7 @@ export default function Dashboard() {
             onClick={() => setTaskPanelOpen((v) => !v)}
             aria-pressed={taskPanelOpen}
             aria-label="Toggle tasks panel"
-            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+            className={`hidden sm:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
               taskPanelOpen
                 ? 'bg-violet-900/30 border-violet-700/50 text-violet-300'
                 : 'bg-navy-800 border-navy-700 text-slate-400 hover:text-slate-200'
