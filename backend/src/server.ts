@@ -11,6 +11,7 @@ import {
   addLedgerEntry,
   assertCanSpendCredits,
   buildCreditSnapshot,
+  buildDelegationRuntimeContext,
   createTask,
   createTaskRun,
   DEFAULT_WORKSPACE_ID,
@@ -19,6 +20,8 @@ import {
   estimateCreditCost,
   finalizeTaskRun,
   getBillingStatus,
+  getStripeBillingConfig,
+  getWorkspaceProfile,
   listLedgerEntries,
   listReferralEvents,
   listTaskRuns,
@@ -31,7 +34,10 @@ import {
   mapTaskRunToStatus,
   updateTask,
   upsertBillingConfig,
+  upsertWorkspaceProfile,
   listTopUpOffers,
+  createSubscriptionCheckoutSession,
+  createTopUpCheckoutSession,
 } from './platform';
 import {
   generateText,
@@ -127,6 +133,33 @@ function getPersistedAutomationCount(): number {
   } catch {
     return 0;
   }
+}
+
+function resolveWorkspaceContext(req: Request) {
+  const candidateId =
+    (typeof req.header('X-Workspace-Id') === 'string' ? req.header('X-Workspace-Id') : undefined) ||
+    (typeof req.query.workspace_id === 'string' ? req.query.workspace_id : undefined) ||
+    (typeof (req.body as Record<string, unknown> | undefined)?.workspaceId === 'string'
+      ? (req.body as Record<string, unknown>).workspaceId as string
+      : undefined) ||
+    DEFAULT_WORKSPACE_ID;
+  const workspaceId = candidateId.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || DEFAULT_WORKSPACE_ID;
+  const candidateName =
+    (typeof req.header('X-Workspace-Name') === 'string' ? req.header('X-Workspace-Name') : undefined) ||
+    (typeof req.query.workspace_name === 'string' ? req.query.workspace_name : undefined) ||
+    (typeof (req.body as Record<string, unknown> | undefined)?.workspaceName === 'string'
+      ? (req.body as Record<string, unknown>).workspaceName as string
+      : undefined);
+
+  const profile = candidateName
+    ? upsertWorkspaceProfile(workspaceId, { name: candidateName })
+    : getWorkspaceProfile(workspaceId);
+
+  return {
+    workspaceId: profile.id,
+    workspaceName: profile.name,
+    workspace: profile,
+  };
 }
 
 function getRequiredEnv(name: string): string {
@@ -848,18 +881,31 @@ async function runAutomation(automation: {
   condition?: string;
 }) {
   ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
+  const delegation = buildDelegationRuntimeContext({
+    workspaceId: DEFAULT_WORKSPACE_ID,
+    taskKind: 'automation',
+    title: automation.name,
+    description: automation.description,
+    autonomyMode: 'cautious',
+    priority: 'medium',
+    modelTier: 'ops',
+    toolCountHint: automation.actions.length,
+    complexity: automation.actions.length > 2 ? 'high' : 'medium',
+  });
   const task = createTask({
     workspaceId: DEFAULT_WORKSPACE_ID,
     title: automation.name,
     description: automation.description,
     kind: 'automation',
     priority: 'medium',
-    assigneeRole: 'scheduler',
-    metadata: { automationId: automation.id, notify: automation.notify || null },
+    ...delegation.taskPatch,
+    delegationPlanId: delegation.plan.id,
+    delegationPlan: delegation.plan,
+    metadata: { automationId: automation.id, notify: automation.notify || null, delegation: delegation.ownership },
   });
   const estimate = estimateCreditCost({
     taskKind: 'automation',
-    modelTier: 'ops',
+    modelTier: delegation.plan.suggestedModelTier,
     automationRuns: 1,
     complexity: automation.actions.length > 2 ? 'medium' : 'low',
   });
@@ -867,12 +913,13 @@ async function runAutomation(automation: {
   const taskRun = createTaskRun({
     workspaceId: DEFAULT_WORKSPACE_ID,
     taskId: task.id,
-    agentRole: 'scheduler',
-    modelTier: 'ops',
+    ...delegation.taskRunPatch,
+    modelTier: delegation.plan.suggestedModelTier,
     estimatedCredits: estimate.estimatedCredits,
-    metadata: { automationId: automation.id, title: automation.name },
+    delegationPlan: delegation.plan,
+    metadata: { automationId: automation.id, title: automation.name, delegation: delegation.ownership },
   });
-  updateTask(task.id, { status: 'running' });
+  updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
 
   const summary = [
     `Automation: ${automation.name}`,
@@ -896,7 +943,7 @@ async function runAutomation(automation: {
       status: 'succeeded',
       actualCredits: estimate.estimatedCredits,
     });
-    updateTask(task.id, { status: 'completed' });
+    updateTask(task.id, { status: 'completed', delegationState: 'completed' });
     addLedgerEntry({
       workspaceId: DEFAULT_WORKSPACE_ID,
       source: 'automation_run',
@@ -912,7 +959,7 @@ async function runAutomation(automation: {
       actualCredits: estimate.estimatedCredits,
       error: error instanceof Error ? error.message : 'Unknown automation error',
     });
-    updateTask(task.id, { status: 'failed' });
+    updateTask(task.id, { status: 'failed', delegationState: 'review' });
     addLedgerEntry({
       workspaceId: DEFAULT_WORKSPACE_ID,
       source: 'automation_run',
@@ -946,51 +993,69 @@ app.post('/api/chat', async (req: Request, res: Response) => {
 
   let taskId: string | null = null;
   let taskRunId: string | null = null;
+  const { workspaceId } = resolveWorkspaceContext(req);
 
   try {
-    ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
+    ensureWorkspaceCredits(workspaceId);
     const routingDecision = modelProfile === 'auto'
       ? await routeChatProfile(messages)
       : null;
     const resolvedProfile: TextProfile = routingDecision?.profile || (modelProfile === 'auto' ? 'default' : modelProfile);
-    const modelTier = normalizeModelTier(resolvedProfile);
-    const { client, executingRoute } = getChatClient(resolvedProfile);
-    const requestedRoute = getChatModelConfig(resolvedProfile);
+    const canonicalModelTier = normalizeModelTier(resolvedProfile);
     const combinedContent = messages.map((message) => message.content).join(' ');
-    const taskKind = resolvedProfile === 'ops'
+    const taskKind = canonicalModelTier === 'ops'
       ? 'automation'
       : messages.some((message) => /report|analysis|analyze|compare|research/i.test(message.content))
         ? 'analysis'
         : 'chat';
+    const delegation = buildDelegationRuntimeContext({
+      workspaceId,
+      taskKind,
+      title: messages[0]?.content?.slice(0, 72) || 'Nexus task',
+      description: messages[messages.length - 1]?.content || '',
+      autonomyMode: normalizeAutonomyMode(autonomyMode),
+      priority: canonicalModelTier === 'critical' ? 'high' : 'medium',
+      modelTier: canonicalModelTier,
+      toolCountHint: messages.length,
+      complexity: combinedContent.length > 1200 ? 'high' : combinedContent.length > 500 ? 'medium' : 'low',
+      requiresHumanReview: normalizeAutonomyMode(autonomyMode) === 'supervised',
+    });
+    const modelTier = delegation.plan.suggestedModelTier;
+    const { client, executingRoute } = getChatClient(resolvedProfile);
+    const requestedRoute = getChatModelConfig(resolvedProfile);
     const task = createTask({
-      workspaceId: DEFAULT_WORKSPACE_ID,
+      workspaceId,
       title: messages[0]?.content?.slice(0, 72) || 'Nexus task',
       description: messages[messages.length - 1]?.content || '',
       kind: taskKind,
-      priority: resolvedProfile === 'critical' ? 'high' : 'medium',
+      priority: canonicalModelTier === 'critical' ? 'high' : 'medium',
       autonomyMode: normalizeAutonomyMode(autonomyMode),
-      assigneeRole: 'nexus',
+      ...delegation.taskPatch,
+      delegationPlanId: delegation.plan.id,
+      delegationPlan: delegation.plan,
       metadata: {
         selectedProfile: resolvedProfile,
         model: requestedRoute.model,
+        delegation: delegation.ownership,
       },
     });
     taskId = task.id;
-    updateTask(task.id, { status: 'running' });
+    updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
     const estimatedCost = estimateCreditCost({
       taskKind,
       modelTier,
       toolCalls: 0,
       complexity: combinedContent.length > 1200 ? 'high' : combinedContent.length > 500 ? 'medium' : 'low',
     });
-    assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimatedCost.estimatedCredits);
+    assertCanSpendCredits(workspaceId, estimatedCost.estimatedCredits);
     const taskRun = createTaskRun({
-      workspaceId: DEFAULT_WORKSPACE_ID,
+      workspaceId,
       taskId: task.id,
-      agentRole: 'nexus',
+      ...delegation.taskRunPatch,
       modelTier,
       estimatedCredits: estimatedCost.estimatedCredits,
-      metadata: { requestedProfile: modelProfile, title: task.title },
+      delegationPlan: delegation.plan,
+      metadata: { requestedProfile: modelProfile, title: task.title, delegation: delegation.ownership },
     });
     taskRunId = taskRun.id;
     const anthropicMessages: Anthropic.MessageParam[] = messages.map(m => ({
@@ -1007,6 +1072,13 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       risk: routingDecision?.risk || 'low',
       needs_tools: routingDecision?.needsTools ?? true,
     });
+    sendEvent({
+      type: 'delegation_planned',
+      task_id: task.id,
+      task_run_id: taskRun.id,
+      plan: delegation.plan,
+      ownership: delegation.ownership,
+    });
 
     if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
       if (!client) throw new Error('Missing Anthropic-compatible client.');
@@ -1022,9 +1094,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         actualCredits: actualCost.estimatedCredits,
         metadata: { toolCallsExecuted: execution.toolCallsExecuted },
       });
-      updateTask(task.id, { status: 'completed' });
+      updateTask(task.id, { status: 'completed', delegationState: 'completed' });
       addLedgerEntry({
-        workspaceId: DEFAULT_WORKSPACE_ID,
+        workspaceId,
         source: 'task_run',
         deltaCredits: -actualCost.estimatedCredits,
         referenceType: 'task',
@@ -1045,9 +1117,9 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         actualCredits: actualCost.estimatedCredits,
         metadata: { toolCallsExecuted: execution.toolCallsExecuted },
       });
-      updateTask(task.id, { status: 'completed' });
+      updateTask(task.id, { status: 'completed', delegationState: 'completed' });
       addLedgerEntry({
-        workspaceId: DEFAULT_WORKSPACE_ID,
+        workspaceId,
         source: 'task_run',
         deltaCredits: -actualCost.estimatedCredits,
         referenceType: 'task',
@@ -1066,7 +1138,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       finalizeTaskRun(taskRunId, { status: 'failed', error: errorMessage });
     }
     if (typeof taskId === 'string') {
-      updateTask(taskId, { status: 'failed' });
+      updateTask(taskId, { status: 'failed', delegationState: 'review' });
     }
     sendEvent({ type: 'error', message: errorMessage });
     res.end();
@@ -1171,12 +1243,42 @@ app.post('/api/waitlist', (req: Request, res: Response) => {
   res.json({ ok: true, duplicate: false, position: list.length });
 });
 
-app.get('/api/billing/usage', (_req: Request, res: Response) => {
-  res.json(buildCreditSnapshot());
+app.get('/api/workspace', (req: Request, res: Response) => {
+  const { workspaceId, workspaceName, workspace } = resolveWorkspaceContext(req);
+  res.json({
+    workspaceId,
+    workspaceName,
+    workspace,
+    billing: getBillingStatus(workspaceId),
+  });
 });
 
-app.get('/api/usage/credits', (_req: Request, res: Response) => {
-  res.json(buildCreditSnapshot());
+app.post('/api/workspace', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const body = req.body as { workspaceName?: string; ownerEmail?: string; slug?: string };
+  const workspace = upsertWorkspaceProfile(workspaceId, {
+    name: body.workspaceName,
+    ownerEmail: body.ownerEmail,
+    slug: body.slug,
+  });
+
+  res.json({
+    ok: true,
+    workspaceId: workspace.id,
+    workspaceName: workspace.name,
+    workspace,
+    billing: getBillingStatus(workspace.id),
+  });
+});
+
+app.get('/api/billing/usage', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json(buildCreditSnapshot(workspaceId));
+});
+
+app.get('/api/usage/credits', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json(buildCreditSnapshot(workspaceId));
 });
 
 app.post('/api/billing/estimate', (req: Request, res: Response) => {
@@ -1205,22 +1307,26 @@ app.post('/api/billing/estimate', (req: Request, res: Response) => {
   res.json(estimate);
 });
 
-app.get('/api/billing/config', (_req: Request, res: Response) => {
-  const status = getBillingStatus(DEFAULT_WORKSPACE_ID);
+app.get('/api/billing/config', (req: Request, res: Response) => {
+  const { workspaceId, workspace } = resolveWorkspaceContext(req);
+  const status = getBillingStatus(workspaceId);
   const enforcement = evaluatePlanEnforcement({
-    workspaceId: DEFAULT_WORKSPACE_ID,
+    workspaceId,
     automationCount: getPersistedAutomationCount(),
   });
 
   res.json({
+    workspace,
     ...status,
     enforcement,
+    payments: getStripeBillingConfig(workspaceId),
   });
 });
 
 app.post('/api/billing/config', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   const patch = req.body as Record<string, unknown>;
-  const next = upsertBillingConfig(DEFAULT_WORKSPACE_ID, {
+  const next = upsertBillingConfig(workspaceId, {
     planId: typeof patch.planId === 'string' ? patch.planId as 'starter' | 'pro' | 'team' : undefined,
     autoTopUpEnabled: typeof patch.autoTopUpEnabled === 'boolean' ? patch.autoTopUpEnabled : undefined,
     autoTopUpThresholdCredits:
@@ -1232,7 +1338,7 @@ app.post('/api/billing/config', (req: Request, res: Response) => {
   res.json({
     ok: true,
     config: next,
-    status: getBillingStatus(DEFAULT_WORKSPACE_ID),
+    status: getBillingStatus(workspaceId),
   });
 });
 
@@ -1241,6 +1347,7 @@ app.get('/api/billing/offers', (_req: Request, res: Response) => {
 });
 
 app.post('/api/billing/top-up', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   const { offerId } = req.body as { offerId?: string };
   if (!offerId) {
     res.status(400).json({ error: 'offerId is required' });
@@ -1250,22 +1357,88 @@ app.post('/api/billing/top-up', (req: Request, res: Response) => {
   try {
     res.json({
       ok: true,
-      ...purchaseTopUp(DEFAULT_WORKSPACE_ID, offerId),
+      ...purchaseTopUp(workspaceId, offerId),
     });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Could not apply top-up' });
   }
 });
 
-app.get('/api/billing/referrals', (_req: Request, res: Response) => {
+app.get('/api/billing/stripe/config', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json(getStripeBillingConfig(workspaceId));
+});
+
+app.post('/api/billing/stripe/checkout/subscription', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const body = req.body as { planId?: string; successUrl?: string; cancelUrl?: string; metadata?: Record<string, string> };
+  const planId = body.planId && ['starter', 'pro', 'team'].includes(body.planId) ? (body.planId as 'starter' | 'pro' | 'team') : getBillingStatus(workspaceId).config.planId;
+
+  try {
+    const session = await createSubscriptionCheckoutSession(workspaceId, planId, {
+      successUrl: body.successUrl,
+      cancelUrl: body.cancelUrl,
+      metadata: body.metadata,
+    });
+
+    res.json({
+      ok: true,
+      session,
+      billing: getBillingStatus(workspaceId),
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not create subscription checkout session' });
+  }
+});
+
+app.post('/api/billing/stripe/checkout/top-up', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const body = req.body as { offerId?: string; successUrl?: string; cancelUrl?: string; quantity?: number; metadata?: Record<string, string> };
+  if (!body.offerId) {
+    res.status(400).json({ error: 'offerId is required' });
+    return;
+  }
+
+  try {
+    const session = await createTopUpCheckoutSession(workspaceId, body.offerId, {
+      successUrl: body.successUrl,
+      cancelUrl: body.cancelUrl,
+      quantity: Number.isFinite(body.quantity) ? body.quantity : undefined,
+      metadata: body.metadata,
+    });
+
+    res.json({
+      ok: true,
+      session,
+      billing: getBillingStatus(workspaceId),
+    });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not create top-up checkout session' });
+  }
+});
+
+app.get('/api/billing/stripe/mock-checkout/:sessionId', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   res.json({
-    items: listReferralEvents(DEFAULT_WORKSPACE_ID),
-    summary: summarizeReferralRewards(DEFAULT_WORKSPACE_ID),
-    billing: getBillingStatus(DEFAULT_WORKSPACE_ID),
+    ok: true,
+    sessionId: req.params.sessionId,
+    provider: 'mock',
+    message: 'Stripe is not configured on this environment, so this is a mock checkout session.',
+    billing: getBillingStatus(workspaceId),
+  });
+});
+
+app.get('/api/billing/referrals', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json({
+    items: listReferralEvents(workspaceId),
+    summary: summarizeReferralRewards(workspaceId),
+    billing: getBillingStatus(workspaceId),
   });
 });
 
 app.post('/api/billing/referrals', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   const { referredEmail, source, referrerEmail } = req.body as {
     referredEmail?: string;
     source?: 'invite' | 'manual' | 'campaign';
@@ -1278,7 +1451,7 @@ app.post('/api/billing/referrals', (req: Request, res: Response) => {
   }
 
   const event = recordReferralEvent({
-    workspaceId: DEFAULT_WORKSPACE_ID,
+    workspaceId,
     referredEmail,
     referrerEmail,
     source,
@@ -1287,11 +1460,12 @@ app.post('/api/billing/referrals', (req: Request, res: Response) => {
   res.json({
     ok: true,
     event,
-    summary: summarizeReferralRewards(DEFAULT_WORKSPACE_ID),
+    summary: summarizeReferralRewards(workspaceId),
   });
 });
 
 app.post('/api/billing/referrals/:id/qualify', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   const event = markReferralQualified(req.params.id);
   if (!event) {
     res.status(404).json({ error: 'Referral not found' });
@@ -1301,12 +1475,13 @@ app.post('/api/billing/referrals/:id/qualify', (req: Request, res: Response) => 
   res.json({
     ok: true,
     event,
-    summary: summarizeReferralRewards(DEFAULT_WORKSPACE_ID),
+    summary: summarizeReferralRewards(workspaceId),
   });
 });
 
 app.post('/api/billing/referrals/:id/reward', (req: Request, res: Response) => {
-  const current = listReferralEvents(DEFAULT_WORKSPACE_ID).find((item) => item.id === req.params.id);
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const current = listReferralEvents(workspaceId).find((item) => item.id === req.params.id);
   if (!current) {
     res.status(404).json({ error: 'Referral not found' });
     return;
@@ -1315,8 +1490,8 @@ app.post('/api/billing/referrals/:id/reward', (req: Request, res: Response) => {
     res.json({
       ok: true,
       event: current,
-      summary: summarizeReferralRewards(DEFAULT_WORKSPACE_ID),
-      billing: getBillingStatus(DEFAULT_WORKSPACE_ID),
+      summary: summarizeReferralRewards(workspaceId),
+      billing: getBillingStatus(workspaceId),
     });
     return;
   }
@@ -1328,7 +1503,7 @@ app.post('/api/billing/referrals/:id/reward', (req: Request, res: Response) => {
   }
 
   addLedgerEntry({
-    workspaceId: DEFAULT_WORKSPACE_ID,
+    workspaceId,
     source: 'referral_bonus',
     deltaCredits: rewarded.rewardCredits,
     referenceType: 'referral',
@@ -1340,25 +1515,29 @@ app.post('/api/billing/referrals/:id/reward', (req: Request, res: Response) => {
   res.json({
     ok: true,
     event: rewarded,
-    summary: summarizeReferralRewards(DEFAULT_WORKSPACE_ID),
-    billing: getBillingStatus(DEFAULT_WORKSPACE_ID),
+    summary: summarizeReferralRewards(workspaceId),
+    billing: getBillingStatus(workspaceId),
   });
 });
 
-app.get('/api/platform/tasks', (_req: Request, res: Response) => {
-  res.json({ items: listTasks(DEFAULT_WORKSPACE_ID) });
+app.get('/api/platform/tasks', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json({ items: listTasks(workspaceId) });
 });
 
-app.get('/api/platform/task-runs', (_req: Request, res: Response) => {
-  res.json({ items: listTaskRuns(DEFAULT_WORKSPACE_ID) });
+app.get('/api/platform/task-runs', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json({ items: listTaskRuns(workspaceId) });
 });
 
-app.get('/api/platform/ledger', (_req: Request, res: Response) => {
-  res.json({ items: listLedgerEntries(DEFAULT_WORKSPACE_ID) });
+app.get('/api/platform/ledger', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json({ items: listLedgerEntries(workspaceId) });
 });
 
-app.get('/api/billing/recent-usage', (_req: Request, res: Response) => {
-  const items = listTaskRuns(DEFAULT_WORKSPACE_ID)
+app.get('/api/billing/recent-usage', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const items = listTaskRuns(workspaceId)
     .slice(0, 8)
     .map((run) => ({
       id: run.id,

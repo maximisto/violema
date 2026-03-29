@@ -2,12 +2,15 @@ import fs from 'fs';
 import path from 'path';
 import { DEFAULT_AUTOMATION_RUN_CREDIT_COST } from './cost';
 import { getBillingStatus, getApplicableTopUpOffer } from './billing';
+import { DEFAULT_WORKSPACE_ID, getWorkspaceProfile } from './workspace';
 
 interface AutomationLike {
   cron_expression?: string;
 }
 
 export interface CreditSnapshot {
+  workspaceId: string;
+  workspaceName: string;
   planName: string;
   creditsRemaining: number;
   creditsTotal: number;
@@ -21,7 +24,6 @@ export interface CreditSnapshot {
 
 const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
 const DAYS_IN_MONTH = 30;
-export const DEFAULT_WORKSPACE_ID = 'workspace_default';
 const DEFAULT_REFERRAL_BONUS = 2000;
 const DEFAULT_ESTIMATED_TASK_COST = 18;
 
@@ -59,12 +61,13 @@ function readAutomations(): AutomationLike[] {
   }
 }
 
-export function buildCreditSnapshot(): CreditSnapshot {
+export function buildCreditSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): CreditSnapshot {
   const automations = readAutomations();
   const automationBurnMonthly = automations.reduce((sum, automation) => {
     return sum + estimateMonthlyRuns(automation.cron_expression) * DEFAULT_AUTOMATION_RUN_CREDIT_COST;
   }, 0);
-  const billing = getBillingStatus(DEFAULT_WORKSPACE_ID);
+  const workspace = getWorkspaceProfile(workspaceId);
+  const billing = getBillingStatus(workspaceId);
   const dailyBurn = automationBurnMonthly / DAYS_IN_MONTH + 8;
   const projectedDaysLeft = dailyBurn > 0
     ? Math.max(1, Math.floor(billing.summary.balanceCredits / dailyBurn))
@@ -75,6 +78,8 @@ export function buildCreditSnapshot(): CreditSnapshot {
   );
 
   return {
+    workspaceId: workspace.id,
+    workspaceName: workspace.name,
     planName: billing.plan.name,
     creditsRemaining: billing.summary.balanceCredits,
     creditsTotal: billing.plan.includedCredits,

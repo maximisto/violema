@@ -26,6 +26,10 @@ export type UsageEventKind =
   | 'automation_failed'
   | 'tool_called'
   | 'model_routed'
+  | 'delegation_planned'
+  | 'delegation_assigned'
+  | 'delegation_handed_off'
+  | 'delegation_reviewed'
   | 'credit_granted'
   | 'credit_spent'
   | 'credit_reserved'
@@ -75,9 +79,30 @@ export interface TaskRecord {
   autonomyMode?: 'autonomous' | 'cautious' | 'supervised';
   budgetCredits?: number;
   assigneeRole?: AgentRole;
+  ownerRole?: AgentRole;
+  executorRole?: AgentRole;
+  reviewerRole?: AgentRole;
+  supportingRoles?: AgentRole[];
+  delegationState?: 'unassigned' | 'planned' | 'delegated' | 'in_progress' | 'review' | 'completed';
+  delegationPlanId?: string;
   createdAt: string;
   updatedAt: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface TaskDelegationStep {
+  id: string;
+  role: AgentRole;
+  objective: string;
+  status: 'planned' | 'running' | 'completed' | 'blocked';
+}
+
+export interface TaskDelegationPlan {
+  mode: 'solo' | 'delegated';
+  primaryRole: AgentRole;
+  supportingRoles: AgentRole[];
+  rationale: string;
+  steps: TaskDelegationStep[];
 }
 
 export interface TaskRunRecord {
@@ -85,6 +110,10 @@ export interface TaskRunRecord {
   workspaceId: string;
   taskId: string;
   agentRole: AgentRole;
+  ownerRole?: AgentRole;
+  executorRole?: AgentRole;
+  reviewerRole?: AgentRole;
+  supportingRoles?: AgentRole[];
   modelTier: ModelTier;
   status: TaskRunStatus;
   estimatedCredits: number;
@@ -92,6 +121,45 @@ export interface TaskRunRecord {
   startedAt: string;
   finishedAt?: string;
   error?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DelegationPlan {
+  id: string;
+  workspaceId: string;
+  taskKind: TaskKind;
+  ownerRole: AgentRole;
+  executorRole: AgentRole;
+  reviewerRole?: AgentRole;
+  supportingRoles: AgentRole[];
+  delegationDepth: number;
+  requiresReview: boolean;
+  suggestedModelTier: ModelTier;
+  reason: string;
+  confidence: 'low' | 'medium' | 'high';
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TaskOwnershipMetadata {
+  planId: string;
+  ownerRole: AgentRole;
+  executorRole: AgentRole;
+  reviewerRole?: AgentRole;
+  supportingRoles: AgentRole[];
+  delegationDepth: number;
+  requiresReview: boolean;
+  reason: string;
+  confidence: 'low' | 'medium' | 'high';
+}
+
+export interface WorkspaceProfile {
+  id: string;
+  slug: string;
+  name: string;
+  ownerEmail?: string;
+  createdAt: string;
+  updatedAt: string;
   metadata?: Record<string, unknown>;
 }
 

@@ -5,6 +5,7 @@ import type {
   AgentRole,
   CreditLedgerEntry,
   CreditSource,
+  DelegationPlan,
   ModelTier,
   TaskKind,
   TaskRecord,
@@ -83,6 +84,13 @@ export function createTask(input: {
   priority?: TaskRecord['priority'];
   autonomyMode?: TaskRecord['autonomyMode'];
   assigneeRole?: AgentRole;
+  ownerRole?: AgentRole;
+  executorRole?: AgentRole;
+  reviewerRole?: AgentRole;
+  supportingRoles?: AgentRole[];
+  delegationState?: TaskRecord['delegationState'];
+  delegationPlanId?: string;
+  delegationPlan?: DelegationPlan;
   budgetCredits?: number;
   metadata?: Record<string, unknown>;
 }): TaskRecord {
@@ -98,10 +106,19 @@ export function createTask(input: {
     priority: input.priority || 'medium',
     autonomyMode: input.autonomyMode,
     assigneeRole: input.assigneeRole,
+    ownerRole: input.ownerRole,
+    executorRole: input.executorRole,
+    reviewerRole: input.reviewerRole,
+    supportingRoles: input.supportingRoles,
+    delegationState: input.delegationState || (input.delegationPlan ? 'planned' : undefined),
+    delegationPlanId: input.delegationPlanId || input.delegationPlan?.id,
     budgetCredits: input.budgetCredits,
     createdAt: now,
     updatedAt: now,
-    metadata: input.metadata,
+    metadata: {
+      ...input.metadata,
+      delegationPlan: input.delegationPlan || undefined,
+    },
   };
 
   state.tasks.unshift(task);
@@ -124,8 +141,13 @@ export function createTaskRun(input: {
   workspaceId: string;
   taskId: string;
   agentRole: AgentRole;
+  ownerRole?: AgentRole;
+  executorRole?: AgentRole;
+  reviewerRole?: AgentRole;
+  supportingRoles?: AgentRole[];
   modelTier: ModelTier;
   estimatedCredits: number;
+  delegationPlan?: DelegationPlan;
   metadata?: Record<string, unknown>;
 }): TaskRunRecord {
   const state = getPlatformState();
@@ -134,11 +156,18 @@ export function createTaskRun(input: {
     workspaceId: input.workspaceId,
     taskId: input.taskId,
     agentRole: input.agentRole,
+    ownerRole: input.ownerRole,
+    executorRole: input.executorRole,
+    reviewerRole: input.reviewerRole,
+    supportingRoles: input.supportingRoles,
     modelTier: input.modelTier,
     status: 'running',
     estimatedCredits: input.estimatedCredits,
     startedAt: new Date().toISOString(),
-    metadata: input.metadata,
+    metadata: {
+      ...input.metadata,
+      delegationPlan: input.delegationPlan || undefined,
+    },
   };
 
   state.taskRuns.unshift(taskRun);

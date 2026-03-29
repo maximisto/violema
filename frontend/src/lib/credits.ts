@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { resolveWorkspaceContext } from './workspace';
 
 export type CreditSource = 'mock' | 'api';
 
 export interface CreditSnapshot {
   source: CreditSource;
+  workspaceId: string;
+  workspaceName: string;
   planName: string;
   creditsRemaining: number;
   creditsTotal: number;
@@ -26,6 +29,8 @@ export interface RecentCreditUsage {
 
 const MOCK_CREDIT_SNAPSHOT: CreditSnapshot = {
   source: 'mock',
+  workspaceId: 'workspace_default',
+  workspaceName: 'Nexus HQ',
   planName: 'Growth',
   creditsRemaining: 684,
   creditsTotal: 1000,
@@ -83,14 +88,39 @@ function isCreditSnapshot(value: unknown): value is CreditSnapshot {
   );
 }
 
+function buildWorkspaceRequest(endpoint: string, context: ReturnType<typeof resolveWorkspaceContext>) {
+  const url = new URL(endpoint, window.location.origin);
+  url.searchParams.set('workspace_id', context.workspaceId);
+  url.searchParams.set('workspace_name', context.workspaceName);
+  return {
+    url: url.toString(),
+    headers: {
+      'X-Workspace-Id': context.workspaceId,
+      'X-Workspace-Name': context.workspaceName,
+    },
+  };
+}
+
+export function getWorkspaceRequest(endpoint: string) {
+  return buildWorkspaceRequest(endpoint, resolveWorkspaceContext());
+}
+
 async function fetchCreditSnapshot(signal?: AbortSignal): Promise<CreditSnapshot> {
+  const workspace = resolveWorkspaceContext();
+
   for (const endpoint of CREDIT_ENDPOINTS) {
     try {
-      const response = await fetch(endpoint, { signal });
+      const request = buildWorkspaceRequest(endpoint, workspace);
+      const response = await fetch(request.url, { signal, headers: request.headers });
       if (!response.ok) continue;
       const data = await response.json() as unknown;
       if (isCreditSnapshot(data)) {
-        return { ...data, source: 'api' };
+        return {
+          ...data,
+          source: 'api',
+          workspaceId: data.workspaceId || workspace.workspaceId,
+          workspaceName: data.workspaceName || workspace.workspaceName,
+        };
       }
     } catch {
       continue;
@@ -116,9 +146,12 @@ function isRecentCreditUsageList(value: unknown): value is RecentCreditUsage[] {
 }
 
 async function fetchRecentUsage(signal?: AbortSignal): Promise<RecentCreditUsage[]> {
+  const workspace = resolveWorkspaceContext();
+
   for (const endpoint of RECENT_USAGE_ENDPOINTS) {
     try {
-      const response = await fetch(endpoint, { signal });
+      const request = buildWorkspaceRequest(endpoint, workspace);
+      const response = await fetch(request.url, { signal, headers: request.headers });
       if (!response.ok) continue;
       const data = await response.json() as unknown;
       if (isRecentCreditUsageList(data)) {
@@ -208,6 +241,7 @@ export function getCreditRecommendation(snapshot: CreditSnapshot) {
 export function buildTopUpRequest(snapshot: CreditSnapshot) {
   return [
     'Hi team, I would like to add credits to my Nexus workspace.',
+    `Workspace: ${snapshot.workspaceName} (${snapshot.workspaceId})`,
     `Current plan: ${snapshot.planName}`,
     `Suggested top-up: ${formatCredits(snapshot.topUpSuggestion)} credits`,
     `Current balance: ${formatCredits(snapshot.creditsRemaining)} / ${formatCredits(snapshot.creditsTotal)}`,
@@ -217,7 +251,40 @@ export function buildTopUpRequest(snapshot: CreditSnapshot) {
 export function buildReferralMessage(snapshot: CreditSnapshot) {
   return [
     'Try Nexus: an AI coworker for chat, research, automations, and delegated work.',
+    `Workspace: ${snapshot.workspaceName}`,
     `New users get a bonus, and I get ${formatCredits(snapshot.referralBonus)} credits when you join.`,
     'Start here: https://nexus.purpleorange.io',
   ].join('\n');
+}
+
+export function getSuggestedTopUpOfferId(snapshot: CreditSnapshot) {
+  if (snapshot.topUpSuggestion >= 5000) return 'topup_5000';
+  if (snapshot.topUpSuggestion >= 1500) return 'topup_1500';
+  return 'topup_500';
+}
+
+export async function createBillingCheckout(input: { kind: 'subscription' | 'top-up'; planId?: 'starter' | 'pro' | 'team'; offerId?: string }) {
+  const request = getWorkspaceRequest(
+    input.kind === 'subscription'
+      ? '/api/billing/stripe/checkout/subscription'
+      : '/api/billing/stripe/checkout/top-up'
+  );
+
+  const response = await fetch(request.url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...request.headers,
+    },
+    body: JSON.stringify(input.kind === 'subscription' ? { planId: input.planId } : { offerId: input.offerId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Checkout failed: ${response.status}`);
+  }
+
+  return response.json() as Promise<{
+    ok: boolean;
+    session?: { checkoutUrl: string; provider: 'stripe' | 'mock'; status: 'ready' | 'mocked' };
+  }>;
 }

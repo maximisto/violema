@@ -86,6 +86,14 @@ export function getDefaultPlanCatalog(): PlanDefinition[] {
   return Object.values(DEFAULT_PLAN_CATALOG);
 }
 
+export function listPlanDefinitions(): PlanDefinition[] {
+  return getDefaultPlanCatalog();
+}
+
+export function getPlanDefinition(planId: BillingPlanId): PlanDefinition {
+  return DEFAULT_PLAN_CATALOG[planId];
+}
+
 export function getDefaultBillingConfig(workspaceId: string): WorkspaceBillingConfig {
   return {
     workspaceId,

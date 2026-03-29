@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import ChatInterface from '../components/ChatInterface';
 import CreditSurface from '../components/CreditSurface';
+import { resolveWorkspaceContext } from '../lib/workspace';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
 const PO_LOGO = '/po-logo.png';
@@ -117,10 +118,19 @@ function formatTime(date: Date) {
 
 async function fetchSmartTitle(messages: { role: string; content: string }[]): Promise<string> {
   try {
+    const workspace = resolveWorkspaceContext();
     const res = await fetch('/api/title', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages }),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Workspace-Id': workspace.workspaceId,
+        'X-Workspace-Name': workspace.workspaceName,
+      },
+      body: JSON.stringify({
+        messages,
+        workspaceId: workspace.workspaceId,
+        workspaceName: workspace.workspaceName,
+      }),
     });
     if (!res.ok) throw new Error('Failed');
     const data = await res.json() as { title: string };

@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { ArrowUpRight, CreditCard, Gift, Sparkles, ChevronRight, History, ExternalLink } from 'lucide-react';
 import {
   buildReferralMessage,
+  createBillingCheckout,
   buildTopUpRequest,
   formatCredits,
   formatRelativeTime,
   getCreditRecommendation,
+  getSuggestedTopUpOfferId,
   useCreditSnapshot,
   useRecentCreditUsage,
 } from '../lib/credits';
@@ -45,12 +47,30 @@ export default function CreditSurface() {
     }
   }
 
-  function openPricing() {
+  async function openPricing() {
+    try {
+      const session = await createBillingCheckout({ kind: 'subscription', planId: snapshot.planName === 'Starter' ? 'pro' : 'team' });
+      if (session.session?.checkoutUrl) {
+        window.location.assign(session.session.checkoutUrl);
+        return;
+      }
+    } catch {
+      // fall back to pricing section below
+    }
     window.location.assign('/#pricing');
     setActionState('Opening pricing');
   }
 
-  function handleTopUp() {
+  async function handleTopUp() {
+    try {
+      const session = await createBillingCheckout({ kind: 'top-up', offerId: getSuggestedTopUpOfferId(snapshot) });
+      if (session.session?.checkoutUrl) {
+        window.location.assign(session.session.checkoutUrl);
+        return;
+      }
+    } catch {
+      // fall back to copy flow below
+    }
     copyToClipboard(buildTopUpRequest(snapshot), 'Top-up request');
   }
 
@@ -68,7 +88,7 @@ export default function CreditSurface() {
           </div>
           <h3 className="mt-2 text-sm font-semibold text-white">Nexus Credits</h3>
           <p className="mt-0.5 text-[11px] text-slate-500">
-            {snapshot.planName} plan · {isLoading ? 'syncing…' : snapshot.source === 'api' ? 'live' : 'preview'}
+            {snapshot.workspaceName} · {snapshot.planName} plan · {isLoading ? 'syncing…' : snapshot.source === 'api' ? 'live' : 'preview'}
           </p>
         </div>
         <div className="rounded-xl border border-navy-700/60 bg-navy-950/60 px-3 py-2 text-right">
@@ -96,7 +116,7 @@ export default function CreditSurface() {
       <div className="mt-4 grid grid-cols-1 gap-2">
         <Stat label="Task cost" value={`${formatCredits(snapshot.estimatedTaskCost)} credits`} />
         <Stat label="Auto burn" value={`${formatCredits(snapshot.automationBurnMonthly)}/mo`} />
-        <Stat label="Top up" value={`+${formatCredits(snapshot.topUpSuggestion)}`} />
+        <Stat label="Top up" value={`+${formatCredits(snapshot.topUpSuggestion)} credits`} />
       </div>
 
       <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 p-3">
@@ -157,6 +177,9 @@ export default function CreditSurface() {
             }`}>
               {recommendation.title}: {recommendation.detail}
             </p>
+            <p className="mt-2 text-[11px] text-violet-300/80">
+              Referral grant: +{formatCredits(snapshot.referralBonus)} credits.
+            </p>
           </div>
           <ChevronRight className="w-4 h-4 text-violet-300/70 flex-shrink-0" />
         </div>
@@ -169,7 +192,7 @@ export default function CreditSurface() {
           className="inline-flex items-center justify-center gap-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12"
         >
           <CreditCard className="w-3 h-3" />
-          Add credits
+          Top up now
         </button>
         <button
           type="button"
@@ -185,13 +208,13 @@ export default function CreditSurface() {
           className="inline-flex items-center justify-center gap-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12"
         >
           <Gift className="w-3 h-3" />
-          Refer a friend
+          Refer for 2k
         </button>
       </div>
 
       <div className="mt-2 flex items-center justify-between gap-3 px-1">
         <p className="text-[10px] text-slate-600">
-          {snapshot.source === 'api' ? 'Live usage' : 'Preview data'} · top-ups and referrals are copy-ready until billing is connected.
+          {snapshot.source === 'api' ? 'Live usage' : 'Preview data'} · workspace-aware billing is ready for a live API.
         </p>
         <button
           type="button"

@@ -4,6 +4,8 @@ import {
   Copy, Check, Clock, Brain, ThumbsUp, ThumbsDown, Zap, Shield, Eye, RefreshCw,
 } from 'lucide-react';
 import type { Message, ToolCall, SSEEvent, AutonomyMode } from '../types';
+import { resolveWorkspaceContext } from '../lib/workspace';
+import BillingGateBar from './BillingGateBar';
 
 // ─── Markdown renderer ───────────────────────────────────────────────────────
 
@@ -517,10 +519,21 @@ export default function ChatInterface({
       abortControllerRef.current = new AbortController();
 
       try {
+        const workspace = resolveWorkspaceContext();
         const response = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: allMessages, conversationId, autonomyMode }),
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Workspace-Id': workspace.workspaceId,
+            'X-Workspace-Name': workspace.workspaceName,
+          },
+          body: JSON.stringify({
+            messages: allMessages,
+            conversationId,
+            autonomyMode,
+            workspaceId: workspace.workspaceId,
+            workspaceName: workspace.workspaceName,
+          }),
           signal: abortControllerRef.current.signal,
         });
 
@@ -669,6 +682,7 @@ export default function ChatInterface({
   const suggestions = SUGGESTIONS_BY_MODE[autonomyMode];
   const modeConfig = MODE_CONFIG[autonomyMode];
   const ModeIcon = modeConfig.icon;
+  const isCreditError = Boolean(error && /insufficient credits|credits exhausted|add a top-up|upgrade your plan/i.test(error));
 
   const statusText = {
     idle: 'Ready',
@@ -691,6 +705,12 @@ export default function ChatInterface({
         <div className={`ml-auto flex items-center gap-1.5 text-[10px] border rounded-full px-2.5 py-1 ${modeConfig.bg} ${modeConfig.color}`}>
           <ModeIcon className="w-3 h-3" />
           {modeConfig.label}
+        </div>
+      </div>
+
+      <div className="px-4 sm:px-6 pt-3">
+        <div className="max-w-3xl mx-auto">
+          <BillingGateBar />
         </div>
       </div>
 
@@ -757,7 +777,25 @@ export default function ChatInterface({
       {error && (
         <div className="mx-4 mb-2 px-4 py-3 bg-red-950/60 border border-red-800/60 rounded-xl flex items-center gap-3">
           <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-          <p className="text-red-300 text-sm flex-1">{error}</p>
+          <div className="flex-1">
+            <p className="text-red-300 text-sm">{error}</p>
+            {isCreditError && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  onClick={() => window.location.assign('/#pricing')}
+                  className="rounded-lg border border-red-800/50 px-2.5 py-1.5 text-[11px] text-red-200 hover:bg-red-900/30 transition-colors"
+                >
+                  Upgrade plan
+                </button>
+                <button
+                  onClick={() => window.location.assign('/dashboard')}
+                  className="rounded-lg border border-red-800/50 px-2.5 py-1.5 text-[11px] text-red-200 hover:bg-red-900/30 transition-colors"
+                >
+                  Open billing
+                </button>
+              </div>
+            )}
+          </div>
           {lastUserInput && (
             <button
               onClick={() => { setError(null); sendMessage(lastUserInput); }}
