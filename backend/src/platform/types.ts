@@ -1,0 +1,129 @@
+export type CreditSource =
+  | 'monthly_subscription'
+  | 'top_up'
+  | 'referral_bonus'
+  | 'task_run'
+  | 'automation_run'
+  | 'manual_adjustment'
+  | 'refund'
+  | 'promo';
+
+export type CreditDirection = 'grant' | 'debit';
+export type ModelTier = 'micro' | 'default' | 'hard' | 'critical' | 'ops';
+export type AgentRole = 'nexus' | 'researcher' | 'operator' | 'engineer' | 'reviewer' | 'analyst' | 'scheduler' | 'writer';
+export type TaskKind = 'chat' | 'research' | 'analysis' | 'engineering' | 'automation' | 'message' | 'report' | 'review' | 'scheduling';
+export type TaskStatus = 'queued' | 'running' | 'waiting_review' | 'blocked' | 'completed' | 'failed' | 'canceled';
+export type TaskRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'retrying';
+export type UsageEventKind =
+  | 'task_created'
+  | 'task_started'
+  | 'task_completed'
+  | 'task_failed'
+  | 'task_reviewed'
+  | 'automation_scheduled'
+  | 'automation_triggered'
+  | 'automation_completed'
+  | 'automation_failed'
+  | 'tool_called'
+  | 'model_routed'
+  | 'credit_granted'
+  | 'credit_spent'
+  | 'credit_reserved'
+  | 'credit_released'
+  | 'referral_redeemed';
+
+export interface CreditLedgerEntry {
+  id: string;
+  workspaceId: string;
+  direction: CreditDirection;
+  source: CreditSource;
+  deltaCredits: number;
+  balanceAfterCredits: number;
+  referenceType?: 'subscription' | 'task' | 'automation' | 'referral' | 'manual' | 'promotion';
+  referenceId?: string;
+  note?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface CreditLedgerSummary {
+  workspaceId: string;
+  balanceCredits: number;
+  grantedCredits: number;
+  spentCredits: number;
+  netCredits: number;
+  updatedAt: string;
+}
+
+export interface CreditReserve {
+  workspaceId: string;
+  reservedCredits: number;
+  availableCredits: number;
+  updatedAt: string;
+}
+
+export interface TaskRecord {
+  id: string;
+  workspaceId: string;
+  objectiveId?: string;
+  parentTaskId?: string;
+  title: string;
+  description?: string;
+  kind: TaskKind;
+  status: TaskStatus;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  autonomyMode?: 'autonomous' | 'cautious' | 'supervised';
+  budgetCredits?: number;
+  assigneeRole?: AgentRole;
+  createdAt: string;
+  updatedAt: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TaskRunRecord {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  agentRole: AgentRole;
+  modelTier: ModelTier;
+  status: TaskRunStatus;
+  estimatedCredits: number;
+  actualCredits?: number;
+  startedAt: string;
+  finishedAt?: string;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UsageEvent {
+  id: string;
+  workspaceId: string;
+  kind: UsageEventKind;
+  taskId?: string;
+  taskRunId?: string;
+  automationId?: string;
+  modelTier?: ModelTier;
+  agentRole?: AgentRole;
+  source?: CreditSource;
+  deltaCredits?: number;
+  toolName?: string;
+  toolCount?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  durationMs?: number;
+  success?: boolean;
+  metadata?: Record<string, unknown>;
+  occurredAt: string;
+}
+
+export interface PlatformPlan {
+  workspaceId: string;
+  subscriptionName: string;
+  monthlyPriceUsd: number;
+  includedCredits: number;
+  autoTopUpEnabled: boolean;
+  autoTopUpThresholdCredits?: number;
+  autoTopUpAmountCredits?: number;
+  createdAt: string;
+  updatedAt: string;
+}

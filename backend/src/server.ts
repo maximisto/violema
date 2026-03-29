@@ -8,6 +8,21 @@ import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
 import { createAutomation, loadPersistedAutomations } from './scheduler';
 import {
+  addLedgerEntry,
+  buildCreditSnapshot,
+  createTask,
+  createTaskRun,
+  DEFAULT_WORKSPACE_ID,
+  ensureWorkspaceCredits,
+  estimateCreditCost,
+  finalizeTaskRun,
+  listLedgerEntries,
+  listTaskRuns,
+  listTasks,
+  mapTaskRunToStatus,
+  updateTask,
+} from './platform';
+import {
   generateText,
   getChatClient,
   getChatModelConfig,
@@ -129,9 +144,10 @@ async function runAnthropicChatLoop(
   anthropicMessages: Anthropic.MessageParam[],
   autonomyMode: string,
   sendEvent: (data: Record<string, unknown>) => void
-) {
+): Promise<{ toolCallsExecuted: number }> {
   let continueLoop = true;
   let currentMessages = [...anthropicMessages];
+  let toolCallsExecuted = 0;
 
   while (continueLoop) {
     const stream = client.messages.stream({
@@ -229,6 +245,7 @@ async function runAnthropicChatLoop(
           tool_use_id: toolUseBlock.id,
           content: result,
         });
+        toolCallsExecuted += 1;
       }
 
       currentMessages.push({ role: 'user', content: toolResults });
@@ -236,6 +253,8 @@ async function runAnthropicChatLoop(
       continueLoop = false;
     }
   }
+
+  return { toolCallsExecuted };
 }
 
 async function runOpenAIChatLoop(
@@ -243,13 +262,14 @@ async function runOpenAIChatLoop(
   messages: ChatMessage[],
   autonomyMode: string,
   sendEvent: (data: Record<string, unknown>) => void
-) {
+): Promise<{ toolCallsExecuted: number }> {
   const currentMessages: Array<Record<string, unknown>> = [
     { role: 'system', content: buildSystemPrompt(autonomyMode) },
     ...messages.map((message) => ({ role: message.role, content: message.content })),
   ];
 
   let continueLoop = true;
+  let toolCallsExecuted = 0;
 
   while (continueLoop) {
     const response = await fetch(`${route.baseUrl}/chat/completions`, {
@@ -341,11 +361,14 @@ async function runOpenAIChatLoop(
           tool_call_id: toolId,
           content: result,
         });
+        toolCallsExecuted += 1;
       }
     } else {
       continueLoop = false;
     }
   }
+
+  return { toolCallsExecuted };
 }
 
 const NEXUS_TOOLS: Anthropic.Tool[] = [
@@ -775,6 +798,25 @@ interface ChatRequest {
   modelProfile?: TextProfile | 'auto';
 }
 
+function normalizeAutonomyMode(value: string): 'autonomous' | 'cautious' | 'supervised' {
+  return value === 'autonomous' || value === 'supervised' ? value : 'cautious';
+}
+
+function normalizeModelTier(profile: TextProfile): 'micro' | 'default' | 'hard' | 'critical' | 'ops' {
+  switch (profile) {
+    case 'balanced':
+      return 'default';
+    case 'frontier':
+      return 'critical';
+    case 'operations':
+      return 'ops';
+    case 'utility':
+      return 'micro';
+    default:
+      return profile;
+  }
+}
+
 async function runAutomation(automation: {
   id: string;
   name: string;
@@ -783,6 +825,32 @@ async function runAutomation(automation: {
   notify?: string;
   condition?: string;
 }) {
+  ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
+  const task = createTask({
+    workspaceId: DEFAULT_WORKSPACE_ID,
+    title: automation.name,
+    description: automation.description,
+    kind: 'automation',
+    priority: 'medium',
+    assigneeRole: 'scheduler',
+    metadata: { automationId: automation.id, notify: automation.notify || null },
+  });
+  const estimate = estimateCreditCost({
+    taskKind: 'automation',
+    modelTier: 'ops',
+    automationRuns: 1,
+    complexity: automation.actions.length > 2 ? 'medium' : 'low',
+  });
+  const taskRun = createTaskRun({
+    workspaceId: DEFAULT_WORKSPACE_ID,
+    taskId: task.id,
+    agentRole: 'scheduler',
+    modelTier: 'ops',
+    estimatedCredits: estimate.estimatedCredits,
+    metadata: { automationId: automation.id, title: automation.name },
+  });
+  updateTask(task.id, { status: 'running' });
+
   const summary = [
     `Automation: ${automation.name}`,
     automation.description ? `Description: ${automation.description}` : null,
@@ -800,7 +868,37 @@ async function runAutomation(automation: {
     } else {
       console.log(`[automation] ${automation.id}\n${summary}`);
     }
+
+    finalizeTaskRun(taskRun.id, {
+      status: 'succeeded',
+      actualCredits: estimate.estimatedCredits,
+    });
+    updateTask(task.id, { status: 'completed' });
+    addLedgerEntry({
+      workspaceId: DEFAULT_WORKSPACE_ID,
+      source: 'automation_run',
+      deltaCredits: -estimate.estimatedCredits,
+      referenceType: 'automation',
+      referenceId: automation.id,
+      note: `Automation run: ${automation.name}`,
+      metadata: { taskId: task.id, taskRunId: taskRun.id },
+    });
   } catch (error) {
+    finalizeTaskRun(taskRun.id, {
+      status: 'failed',
+      actualCredits: estimate.estimatedCredits,
+      error: error instanceof Error ? error.message : 'Unknown automation error',
+    });
+    updateTask(task.id, { status: 'failed' });
+    addLedgerEntry({
+      workspaceId: DEFAULT_WORKSPACE_ID,
+      source: 'automation_run',
+      deltaCredits: -estimate.estimatedCredits,
+      referenceType: 'automation',
+      referenceId: automation.id,
+      note: `Automation failed: ${automation.name}`,
+      metadata: { taskId: task.id, taskRunId: taskRun.id },
+    });
     console.error(`[automation] ${automation.id} failed`, error);
   }
 }
@@ -823,13 +921,54 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
+  let taskId: string | null = null;
+  let taskRunId: string | null = null;
+
   try {
+    ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
     const routingDecision = modelProfile === 'auto'
       ? await routeChatProfile(messages)
       : null;
     const resolvedProfile: TextProfile = routingDecision?.profile || (modelProfile === 'auto' ? 'default' : modelProfile);
+    const modelTier = normalizeModelTier(resolvedProfile);
     const { client, executingRoute } = getChatClient(resolvedProfile);
     const requestedRoute = getChatModelConfig(resolvedProfile);
+    const combinedContent = messages.map((message) => message.content).join(' ');
+    const taskKind = resolvedProfile === 'ops'
+      ? 'automation'
+      : messages.some((message) => /report|analysis|analyze|compare|research/i.test(message.content))
+        ? 'analysis'
+        : 'chat';
+    const task = createTask({
+      workspaceId: DEFAULT_WORKSPACE_ID,
+      title: messages[0]?.content?.slice(0, 72) || 'Nexus task',
+      description: messages[messages.length - 1]?.content || '',
+      kind: taskKind,
+      priority: resolvedProfile === 'critical' ? 'high' : 'medium',
+      autonomyMode: normalizeAutonomyMode(autonomyMode),
+      assigneeRole: 'nexus',
+      metadata: {
+        selectedProfile: resolvedProfile,
+        model: requestedRoute.model,
+      },
+    });
+    taskId = task.id;
+    updateTask(task.id, { status: 'running' });
+    const estimatedCost = estimateCreditCost({
+      taskKind,
+      modelTier,
+      toolCalls: 0,
+      complexity: combinedContent.length > 1200 ? 'high' : combinedContent.length > 500 ? 'medium' : 'low',
+    });
+    const taskRun = createTaskRun({
+      workspaceId: DEFAULT_WORKSPACE_ID,
+      taskId: task.id,
+      agentRole: 'nexus',
+      modelTier,
+      estimatedCredits: estimatedCost.estimatedCredits,
+      metadata: { requestedProfile: modelProfile, title: task.title },
+    });
+    taskRunId = taskRun.id;
     const anthropicMessages: Anthropic.MessageParam[] = messages.map(m => ({
       role: m.role,
       content: m.content,
@@ -847,9 +986,51 @@ app.post('/api/chat', async (req: Request, res: Response) => {
 
     if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
       if (!client) throw new Error('Missing Anthropic-compatible client.');
-      await runAnthropicChatLoop(client, executingRoute, anthropicMessages, autonomyMode, sendEvent);
+      const execution = await runAnthropicChatLoop(client, executingRoute, anthropicMessages, autonomyMode, sendEvent);
+      const actualCost = estimateCreditCost({
+        taskKind,
+        modelTier,
+        toolCalls: execution.toolCallsExecuted,
+        complexity: estimatedCost.breakdown.complexityCredits > 0 ? 'medium' : 'low',
+      });
+      finalizeTaskRun(taskRun.id, {
+        status: 'succeeded',
+        actualCredits: actualCost.estimatedCredits,
+        metadata: { toolCallsExecuted: execution.toolCallsExecuted },
+      });
+      updateTask(task.id, { status: 'completed' });
+      addLedgerEntry({
+        workspaceId: DEFAULT_WORKSPACE_ID,
+        source: 'task_run',
+        deltaCredits: -actualCost.estimatedCredits,
+        referenceType: 'task',
+        referenceId: task.id,
+        note: `Chat task completed: ${task.title}`,
+        metadata: { taskRunId: taskRun.id, toolCallsExecuted: execution.toolCallsExecuted },
+      });
     } else {
-      await runOpenAIChatLoop(requestedRoute, messages, autonomyMode, sendEvent);
+      const execution = await runOpenAIChatLoop(requestedRoute, messages, autonomyMode, sendEvent);
+      const actualCost = estimateCreditCost({
+        taskKind,
+        modelTier,
+        toolCalls: execution.toolCallsExecuted,
+        complexity: estimatedCost.breakdown.complexityCredits > 0 ? 'medium' : 'low',
+      });
+      finalizeTaskRun(taskRun.id, {
+        status: 'succeeded',
+        actualCredits: actualCost.estimatedCredits,
+        metadata: { toolCallsExecuted: execution.toolCallsExecuted },
+      });
+      updateTask(task.id, { status: 'completed' });
+      addLedgerEntry({
+        workspaceId: DEFAULT_WORKSPACE_ID,
+        source: 'task_run',
+        deltaCredits: -actualCost.estimatedCredits,
+        referenceType: 'task',
+        referenceId: task.id,
+        note: `Chat task completed: ${task.title}`,
+        metadata: { taskRunId: taskRun.id, toolCallsExecuted: execution.toolCallsExecuted },
+      });
     }
 
     sendEvent({ type: 'done' });
@@ -857,6 +1038,12 @@ app.post('/api/chat', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error calling Anthropic API:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    if (typeof taskRunId === 'string') {
+      finalizeTaskRun(taskRunId, { status: 'failed', error: errorMessage });
+    }
+    if (typeof taskId === 'string') {
+      updateTask(taskId, { status: 'failed' });
+    }
     sendEvent({ type: 'error', message: errorMessage });
     res.end();
   }
@@ -958,6 +1145,72 @@ app.post('/api/waitlist', (req: Request, res: Response) => {
 
   console.log(`[waitlist] #${list.length} — ${email}`);
   res.json({ ok: true, duplicate: false, position: list.length });
+});
+
+app.get('/api/billing/usage', (_req: Request, res: Response) => {
+  res.json(buildCreditSnapshot());
+});
+
+app.get('/api/usage/credits', (_req: Request, res: Response) => {
+  res.json(buildCreditSnapshot());
+});
+
+app.post('/api/billing/estimate', (req: Request, res: Response) => {
+  const {
+    taskKind = 'chat',
+    modelTier = 'default',
+    toolCalls = 0,
+    automationRuns = 0,
+    reviewRequired = false,
+    artifactCount = 0,
+    complexity = 'low',
+    durationSeconds = 0,
+  } = req.body as Record<string, unknown>;
+
+  const estimate = estimateCreditCost({
+    taskKind: String(taskKind) as Parameters<typeof estimateCreditCost>[0]['taskKind'],
+    modelTier: String(modelTier) as Parameters<typeof estimateCreditCost>[0]['modelTier'],
+    toolCalls: Number(toolCalls),
+    automationRuns: Number(automationRuns),
+    reviewRequired: Boolean(reviewRequired),
+    artifactCount: Number(artifactCount),
+    complexity: String(complexity) as Parameters<typeof estimateCreditCost>[0]['complexity'],
+    durationSeconds: Number(durationSeconds),
+  });
+
+  res.json(estimate);
+});
+
+app.get('/api/platform/tasks', (_req: Request, res: Response) => {
+  res.json({ items: listTasks(DEFAULT_WORKSPACE_ID) });
+});
+
+app.get('/api/platform/task-runs', (_req: Request, res: Response) => {
+  res.json({ items: listTaskRuns(DEFAULT_WORKSPACE_ID) });
+});
+
+app.get('/api/platform/ledger', (_req: Request, res: Response) => {
+  res.json({ items: listLedgerEntries(DEFAULT_WORKSPACE_ID) });
+});
+
+app.get('/api/billing/recent-usage', (_req: Request, res: Response) => {
+  const items = listTaskRuns(DEFAULT_WORKSPACE_ID)
+    .slice(0, 8)
+    .map((run) => ({
+      id: run.id,
+      title: run.metadata?.title ? String(run.metadata.title) : `${run.agentRole} ${run.modelTier} run`,
+      detail: `${run.modelTier} · ${run.status}`,
+      credits: run.actualCredits ?? run.estimatedCredits,
+      timestamp: run.finishedAt || run.startedAt,
+      tone:
+        run.modelTier === 'critical'
+          ? 'amber'
+          : run.modelTier === 'ops'
+            ? 'cyan'
+            : 'violet',
+    }));
+
+  res.json(items);
 });
 
 app.get('/api/health', (_req: Request, res: Response) => {

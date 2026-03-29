@@ -6,6 +6,7 @@ import {
   Eye, Shield, Search,
 } from 'lucide-react';
 import ChatInterface from '../components/ChatInterface';
+import CreditSurface from '../components/CreditSurface';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
 const PO_LOGO = '/po-logo.png';
@@ -295,6 +296,10 @@ export default function Dashboard() {
             >
               <PanelLeftClose className="w-4 h-4" />
             </button>
+          </div>
+
+          <div className="px-3 pt-3">
+            <CreditSurface />
           </div>
 
           {/* New chat + Mode selector */}

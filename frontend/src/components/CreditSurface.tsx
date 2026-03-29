@@ -1,0 +1,146 @@
+import { ArrowUpRight, CreditCard, Gift, Sparkles, ChevronRight, History } from 'lucide-react';
+import { formatCredits, formatRelativeTime, useCreditSnapshot, useRecentCreditUsage } from '../lib/credits';
+
+function Stat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-navy-700/60 bg-navy-950/50 px-3 py-2.5">
+      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">{label}</p>
+      <p className="text-sm font-semibold text-white tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+export default function CreditSurface() {
+  const { snapshot, isLoading } = useCreditSnapshot();
+  const { items: recentUsage, isLoading: usageLoading } = useRecentCreditUsage();
+  const progress = Math.max(0, Math.min(100, (snapshot.creditsRemaining / snapshot.creditsTotal) * 100));
+  const lowBalance = progress < 25;
+  const burnRate = snapshot.automationBurnMonthly / 30;
+
+  return (
+    <section className="rounded-2xl border border-violet-500/15 bg-gradient-to-br from-navy-900/90 via-navy-900/75 to-navy-950/95 p-4 shadow-[0_18px_42px_rgba(2,6,23,0.24)] overflow-hidden">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/15 bg-violet-500/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300">
+            <Sparkles className="w-3 h-3" />
+            Credits
+          </div>
+          <h3 className="mt-2 text-sm font-semibold text-white">Nexus Credits</h3>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            {snapshot.planName} plan · {isLoading ? 'syncing…' : snapshot.source === 'api' ? 'live' : 'preview'}
+          </p>
+        </div>
+        <div className="rounded-xl border border-navy-700/60 bg-navy-950/60 px-3 py-2 text-right">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Remaining</p>
+          <p className={`mt-1 text-lg font-extrabold ${lowBalance ? 'text-amber-300' : 'text-white'}`}>
+            {formatCredits(snapshot.creditsRemaining)}
+          </p>
+          <p className="text-[10px] text-slate-600">of {formatCredits(snapshot.creditsTotal)}</p>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <div className="flex items-center justify-between text-[10px] text-slate-600">
+          <span>Usage</span>
+          <span>{Math.round(progress)}%</span>
+        </div>
+        <div className="mt-1.5 h-2 rounded-full bg-navy-950/80 overflow-hidden border border-navy-800/60">
+          <div
+            className={`h-full rounded-full transition-all duration-700 ${lowBalance ? 'bg-gradient-to-r from-amber-500 to-orange-400' : 'bg-gradient-to-r from-violet-500 via-fuchsia-500 to-cyan-400'}`}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-2">
+        <Stat label="Task cost" value={`${formatCredits(snapshot.estimatedTaskCost)} credits`} />
+        <Stat label="Auto burn" value={`${formatCredits(snapshot.automationBurnMonthly)}/mo`} />
+        <Stat label="Top up" value={`+${formatCredits(snapshot.topUpSuggestion)}`} />
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <History className="w-3 h-3" />
+            <span>Recent usage</span>
+          </div>
+          <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600">
+            {usageLoading ? 'loading' : 'live preview'}
+          </span>
+        </div>
+        <div className="mt-2 space-y-2">
+          {recentUsage.slice(0, 3).map((item) => (
+            <div
+              key={item.id}
+              className="flex items-start justify-between gap-3 rounded-xl border border-navy-700/60 bg-navy-900/45 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-white">{item.title}</p>
+                <p className="text-[11px] text-slate-500">{item.detail}</p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p
+                  className={`text-[11px] font-semibold ${
+                    item.tone === 'amber'
+                      ? 'text-amber-300'
+                      : item.tone === 'cyan'
+                        ? 'text-cyan-300'
+                        : 'text-violet-300'
+                  }`}
+                >
+                  -{formatCredits(item.credits)}
+                </p>
+                <p className="text-[10px] text-slate-600">{formatRelativeTime(item.timestamp)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Billing insight</p>
+            <p className="mt-1 text-sm text-white">
+              Burn is roughly {formatCredits(Math.round(burnRate))} credits/day.
+            </p>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              At this rate, you have about {snapshot.projectedDaysLeft} days left on the current plan.
+            </p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-violet-300/70 flex-shrink-0" />
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <button
+          type="button"
+          className="inline-flex items-center justify-center gap-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12"
+        >
+          <CreditCard className="w-3 h-3" />
+          Add credits
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center justify-center gap-1 rounded-xl border border-cyan-500/20 bg-cyan-500/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300 transition-colors hover:bg-cyan-500/12"
+        >
+          <ArrowUpRight className="w-3 h-3" />
+          Upgrade plan
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center justify-center gap-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12"
+        >
+          <Gift className="w-3 h-3" />
+          Refer a friend
+        </button>
+      </div>
+    </section>
+  );
+}
