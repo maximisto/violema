@@ -60,7 +60,7 @@ export function normalizeSchedule(schedule: string): string {
     return normalized;
   }
 
-  if (normalized === 'hourly') {
+  if (normalized === 'hourly' || normalized === 'every hour') {
     return '0 * * * *';
   }
 
