@@ -139,36 +139,26 @@ async function sendSlackMessage(input: SendMessageInput) {
 }
 
 async function sendEmailMessage(input: SendMessageInput) {
-  const apiKey = getRequiredEnv('SENDGRID_API_KEY');
-  const fromEmail = getRequiredEnv('SENDGRID_FROM_EMAIL');
+  const apiKey = getRequiredEnv('POSTMARK_API_KEY');
+  const fromEmail = getRequiredEnv('POSTMARK_FROM_EMAIL');
 
-  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+  const response = await fetch('https://api.postmarkapp.com/email', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      Accept: 'application/json',
+      'X-Postmark-Server-Token': apiKey,
     },
     body: JSON.stringify({
-      personalizations: [
-        {
-          to: [{ email: input.to }],
-          subject: input.subject || 'Message from Nexus',
-        },
-      ],
-      from: {
-        email: fromEmail,
-      },
-      content: [
-        {
-          type: 'text/plain',
-          value: input.body,
-        },
-      ],
+      From: fromEmail,
+      To: input.to,
+      Subject: input.subject || 'Message from Nexus',
+      TextBody: input.body,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`SendGrid send failed: ${await parseErrorResponse(response)}`);
+    throw new Error(`Postmark send failed: ${await parseErrorResponse(response)}`);
   }
 
   return {
@@ -178,7 +168,7 @@ async function sendEmailMessage(input: SendMessageInput) {
     subject: input.subject || 'Message from Nexus',
     status: 'delivered',
     sent_at: new Date().toISOString(),
-    provider: 'sendgrid',
+    provider: 'postmark',
   };
 }
 
@@ -200,7 +190,7 @@ export function getIntegrationStatus() {
   return {
     anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
     tavily: Boolean(process.env.TAVILY_API_KEY),
-    sendgrid: Boolean(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL),
+    postmark: Boolean(process.env.POSTMARK_API_KEY && process.env.POSTMARK_FROM_EMAIL),
     slack: Boolean(process.env.SLACK_BOT_TOKEN),
   };
 }
