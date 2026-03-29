@@ -58,6 +58,30 @@ const TOOL_LABELS: Record<string, string> = {
   schedule_automation: 'Scheduling automation',
 };
 
+function formatJsonBlock(value: unknown) {
+  return JSON.stringify(value, null, 2);
+}
+
+function extractResultLinks(result?: Record<string, unknown>) {
+  if (!result) return [];
+
+  return Object.entries(result)
+    .flatMap(([key, value]) => {
+      if (typeof value === 'string' && /^https?:\/\//.test(value)) {
+        return [{ label: key.replace(/_/g, ' '), href: value }];
+      }
+
+      if (Array.isArray(value)) {
+        return value
+          .filter((item): item is string => typeof item === 'string' && /^https?:\/\//.test(item))
+          .map((href, index) => ({ label: `${key.replace(/_/g, ' ')} ${index + 1}`, href }));
+      }
+
+      return [];
+    })
+    .slice(0, 3);
+}
+
 const MODE_CONFIG = {
   autonomous: {
     label: 'Autonomous',
@@ -213,33 +237,36 @@ const ToolCallBlock = memo(function ToolCallBlock({ toolCall }: { toolCall: Tool
   const isDone = toolCall.status === 'complete';
   const elapsed = toolCall.elapsedMs;
   const confidence = toolCall.confidence;
+  const resultLinks = extractResultLinks(toolCall.result);
 
   const inputSummary = toolCall.input
     ? (Object.values(toolCall.input)[0] as string | undefined)
     : undefined;
 
   return (
-    <div className="my-2 bg-navy-950 border border-navy-700/60 rounded-xl overflow-hidden">
+    <div className="my-2 overflow-hidden rounded-2xl border border-navy-700/70 bg-gradient-to-br from-navy-950/92 via-navy-950/84 to-navy-900/72 shadow-[0_14px_32px_rgba(2,6,23,0.18)]">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-navy-900/60 transition-colors text-left"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.02]"
       >
-        <span className="text-base leading-none">{icon}</span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-navy-800/80 text-base leading-none ring-1 ring-white/5">
+          {icon}
+        </span>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-slate-200">{label}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-slate-100">{label}</span>
             {isDone ? (
-              <span className="text-[10px] text-green-400 bg-green-400/10 border border-green-400/20 px-2 py-0.5 rounded-full">
+              <span className="rounded-full border border-green-400/20 bg-green-400/10 px-2 py-0.5 text-[10px] text-green-400">
                 ✓ Done
               </span>
             ) : (
-              <span className="text-[10px] text-violet-400 bg-violet-400/10 border border-violet-400/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="flex items-center gap-1 rounded-full border border-violet-400/20 bg-violet-400/10 px-2 py-0.5 text-[10px] text-violet-400">
                 <span className="inline-block w-1.5 h-1.5 bg-violet-400 rounded-full animate-pulse" />
                 Running
               </span>
             )}
             {isDone && elapsed !== undefined && (
-              <span className="text-[10px] text-slate-600 flex items-center gap-1">
+              <span className="flex items-center gap-1 text-[10px] text-slate-600">
                 <Clock className="w-2.5 h-2.5" />
                 {elapsed < 1000 ? `${elapsed}ms` : `${(elapsed / 1000).toFixed(1)}s`}
               </span>
@@ -247,9 +274,18 @@ const ToolCallBlock = memo(function ToolCallBlock({ toolCall }: { toolCall: Tool
             {isDone && confidence !== undefined && <ConfidenceBar score={confidence} />}
           </div>
           {inputSummary && typeof inputSummary === 'string' && (
-            <p className="text-xs text-slate-500 truncate mt-0.5 font-mono">
+            <p className="mt-0.5 truncate font-mono text-xs text-slate-500">
               {inputSummary.slice(0, 72)}{inputSummary.length > 72 ? '…' : ''}
             </p>
+          )}
+          {!expanded && resultLinks.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {resultLinks.map((link) => (
+                <span key={link.href} className="ui-pill px-2 py-0.5 text-[9px] normal-case tracking-normal text-cyan-300">
+                  {link.label}
+                </span>
+              ))}
+            </div>
           )}
         </div>
         <ChevronDown
@@ -258,27 +294,42 @@ const ToolCallBlock = memo(function ToolCallBlock({ toolCall }: { toolCall: Tool
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 space-y-3 border-t border-navy-800/60">
+        <div className="border-t border-white/5 px-4 pb-4 pt-3 space-y-3">
           {toolCall.input && (
-            <div>
-              <div className="flex items-center justify-between mt-3 mb-1.5">
-                <p className="text-[10px] text-slate-600 font-semibold uppercase tracking-wider">Input</p>
-                <CopyButton text={JSON.stringify(toolCall.input, null, 2)} />
+            <div className="rounded-xl border border-navy-800/70 bg-black/20 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Input</p>
+                <CopyButton text={formatJsonBlock(toolCall.input)} />
               </div>
-              <pre className="text-xs text-cyan-300 font-mono bg-black/30 rounded-lg p-3 overflow-x-auto">
-                {JSON.stringify(toolCall.input, null, 2)}
+              <pre className="overflow-x-auto rounded-lg bg-black/30 p-3 font-mono text-xs text-cyan-300">
+                {formatJsonBlock(toolCall.input)}
               </pre>
             </div>
           )}
           {toolCall.result && (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[10px] text-slate-600 font-semibold uppercase tracking-wider">Output</p>
-                <CopyButton text={JSON.stringify(toolCall.result, null, 2)} />
+            <div className="rounded-xl border border-navy-800/70 bg-black/20 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Result</p>
+                <CopyButton text={formatJsonBlock(toolCall.result)} />
               </div>
-              <pre className="text-xs text-green-300 font-mono bg-black/30 rounded-lg p-3 overflow-x-auto max-h-52">
-                {JSON.stringify(toolCall.result, null, 2)}
+              <pre className="max-h-52 overflow-x-auto rounded-lg bg-black/30 p-3 font-mono text-xs text-green-300">
+                {formatJsonBlock(toolCall.result)}
               </pre>
+              {resultLinks.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {resultLinks.map((link) => (
+                    <a
+                      key={link.href}
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ui-pill px-2.5 py-1 text-[10px] normal-case tracking-normal text-cyan-300 hover:border-cyan-500/30 hover:text-cyan-200"
+                    >
+                      Open {link.label}
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -320,10 +371,10 @@ function MessageBubble({
         <span className="text-xs text-white font-bold">N</span>
       </div>
 
-      <div className="min-w-0 flex-1 rounded-[1.45rem] border border-navy-800/75 bg-gradient-to-br from-navy-900/82 via-navy-900/58 to-navy-950/72 px-4 py-3.5 shadow-[0_16px_34px_rgba(2,6,23,0.18)]">
+      <div className="min-w-0 flex-1 rounded-[1.45rem] border border-navy-800/75 bg-gradient-to-br from-navy-900/84 via-navy-900/60 to-navy-950/74 px-4 py-3.5 shadow-[0_16px_34px_rgba(2,6,23,0.18)]">
         {/* Header */}
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-violet-200">Nexus</span>
+          <span className="text-sm font-semibold text-violet-100">Nexus</span>
           {!message.isStreaming && <ModelBadge />}
           <span className="text-xs text-slate-600">
             {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -700,8 +751,8 @@ export default function ChatInterface({
   return (
     <div className="flex flex-col h-full relative">
       {/* Agent status bar */}
-      <div className="flex items-center gap-2 px-3.5 sm:px-4 py-2 border-b border-navy-800/40 bg-gradient-to-r from-navy-900/30 via-navy-900/20 to-violet-950/10 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-2xl border border-white/5 bg-navy-950/35 px-3.5 py-2.5 shadow-[0_12px_34px_rgba(2,6,23,0.16)] backdrop-blur-sm">
+      <div className="border-b border-navy-800/40 bg-gradient-to-r from-navy-900/30 via-navy-900/20 to-violet-950/10 px-3 py-2 backdrop-blur-sm sm:px-4">
+        <div className="mx-auto flex max-w-3xl items-center gap-2.5 rounded-2xl border border-white/5 bg-navy-950/35 px-3 py-2.5 shadow-[0_12px_34px_rgba(2,6,23,0.16)] backdrop-blur-sm sm:gap-3 sm:px-3.5">
           <div className="flex items-center gap-2.5">
             <div className={`w-2 h-2 rounded-full ${statusColor} ${agentStatus !== 'idle' ? 'animate-pulse' : ''}`} />
             <div className="leading-tight">
@@ -713,11 +764,11 @@ export default function ChatInterface({
             <span className="text-slate-700">•</span>
             <span>{messages.length === 0 ? 'Fresh workspace' : `${messages.length} messages`}</span>
           </div>
-          <div className="ml-auto flex items-center gap-2 text-[10px] text-slate-500">
+          <div className="ml-auto flex items-center gap-1.5 text-[10px] text-slate-500 sm:gap-2">
             <span className="hidden uppercase tracking-[0.24em] text-slate-700 sm:inline">Mode</span>
-            <div className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${modeConfig.bg} ${modeConfig.color} shadow-sm`}>
+            <div className={`flex items-center gap-1 rounded-full border px-2 py-1 ${modeConfig.bg} ${modeConfig.color} shadow-sm sm:gap-1.5 sm:px-2.5`}>
               <ModeIcon className="w-3 h-3" />
-              {modeConfig.label}
+              <span className="max-[420px]:hidden">{modeConfig.label}</span>
             </div>
           </div>
         </div>
@@ -791,7 +842,7 @@ export default function ChatInterface({
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-3xl space-y-5">
+          <div className="mx-auto max-w-3xl space-y-5 pb-2">
             {messages.map((msg) => (
               <MessageBubble
                 key={msg.id}
@@ -863,10 +914,10 @@ export default function ChatInterface({
       )}
 
       {/* Input */}
-      <div className="px-3 sm:px-6 pb-[calc(0.8rem+env(safe-area-inset-bottom))] pt-2 border-t border-navy-800/60 bg-gradient-to-t from-navy-950/50 via-navy-950/20 to-transparent">
+      <div className="border-t border-navy-800/60 bg-gradient-to-t from-navy-950/50 via-navy-950/20 to-transparent px-3 pt-2 pb-[calc(0.8rem+env(safe-area-inset-bottom))] sm:px-6">
         <div className="max-w-3xl mx-auto">
           <div className="rounded-[1.45rem] border border-navy-700/60 bg-gradient-to-br from-navy-800/72 via-navy-800/58 to-navy-900/76 shadow-[0_18px_42px_rgba(2,6,23,0.24)] transition-all duration-200 focus-within:border-violet-600/50">
-            <div className="flex items-end gap-2.5 px-3.5 py-3 sm:px-4 sm:py-3.5">
+            <div className="flex items-end gap-2 px-3 py-3 sm:gap-2.5 sm:px-4 sm:py-3.5">
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -876,7 +927,7 @@ export default function ChatInterface({
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder="Message Nexus… (Shift+Enter for new line)"
-                className="min-h-[2.75rem] flex-1 resize-none bg-transparent text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-600 chat-input"
+                className="chat-input min-h-[2.65rem] flex-1 resize-none bg-transparent text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-600"
                 rows={1}
                 disabled={isLoading}
               />
@@ -899,8 +950,9 @@ export default function ChatInterface({
                 </button>
               )}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 px-3.5 py-2 text-[11px] text-slate-700 sm:px-4">
-              <span>Nexus can make mistakes. Verify important information.</span>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 px-3 py-2 text-[11px] text-slate-700 sm:px-4">
+              <span className="max-[460px]:hidden">Nexus can make mistakes. Verify important information.</span>
+              <span className="min-[461px]:hidden">Verify important information.</span>
               <span className="inline-flex items-center gap-2">
                 <kbd className="text-[10px] bg-navy-800 border border-navy-700 px-1.5 py-0.5 rounded font-mono">
                   ⌘K

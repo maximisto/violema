@@ -186,6 +186,7 @@ export default function Dashboard() {
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
   const [taskPanelOpen, setTaskPanelOpen] = useState(false); // hidden by default on mobile feel
+  const [selectedTaskId, setSelectedTaskId] = useState<number>(SAMPLE_TASKS[0]?.id ?? 0);
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
   const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -303,6 +304,14 @@ export default function Dashboard() {
     },
     { scheduled: 0, complete: 0, alert: 0 }
   );
+  const selectedTask = SAMPLE_TASKS.find((task) => task.id === selectedTaskId) ?? SAMPLE_TASKS[0];
+  const selectedTaskMeta = selectedTask ? getTaskStatusMeta(selectedTask.status as 'scheduled' | 'complete' | 'alert') : null;
+
+  useEffect(() => {
+    if (!selectedTask && SAMPLE_TASKS[0]) {
+      setSelectedTaskId(SAMPLE_TASKS[0].id);
+    }
+  }, [selectedTask]);
 
   const ModeSelector = ({ compact = false }: { compact?: boolean }) => (
     <div className={`ui-input-shell flex items-center gap-1 p-1 ${compact ? 'w-full' : ''}`}>
@@ -623,9 +632,15 @@ export default function Dashboard() {
             />
           </div>
 
-          {/* Task panel */}
-          {taskPanelOpen && (
-            <aside className="w-72 flex-shrink-0 border-l border-navy-800/80 bg-gradient-to-b from-navy-900/60 via-navy-900/36 to-navy-950/60 flex flex-col overflow-hidden backdrop-blur-md shadow-[inset_1px_0_0_rgba(255,255,255,0.03)]">
+      {/* Task panel */}
+      {taskPanelOpen && (
+            <aside
+              className={`${
+                isMobileSidebar
+                  ? 'fixed inset-x-2 bottom-2 top-20 z-40 rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.58)]'
+                  : 'w-72 flex-shrink-0'
+              } border-l border-navy-800/80 bg-gradient-to-b from-navy-900/60 via-navy-900/36 to-navy-950/60 flex flex-col overflow-hidden backdrop-blur-md shadow-[inset_1px_0_0_rgba(255,255,255,0.03)]`}
+            >
               <div className="flex items-center justify-between px-4 py-3.5 border-b border-navy-800/80 bg-gradient-to-r from-violet-500/8 via-navy-950/30 to-cyan-500/6">
                 <div className="flex items-center gap-2">
                   <span className="flex h-7 w-7 items-center justify-center rounded-xl border border-violet-500/15 bg-violet-500/8 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
@@ -669,14 +684,70 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              <div className="px-3 pt-3">
+                <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Selected automation</p>
+                      <h4 className="mt-1 text-sm font-semibold text-white">{selectedTask?.title}</h4>
+                    </div>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${selectedTaskMeta?.chip ?? 'border-navy-700 bg-navy-900 text-slate-400'}`}>
+                      {selectedTaskMeta?.label ?? 'Scheduled'}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/40 px-2.5 py-2">
+                      <p className="uppercase tracking-[0.18em] text-slate-600">Cadence</p>
+                      <p className="mt-1 text-slate-200">{selectedTask?.time}</p>
+                    </div>
+                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/40 px-2.5 py-2">
+                      <p className="uppercase tracking-[0.18em] text-slate-600">Next action</p>
+                      <p className="mt-1 text-slate-200">Review / run / pause</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+                    {selectedTask?.status === 'alert'
+                      ? 'This automation needs attention. Use the controls below to inspect, pause, or update it before the next run.'
+                      : selectedTask?.status === 'complete'
+                        ? 'This workflow is running cleanly. Keep it active or copy the pattern into another workflow.'
+                        : 'This workflow is on schedule. Open it for details or tweak the cadence before the next run.'}
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <button className="flex-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12">
+                      Open
+                    </button>
+                    <button className="flex-1 rounded-xl border border-navy-700/70 bg-navy-950/35 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition-colors hover:bg-navy-900/70">
+                      Pause
+                    </button>
+                    <button className="flex-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12">
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex-1 overflow-y-auto p-3 space-y-2">
                 {SAMPLE_TASKS.map((task) => {
                   const Icon = task.icon;
                   const meta = getTaskStatusMeta(task.status as 'scheduled' | 'complete' | 'alert');
+                  const isSelected = selectedTaskId === task.id;
                   return (
                     <div
                       key={task.id}
-                      className={`bg-gradient-to-br ${meta.accent} border border-navy-700/70 rounded-2xl p-3.5 hover:border-violet-600/30 transition-all cursor-pointer group shadow-[0_12px_28px_rgba(2,6,23,0.14)] hover:shadow-[0_16px_34px_rgba(2,6,23,0.22)]`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedTaskId(task.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedTaskId(task.id);
+                        }
+                      }}
+                      className={`bg-gradient-to-br ${meta.accent} border rounded-2xl p-3.5 transition-all cursor-pointer group shadow-[0_12px_28px_rgba(2,6,23,0.14)] hover:shadow-[0_16px_34px_rgba(2,6,23,0.22)] ${
+                        isSelected
+                          ? 'border-violet-500/40 ring-1 ring-violet-500/20 translate-y-[-1px]'
+                          : 'border-navy-700/70 hover:border-violet-600/30'
+                      }`}
                     >
                       <div className="flex items-start gap-2.5">
                         <div
@@ -687,7 +758,7 @@ export default function Dashboard() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm text-slate-100 font-medium truncate">{task.title}</p>
-                            <span className="text-[10px] text-slate-500 flex-shrink-0">{task.time}</span>
+                            <span className={`text-[10px] flex-shrink-0 ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>{task.time}</span>
                           </div>
                           <div className="flex items-center gap-2 mt-1.5">
                             <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${meta.chip}`}>
@@ -697,7 +768,9 @@ export default function Dashboard() {
                             <span className="text-[10px] text-slate-600">Automation pulse</span>
                           </div>
                         </div>
-                        <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-300 mt-0.5 transition-colors flex-shrink-0" />
+                        <ChevronRight className={`w-3.5 h-3.5 mt-0.5 transition-all flex-shrink-0 ${
+                          isSelected ? 'text-violet-300 rotate-0' : 'text-slate-600 group-hover:text-slate-300'
+                        }`} />
                       </div>
                     </div>
                   );
