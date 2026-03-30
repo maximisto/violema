@@ -1004,7 +1004,7 @@ export default function ChatInterface({
   }[agentStatus];
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 w-full flex-1 flex-col">
       {/* Agent status bar */}
       <div className="flex-shrink-0 border-b border-navy-800/40 bg-gradient-to-r from-navy-900/30 via-navy-900/20 to-violet-950/10 px-3 py-2 backdrop-blur-sm sm:px-4">
         <div className="mx-auto flex max-w-5xl items-center gap-2.5 rounded-2xl border border-white/5 bg-navy-950/35 px-3 py-2.5 shadow-[0_12px_34px_rgba(2,6,23,0.16)] backdrop-blur-sm sm:gap-3 sm:px-3.5">
