@@ -9,6 +9,10 @@ export interface AuthSession {
   acceptedTerms: boolean;
   acceptedEducation: boolean;
   createdAt: string;
+  slackWorkspace?: string;
+  slackChannelId?: string;
+  slackDisplayTarget?: string;
+  slackConnectedAt?: string;
 }
 
 const SESSION_KEY = 'nexus_auth_session';
@@ -46,4 +50,9 @@ export function clearAuthSession() {
 export function hasAcceptedAccess(): boolean {
   const session = getAuthSession();
   return Boolean(session?.acceptedTerms && session?.acceptedEducation);
+}
+
+export function hasSlackConnection(): boolean {
+  const session = getAuthSession();
+  return Boolean(session?.slackWorkspace && session?.slackChannelId);
 }

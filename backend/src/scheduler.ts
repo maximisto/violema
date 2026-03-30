@@ -325,6 +325,22 @@ export function updateAutomation(
   return updated;
 }
 
+export function deleteAutomation(id: string) {
+  const items = readAutomations();
+  const index = items.findIndex((item) => item.id === id);
+  if (index === -1) return null;
+
+  const [removed] = items.splice(index, 1);
+  writeAutomations(items);
+
+  const existing = scheduledTasks.get(id);
+  existing?.stop();
+  existing?.destroy();
+  scheduledTasks.delete(id);
+
+  return removed;
+}
+
 export function triggerAutomationNow(
   id: string,
   onTrigger: (record: AutomationRecord) => Promise<{ ok: boolean; error?: string } | void>

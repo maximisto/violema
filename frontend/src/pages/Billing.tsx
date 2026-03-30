@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, CreditCard, Layers3, MessageSquare, Shield, Sparkles, Users } from 'lucide-react';
 import { TOP_UP_OPTIONS, createBillingCheckout, formatCredits } from '../lib/credits';
-import { getAuthSession, hasAcceptedAccess } from '../lib/auth';
+import { getAuthSession, hasAcceptedAccess, hasSlackConnection } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
 
 const PLANS = [
@@ -143,6 +143,25 @@ export default function Billing() {
                   <p className="mt-2 text-sm text-slate-400">
                     You’ll review the selected package in Stripe, complete checkout, and return with billing attached to this workspace.
                   </p>
+                </div>
+                <div className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Slack setup</p>
+                      <p className="mt-2 text-sm text-slate-400">
+                        {hasSlackConnection()
+                          ? 'Slack destination saved for this workspace.'
+                          : 'Save one Slack channel ID before you turn on automations.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/connect/slack?next=${encodeURIComponent('/plans')}`)}
+                      className="ui-button-ghost px-3 py-2 text-xs"
+                    >
+                      {hasSlackConnection() ? 'Edit' : 'Connect'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

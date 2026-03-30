@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } from './integrations';
-import { createAutomation, getAutomationById, listAutomations, loadPersistedAutomations, triggerAutomationNow, updateAutomation } from './scheduler';
+import { createAutomation, deleteAutomation, getAutomationById, listAutomations, loadPersistedAutomations, triggerAutomationNow, updateAutomation } from './scheduler';
 import {
   addLedgerEntry,
   assertCanSpendCredits,
@@ -1623,6 +1623,16 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Could not update automation' });
   }
+});
+
+app.delete('/api/automations/:id', (req: Request, res: Response) => {
+  const removed = deleteAutomation(req.params.id);
+  if (!removed) {
+    res.status(404).json({ error: 'Automation not found' });
+    return;
+  }
+
+  res.json({ ok: true, item: removed });
 });
 
 app.get('/api/platform/tasks', (req: Request, res: Response) => {

@@ -8,6 +8,7 @@ import {
 import ChatInterface from '../components/ChatInterface';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
+import { getAuthSession, hasSlackConnection } from '../lib/auth';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
 const PO_LOGO = '/po-logo.png';
@@ -368,6 +369,7 @@ export default function Dashboard() {
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
   const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteAutomationConfirmId, setDeleteAutomationConfirmId] = useState<string | null>(null);
   const [autonomyMode, setAutonomyMode] = useState<AutonomyMode>('cautious');
   const [searchQuery, setSearchQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
@@ -381,6 +383,7 @@ export default function Dashboard() {
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const { snapshot } = useCreditSnapshot();
+  const authSession = getAuthSession();
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
 
@@ -522,6 +525,13 @@ export default function Dashboard() {
   }, [deleteConfirmId]);
 
   useEffect(() => {
+    if (deleteAutomationConfirmId) {
+      const t = setTimeout(() => setDeleteAutomationConfirmId(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [deleteAutomationConfirmId]);
+
+  useEffect(() => {
     if (!uiNotice) return undefined;
     const timeout = window.setTimeout(() => setUiNotice(null), 3200);
     return () => window.clearTimeout(timeout);
@@ -646,6 +656,22 @@ export default function Dashboard() {
       showNotice('success', `${nextStatus === 'paused' ? 'Paused' : 'Resumed'} "${task.title}"`);
     } catch {
       showNotice('error', `Could not update "${task.title}"`);
+    } finally {
+      setActionBusy(null);
+    }
+  }, [refreshAutomations, showNotice]);
+
+  const handleAutomationDelete = useCallback(async (task: DashboardTaskItem | undefined) => {
+    if (!task?.automationId) return;
+    setActionBusy('edit');
+    try {
+      const response = await fetch(`/api/automations/${task.automationId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Could not delete automation');
+      await refreshAutomations();
+      setDeleteAutomationConfirmId(null);
+      showNotice('success', `Deleted "${task.title}"`);
+    } catch {
+      showNotice('error', `Could not delete "${task?.title || 'automation'}"`);
     } finally {
       setActionBusy(null);
     }
@@ -1508,6 +1534,27 @@ export default function Dashboard() {
 
           {/* User / settings */}
           <div className="border-t border-navy-800 px-4 py-3">
+            <div className="mb-3 rounded-2xl border border-navy-700/80 bg-navy-950/38 px-3.5 py-3 shadow-[0_10px_24px_rgba(2,6,23,0.14)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Slack</p>
+                  <p className="mt-1 text-sm font-medium text-white">
+                    {hasSlackConnection() ? authSession?.slackDisplayTarget || authSession?.slackChannelId : 'Not connected'}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                    {hasSlackConnection()
+                      ? `${authSession?.slackWorkspace || 'Slack'} is ready for alerts and approvals.`
+                      : 'Save one Slack channel during onboarding so automations have a real destination.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/connect/slack?next=%2Fdashboard')}
+                  className="ui-button-ghost px-3 py-2 text-[11px]"
+                >
+                  {hasSlackConnection() ? 'Edit' : 'Connect'}
+                </button>
+              </div>
+            </div>
             <div className="rounded-2xl border border-navy-700/80 bg-navy-950/38 px-3.5 py-3 shadow-[0_10px_24px_rgba(2,6,23,0.14)]">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl border border-violet-800/40 bg-gradient-to-br from-violet-700/35 to-navy-700 text-xs font-bold text-violet-300">
@@ -1760,6 +1807,36 @@ export default function Dashboard() {
                     </button>
                   </div>
                   {selectedTask?.source === 'live' && (
+                    deleteAutomationConfirmId === selectedTask.automationId ? (
+                      <div className="mt-2 flex items-center justify-between rounded-xl border border-red-500/25 bg-red-500/8 px-3 py-2 text-[11px] text-red-200">
+                        <span>Delete this automation?</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { void handleAutomationDelete(selectedTask); }}
+                            disabled={actionBusy !== null}
+                            className="rounded-lg border border-red-500/30 px-2 py-1 font-semibold text-red-200 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            onClick={() => setDeleteAutomationConfirmId(null)}
+                            className="rounded-lg border border-navy-700/70 px-2 py-1 text-slate-300 transition-colors hover:bg-navy-900/70"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDeleteAutomationConfirmId(selectedTask.automationId || null)}
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/18 bg-red-500/6 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-red-300 transition-colors hover:bg-red-500/10"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete automation
+                      </button>
+                    )
+                  )}
+                  {selectedTask?.source === 'live' && (
                     <div className="mt-2 flex items-center gap-2">
                       <button
                         onClick={duplicateSelectedAutomation}
@@ -1800,7 +1877,7 @@ export default function Dashboard() {
                           setSelectedTaskId(task.id);
                         }
                       }}
-                      className={`border rounded-2xl p-3.5 transition-all cursor-pointer group shadow-[0_12px_28px_rgba(2,6,23,0.14)] hover:shadow-[0_16px_34px_rgba(2,6,23,0.22)] ${
+                      className={`relative border rounded-2xl p-3.5 transition-all cursor-pointer group shadow-[0_12px_28px_rgba(2,6,23,0.14)] hover:shadow-[0_16px_34px_rgba(2,6,23,0.22)] ${
                         isSelected
                           ? `bg-gradient-to-br ${meta.accent} border-violet-500/40 ring-1 ring-violet-500/20 translate-y-[-1px]`
                           : 'border-navy-700/70 bg-navy-950/34 hover:border-violet-600/30 hover:bg-navy-900/55'
@@ -1827,6 +1904,19 @@ export default function Dashboard() {
                             )}
                           </div>
                         </div>
+                        {task.source === 'live' && task.automationId ? (
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setDeleteAutomationConfirmId(task.automationId || null);
+                              setSelectedTaskId(task.id);
+                            }}
+                            className="rounded-lg p-1 text-slate-600 transition-colors hover:bg-navy-900/80 hover:text-red-300"
+                            aria-label={`Delete ${task.title}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        ) : null}
                         <ChevronRight className={`w-3.5 h-3.5 mt-0.5 transition-all flex-shrink-0 ${
                           isSelected ? 'text-violet-300 rotate-0' : 'text-slate-600 group-hover:text-slate-300'
                         }`} />

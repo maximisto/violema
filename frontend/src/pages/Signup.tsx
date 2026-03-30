@@ -64,7 +64,7 @@ export default function Signup() {
       createdAt: new Date().toISOString(),
     });
 
-    navigate(nextPath);
+    navigate(`/connect/slack?next=${encodeURIComponent(nextPath)}`);
   }
 
   return (

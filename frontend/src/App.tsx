@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import Billing from './pages/Billing';
 import ProtectedRoute from './components/ProtectedRoute';
 import IntegrationsPage from './pages/IntegrationsPage';
+import SlackSetup from './pages/SlackSetup';
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
         <Route path="/plans" element={<Billing />} />
+        <Route path="/connect/slack" element={<ProtectedRoute><SlackSetup /></ProtectedRoute>} />
         <Route path="/integrations" element={<IntegrationsPage />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/faq" element={<FAQ />} />
