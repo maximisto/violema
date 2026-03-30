@@ -938,9 +938,29 @@ function inferAutomationModelTier(actions: string[]): 'default' | 'ops' {
 }
 
 function inferAutomationComplexity(actions: string[]): 'low' | 'medium' | 'high' {
-  if (actions.length >= 5) return 'high';
-  if (actions.length >= 3) return 'medium';
+  if (actions.length >= 6) return 'high';
+  if (actions.length >= 4) return 'medium';
   return 'low';
+}
+
+function inferAutomationToolCallCount(
+  actions: string[],
+  notify?: string
+) {
+  let count = 0;
+
+  for (const action of actions) {
+    const normalized = normalizeAutomationActionText(action);
+    if (/(search|scan internet|scan the internet|scan web|research|news|competitor)/.test(normalized)) count += 1;
+    if (inferAutomationQueryDataInput(action)) count += 1;
+    if (/(screenshot|capture)/.test(normalized)) count += 1;
+  }
+
+  if (notify && actions.some(actionNeedsDelivery)) {
+    count += 1;
+  }
+
+  return Math.max(0, count);
 }
 
 function actionNeedsSummary(action: string) {
@@ -1052,6 +1072,7 @@ async function runAutomation(automation: {
   ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
   const modelTier = inferAutomationModelTier(automation.actions);
   const complexity = inferAutomationComplexity(automation.actions);
+  const toolCallCount = inferAutomationToolCallCount(automation.actions, automation.notify);
   const delegation = buildDelegationRuntimeContext({
     workspaceId: DEFAULT_WORKSPACE_ID,
     taskKind: 'automation',
@@ -1078,7 +1099,7 @@ async function runAutomation(automation: {
     taskKind: 'automation',
     modelTier: delegation.plan.suggestedModelTier,
     automationRuns: 1,
-    toolCalls: Math.min(automation.actions.length, 3),
+    toolCalls: toolCallCount,
     complexity,
   });
   assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimate.estimatedCredits);
