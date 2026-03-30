@@ -46,6 +46,7 @@ function renderMarkdown(text: string): string {
   let listBuffer: string[] = [];
   let listType: 'ul' | 'ol' | null = null;
   let tableBuffer: string[] = [];
+  let metricBuffer: string[] = [];
   let inCodeBlock = false;
   let codeLanguage = '';
   let codeLines: string[] = [];
@@ -71,6 +72,35 @@ function renderMarkdown(text: string): string {
     tableBuffer = [];
   };
 
+  const flushMetrics = () => {
+    if (!metricBuffer.length) return;
+    const metrics = metricBuffer
+      .map((line) => {
+        const match = line.match(/^([A-Za-z][A-Za-z0-9 /_-]{1,28}):\s+(.{1,72})$/);
+        if (!match) return null;
+        return {
+          label: renderInlineMarkdown(match[1].trim()),
+          value: renderInlineMarkdown(match[2].trim()),
+        };
+      })
+      .filter((item): item is { label: string; value: string } => Boolean(item));
+
+    if (metrics.length >= 2) {
+      html.push(
+        `<div class="my-4 grid gap-2 sm:grid-cols-2">${metrics
+          .map(
+            (metric) =>
+              `<div class="rounded-2xl border border-navy-700/70 bg-navy-950/45 px-3 py-3"><p class="text-[10px] uppercase tracking-[0.18em] text-slate-600">${metric.label}</p><p class="mt-1 text-sm font-medium text-white">${metric.value}</p></div>`
+          )
+          .join('')}</div>`
+      );
+    } else {
+      paragraphBuffer.push(...metricBuffer);
+    }
+
+    metricBuffer = [];
+  };
+
   const flushCode = () => {
     const langLabel = codeLanguage ? `<span class="absolute right-3 top-2 text-[10px] font-mono uppercase tracking-[0.18em] text-slate-500">${escapeHtml(codeLanguage)}</span>` : '';
     html.push(`<div class="relative my-4 overflow-hidden rounded-2xl border border-navy-700/70 bg-[#0d1117]"><pre class="overflow-x-auto p-4">${langLabel}<code class="text-sm leading-relaxed text-cyan-300">${escapeHtml(codeLines.join('\n'))}</code></pre></div>`);
@@ -83,6 +113,7 @@ function renderMarkdown(text: string): string {
       flushParagraph();
       flushList();
       flushTable();
+      flushMetrics();
       if (inCodeBlock) {
         flushCode();
         inCodeBlock = false;
@@ -105,18 +136,30 @@ function renderMarkdown(text: string): string {
       return;
     }
 
+    const metricMatch = line.trim().match(/^([A-Za-z][A-Za-z0-9 /_-]{1,28}):\s+(.{1,72})$/);
+    if (metricMatch && !/^https?:\/\//.test(metricMatch[2])) {
+      flushParagraph();
+      flushList();
+      flushTable();
+      metricBuffer.push(line.trim());
+      return;
+    }
+
     if (!line.trim()) {
       flushParagraph();
       flushList();
       flushTable();
+      flushMetrics();
       return;
     }
 
     flushTable();
+    flushMetrics();
 
     if (/^---+$/.test(line.trim())) {
       flushParagraph();
       flushList();
+      flushMetrics();
       html.push('<hr class="my-4 border-navy-700" />');
       return;
     }
@@ -125,6 +168,7 @@ function renderMarkdown(text: string): string {
     if (orderedMatch) {
       flushParagraph();
       if (listType && listType !== 'ol') flushList();
+      flushMetrics();
       listType = 'ol';
       listBuffer.push(orderedMatch[1]);
       return;
@@ -134,6 +178,7 @@ function renderMarkdown(text: string): string {
     if (unorderedMatch) {
       flushParagraph();
       if (listType && listType !== 'ul') flushList();
+      flushMetrics();
       listType = 'ul';
       listBuffer.push(unorderedMatch[1]);
       return;
@@ -143,6 +188,7 @@ function renderMarkdown(text: string): string {
     if (headingMatch) {
       flushParagraph();
       flushList();
+      flushMetrics();
       const level = headingMatch[1].length;
       const tag = `h${level}`;
       const size = level === 1 ? 'text-xl font-bold' : level === 2 ? 'text-lg font-semibold' : 'text-base font-semibold';
@@ -154,6 +200,7 @@ function renderMarkdown(text: string): string {
     if (quoteMatch) {
       flushParagraph();
       flushList();
+      flushMetrics();
       html.push(`<blockquote class="my-3 border-l-2 border-violet-500 pl-4 italic text-slate-400">${renderInlineMarkdown(quoteMatch[1])}</blockquote>`);
       return;
     }
@@ -164,6 +211,7 @@ function renderMarkdown(text: string): string {
   flushParagraph();
   flushList();
   flushTable();
+  flushMetrics();
   if (inCodeBlock) flushCode();
 
   return html.join('');

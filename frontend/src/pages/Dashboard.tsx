@@ -208,6 +208,17 @@ function formatRelativeTimeFromIso(iso: string) {
   return formatTime(new Date(iso));
 }
 
+function getConversationSectionLabel(date: Date) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+
+  if (date >= startOfToday) return 'Today';
+  if (date >= startOfYesterday) return 'Yesterday';
+  return 'Earlier';
+}
+
 function mapPlatformStatus(status: string): DashboardTaskStatus {
   if (status === 'failed' || status === 'blocked' || status === 'canceled') return 'alert';
   if (status === 'completed' || status === 'succeeded') return 'complete';
@@ -713,6 +724,22 @@ export default function Dashboard() {
       (c.lastMessage ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const groupedConversations = useMemo(() => {
+    const sorted = [...filteredConvos].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    const active = activeConvoId !== 'new' ? sorted.find((convo) => convo.id === activeConvoId) : undefined;
+    const remaining = active ? sorted.filter((convo) => convo.id !== active.id) : sorted;
+
+    const sections = remaining.reduce<Array<{ label: string; items: Conversation[] }>>((acc, convo) => {
+      const label = getConversationSectionLabel(convo.timestamp);
+      const existing = acc.find((section) => section.label === label);
+      if (existing) existing.items.push(convo);
+      else acc.push({ label, items: [convo] });
+      return acc;
+    }, []);
+
+    return { active, sections };
+  }, [activeConvoId, filteredConvos]);
+
   const taskItems: DashboardTaskItem[] = liveAutomations.length > 0
     ? liveAutomations
     : platformTasks.length > 0
@@ -794,6 +821,21 @@ export default function Dashboard() {
     }
     window.location.assign('/#pricing');
   };
+
+  const duplicateSelectedAutomation = useCallback(() => {
+    if (!selectedTask) return;
+    setAutomationEditor({
+      mode: 'create',
+      id: `draft-${Date.now()}`,
+      name: `${selectedTask.title} copy`,
+      schedule: selectedTask.schedule || selectedTask.time || 'every monday at 9am',
+      description: selectedTask.description || '',
+      notify: selectedTask.notify || '#ops-alerts',
+      condition: selectedTask.condition || '',
+      actionsText: Array.isArray(selectedTask.actions) ? selectedTask.actions.join('\n') : 'Generate summary',
+      destinationType: selectedTask.notify?.startsWith('#') ? 'slack' : selectedTask.notify?.includes('@') ? 'email' : selectedTask.notify ? 'custom' : 'none',
+    });
+  }, [selectedTask]);
 
   return (
     <div className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-navy-950 md:h-screen md:min-h-screen">
@@ -941,78 +983,114 @@ export default function Dashboard() {
           {/* Conversation list */}
           <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
             <p className="px-1 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-600">
-              {searchQuery ? `${filteredConvos.length} result${filteredConvos.length !== 1 ? 's' : ''}` : 'Recent'}
+              {searchQuery ? `${filteredConvos.length} result${filteredConvos.length !== 1 ? 's' : ''}` : 'Threads'}
             </p>
 
             {filteredConvos.length === 0 && searchQuery && (
               <p className="px-3 py-4 text-center text-xs text-slate-600">No conversations found</p>
             )}
 
-            {filteredConvos.map((convo) => (
-              <div
-                key={convo.id}
-                onMouseEnter={() => setHoveredConvoId(convo.id)}
-                onMouseLeave={() => {
-                  setHoveredConvoId(null);
-                  // don't clear deleteConfirmId here — let timeout handle it
-                }}
-                className="relative"
-              >
-                <button
-                  onClick={() => {
-                    setActiveConvoId(convo.id);
-                    if (isMobileSidebar) setSidebarOpen(false);
-                  }}
-                  className={`w-full text-left px-3.5 py-2.5 rounded-xl transition-all ${
-                    activeConvoId === convo.id
-                      ? 'bg-navy-800 text-white shadow-[0_10px_24px_rgba(2,6,23,0.18)]'
-                      : 'text-slate-400 hover:bg-navy-800/60 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="flex items-start gap-2.5 pr-6">
-                    <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 opacity-45" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-sm font-medium leading-snug">{convo.title}</p>
-                        <span className="flex-shrink-0 text-[10px] text-slate-700">{formatTime(convo.timestamp)}</span>
-                      </div>
-                      {convo.lastMessage && (
-                        <p className="mt-1 truncate text-[10px] leading-snug text-slate-500">{convo.lastMessage}</p>
-                      )}
-                    </div>
-                  </div>
-                </button>
-
-                {/* Delete button / confirm */}
-                {hoveredConvoId === convo.id && (
-                  deleteConfirmId === convo.id ? (
-                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-navy-950 border border-red-800/60 rounded-xl px-2.5 py-1.5 shadow-[0_10px_24px_rgba(2,6,23,0.32)] z-10">
-                      <span className="text-[10px] text-red-400 font-medium">Delete?</span>
-                      <button
-                        onClick={(e) => handleDeleteConvo(convo.id, e)}
-                        className="text-[10px] text-red-400 hover:text-red-300 font-semibold ml-1 px-1"
-                        aria-label="Confirm delete"
-                      >
-                        Yes
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null); }}
-                        className="text-[10px] text-slate-500 hover:text-slate-300 px-1"
-                        aria-label="Cancel delete"
-                      >
-                        No
-                      </button>
-                    </div>
-                  ) : (
+            {groupedConversations.active && (
+              <div className="space-y-1">
+                <p className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-violet-300/70">Active now</p>
+                {[groupedConversations.active].map((convo) => (
+                  <div
+                    key={convo.id}
+                    onMouseEnter={() => setHoveredConvoId(convo.id)}
+                    onMouseLeave={() => {
+                      setHoveredConvoId(null);
+                    }}
+                    className="relative"
+                  >
                     <button
-                      onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(convo.id); }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-700 hover:text-red-400 transition-colors rounded"
-                      aria-label={`Delete conversation "${convo.title}"`}
+                      onClick={() => {
+                        setActiveConvoId(convo.id);
+                        if (isMobileSidebar) setSidebarOpen(false);
+                      }}
+                      className="w-full rounded-xl bg-navy-800 text-left text-white shadow-[0_10px_24px_rgba(2,6,23,0.18)] transition-all px-3.5 py-2.5 ring-1 ring-violet-500/20"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <div className="flex items-start gap-2.5 pr-6">
+                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-300" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-sm font-medium leading-snug">{convo.title}</p>
+                            <span className="flex-shrink-0 text-[10px] text-slate-500">{formatTime(convo.timestamp)}</span>
+                          </div>
+                          {convo.lastMessage && (
+                            <p className="mt-1 truncate text-[10px] leading-snug text-slate-400">{convo.lastMessage}</p>
+                          )}
+                        </div>
+                      </div>
                     </button>
-                  )
-                )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {groupedConversations.sections.map((section) => (
+              <div key={section.label} className="space-y-1">
+                <p className="px-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">{section.label}</p>
+                {section.items.map((convo) => (
+                  <div
+                    key={convo.id}
+                    onMouseEnter={() => setHoveredConvoId(convo.id)}
+                    onMouseLeave={() => {
+                      setHoveredConvoId(null);
+                    }}
+                    className="relative"
+                  >
+                    <button
+                      onClick={() => {
+                        setActiveConvoId(convo.id);
+                        if (isMobileSidebar) setSidebarOpen(false);
+                      }}
+                      className="w-full text-left px-3.5 py-2.5 rounded-xl transition-all text-slate-400 hover:bg-navy-800/60 hover:text-slate-200"
+                    >
+                      <div className="flex items-start gap-2.5 pr-6">
+                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 opacity-45" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-sm font-medium leading-snug">{convo.title}</p>
+                            <span className="flex-shrink-0 text-[10px] text-slate-700">{formatTime(convo.timestamp)}</span>
+                          </div>
+                          {convo.lastMessage && (
+                            <p className="mt-1 truncate text-[10px] leading-snug text-slate-500">{convo.lastMessage}</p>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+
+                    {hoveredConvoId === convo.id && (
+                      deleteConfirmId === convo.id ? (
+                        <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-navy-950 border border-red-800/60 rounded-xl px-2.5 py-1.5 shadow-[0_10px_24px_rgba(2,6,23,0.32)] z-10">
+                          <span className="text-[10px] text-red-400 font-medium">Delete?</span>
+                          <button
+                            onClick={(e) => handleDeleteConvo(convo.id, e)}
+                            className="text-[10px] text-red-400 hover:text-red-300 font-semibold ml-1 px-1"
+                            aria-label="Confirm delete"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null); }}
+                            className="text-[10px] text-slate-500 hover:text-slate-300 px-1"
+                            aria-label="Cancel delete"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(convo.id); }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-700 hover:text-red-400 transition-colors rounded"
+                          aria-label={`Delete conversation "${convo.title}"`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )
+                    )}
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -1256,6 +1334,22 @@ export default function Dashboard() {
                       Edit
                     </button>
                   </div>
+                  {selectedTask?.source === 'live' && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        onClick={duplicateSelectedAutomation}
+                        className="flex-1 rounded-xl border border-navy-700/70 bg-navy-950/35 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition-colors hover:bg-navy-900/70"
+                      >
+                        Duplicate
+                      </button>
+                      <button
+                        onClick={handleAutomationCreate}
+                        className="flex-1 rounded-xl border border-cyan-500/20 bg-cyan-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300 transition-colors hover:bg-cyan-500/12"
+                      >
+                        New from template
+                      </button>
+                    </div>
+                  )}
                   {selectedTask?.source === 'live' && (
                     <p className="mt-2 text-[11px] text-slate-500">
                       Tune cadence, steps, destinations, and burn from the builder without leaving the dashboard.
