@@ -1212,7 +1212,6 @@ async function runAutomation(automation: {
     toolCalls: toolCallCount,
     complexity,
   });
-  assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimate.estimatedCredits);
   const taskRun = createTaskRun({
     workspaceId: DEFAULT_WORKSPACE_ID,
     taskId: task.id,
