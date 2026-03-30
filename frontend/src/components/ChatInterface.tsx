@@ -1039,65 +1039,73 @@ export default function ChatInterface({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto px-3 py-4 sm:px-6 sm:py-6"
+        className="flex-1 min-h-0 overflow-y-auto px-3 py-4 pb-24 sm:px-6 sm:py-6 sm:pb-32"
       >
         {messages.length === 0 ? (
-          <div className="flex min-h-full items-start justify-center px-1 py-6 sm:py-8">
-            <div className="ui-panel-strong relative w-full max-w-4xl overflow-hidden px-4 py-6 sm:px-7 sm:py-8">
+          <div className="flex min-h-full items-start justify-center px-1 py-4 sm:py-6">
+            <div className="ui-panel-strong relative w-full max-w-5xl overflow-hidden px-4 py-6 sm:px-7 sm:py-8">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.18),transparent_48%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.08),transparent_35%)]" />
-              <div className="relative flex flex-col items-center text-center">
-                <div className="ui-pill mb-4 px-3 py-1 text-violet-300">
-                  <Sparkles className="h-3 w-3" />
-                  Nexus workspace
-                </div>
-                <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-[1.15rem] bg-gradient-to-br from-violet-500 to-violet-700 shadow-glow-violet ring-1 ring-white/10 sm:h-16 sm:w-16">
-                  <span className="text-xl sm:text-2xl font-bold text-white">N</span>
-                </div>
-                <h2 className="text-[1.6rem] font-bold text-white sm:text-[2.1rem]">Hey, I'm Nexus</h2>
-                <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.32em] text-violet-300/70 sm:text-[11px]">
-                  by Purple Orange AI
-                </p>
-                <p className="mt-4 max-w-xl text-slate-300 leading-relaxed">
-                  Your AI coworker, tuned for{' '}
-                  <span className={`font-semibold ${modeConfig.color}`}>{modeLabel.toLowerCase()}</span>
-                  {' '}work. Ask for research, automations, screenshots, or just start with a task.
-                </p>
-                <p className="mt-2 text-slate-500 text-sm">{modeConfig.description}. Switch modes in the sidebar.</p>
-
-                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                  <span className="ui-pill">Research</span>
-                  <span className="ui-pill">Automate</span>
-                  <span className="ui-pill">Inspect</span>
-                  <span className="ui-pill">Draft</span>
-                </div>
-
-                <div className="mt-6 grid w-full grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
-                  <div className="ui-panel p-3 text-left shadow-none">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/70">Start here</p>
-                    <p className="mt-1 text-sm font-medium text-white">Ask for a search, a summary, or a plan.</p>
+              <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:gap-8">
+                <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
+                  <div className="ui-pill mb-4 px-3 py-1 text-violet-300">
+                    <Sparkles className="h-3 w-3" />
+                    Nexus workspace
                   </div>
-                  <div className="ui-panel p-3 text-left shadow-none">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">System state</p>
-                    <p className="mt-1 text-sm font-medium text-white">Mode, credits, and automation gate are visible above.</p>
+                  <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-[1.15rem] bg-gradient-to-br from-violet-500 to-violet-700 shadow-glow-violet ring-1 ring-white/10 sm:h-16 sm:w-16">
+                    <span className="text-xl font-bold text-white sm:text-2xl">N</span>
+                  </div>
+                  <h2 className="text-[1.8rem] font-bold text-white sm:text-[2.4rem]">Hey, I'm Nexus</h2>
+                  <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.32em] text-violet-300/70 sm:text-[11px]">
+                    by Purple Orange AI
+                  </p>
+                  <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-300">
+                    Your AI coworker, tuned for{' '}
+                    <span className={`font-semibold ${modeConfig.color}`}>{modeLabel.toLowerCase()}</span>
+                    {' '}work. Ask for research, automations, screenshots, or just start with a task.
+                  </p>
+                  <p className="mt-2 max-w-xl text-sm text-slate-500">{modeConfig.description}. Switch modes in the sidebar.</p>
+
+                  <div className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+                    <span className="ui-pill">Research</span>
+                    <span className="ui-pill">Automate</span>
+                    <span className="ui-pill">Inspect</span>
+                    <span className="ui-pill">Draft</span>
+                  </div>
+
+                  <div className="mt-6 grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="ui-panel p-4 text-left shadow-none">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/70">Start here</p>
+                      <p className="mt-1 text-sm font-medium text-white">Ask for a search, a summary, or a plan.</p>
+                    </div>
+                    <div className="ui-panel p-4 text-left shadow-none">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">System state</p>
+                      <p className="mt-1 text-sm font-medium text-white">Mode, credits, and automation gate are visible above.</p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-5 grid w-full grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-2 sm:gap-3">
-                  {suggestions.map((suggestion, i) => (
-                    <button
-                      key={i}
-                      onClick={() => sendMessage(suggestion)}
-                      className="rounded-2xl border border-navy-700/60 bg-navy-800/60 px-4 py-3 text-left text-sm leading-snug text-slate-400 shadow-[0_12px_30px_rgba(2,6,23,0.16)] transition-all duration-200 hover:border-violet-600/50 hover:bg-navy-700/70 hover:text-slate-200"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
+                <div className="flex flex-col gap-3">
+                  <div className="rounded-2xl border border-navy-700/60 bg-navy-950/35 px-4 py-3 text-left">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Suggested prompts</p>
+                    <p className="mt-1 text-sm text-slate-400">Start with one of these and Nexus will pick up the thread.</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3">
+                    {suggestions.map((suggestion, i) => (
+                      <button
+                        key={i}
+                        onClick={() => sendMessage(suggestion)}
+                        className="rounded-2xl border border-navy-700/60 bg-navy-800/60 px-4 py-3 text-left text-sm leading-snug text-slate-400 shadow-[0_12px_30px_rgba(2,6,23,0.16)] transition-all duration-200 hover:border-violet-600/50 hover:bg-navy-700/70 hover:text-slate-200"
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-4xl space-y-5 pb-2">
+          <div className="mx-auto max-w-5xl space-y-5 pb-2">
             {messages.map((msg) => (
               <MessageBubble
                 key={msg.id}
@@ -1169,8 +1177,8 @@ export default function ChatInterface({
       )}
 
       {/* Input */}
-      <div className="flex-shrink-0 border-t border-navy-800/60 bg-gradient-to-t from-navy-950/50 via-navy-950/20 to-transparent px-3 pt-2 pb-[calc(0.8rem+env(safe-area-inset-bottom))] sm:px-6">
-        <div className="mx-auto max-w-4xl">
+      <div className="sticky bottom-0 z-20 flex-shrink-0 border-t border-navy-800/60 bg-gradient-to-t from-navy-950/96 via-navy-950/92 to-navy-950/70 px-3 pt-2 pb-[calc(0.8rem+env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-6">
+        <div className="mx-auto max-w-5xl">
           <div className="rounded-[1.45rem] border border-navy-700/60 bg-gradient-to-br from-navy-800/72 via-navy-800/58 to-navy-900/76 shadow-[0_18px_42px_rgba(2,6,23,0.24)] transition-all duration-200 focus-within:border-violet-600/50">
             {(draftEstimate !== null || lowRunway) && (
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 px-3 py-2 text-[11px] sm:px-4">
