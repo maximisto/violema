@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, MessageSquare, Settings, ChevronRight, Zap, LogOut,
@@ -322,6 +322,27 @@ export default function Dashboard() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
+
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const { history } = window;
+    const previousScrollRestoration = 'scrollRestoration' in history ? history.scrollRestoration : null;
+
+    if ('scrollRestoration' in history) {
+      history.scrollRestoration = 'manual';
+    }
+
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+
+    return () => {
+      if (previousScrollRestoration) {
+        history.scrollRestoration = previousScrollRestoration;
+      }
+    };
+  }, []);
 
   // Persist conversations
   useEffect(() => { saveConvos(conversations); }, [conversations]);
