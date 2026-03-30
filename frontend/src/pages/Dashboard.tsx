@@ -751,7 +751,7 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="relative flex h-[100dvh] min-h-[100dvh] bg-navy-950 overflow-hidden">
+    <div className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-navy-950 md:h-screen md:min-h-screen">
       {uiNotice && (
         <div className="pointer-events-none absolute inset-x-3 top-3 z-50 flex justify-center">
           <div
