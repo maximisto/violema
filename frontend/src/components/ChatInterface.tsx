@@ -4,6 +4,7 @@ import {
   Copy, Check, Clock, Brain, ThumbsUp, ThumbsDown, Zap, Shield, Eye, RefreshCw, Sparkles, X,
 } from 'lucide-react';
 import type { Message, ToolCall, SSEEvent, AutonomyMode } from '../types';
+import TopUpChooser from './TopUpChooser';
 import { fetchCreditEstimate, formatCredits, getSuggestedTopUpOfferId, getSuggestedUpgradePlanId, openBillingCheckout, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import BillingGateBar from './BillingGateBar';
@@ -927,6 +928,8 @@ export default function ChatInterface({
   const [lastUserInput, setLastUserInput] = useState('');
   const [draftEstimate, setDraftEstimate] = useState<number | null>(null);
   const [selectedArtifact, setSelectedArtifact] = useState<ToolArtifact | null>(null);
+  const [topUpChooserOpen, setTopUpChooserOpen] = useState(false);
+  const [topUpBusyOfferId, setTopUpBusyOfferId] = useState<ReturnType<typeof getSuggestedTopUpOfferId> | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1210,18 +1213,26 @@ export default function ChatInterface({
     window.location.assign('/#pricing');
   }, [snapshot.planName]);
 
-  const handleTopUpCheckout = useCallback(async () => {
+  const handleTopUpCheckout = useCallback(() => {
+    setTopUpChooserOpen(true);
+  }, []);
+
+  const handleTopUpSelect = useCallback(async (offerId: ReturnType<typeof getSuggestedTopUpOfferId>) => {
+    setTopUpBusyOfferId(offerId);
     try {
       const opened = await openBillingCheckout({
         kind: 'top-up',
-        offerId: getSuggestedTopUpOfferId(snapshot),
+        offerId,
       });
       if (opened) return;
     } catch {
       // fall through
+    } finally {
+      setTopUpBusyOfferId(null);
+      setTopUpChooserOpen(false);
     }
     window.location.assign('/#pricing');
-  }, [snapshot]);
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1527,6 +1538,15 @@ export default function ChatInterface({
       {selectedArtifact && (
         <ArtifactPreview artifact={selectedArtifact} onClose={() => setSelectedArtifact(null)} />
       )}
+      <TopUpChooser
+        open={topUpChooserOpen}
+        recommendedOfferId={getSuggestedTopUpOfferId(snapshot)}
+        busyOfferId={topUpBusyOfferId}
+        onClose={() => {
+          if (!topUpBusyOfferId) setTopUpChooserOpen(false);
+        }}
+        onSelect={(offerId) => { void handleTopUpSelect(offerId); }}
+      />
     </div>
   );
 }

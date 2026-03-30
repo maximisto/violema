@@ -53,6 +53,16 @@ export interface CreditEstimate {
   rationale: string[];
 }
 
+export type TopUpOfferId = 'topup_500' | 'topup_1500' | 'topup_5000';
+
+export interface TopUpOption {
+  id: TopUpOfferId;
+  credits: number;
+  priceUsd: number;
+  label: string;
+  description: string;
+}
+
 const MOCK_CREDIT_SNAPSHOT: CreditSnapshot = {
   source: 'mock',
   workspaceId: 'workspace_default',
@@ -67,6 +77,30 @@ const MOCK_CREDIT_SNAPSHOT: CreditSnapshot = {
   projectedDaysLeft: 18,
   lastUpdatedAt: new Date().toISOString(),
 };
+
+export const TOP_UP_OPTIONS: TopUpOption[] = [
+  {
+    id: 'topup_500',
+    credits: 500,
+    priceUsd: 35,
+    label: 'Light boost',
+    description: 'Best for lighter weekly usage or a short burst of work.',
+  },
+  {
+    id: 'topup_1500',
+    credits: 1500,
+    priceUsd: 99,
+    label: 'Most flexible',
+    description: 'Good for steady multi-step work without changing plans.',
+  },
+  {
+    id: 'topup_5000',
+    credits: 5000,
+    priceUsd: 249,
+    label: 'Heavy execution',
+    description: 'Built for teams running more automations and delegated work.',
+  },
+];
 
 const CREDIT_ENDPOINTS = ['/api/billing/usage', '/api/usage/credits'];
 const RECENT_USAGE_ENDPOINTS = ['/api/billing/recent-usage', '/api/usage/recent', '/api/usage/activity'];
@@ -302,7 +336,7 @@ export function buildReferralMessage(snapshot: CreditSnapshot) {
   ].join('\n');
 }
 
-export function getSuggestedTopUpOfferId(snapshot: CreditSnapshot) {
+export function getSuggestedTopUpOfferId(snapshot: CreditSnapshot): TopUpOfferId {
   if (snapshot.topUpSuggestion >= 5000) return 'topup_5000';
   if (snapshot.topUpSuggestion >= 1500) return 'topup_1500';
   return 'topup_500';
@@ -314,7 +348,7 @@ export function getSuggestedUpgradePlanId(planName: string): 'pro' | 'team' | nu
   return null;
 }
 
-export async function createBillingCheckout(input: { kind: 'subscription' | 'top-up'; planId?: 'starter' | 'pro' | 'team'; offerId?: string }) {
+export async function createBillingCheckout(input: { kind: 'subscription' | 'top-up'; planId?: 'starter' | 'pro' | 'team'; offerId?: TopUpOfferId | string }) {
   const request = getWorkspaceRequest(
     input.kind === 'subscription'
       ? '/api/billing/stripe/checkout/subscription'
@@ -340,7 +374,7 @@ export async function createBillingCheckout(input: { kind: 'subscription' | 'top
   }>;
 }
 
-export async function openBillingCheckout(input: { kind: 'subscription' | 'top-up'; planId?: 'starter' | 'pro' | 'team'; offerId?: string }) {
+export async function openBillingCheckout(input: { kind: 'subscription' | 'top-up'; planId?: 'starter' | 'pro' | 'team'; offerId?: TopUpOfferId | string }) {
   const result = await createBillingCheckout(input);
   if (result.session?.checkoutUrl) {
     window.location.assign(result.session.checkoutUrl);

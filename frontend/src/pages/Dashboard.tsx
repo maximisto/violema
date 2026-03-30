@@ -6,6 +6,7 @@ import {
   Eye, Shield, Search, CreditCard, ArrowUpRight, Pin, Archive, RotateCcw, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import ChatInterface from '../components/ChatInterface';
+import TopUpChooser from '../components/TopUpChooser';
 import { fetchCreditEstimate, formatCredits, getSuggestedTopUpOfferId, getSuggestedUpgradePlanId, openBillingCheckout, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import type { Conversation, Message, AutonomyMode } from '../types';
@@ -351,6 +352,8 @@ export default function Dashboard() {
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
+  const [topUpChooserOpen, setTopUpChooserOpen] = useState(false);
+  const [topUpBusyOfferId, setTopUpBusyOfferId] = useState<ReturnType<typeof getSuggestedTopUpOfferId> | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const { snapshot } = useCreditSnapshot();
 
@@ -924,12 +927,20 @@ export default function Dashboard() {
     </div>
   );
 
-  const openTopUp = async () => {
+  const openTopUp = () => {
+    setTopUpChooserOpen(true);
+  };
+
+  const handleTopUpSelect = async (offerId: ReturnType<typeof getSuggestedTopUpOfferId>) => {
+    setTopUpBusyOfferId(offerId);
     try {
-      const opened = await openBillingCheckout({ kind: 'top-up', offerId: getSuggestedTopUpOfferId(snapshot) });
+      const opened = await openBillingCheckout({ kind: 'top-up', offerId });
       if (opened) return;
     } catch {
       // fall through
+    } finally {
+      setTopUpBusyOfferId(null);
+      setTopUpChooserOpen(false);
     }
     window.location.assign('/#pricing');
   };
@@ -982,6 +993,16 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <TopUpChooser
+        open={topUpChooserOpen}
+        recommendedOfferId={getSuggestedTopUpOfferId(snapshot)}
+        busyOfferId={topUpBusyOfferId}
+        onClose={() => {
+          if (!topUpBusyOfferId) setTopUpChooserOpen(false);
+        }}
+        onSelect={(offerId) => { void handleTopUpSelect(offerId); }}
+      />
 
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
       {sidebarOpen && isMobileSidebar && (
@@ -1063,7 +1084,7 @@ export default function Dashboard() {
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
-                  onClick={() => { void openTopUp(); }}
+                  onClick={openTopUp}
                   className="flex-1 rounded-lg border border-navy-700 bg-navy-900/70 px-2.5 py-2 text-[11px] font-medium text-slate-300 transition-colors hover:border-violet-700 hover:text-white"
                 >
                   <span className="inline-flex items-center gap-1.5">

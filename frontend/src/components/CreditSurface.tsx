@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowUpRight, CreditCard, Gift, Sparkles, ChevronRight, History, ExternalLink } from 'lucide-react';
+import TopUpChooser from './TopUpChooser';
 import {
   buildReferralMessage,
   createBillingCheckout,
@@ -32,6 +33,8 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
   const { snapshot, isLoading } = useCreditSnapshot();
   const { items: recentUsage, isLoading: usageLoading } = useRecentCreditUsage();
   const [actionState, setActionState] = useState<string | null>(null);
+  const [topUpChooserOpen, setTopUpChooserOpen] = useState(false);
+  const [topUpBusyOfferId, setTopUpBusyOfferId] = useState<ReturnType<typeof getSuggestedTopUpOfferId> | null>(null);
   const progress = Math.max(0, Math.min(100, (snapshot.creditsRemaining / snapshot.creditsTotal) * 100));
   const lowBalance = progress < 25;
   const burnRate = snapshot.automationBurnMonthly / 30;
@@ -67,17 +70,21 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
     setActionState('Opening pricing');
   }
 
-  async function handleTopUp() {
+  async function handleTopUpSelect(offerId: ReturnType<typeof getSuggestedTopUpOfferId>) {
+    setTopUpBusyOfferId(offerId);
     try {
-      const session = await createBillingCheckout({ kind: 'top-up', offerId: getSuggestedTopUpOfferId(snapshot) });
+      const session = await createBillingCheckout({ kind: 'top-up', offerId });
       if (session.session?.checkoutUrl) {
         window.location.assign(session.session.checkoutUrl);
         return;
       }
     } catch {
       // fall back to copy flow below
+    } finally {
+      setTopUpBusyOfferId(null);
+      setTopUpChooserOpen(false);
     }
-    copyToClipboard(buildTopUpRequest(snapshot), 'Top-up request');
+    void copyToClipboard(buildTopUpRequest(snapshot), 'Top-up request');
   }
 
   function handleReferral() {
@@ -225,7 +232,7 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
       <div className={`mt-3 grid ${compact ? 'grid-cols-2 gap-1' : 'grid-cols-1 gap-1.5 sm:grid-cols-3 sm:gap-2'}`}>
         <button
           type="button"
-          onClick={handleTopUp}
+          onClick={() => setTopUpChooserOpen(true)}
           className="ui-pill rounded-xl text-[9px] sm:text-[10px]"
         >
           <CreditCard className="h-3 w-3" />
@@ -264,6 +271,15 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
           {actionState || 'Copy summary'}
         </button>
       </div>
+      <TopUpChooser
+        open={topUpChooserOpen}
+        recommendedOfferId={getSuggestedTopUpOfferId(snapshot)}
+        busyOfferId={topUpBusyOfferId}
+        onClose={() => {
+          if (!topUpBusyOfferId) setTopUpChooserOpen(false);
+        }}
+        onSelect={(offerId) => { void handleTopUpSelect(offerId); }}
+      />
     </section>
   );
 }

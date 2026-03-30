@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowUpRight, CreditCard, Gift, Sparkles } from 'lucide-react';
+import TopUpChooser from './TopUpChooser';
 import {
   buildReferralMessage,
   buildTopUpRequest,
@@ -14,6 +15,8 @@ import {
 export default function BillingGateBar({ compact = false }: { compact?: boolean }) {
   const { snapshot } = useCreditSnapshot();
   const [status, setStatus] = useState<string | null>(null);
+  const [topUpChooserOpen, setTopUpChooserOpen] = useState(false);
+  const [topUpBusyOfferId, setTopUpBusyOfferId] = useState<ReturnType<typeof getSuggestedTopUpOfferId> | null>(null);
   const recommendation = getCreditRecommendation(snapshot);
 
   if (compact && recommendation.tone === 'good' && !status) {
@@ -56,15 +59,19 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
     window.location.assign('/#pricing');
   }
 
-  async function handleTopUp() {
+  async function handleTopUpSelect(offerId: ReturnType<typeof getSuggestedTopUpOfferId>) {
+    setTopUpBusyOfferId(offerId);
     try {
       const started = await openBillingCheckout({
         kind: 'top-up',
-        offerId: getSuggestedTopUpOfferId(snapshot),
+        offerId,
       });
       if (started) return;
     } catch {
       // fall through to copy
+    } finally {
+      setTopUpBusyOfferId(null);
+      setTopUpChooserOpen(false);
     }
     void copy(buildTopUpRequest(snapshot), 'Top-up request');
   }
@@ -85,7 +92,7 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => { void handleTopUp(); }}
+              onClick={() => setTopUpChooserOpen(true)}
               className="text-[11px] font-medium text-cyan-300 transition-colors hover:text-cyan-200"
             >
               Top up
@@ -125,7 +132,7 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             <button
               type="button"
-              onClick={() => { void handleTopUp(); }}
+              onClick={() => setTopUpChooserOpen(true)}
               className="ui-pill text-[9px] sm:text-[10px]"
             >
               <CreditCard className="h-3 w-3" />
@@ -155,6 +162,15 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
           </p>
         </div>
       </div>
+      <TopUpChooser
+        open={topUpChooserOpen}
+        recommendedOfferId={getSuggestedTopUpOfferId(snapshot)}
+        busyOfferId={topUpBusyOfferId}
+        onClose={() => {
+          if (!topUpBusyOfferId) setTopUpChooserOpen(false);
+        }}
+        onSelect={(offerId) => { void handleTopUpSelect(offerId); }}
+      />
     </div>
   );
 }
