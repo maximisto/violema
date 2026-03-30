@@ -110,6 +110,7 @@ interface PlatformTaskRunRecord {
   agentRole: string;
   startedAt: string;
   finishedAt?: string;
+  error?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -153,6 +154,7 @@ interface DashboardTaskItem {
   latestSummary?: string;
   latestArtifacts?: DashboardTaskArtifact[];
   taskUpdatedAt?: string;
+  failureReason?: string;
 }
 
 interface DashboardTaskArtifact {
@@ -311,6 +313,15 @@ function getTaskMetadataArtifacts(task?: PlatformTaskRecord, run?: PlatformTaskR
   const runArtifacts = readArtifacts(run?.metadata?.artifacts);
   if (runArtifacts.length > 0) return runArtifacts;
   return readArtifacts(task?.metadata?.latestArtifacts);
+}
+
+function getTaskFailureReason(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
+  return (
+    readString(run?.error) ||
+    readString(run?.metadata?.deliveryError) ||
+    readString(task?.metadata?.deliveryError) ||
+    readString(task?.metadata?.error)
+  );
 }
 
 function getTaskAutomationId(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
@@ -685,6 +696,7 @@ export default function Dashboard() {
           lastRunAt: latestRun?.finishedAt || latestRun?.startedAt,
           latestSummary: getTaskMetadataSummary(task, latestRun),
           latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
+          failureReason: getTaskFailureReason(task, latestRun),
           taskUpdatedAt: task.updatedAt,
         };
       });
@@ -726,6 +738,7 @@ export default function Dashboard() {
           nextRunAt: automation.next_run_at,
           latestSummary: getTaskMetadataSummary(task, latestRun),
           latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
+          failureReason: getTaskFailureReason(task, latestRun),
           taskUpdatedAt: task?.updatedAt,
         };
       });
@@ -1931,21 +1944,14 @@ export default function Dashboard() {
                     </div>
                     <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
                       <p className="uppercase tracking-[0.18em] text-slate-600">Last outcome</p>
-                      <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${selectedTaskOutcome.tone}`}>
-                        {selectedTaskOutcome.label}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
-                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                      <p className="uppercase tracking-[0.18em] text-slate-600">Last run</p>
-                      <p className="mt-1 text-slate-200">
-                        {selectedTask?.lastRunAt ? formatAutomationRunTime(selectedTask.lastRunAt) : 'Not yet'}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                      <p className="uppercase tracking-[0.18em] text-slate-600">Timezone</p>
-                      <p className="mt-1 text-slate-200">{selectedTask?.timezone || getLocalTimeZone()}</p>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${selectedTaskOutcome.tone}`}>
+                          {selectedTaskOutcome.label}
+                        </span>
+                        {selectedTask?.lastRunAt ? (
+                          <span className="text-[10px] text-slate-500">{formatRelativeTimeFromIso(selectedTask.lastRunAt)}</span>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
@@ -1967,16 +1973,20 @@ export default function Dashboard() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Latest result</p>
-                        <p className="mt-1 text-[11px] text-slate-500">{selectedTaskOutcome.detail}</p>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {selectedTask?.lastRunAt
+                            ? `${selectedTaskOutcome.detail} Last run ${formatAutomationRunTime(selectedTask.lastRunAt)}.`
+                            : selectedTaskOutcome.detail}
+                        </p>
                       </div>
-                      {selectedTask?.lastRunAt && (
-                        <span className="rounded-full border border-navy-700/70 bg-navy-900/60 px-2 py-0.5 text-[10px] text-slate-400">
-                          {formatRelativeTimeFromIso(selectedTask.lastRunAt)}
-                        </span>
-                      )}
                     </div>
+                    {selectedTask?.failureReason ? (
+                      <div className="mt-3 rounded-xl border border-red-500/18 bg-red-500/8 px-3 py-2.5 text-[11px] leading-relaxed text-red-200">
+                        {selectedTask.failureReason}
+                      </div>
+                    ) : null}
                     {selectedTaskSummary ? (
-                      <p className="mt-3 text-[12px] leading-5 text-slate-200">
+                      <p className="mt-3 text-[13px] leading-6 text-slate-100">
                         {selectedTaskSummary}
                       </p>
                     ) : (
@@ -2002,7 +2012,7 @@ export default function Dashboard() {
                             >
                               <div className="min-w-0">
                                 <p className="truncate text-[11px] font-medium text-slate-100">{link.label}</p>
-                                <p className="truncate text-[10px] text-slate-500">{link.source}</p>
+                                <p className="truncate text-[10px] text-slate-500">Source: {link.source}</p>
                               </div>
                               <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0 text-cyan-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                             </a>
@@ -2057,22 +2067,17 @@ export default function Dashboard() {
                     <div className="mt-2 flex items-center gap-2">
                       <button
                         onClick={duplicateSelectedAutomation}
-                        className="flex-1 rounded-xl border border-navy-700/70 bg-navy-950/35 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition-colors hover:bg-navy-900/70"
+                        className="flex-1 rounded-xl border border-navy-700/70 bg-transparent px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-navy-600 hover:bg-navy-950/35 hover:text-slate-200"
                       >
                         Duplicate
                       </button>
                       <button
                         onClick={handleAutomationCreate}
-                        className="flex-1 rounded-xl border border-cyan-500/20 bg-cyan-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300 transition-colors hover:bg-cyan-500/12"
+                        className="flex-1 rounded-xl border border-navy-700/70 bg-transparent px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-navy-600 hover:bg-navy-950/35 hover:text-cyan-200"
                       >
                         New from template
                       </button>
                     </div>
-                  )}
-                  {selectedTask?.source === 'live' && (
-                    <p className="mt-2 text-[11px] text-slate-500">
-                      Tune cadence, workflow steps, delivery, and burn without leaving the dashboard.
-                    </p>
                   )}
                 </div>
               </div>
@@ -2122,6 +2127,7 @@ export default function Dashboard() {
                           </div>
                           <p className={`mt-2 truncate text-[11px] leading-relaxed ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
                             {formatSummaryPreview(task.latestSummary, 90)
+                              || (task.failureReason ? truncateText(task.failureReason, 90) : '')
                               || (task.lastRunAt
                                 ? task.status === 'alert'
                                   ? 'Latest run needs attention.'

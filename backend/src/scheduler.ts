@@ -220,7 +220,16 @@ async function executeAutomation(
     last_run_at: startedAt,
   }));
 
-  const result = await onTrigger({ ...record, timezone, last_run_at: startedAt });
+  let result: { ok: boolean; error?: string } | void;
+
+  try {
+    result = await onTrigger({ ...record, timezone, last_run_at: startedAt });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown automation error';
+    console.error(`[scheduler] automation ${record.id} failed`, error);
+    result = { ok: false, error: message };
+  }
+
   const ok = typeof result === 'object' && result !== null && 'ok' in result ? Boolean(result.ok) : true;
 
   updateAutomationRecord(record.id, (current) => ({
@@ -347,7 +356,9 @@ export function triggerAutomationNow(
 ) {
   const record = getAutomationById(id);
   if (!record) return null;
-  void executeAutomation(record, onTrigger);
+  void executeAutomation(record, onTrigger).catch((error) => {
+    console.error(`[scheduler] manual trigger failed for ${id}`, error);
+  });
   return record;
 }
 

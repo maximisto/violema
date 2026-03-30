@@ -1222,9 +1222,11 @@ async function runAutomation(automation: {
     delegationPlan: delegation.plan,
     metadata: { automationId: automation.id, title: automation.name, delegation: delegation.ownership },
   });
-  updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
 
   try {
+    assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimate.estimatedCredits);
+    updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
+
     const execution = await executeAutomationCore(automation, delegation.plan.suggestedModelTier === 'ops' ? 'ops' : 'default');
     const fallbackSummary = [
       `Automation: ${automation.name}`,
@@ -1305,16 +1307,54 @@ async function runAutomation(automation: {
       deliveryError: deliveryError || undefined,
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown automation error';
+    const failureSummary = errorMessage.toLowerCase().includes('insufficient credits')
+      ? `Automation could not start because the workspace does not have enough credits for this run.\n\n${errorMessage}`
+      : `Automation failed before it could finish cleanly.\n\n${errorMessage}`;
+
     finalizeTaskRun(taskRun.id, {
       status: 'failed',
       actualCredits: 0,
-      error: error instanceof Error ? error.message : 'Unknown automation error',
+      error: errorMessage,
+      metadata: {
+        automationId: automation.id,
+        summary: failureSummary,
+        artifacts: [
+          {
+            kind: 'note',
+            title: `${automation.name} execution status`,
+            payload: {
+              note: failureSummary,
+              error: errorMessage,
+            },
+          },
+        ],
+      },
     });
-    updateTask(task.id, { status: 'failed', delegationState: 'review' });
+    updateTask(task.id, {
+      status: 'failed',
+      delegationState: 'review',
+      metadata: {
+        automationId: automation.id,
+        notify: automation.notify || null,
+        delegation: delegation.ownership,
+        latestSummary: failureSummary,
+        latestArtifacts: [
+          {
+            kind: 'note',
+            title: `${automation.name} execution status`,
+            payload: {
+              note: failureSummary,
+              error: errorMessage,
+            },
+          },
+        ],
+      },
+    });
     console.error(`[automation] ${automation.id} failed`, error);
     return {
       ok: false as const,
-      error: error instanceof Error ? error.message : 'Unknown automation error',
+      error: errorMessage,
     };
   }
 }
