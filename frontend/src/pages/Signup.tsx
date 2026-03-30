@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, Disc3, Eye, Globe, Lock, Mail, MessageSquare, MonitorSmartphone, Shield, Slack } from 'lucide-react';
+import { ArrowRight, Eye, Globe, Lock, Mail, MonitorSmartphone, Slack } from 'lucide-react';
 import { saveAuthSession, type AccessRole, type AuthMethod } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
 
@@ -20,7 +20,7 @@ const EDUCATION_CARDS = [
   {
     icon: Slack,
     title: 'Works where teams already are',
-    body: 'Run Nexus from Slack, Telegram, Discord, or the web interface. The same account follows you across surfaces.',
+    body: 'Run Nexus from Slack or the web app. Slack is the team-facing layer. The web app is the full workspace.',
   },
   {
     icon: Eye,
@@ -105,9 +105,7 @@ export default function Signup() {
               <div className="mt-3 flex flex-wrap gap-2.5">
                 {[
                   { icon: Slack, label: 'Slack' },
-                  { icon: MessageSquare, label: 'Telegram' },
-                  { icon: Disc3, label: 'Discord' },
-                  { icon: Globe, label: 'Web interface' },
+                  { icon: Globe, label: 'Web app' },
                 ].map(({ icon: Icon, label }) => (
                   <div key={label} className="ui-pill px-3 py-2 text-slate-300">
                     <Icon className="h-3.5 w-3.5" />

@@ -74,8 +74,8 @@ const STEPS = [
   },
   {
     number: '02',
-    title: 'Connect your channels',
-    description: 'Slack, Telegram, Discord, and the web interface all route into the same Nexus workspace and memory.',
+    title: 'Connect Slack and the web app',
+    description: 'Slack handles alerts, approvals, and team-facing work. The web app stays the full control surface for workflows, settings, and execution.',
   },
   {
     number: '03',

@@ -1,4 +1,4 @@
-import { ArrowRight, BellRing, Bot, Disc3, Github, Globe, Layers3, Link2, MessageSquare, Search, Shield, Slack, Sparkles } from 'lucide-react';
+import { ArrowRight, BellRing, Bot, Github, Globe, Layers3, Link2, Search, Shield, Slack, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PublicHeader from '../components/PublicHeader';
 
@@ -42,7 +42,6 @@ const NATIVE_NOW = [
 ];
 
 const NEXT_UP = [
-  'Telegram and Discord account linking',
   'Notion and Linear workspace sync',
   'Shared alerts into more team destinations',
   'A cleaner long-tail integration layer for non-core business tools',
@@ -153,7 +152,7 @@ export default function IntegrationsPage() {
           <div className="rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-cyan-500/10 p-3 text-cyan-300">
-                <Disc3 className="h-5 w-5" />
+                <Globe className="h-5 w-5" />
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Messaging surfaces</p>
@@ -162,10 +161,8 @@ export default function IntegrationsPage() {
             </div>
             <div className="mt-5 space-y-3">
               {[
-                { label: 'Slack', note: 'Represented in-product and supported in messaging flows today.', icon: Slack },
-                { label: 'Telegram', note: 'Part of the intended surface area and product story. Needs real account linking before we market it harder.', icon: MessageSquare },
-                { label: 'Discord', note: 'Also part of the intended surface area, but should stay directional until the integration path is live.', icon: Disc3 },
-                { label: 'Web interface', note: 'Primary product surface today.', icon: Globe },
+                { label: 'Slack', note: 'Primary team-facing surface for alerts, summaries, approvals, and shared execution.', icon: Slack },
+                { label: 'Web app', note: 'Primary control surface for workflows, settings, task visibility, and full execution detail.', icon: Globe },
               ].map(({ label, note, icon: Icon }) => (
                 <div key={label} className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
                   <div className="flex items-center gap-2 text-sm font-semibold text-white">

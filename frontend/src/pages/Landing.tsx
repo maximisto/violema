@@ -729,7 +729,7 @@ function FinalCTA() {
           </button>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-slate-500">
-          {['Slack, Telegram, Discord + web', 'Plans and top-ups', 'Human review controls', 'Cancel anytime'].map((item) => (
+          {['Slack + web app', 'Plans and top-ups', 'Human review controls', 'Cancel anytime'].map((item) => (
             <div key={item} className="flex items-center gap-2">
               <Check className="w-3.5 h-3.5 text-green-500" />
               <span>{item}</span>

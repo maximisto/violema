@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Play, ArrowRight, Sparkles, CheckCircle2, Disc3, Globe, MessageSquare, Slack } from 'lucide-react';
+import { Play, ArrowRight, Sparkles, CheckCircle2, Globe, Slack } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
 function useCountUp(target: number, duration = 1800, start = false) {
@@ -194,9 +194,7 @@ export default function Hero() {
             <div className="mt-5 flex flex-wrap gap-2">
               {[
                 { icon: Slack, label: 'Slack' },
-                { icon: MessageSquare, label: 'Telegram' },
-                { icon: Disc3, label: 'Discord' },
-                { icon: Globe, label: 'Web interface' },
+                { icon: Globe, label: 'Web app' },
               ].map(({ icon: Icon, label }) => (
                 <div key={label} className="ui-pill px-3 py-1.5 text-slate-300">
                   <Icon className="h-3.5 w-3.5" />
