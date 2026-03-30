@@ -1175,10 +1175,10 @@ export default function Dashboard() {
                       key={stat.label}
                       className={`rounded-2xl border px-2.5 py-2 ${
                         stat.tone === 'violet'
-                          ? 'border-violet-500/15 bg-violet-500/6'
+                          ? 'border-violet-500/15 bg-gradient-to-br from-violet-500/10 to-navy-950/20'
                           : stat.tone === 'green'
-                            ? 'border-green-500/15 bg-green-500/6'
-                            : 'border-amber-500/15 bg-amber-500/6'
+                            ? 'border-green-500/15 bg-gradient-to-br from-green-500/10 to-navy-950/20'
+                            : 'border-amber-500/15 bg-gradient-to-br from-amber-500/10 to-navy-950/20'
                       }`}
                     >
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">{stat.label}</p>
@@ -1189,24 +1189,24 @@ export default function Dashboard() {
               </div>
 
               <div className="px-3 pt-3">
-                <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
+                <div className="rounded-[1.4rem] border border-violet-500/15 bg-gradient-to-br from-violet-500/8 via-navy-900/70 to-navy-950/92 p-3.5 shadow-[0_16px_34px_rgba(2,6,23,0.16)]">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Selected automation</p>
-                      <h4 className="mt-1 text-sm font-semibold text-white">{selectedTask?.title}</h4>
+                      <h4 className="mt-1 text-sm font-semibold leading-snug text-white">{selectedTask?.title}</h4>
                     </div>
                     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${selectedTaskMeta?.chip ?? 'border-navy-700 bg-navy-900 text-slate-400'}`}>
                       {selectedTaskMeta?.label ?? 'Scheduled'}
                     </span>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
-                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/40 px-2.5 py-2">
+                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
                       <p className="uppercase tracking-[0.18em] text-slate-600">Cadence</p>
                       <p className="mt-1 text-slate-200">{selectedTask?.time}</p>
                     </div>
-                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/40 px-2.5 py-2">
-                      <p className="uppercase tracking-[0.18em] text-slate-600">Next action</p>
-                      <p className="mt-1 text-slate-200">Review / run / pause</p>
+                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                      <p className="uppercase tracking-[0.18em] text-slate-600">Status</p>
+                      <p className="mt-1 text-slate-200">{selectedTaskMeta?.label ?? 'Scheduled'}</p>
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
@@ -1258,7 +1258,7 @@ export default function Dashboard() {
                   </div>
                   {selectedTask?.source === 'live' && (
                     <p className="mt-2 text-[11px] text-slate-500">
-                      Open the builder to tune cadence, action steps, destinations, and monthly burn without leaving the dashboard.
+                      Tune cadence, steps, destinations, and burn from the builder without leaving the dashboard.
                     </p>
                   )}
                 </div>
@@ -1281,10 +1281,10 @@ export default function Dashboard() {
                           setSelectedTaskId(task.id);
                         }
                       }}
-                      className={`bg-gradient-to-br ${meta.accent} border rounded-2xl p-3.5 transition-all cursor-pointer group shadow-[0_12px_28px_rgba(2,6,23,0.14)] hover:shadow-[0_16px_34px_rgba(2,6,23,0.22)] ${
+                      className={`border rounded-2xl p-3.5 transition-all cursor-pointer group shadow-[0_12px_28px_rgba(2,6,23,0.14)] hover:shadow-[0_16px_34px_rgba(2,6,23,0.22)] ${
                         isSelected
-                          ? 'border-violet-500/40 ring-1 ring-violet-500/20 translate-y-[-1px]'
-                          : 'border-navy-700/70 hover:border-violet-600/30'
+                          ? `bg-gradient-to-br ${meta.accent} border-violet-500/40 ring-1 ring-violet-500/20 translate-y-[-1px]`
+                          : 'border-navy-700/70 bg-navy-950/34 hover:border-violet-600/30 hover:bg-navy-900/55'
                       }`}
                     >
                       <div className="flex items-start gap-2.5">
@@ -1303,7 +1303,9 @@ export default function Dashboard() {
                               <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
                               {meta.label}
                             </span>
-                            <span className="text-[10px] text-slate-600">Automation pulse</span>
+                            {task.source === 'live' && (
+                              <span className="text-[10px] text-slate-600">Live</span>
+                            )}
                           </div>
                         </div>
                         <ChevronRight className={`w-3.5 h-3.5 mt-0.5 transition-all flex-shrink-0 ${
