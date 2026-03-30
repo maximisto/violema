@@ -134,7 +134,7 @@ function ProductDemo() {
     },
     {
       role: 'nexus',
-      text: '**MRR Report — March 2025**\n\n📈 **$127,450** this month (+17.8% vs February)\n\n| Metric | This Month | Last Month |\n|--------|-----------|------------|\n| MRR | $127,450 | $108,230 |\n| New Subs | 47 | 39 |\n| Churn | 3 | 5 |\n| NRR | 118% | 112% |\n\nStrong growth. Churn improved significantly. Want me to send this to #revenue-team?',
+      text: '**MRR Report — March 2026**\n\n📈 **$127,450** this month (+17.8% vs February)\n\n| Metric | This Month | Last Month |\n|--------|-----------|------------|\n| MRR | $127,450 | $108,230 |\n| New Subs | 47 | 39 |\n| Churn | 3 | 5 |\n| NRR | 118% | 112% |\n\nStrong growth. Churn improved significantly. Want me to send this to #revenue-team?',
     },
     {
       role: 'user',
@@ -525,7 +525,7 @@ function Testimonials() {
             Teams that shipped faster
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Join 2,000+ teams that replaced manual ops work with Nexus.
+            Teams use Nexus to cut repetitive work, centralize execution, and keep humans in the loop.
           </p>
         </div>
 
@@ -571,7 +571,7 @@ const COMPARISON_ROWS = [
   { feature: 'Confidence scoring on actions', nexus: true, chatgpt: false, viktor: false, devin: false, note: '' },
   { feature: 'Proactive anomaly detection', nexus: true, chatgpt: false, viktor: true, devin: false, note: '' },
   { feature: 'Scheduled automations', nexus: true, chatgpt: false, viktor: true, devin: false, note: '' },
-  { feature: '3,000+ integrations', nexus: true, chatgpt: false, viktor: true, devin: false, note: '' },
+  { feature: 'Extensible integration layer', nexus: true, chatgpt: false, viktor: true, devin: false, note: 'Core tools first, then custom expansion' },
   { feature: 'Slack / Teams native', nexus: true, chatgpt: false, viktor: true, devin: false, note: '' },
   { feature: 'Long-term memory', nexus: true, chatgpt: 'partial', viktor: true, devin: 'partial', note: '' },
   { feature: 'Built for paid production use', nexus: true, chatgpt: 'partial', viktor: false, devin: false, note: 'Plans + one-time top-ups' },
@@ -705,12 +705,12 @@ function FinalCTA() {
       <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <div className="inline-flex items-center gap-2 bg-violet-950/60 border border-violet-800/50 rounded-full px-4 py-1.5 mb-8">
           <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-          <span className="text-violet-300 text-sm font-medium">2,000+ teams already running Nexus</span>
+          <span className="text-violet-300 text-sm font-medium">Access, billing, and onboarding</span>
         </div>
         <h2 className="text-5xl sm:text-6xl font-extrabold text-white mb-6 leading-[1.05]">
-          Your next hire
+          Put Nexus to work
           <br />
-          <span className="gradient-text">costs $50/month</span>
+          <span className="gradient-text">with a plan that fits.</span>
         </h2>
         <p className="text-xl text-slate-400 mb-10 max-w-xl mx-auto leading-relaxed">
           No prompting tricks. No babysitting. Nexus executes, reports back, and gets better every day. Pick a plan, connect your stack, and put it to work.
@@ -729,7 +729,7 @@ function FinalCTA() {
           </button>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-slate-500">
-          {['Slack, Telegram, Discord + web', 'Plans and top-ups', 'SOC 2 compliant', 'Cancel anytime'].map((item) => (
+          {['Slack, Telegram, Discord + web', 'Plans and top-ups', 'Human review controls', 'Cancel anytime'].map((item) => (
             <div key={item} className="flex items-center gap-2">
               <Check className="w-3.5 h-3.5 text-green-500" />
               <span>{item}</span>

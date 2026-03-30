@@ -39,7 +39,7 @@ function IntegrationBadge({ name, color, letter }: IntegrationBadgeProps) {
 
 export default function Integrations() {
   return (
-    <section className="py-24 relative overflow-hidden">
+    <section className="py-24 relative overflow-hidden" id="integrations">
       {/* Fade edges */}
       <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-navy-900 to-transparent z-10 pointer-events-none" />
       <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-navy-900 to-transparent z-10 pointer-events-none" />
@@ -47,9 +47,12 @@ export default function Integrations() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-12 text-center">
         <p className="text-slate-500 text-sm font-medium uppercase tracking-widest mb-2">Works with your entire stack</p>
         <h2 className="text-3xl sm:text-4xl font-bold text-white">
-          Plug into{' '}
-          <span className="gradient-text">3,000+ integrations</span>
+          Start with your
+          <span className="gradient-text"> core operating stack</span>
         </h2>
+        <p className="mt-4 max-w-2xl mx-auto text-slate-400">
+          Nexus works best when it can see the systems that already run your work. Start with the important tools first, then expand the integration layer over time.
+        </p>
       </div>
 
       {/* Row 1 — scrolls left */}

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, Disc3, Eye, Globe, Lock, Mail, MessageSquare, MonitorSmartphone, Shield, Slack } from 'lucide-react';
 import { saveAuthSession, type AccessRole, type AuthMethod } from '../lib/auth';
+import PublicHeader from '../components/PublicHeader';
 
 const METHODS: Array<{ id: AuthMethod; label: string; hint: string }> = [
   { id: 'email', label: 'Email access', hint: 'Fastest way in right now.' },
@@ -69,7 +70,8 @@ export default function Signup() {
   return (
     <div className="min-h-screen bg-hero-gradient">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
-      <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col justify-center px-4 py-16 sm:px-6 lg:px-8">
+      <PublicHeader backHref="/" backLabel="Home" actionHref="/login" actionLabel="Sign in" />
+      <div className="relative mx-auto flex max-w-7xl flex-col justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
           <div className="pt-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-4 py-1.5 text-sm font-medium text-violet-300">

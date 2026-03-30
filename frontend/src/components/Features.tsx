@@ -50,8 +50,8 @@ const FEATURES = [
   },
   {
     icon: Plug,
-    title: '3,000+ Integrations',
-    description: 'Connect Stripe, HubSpot, GitHub, Linear, Notion, Salesforce and thousands more. Nexus works across your entire stack.',
+    title: 'Core Integrations',
+    description: 'Start with the systems that matter most first. Nexus is designed to work across your stack and expand through additional connectors over time.',
     color: 'violet',
     gradient: 'from-violet-500/20 to-pink-600/5',
     border: 'border-violet-800/40',

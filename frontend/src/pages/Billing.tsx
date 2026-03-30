@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, CreditCard, Layers3, MessageSquare, Shield, Sparkles, Users } from 'lucide-react';
 import { TOP_UP_OPTIONS, createBillingCheckout, formatCredits } from '../lib/credits';
 import { getAuthSession, hasAcceptedAccess } from '../lib/auth';
+import PublicHeader from '../components/PublicHeader';
 
 const PLANS = [
   {
@@ -82,7 +83,13 @@ export default function Billing() {
   return (
     <div className="min-h-screen bg-hero-gradient">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
-      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <PublicHeader
+        backHref="/"
+        backLabel="Home"
+        actionHref={hasAcceptedAccess() ? '/dashboard' : '/signup?next=%2Fplans'}
+        actionLabel={hasAcceptedAccess() ? 'Open workspace' : 'Create access'}
+      />
+      <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="rounded-[2rem] border border-navy-700/60 bg-navy-950/40 px-5 py-6 shadow-[0_24px_80px_rgba(3,8,24,0.3)] sm:px-7 lg:px-8">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_22rem] lg:items-start">
             <div className="max-w-4xl">
@@ -166,6 +173,42 @@ export default function Billing() {
                 : 'Pick the monthly tier first. Add top-ups later if Nexus needs more room to run.'}
             </div>
           </div>
+
+          {section === 'plans' ? (
+            <div className="mt-5 grid gap-3 border-t border-white/6 pt-5 md:grid-cols-3">
+              {[
+                {
+                  title: 'Start lean',
+                  body: 'Starter is for light weekly usage when you want research, code help, and a few active automations.',
+                },
+                {
+                  title: 'Operate seriously',
+                  body: 'Pro is the working tier for people running Nexus regularly across research, automation, and delegated execution.',
+                },
+                {
+                  title: 'Scale as a team',
+                  body: 'Team adds shared context, approvals, admin visibility, and five included seats for coordinated work.',
+                },
+              ].map((item) => (
+                <div key={item.title} className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">{item.title}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.body}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-5 grid gap-3 border-t border-white/6 pt-5 md:grid-cols-3">
+              {[
+                'Top-ups are for bursts of extra work, not a plan replacement.',
+                'The credits land in the same workspace and burn down before you need to upgrade.',
+                'Choose the pack that matches the extra execution you need right now.',
+              ].map((body, index) => (
+                <div key={index} className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3 text-sm leading-relaxed text-slate-400">
+                  {body}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {section === 'plans' ? (
@@ -176,7 +219,7 @@ export default function Billing() {
                   key={plan.id}
                   className={`rounded-[1.9rem] border p-6 transition-all ${
                     plan.featured
-                      ? 'border-violet-500/45 bg-gradient-to-b from-violet-950/70 to-navy-900/80 shadow-glow-violet'
+                      ? 'border-violet-500/35 bg-gradient-to-b from-violet-950/60 to-navy-900/80 shadow-[0_18px_50px_rgba(76,29,149,0.22)] ring-1 ring-violet-500/12'
                       : 'border-navy-700/70 bg-navy-900/45'
                   }`}
                 >
@@ -280,6 +323,16 @@ export default function Billing() {
                   <div className="mt-6 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
                     <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Price</p>
                     <p className="mt-2 text-xl font-semibold text-white">${option.priceUsd}</p>
+                  </div>
+                  <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Best for</p>
+                    <p className="mt-2 text-sm text-slate-400">
+                      {option.id === 'topup_500'
+                        ? 'Light extra research or a few higher-effort task runs.'
+                        : option.id === 'topup_1500'
+                          ? 'A heavier operating week without moving plans yet.'
+                          : 'A serious burst of execution across multiple automations or artifact-heavy work.'}
+                    </p>
                   </div>
                   <button
                     type="button"

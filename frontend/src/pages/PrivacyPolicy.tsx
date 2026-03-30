@@ -16,7 +16,7 @@ Last updated: March 28, 2026.`,
   {
     id: 'collect',
     title: '2. Information We Collect',
-    content: `**Account information.** When you create an account, we collect your name, email address, and password hash. If you sign up via OAuth (Google, GitHub), we receive your name, email, and profile picture from that provider.
+    content: `**Account information.** When you create access for Nexus, we collect the identifying information you provide, such as your name and email address. If additional authentication methods are introduced later, this policy will be updated to reflect them.
 
 **Usage data.** We collect information about how you interact with the Service: features used, autonomy mode selections, tool calls made, conversation metadata (not content), session duration, and error events. This helps us improve reliability and build better features.
 
@@ -50,7 +50,7 @@ We do **not** use your conversation content or data to train AI models. Your dat
     title: '4. How We Share Your Information',
     content: `We do not sell your personal data. We share it only in these limited circumstances:
 
-**Service providers.** We use trusted vendors to operate the Service: Anthropic (AI inference), Stripe (payments), AWS (infrastructure), Resend (transactional email), and PostHog (anonymised analytics). Each vendor is contractually bound to process your data only as instructed by us.
+**Service providers.** We use trusted vendors to operate the Service: Anthropic (AI inference), Stripe (payments), infrastructure providers, transactional email providers, and analytics tooling. Each vendor is expected to process data only as needed to operate the Service.
 
 **Connected integrations.** When you instruct Nexus to take an action in a third-party tool, the minimum necessary data is shared with that tool's API. You control which integrations are connected and can revoke access at any time.
 
@@ -108,7 +108,7 @@ To exercise any of these rights, contact us at privacy@purpleorange.io. We will 
 • TLS 1.3 encryption for all data in transit
 • AES-256 encryption for data at rest
 • Encrypted credential vault for third-party integration tokens
-• SOC 2 Type II certified infrastructure
+• Managed infrastructure security controls and audit logging
 • Regular third-party penetration testing
 • Employee access controls and least-privilege policies
 • Automated anomaly detection and alerting

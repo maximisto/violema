@@ -21,10 +21,10 @@ function useCountUp(target: number, duration = 1800, start = false) {
 }
 
 const STATS = [
-  { value: 2847, suffix: '', label: 'Tasks completed today', prefix: '' },
-  { value: 47, suffix: 'ms', label: 'Avg response time', prefix: '' },
-  { value: 3000, suffix: '+', label: 'Integrations', prefix: '' },
-  { value: 118, suffix: '%', label: 'Net revenue retention', prefix: '' },
+  { value: 3, suffix: '', label: 'Autonomy modes', prefix: '' },
+  { value: 20, suffix: '', label: 'Active automations on Pro', prefix: '' },
+  { value: 100, suffix: '', label: 'Active automations on Team', prefix: '' },
+  { value: 5, suffix: '', label: 'Included seats on Team', prefix: '' },
 ];
 
 const TERMINAL_MESSAGES = [
@@ -144,7 +144,7 @@ export default function Hero() {
               <Sparkles className="w-3.5 h-3.5 text-violet-400" />
               <span className="text-violet-300 text-sm font-medium">Now in beta</span>
               <span className="w-px h-3 bg-violet-700" />
-              <span className="text-slate-400 text-sm">Join 2,000+ teams</span>
+              <span className="text-slate-400 text-sm">Access and billing now live</span>
             </div>
 
             {/* Headline */}
@@ -156,7 +156,7 @@ export default function Hero() {
 
             {/* Sub */}
             <p className="text-lg sm:text-xl text-slate-400 mb-10 max-w-lg leading-relaxed">
-              Nexus is your AI coworker for research, execution, and automation across your stack. It does more than answer. It follows through.
+              Nexus is your AI coworker for research, execution, and automation. It does more than answer. It follows through.
             </p>
 
             {/* Social proof bullets */}

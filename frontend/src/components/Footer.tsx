@@ -208,7 +208,7 @@ export default function Footer() {
                 ))}
               </div>
               <span className="text-slate-500 text-sm">
-                <span className="text-slate-300 font-semibold">2,400+</span> people already waiting
+                Get early product updates and launch notes
               </span>
             </div>
 
@@ -233,7 +233,7 @@ export default function Footer() {
             Start with Nexus today
           </h2>
           <p className="text-lg text-slate-400 mb-7 max-w-xl mx-auto">
-            Join thousands of teams that have already hired their first AI coworker.
+            Set up access, pick a plan, and put Nexus to work in the stack you already run.
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <button
@@ -315,9 +315,9 @@ export default function Footer() {
             <Link to="/terms" className="text-slate-600 hover:text-slate-400 text-xs transition-colors">Terms</Link>
             <Link to="/faq" className="text-slate-600 hover:text-slate-400 text-xs transition-colors">FAQ</Link>
             <span className="w-px h-3 bg-navy-700 hidden sm:block" />
-            <span className="text-slate-700 text-xs">SOC 2 Certified</span>
+            <span className="text-slate-700 text-xs">TLS in transit</span>
             <span className="w-px h-3 bg-navy-700 hidden sm:block" />
-            <span className="text-slate-700 text-xs">GDPR Compliant</span>
+            <span className="text-slate-700 text-xs">Private by default</span>
             <span className="w-px h-3 bg-navy-700 hidden sm:block" />
             <div className="flex items-center gap-1.5 text-xs text-slate-700">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />

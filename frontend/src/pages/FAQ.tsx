@@ -15,7 +15,7 @@ const CATEGORIES = [
     faqs: [
       {
         q: 'What exactly is Nexus?',
-        a: 'Nexus is your AI coworker — built on Claude, the most capable reasoning model available. Unlike a chatbot that waits for commands, Nexus proactively executes multi-step tasks, coordinates across your tools (Slack, GitHub, Stripe, HubSpot, Linear, and more), and works autonomously in the background. Think of it as hiring a brilliant, tireless teammate who never sleeps.',
+        a: 'Nexus is your AI coworker for research, execution, and automation. Unlike a chatbot that waits for prompts, Nexus is built to carry work across multiple steps, coordinate with connected tools, and report back with what it did.',
       },
       {
         q: 'How is Nexus different from ChatGPT or Claude.ai?',
@@ -41,7 +41,7 @@ const CATEGORIES = [
     faqs: [
       {
         q: 'What can Nexus actually do?',
-        a: 'Nexus can: search the web for research, write and execute code, create tasks in Linear/Jira, send Slack/email messages, query your databases, generate reports and slide decks, schedule recurring automations, pull metrics from Stripe/PostHog/GA, triage GitHub issues, enrich leads in HubSpot/Salesforce, and much more. New tools ship every week.',
+        a: 'Today Nexus can search the web for research, write and execute code, send Slack or email messages, capture browser screenshots, schedule recurring automations, and route work across the workspace. The product is designed to expand into more operational systems over time.',
       },
       {
         q: 'What are autonomy modes?',
@@ -57,7 +57,7 @@ const CATEGORIES = [
       },
       {
         q: 'Does Nexus have memory?',
-        a: 'Nexus maintains full conversation history within each session and across saved conversations. Workspace-level memory (persistent facts about your company, team, and preferences) is on the roadmap and will roll out to Pro and Enterprise customers first.',
+        a: 'Nexus keeps conversation history and saved thread context today. Broader shared workspace memory is part of the direction, but it is not yet a full always-on company memory system.',
       },
     ],
   },
@@ -71,7 +71,7 @@ const CATEGORIES = [
     faqs: [
       {
         q: 'Is my data safe with Nexus?',
-        a: 'Yes. All data is encrypted in transit (TLS 1.3) and at rest (AES-256). We are SOC 2 Type II certified and GDPR compliant. We never use your data to train AI models. Your conversations, tool outputs, and connected credentials stay within your workspace.',
+        a: 'We take security seriously. Data is encrypted in transit, sensitive actions are gated by workspace controls, and we do not use your conversation data to train AI models. If you need specific compliance commitments, talk to us before rolling Nexus into a regulated environment.',
       },
       {
         q: 'Who builds the AI that powers Nexus?',
@@ -79,11 +79,11 @@ const CATEGORIES = [
       },
       {
         q: 'Can I connect Nexus to my internal tools without exposing credentials?',
-        a: 'Yes. OAuth connections and API keys are stored in an encrypted credential vault. Nexus never logs raw credential values. Enterprise customers can bring their own encryption keys (BYOK) for the credential vault.',
+        a: 'For supported integrations, credentials are handled through the integration layer and scoped to the workspace. If you need custom internal tools or stronger controls, that should be treated as an enterprise setup rather than assumed out of the box.',
       },
       {
         q: 'Do you comply with GDPR, HIPAA, or other regulations?',
-        a: 'We are fully GDPR compliant. HIPAA compliance is available on Enterprise plans with a signed BAA. SOC 2 Type II report is available on request. Contact us at compliance@purpleorange.io for specifics.',
+        a: 'Treat Nexus as security-conscious software, not as a pre-certified compliance product. If you need GDPR, HIPAA, SOC 2, or contract-specific guarantees, we should scope that explicitly before rollout.',
       },
     ],
   },
@@ -119,15 +119,15 @@ const CATEGORIES = [
     faqs: [
       {
         q: 'Does Nexus have an API?',
-        a: 'A public API and webhook system are on the roadmap for Q3 2025. This will let you trigger Nexus tasks programmatically from your own systems and receive structured outputs back. Sign up for early access on our waitlist.',
+        a: 'A broader public API and webhook layer are part of the roadmap. Right now the main surface is the web workspace plus connected messaging and automation flows.',
       },
       {
         q: 'Can I build custom tools for Nexus?',
-        a: 'Custom tool integrations are available on Enterprise plans today. You define an OpenAPI spec and Nexus automatically learns to call your internal endpoints. Self-serve custom tools are coming Q4 2025.',
+        a: 'Custom connectors are possible, but they are not a polished self-serve workflow yet. Today that should be treated as an implementation project rather than a turnkey button in the product.',
       },
       {
         q: 'What browsers and platforms does Nexus support?',
-        a: 'Nexus runs entirely in the browser — no desktop app required. We support Chrome, Edge, Firefox, and Safari (latest 2 versions). A native Mac app and mobile companion app are planned for H2 2025.',
+        a: 'Nexus runs in the browser today and works best on current Chrome, Safari, Edge, and Firefox. The web interface is the primary product surface right now.',
       },
       {
         q: 'Is Nexus open source?',
