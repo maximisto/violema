@@ -878,6 +878,168 @@ function normalizeModelTier(profile: TextProfile): 'micro' | 'default' | 'hard' 
   }
 }
 
+interface AutomationExecutionArtifact {
+  kind: 'web_search' | 'query_data' | 'summary' | 'delivery';
+  title: string;
+  payload: Record<string, unknown>;
+}
+
+function normalizeAutomationActionText(action: string) {
+  return action.trim().toLowerCase();
+}
+
+function inferAutomationSearchQuery(
+  action: string,
+  automation: { name: string; description?: string; condition?: string }
+) {
+  const normalized = normalizeAutomationActionText(action);
+  const explicitMatch = action.match(/(?:for|about)\s+(.+)$/i);
+  if (explicitMatch?.[1]) {
+    return explicitMatch[1].trim().replace(/\.$/, '');
+  }
+
+  if (/\b(ai|agentic)\b/.test(normalized) && /\bnews\b/.test(normalized)) {
+    return 'top AI and agentic AI news this week';
+  }
+
+  if (/\bcompetitor\b/.test(normalized) && /\bpricing\b/.test(normalized)) {
+    return 'competitor pricing changes this week';
+  }
+
+  const description = automation.description?.trim();
+  const condition = automation.condition?.trim();
+  return [automation.name, description, condition].filter(Boolean).join(' - ');
+}
+
+function inferAutomationQueryDataInput(action: string) {
+  const normalized = normalizeAutomationActionText(action);
+
+  if (normalized.includes('stripe') && /failed payments?|payment failures?/.test(normalized)) {
+    return { source: 'stripe', query_type: 'failed_payments' };
+  }
+
+  if (normalized.includes('posthog') && normalized.includes('funnel')) {
+    return { source: 'posthog', query_type: 'funnel_analysis' };
+  }
+
+  if (normalized.includes('github') && normalized.includes('issues')) {
+    return { source: 'github', query_type: 'open_issues' };
+  }
+
+  return null;
+}
+
+function inferAutomationModelTier(actions: string[]): 'default' | 'ops' {
+  const joined = actions.map(normalizeAutomationActionText).join(' ');
+  if (/(batch|bulk|pipeline|queue|monitor|backfill|thousands|large volume|throughput)/.test(joined)) {
+    return 'ops';
+  }
+  return 'default';
+}
+
+function inferAutomationComplexity(actions: string[]): 'low' | 'medium' | 'high' {
+  if (actions.length >= 5) return 'high';
+  if (actions.length >= 3) return 'medium';
+  return 'low';
+}
+
+function actionNeedsSummary(action: string) {
+  return /(summary|digest|report|golden nuggets|nuggets|share with the team)/i.test(action);
+}
+
+function actionNeedsDelivery(action: string) {
+  return /(send|post|slack|email|deliver|notify|message)/i.test(action);
+}
+
+async function executeAutomationCore(
+  automation: {
+    id: string;
+    name: string;
+    description?: string;
+    actions: string[];
+    notify?: string;
+    condition?: string;
+    timezone?: string;
+  },
+  modelTier: 'default' | 'ops'
+) {
+  const artifacts: AutomationExecutionArtifact[] = [];
+  const stepErrors: string[] = [];
+  let summaryText = '';
+
+  for (const action of automation.actions) {
+    const normalized = normalizeAutomationActionText(action);
+
+    try {
+      if (/(search|scan internet|scan the internet|scan web|research|news|competitor)/.test(normalized)) {
+        const query = inferAutomationSearchQuery(action, automation);
+        const payload = await searchWeb(query, 6);
+        artifacts.push({
+          kind: 'web_search',
+          title: action,
+          payload,
+        });
+        continue;
+      }
+
+      const queryDataInput = inferAutomationQueryDataInput(action);
+      if (queryDataInput) {
+        const payload = JSON.parse(await executeToolCall('query_data', queryDataInput)) as Record<string, unknown>;
+        artifacts.push({
+          kind: 'query_data',
+          title: action,
+          payload,
+        });
+        continue;
+      }
+    } catch (error) {
+      stepErrors.push(`${action}: ${error instanceof Error ? error.message : 'Unknown step error'}`);
+    }
+  }
+
+  const shouldGenerateSummary =
+    automation.actions.some(actionNeedsSummary) ||
+    artifacts.some((artifact) => artifact.kind === 'web_search' || artifact.kind === 'query_data');
+
+  if (shouldGenerateSummary) {
+    const evidence = artifacts
+      .map((artifact) => `## ${artifact.title}\n${JSON.stringify(artifact.payload, null, 2)}`)
+      .join('\n\n');
+    const stepErrorBlock = stepErrors.length > 0 ? `\n\nStep errors:\n- ${stepErrors.join('\n- ')}` : '';
+
+    summaryText = await generateText(
+      modelTier,
+      'You execute recurring Nexus automations. Turn the provided evidence into a concise, useful markdown output. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. Be concrete, skim-friendly, and avoid filler.',
+      [
+        {
+          role: 'user',
+          content: [
+            `Automation: ${automation.name}`,
+            automation.description ? `Description: ${automation.description}` : null,
+            automation.condition ? `Condition: ${automation.condition}` : null,
+            `Requested steps:\n- ${automation.actions.join('\n- ')}`,
+            evidence ? `Evidence:\n${evidence}` : null,
+            stepErrorBlock ? `Execution notes:${stepErrorBlock}` : null,
+          ].filter(Boolean).join('\n\n'),
+        },
+      ],
+      900,
+    );
+
+    artifacts.push({
+      kind: 'summary',
+      title: `${automation.name} summary`,
+      payload: { markdown: summaryText },
+    });
+  }
+
+  return {
+    artifacts,
+    summaryText,
+    stepErrors,
+  };
+}
+
 async function runAutomation(automation: {
   id: string;
   name: string;
@@ -888,6 +1050,8 @@ async function runAutomation(automation: {
   timezone?: string;
 }) {
   ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
+  const modelTier = inferAutomationModelTier(automation.actions);
+  const complexity = inferAutomationComplexity(automation.actions);
   const delegation = buildDelegationRuntimeContext({
     workspaceId: DEFAULT_WORKSPACE_ID,
     taskKind: 'automation',
@@ -895,9 +1059,9 @@ async function runAutomation(automation: {
     description: automation.description,
     autonomyMode: 'cautious',
     priority: 'medium',
-    modelTier: 'ops',
+    modelTier,
     toolCountHint: automation.actions.length,
-    complexity: automation.actions.length > 2 ? 'high' : 'medium',
+    complexity,
   });
   const task = createTask({
     workspaceId: DEFAULT_WORKSPACE_ID,
@@ -914,7 +1078,8 @@ async function runAutomation(automation: {
     taskKind: 'automation',
     modelTier: delegation.plan.suggestedModelTier,
     automationRuns: 1,
-    complexity: automation.actions.length > 2 ? 'medium' : 'low',
+    toolCalls: Math.min(automation.actions.length, 3),
+    complexity,
   });
   assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimate.estimatedCredits);
   const taskRun = createTaskRun({
@@ -928,20 +1093,40 @@ async function runAutomation(automation: {
   });
   updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
 
-  const summary = [
-    `Automation: ${automation.name}`,
-    automation.description ? `Description: ${automation.description}` : null,
-    `Actions:\n- ${automation.actions.join('\n- ')}`,
-    automation.condition ? `Condition note: ${automation.condition}` : null,
-  ].filter(Boolean).join('\n\n');
-
   try {
-    if (automation.notify) {
-      await sendMessage({
-        to: automation.notify,
-        subject: `Automation run: ${automation.name}`,
-        body: summary,
-      });
+    const execution = await executeAutomationCore(automation, delegation.plan.suggestedModelTier === 'ops' ? 'ops' : 'default');
+    const fallbackSummary = [
+      `Automation: ${automation.name}`,
+      automation.description ? `Description: ${automation.description}` : null,
+      `Actions:\n- ${automation.actions.join('\n- ')}`,
+      automation.condition ? `Condition note: ${automation.condition}` : null,
+    ].filter(Boolean).join('\n\n');
+    const summary = execution.summaryText || fallbackSummary;
+
+    let delivery: Record<string, unknown> | null = null;
+    let deliveryError: string | null = null;
+
+    const shouldDeliver = Boolean(
+      automation.notify ||
+      automation.actions.some(actionNeedsDelivery)
+    );
+
+    if (shouldDeliver && automation.notify) {
+      try {
+        delivery = await sendMessage({
+          to: automation.notify,
+          subject: `Automation run: ${automation.name}`,
+          body: summary,
+        });
+        execution.artifacts.push({
+          kind: 'delivery',
+          title: `Delivered to ${automation.notify}`,
+          payload: delivery,
+        });
+      } catch (error) {
+        deliveryError = error instanceof Error ? error.message : 'Unknown delivery error';
+        console.error(`[automation] ${automation.id} delivery failed`, error);
+      }
     } else {
       console.log(`[automation] ${automation.id}\n${summary}`);
     }
@@ -949,8 +1134,27 @@ async function runAutomation(automation: {
     finalizeTaskRun(taskRun.id, {
       status: 'succeeded',
       actualCredits: estimate.estimatedCredits,
+      metadata: {
+        automationId: automation.id,
+        summary,
+        artifacts: execution.artifacts,
+        stepErrors: execution.stepErrors,
+        delivery,
+        deliveryError,
+      },
     });
-    updateTask(task.id, { status: 'completed', delegationState: 'completed' });
+    updateTask(task.id, {
+      status: 'completed',
+      delegationState: 'completed',
+      metadata: {
+        automationId: automation.id,
+        notify: automation.notify || null,
+        delegation: delegation.ownership,
+        latestSummary: summary,
+        latestArtifacts: execution.artifacts,
+        deliveryError,
+      },
+    });
     addLedgerEntry({
       workspaceId: DEFAULT_WORKSPACE_ID,
       source: 'automation_run',
@@ -958,9 +1162,16 @@ async function runAutomation(automation: {
       referenceType: 'automation',
       referenceId: automation.id,
       note: `Automation run: ${automation.name}`,
-      metadata: { taskId: task.id, taskRunId: taskRun.id },
+      metadata: {
+        taskId: task.id,
+        taskRunId: taskRun.id,
+        deliveryError,
+      },
     });
-    return { ok: true as const };
+    return {
+      ok: true as const,
+      deliveryError: deliveryError || undefined,
+    };
   } catch (error) {
     finalizeTaskRun(taskRun.id, {
       status: 'failed',

@@ -369,7 +369,6 @@ export default function Dashboard() {
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
   const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [deleteAutomationConfirmId, setDeleteAutomationConfirmId] = useState<string | null>(null);
   const [autonomyMode, setAutonomyMode] = useState<AutonomyMode>('cautious');
   const [searchQuery, setSearchQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
@@ -377,7 +376,7 @@ export default function Dashboard() {
   const [platformTasks, setPlatformTasks] = useState<DashboardTaskItem[]>([]);
   const [liveAutomations, setLiveAutomations] = useState<DashboardTaskItem[]>([]);
   const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
-  const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | null>(null);
+  const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | 'delete' | null>(null);
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
@@ -525,13 +524,6 @@ export default function Dashboard() {
   }, [deleteConfirmId]);
 
   useEffect(() => {
-    if (deleteAutomationConfirmId) {
-      const t = setTimeout(() => setDeleteAutomationConfirmId(null), 4000);
-      return () => clearTimeout(t);
-    }
-  }, [deleteAutomationConfirmId]);
-
-  useEffect(() => {
     if (!uiNotice) return undefined;
     const timeout = window.setTimeout(() => setUiNotice(null), 3200);
     return () => window.clearTimeout(timeout);
@@ -663,12 +655,11 @@ export default function Dashboard() {
 
   const handleAutomationDelete = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
-    setActionBusy('edit');
+    setActionBusy('delete');
     try {
       const response = await fetch(`/api/automations/${task.automationId}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Could not delete automation');
       await refreshAutomations();
-      setDeleteAutomationConfirmId(null);
       showNotice('success', `Deleted "${task.title}"`);
     } catch {
       showNotice('error', `Could not delete "${task?.title || 'automation'}"`);
@@ -676,6 +667,13 @@ export default function Dashboard() {
       setActionBusy(null);
     }
   }, [refreshAutomations, showNotice]);
+
+  const confirmAutomationDelete = useCallback((task: DashboardTaskItem | undefined) => {
+    if (!task?.automationId) return;
+    const confirmed = window.confirm(`Delete "${task.title}"?`);
+    if (!confirmed) return;
+    void handleAutomationDelete(task);
+  }, [handleAutomationDelete]);
 
   const handleAutomationEdit = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
@@ -1807,34 +1805,14 @@ export default function Dashboard() {
                     </button>
                   </div>
                   {selectedTask?.source === 'live' && (
-                    deleteAutomationConfirmId === selectedTask.automationId ? (
-                      <div className="mt-2 flex items-center justify-between rounded-xl border border-red-500/25 bg-red-500/8 px-3 py-2 text-[11px] text-red-200">
-                        <span>Delete this automation?</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => { void handleAutomationDelete(selectedTask); }}
-                            disabled={actionBusy !== null}
-                            className="rounded-lg border border-red-500/30 px-2 py-1 font-semibold text-red-200 transition-colors hover:bg-red-500/10 disabled:opacity-50"
-                          >
-                            Delete
-                          </button>
-                          <button
-                            onClick={() => setDeleteAutomationConfirmId(null)}
-                            className="rounded-lg border border-navy-700/70 px-2 py-1 text-slate-300 transition-colors hover:bg-navy-900/70"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setDeleteAutomationConfirmId(selectedTask.automationId || null)}
-                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/18 bg-red-500/6 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-red-300 transition-colors hover:bg-red-500/10"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Delete automation
-                      </button>
-                    )
+                    <button
+                      onClick={() => confirmAutomationDelete(selectedTask)}
+                      disabled={actionBusy !== null}
+                      className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/18 bg-red-500/6 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {actionBusy === 'delete' ? 'Deleting…' : 'Delete automation'}
+                    </button>
                   )}
                   {selectedTask?.source === 'live' && (
                     <div className="mt-2 flex items-center gap-2">
@@ -1908,8 +1886,8 @@ export default function Dashboard() {
                           <button
                             onClick={(event) => {
                               event.stopPropagation();
-                              setDeleteAutomationConfirmId(task.automationId || null);
                               setSelectedTaskId(task.id);
+                              confirmAutomationDelete(task);
                             }}
                             className="rounded-lg p-1 text-slate-600 transition-colors hover:bg-navy-900/80 hover:text-red-300"
                             aria-label={`Delete ${task.title}`}
