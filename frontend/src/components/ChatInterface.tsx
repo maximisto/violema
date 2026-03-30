@@ -1007,7 +1007,7 @@ export default function ChatInterface({
     <div className="relative flex h-full min-h-0 w-full flex-1 flex-col">
       {/* Agent status bar */}
       <div className="flex-shrink-0 border-b border-navy-800/40 bg-gradient-to-r from-navy-900/30 via-navy-900/20 to-violet-950/10 px-3 py-2 backdrop-blur-sm sm:px-4">
-        <div className="mx-auto flex max-w-5xl items-center gap-2.5 rounded-2xl border border-white/5 bg-navy-950/35 px-3 py-2.5 shadow-[0_12px_34px_rgba(2,6,23,0.16)] backdrop-blur-sm sm:gap-3 sm:px-3.5">
+        <div className="mx-auto flex max-w-[72rem] items-center gap-2.5 rounded-2xl border border-white/5 bg-navy-950/35 px-3 py-2.5 shadow-[0_12px_34px_rgba(2,6,23,0.16)] backdrop-blur-sm sm:gap-3 sm:px-3.5">
           <div className="flex items-center gap-2.5">
             <div className={`w-2 h-2 rounded-full ${statusColor} ${agentStatus !== 'idle' ? 'animate-pulse' : ''}`} />
             <div className="leading-tight">
@@ -1030,7 +1030,7 @@ export default function ChatInterface({
       </div>
 
       <div className="flex-shrink-0 px-3 pt-2 sm:px-6 sm:pt-3">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-[72rem]">
           <BillingGateBar compact />
         </div>
       </div>
@@ -1043,7 +1043,7 @@ export default function ChatInterface({
       >
         {messages.length === 0 ? (
           <div className="flex min-h-full items-start justify-center px-1 py-4 sm:py-6">
-            <div className="ui-panel-strong relative w-full max-w-5xl overflow-hidden px-4 py-6 sm:px-7 sm:py-8">
+            <div className="ui-panel-strong relative w-full max-w-[72rem] overflow-hidden px-5 py-6 sm:px-8 sm:py-8">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.18),transparent_48%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.08),transparent_35%)]" />
               <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:gap-8">
                 <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
@@ -1105,7 +1105,7 @@ export default function ChatInterface({
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-5xl space-y-5 pb-2">
+          <div className="mx-auto max-w-[72rem] space-y-5 pb-2">
             {messages.map((msg) => (
               <MessageBubble
                 key={msg.id}
@@ -1178,7 +1178,7 @@ export default function ChatInterface({
 
       {/* Input */}
       <div className="sticky bottom-0 z-20 flex-shrink-0 border-t border-navy-800/60 bg-gradient-to-t from-navy-950/96 via-navy-950/92 to-navy-950/70 px-3 pt-2 pb-[calc(0.8rem+env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-6">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-[72rem]">
           <div className="rounded-[1.45rem] border border-navy-700/60 bg-gradient-to-br from-navy-800/72 via-navy-800/58 to-navy-900/76 shadow-[0_18px_42px_rgba(2,6,23,0.24)] transition-all duration-200 focus-within:border-violet-600/50">
             {(draftEstimate !== null || lowRunway) && (
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 px-3 py-2 text-[11px] sm:px-4">

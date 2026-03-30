@@ -825,12 +825,12 @@ export default function Dashboard() {
         <aside
           className={`${
             isMobileSidebar
-              ? 'fixed inset-y-2 left-2 z-40 w-[calc(100vw-1rem)] max-w-[18.75rem] rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.55)]'
-              : 'w-64 flex-shrink-0'
+              ? 'fixed inset-y-2 left-2 z-40 w-[calc(100vw-1rem)] max-w-[19.75rem] rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.55)]'
+              : 'w-72 flex-shrink-0'
           } border-r border-navy-800 bg-navy-900 flex flex-col sidebar-enter`}
         >
           {/* Logo */}
-          <div className="flex items-center gap-2 px-4 py-4 border-b border-navy-800">
+          <div className="flex items-center gap-2.5 px-4 py-4 border-b border-navy-800">
             <button
               onClick={() => navigate('/')}
               className="flex items-center gap-3.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-1"
@@ -839,8 +839,8 @@ export default function Dashboard() {
               <div className="w-9 h-9 overflow-hidden flex-shrink-0">
                 <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
               </div>
-              <div className="brand-lockup w-[8.95rem]">
-                <span className="brand-wordmark text-[0.98rem]">
+              <div className="brand-lockup w-[10rem]">
+                <span className="brand-wordmark text-[1.02rem]">
                   NEXUS
                 </span>
                 <span className="brand-submark text-[7.9px]">
@@ -861,7 +861,7 @@ export default function Dashboard() {
           </div>
 
           {/* New chat + Mode selector */}
-          <div className="px-3 pt-3 pb-2 space-y-2">
+          <div className="px-4 pt-4 pb-3 space-y-2.5">
             <button
               onClick={handleNewChat}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors shadow-glow-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
@@ -872,12 +872,12 @@ export default function Dashboard() {
             <ModeSelector compact />
           </div>
 
-          <div className="px-3 pb-2">
-            <div className="rounded-2xl border border-navy-700 bg-navy-950/42 px-3 py-3">
+          <div className="px-4 pb-3">
+            <div className="rounded-2xl border border-navy-700 bg-navy-950/42 px-3.5 py-3.5">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Credits</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{formatCredits(snapshot.creditsRemaining)}</p>
+                  <p className="mt-1 text-[1.35rem] font-semibold leading-none text-white">{formatCredits(snapshot.creditsRemaining)}</p>
                   <p className="text-[11px] text-slate-500">{snapshot.planName} plan</p>
                 </div>
                 <div className={`rounded-full px-2 py-1 text-[10px] font-medium ${
@@ -914,7 +914,7 @@ export default function Dashboard() {
           </div>
 
           {/* Search */}
-          <div className="px-3 pb-2">
+          <div className="px-4 pb-3">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
               <input
@@ -939,8 +939,8 @@ export default function Dashboard() {
           </div>
 
           {/* Conversation list */}
-          <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
-            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-600">
+          <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
+            <p className="px-1 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-600">
               {searchQuery ? `${filteredConvos.length} result${filteredConvos.length !== 1 ? 's' : ''}` : 'Recent'}
             </p>
 
@@ -963,20 +963,20 @@ export default function Dashboard() {
                     setActiveConvoId(convo.id);
                     if (isMobileSidebar) setSidebarOpen(false);
                   }}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-all ${
+                  className={`w-full text-left px-3.5 py-3 rounded-xl transition-all ${
                     activeConvoId === convo.id
-                      ? 'bg-navy-800 text-white'
+                      ? 'bg-navy-800 text-white shadow-[0_10px_24px_rgba(2,6,23,0.18)]'
                       : 'text-slate-400 hover:bg-navy-800/60 hover:text-slate-200'
                   }`}
                 >
-                  <div className="flex items-start gap-2 pr-6">
-                    <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 opacity-50" />
+                  <div className="flex items-start gap-2.5 pr-6">
+                    <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 opacity-45" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate leading-snug">{convo.title}</p>
                       {convo.lastMessage && (
-                        <p className="mt-0.5 truncate text-[11px] leading-snug text-slate-500">{convo.lastMessage}</p>
+                        <p className="mt-1 truncate text-[11px] leading-snug text-slate-500">{convo.lastMessage}</p>
                       )}
-                      <p className="mt-0.5 text-[10px] text-slate-700">{formatTime(convo.timestamp)}</p>
+                      <p className="mt-1 text-[10px] text-slate-700">{formatTime(convo.timestamp)}</p>
                     </div>
                   </div>
                 </button>
@@ -1016,7 +1016,7 @@ export default function Dashboard() {
           </div>
 
           {/* User / settings */}
-          <div className="border-t border-navy-800 px-3 py-3 space-y-1">
+          <div className="border-t border-navy-800 px-4 py-3 space-y-1.5">
             <button
               onClick={() => {/* settings panel placeholder */}}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
@@ -1031,7 +1031,7 @@ export default function Dashboard() {
               <LogOut className="w-4 h-4" />
               Back to home
             </button>
-            <div className="mt-1 flex items-center gap-2.5 px-3 py-2">
+            <div className="mt-1 flex items-center gap-2.5 px-3 py-2.5">
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-700/40 to-navy-700 border border-violet-800/40 flex items-center justify-center text-xs font-bold text-violet-300 flex-shrink-0">
                 U
               </div>
