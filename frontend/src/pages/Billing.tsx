@@ -43,6 +43,7 @@ export default function Billing() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const search = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const section = search.get('section') === 'topups' ? 'topups' : 'plans';
+  const requestedPlan = search.get('plan');
 
   async function handleSubscription(planId: 'starter' | 'pro' | 'team') {
     if (!hasAcceptedAccess()) {
@@ -81,50 +82,95 @@ export default function Billing() {
   return (
     <div className="min-h-screen bg-hero-gradient">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
-      <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-4 py-1.5 text-sm font-medium text-violet-300">
+      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="rounded-[2rem] border border-navy-700/60 bg-navy-950/40 px-5 py-6 shadow-[0_24px_80px_rgba(3,8,24,0.3)] sm:px-7 lg:px-8">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_22rem] lg:items-start">
+            <div className="max-w-4xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-4 py-1.5 text-sm font-medium text-violet-300">
               <Sparkles className="h-3.5 w-3.5" />
               Billing and access
+              </div>
+              <h1 className="mt-5 max-w-5xl text-4xl font-extrabold leading-[0.95] text-white sm:text-5xl lg:text-[4rem]">
+                Pick the right runway
+                <span className="gradient-text"> before Nexus starts executing.</span>
+              </h1>
+              <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg">
+                Plans set your monthly credit budget and automation limits. Top-ups are one-time add-ons for extra work without changing your plan.
+              </p>
+              <div className="mt-5 space-y-1.5">
+                <p className="text-sm text-slate-300">
+                  Credits map to actual agent work. Start lean, then scale as Nexus takes on more execution.
+                </p>
+                <p className="text-sm text-slate-500">
+                  Starter is for light weekly usage. Higher tiers are built for heavier multi-agent workflows and bigger automation volume.
+                </p>
+              </div>
             </div>
-            <h1 className="mt-5 text-4xl font-extrabold text-white sm:text-5xl">
-              Pick the right runway
-              <span className="gradient-text"> before Nexus starts executing.</span>
-            </h1>
-            <p className="mt-4 max-w-3xl text-lg leading-relaxed text-slate-400">
-              Plans set your monthly credit budget and automation limits. Top-ups are one-time add-ons for extra work without changing your plan.
-            </p>
-          </div>
-          <div className="ui-panel px-4 py-3 text-right">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Account</p>
-            <p className="mt-1 text-sm font-semibold text-white">{session?.name || 'Guest access'}</p>
-            <p className="text-sm text-slate-500">{session?.email || 'Finish access setup to unlock checkout'}</p>
-          </div>
-        </div>
 
-        <div className="mt-8 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => navigate('/plans')}
-            className={`ui-pill px-4 py-2 ${section === 'plans' ? 'border-violet-500/35 bg-violet-500/12 text-violet-200' : ''}`}
-          >
-            <Layers3 className="h-3.5 w-3.5" />
-            Plans
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/plans?section=topups')}
-            className={`ui-pill px-4 py-2 ${section === 'topups' ? 'border-violet-500/35 bg-violet-500/12 text-violet-200' : ''}`}
-          >
-            <CreditCard className="h-3.5 w-3.5" />
-            Top-ups
-          </button>
+            <div className="ui-panel rounded-[1.7rem] px-5 py-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Account</p>
+                  <p className="mt-2 text-base font-semibold text-white">{session?.name || 'Guest access'}</p>
+                  <p className="mt-1 text-sm text-slate-500">{session?.email || 'Finish access setup to unlock checkout'}</p>
+                </div>
+                <div className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                  {hasAcceptedAccess() ? 'Ready' : 'Setup required'}
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                <div className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Current path</p>
+                  <p className="mt-2 text-sm font-semibold text-white">
+                    {section === 'topups' ? 'One-time credits' : requestedPlan ? `Plan: ${requestedPlan}` : 'Plan selection'}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {section === 'topups'
+                      ? 'Add credits without changing the monthly tier.'
+                      : 'Choose the monthly operating tier that fits your workload.'}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">What happens next</p>
+                  <p className="mt-2 text-sm text-slate-400">
+                    You’ll review the selected package in Stripe, complete checkout, and return with billing attached to this workspace.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/6 pt-5">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/plans')}
+                className={`ui-pill px-4 py-2 ${section === 'plans' ? 'border-violet-500/35 bg-violet-500/12 text-violet-200' : ''}`}
+              >
+                <Layers3 className="h-3.5 w-3.5" />
+                Plans
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/plans?section=topups')}
+                className={`ui-pill px-4 py-2 ${section === 'topups' ? 'border-violet-500/35 bg-violet-500/12 text-violet-200' : ''}`}
+              >
+                <CreditCard className="h-3.5 w-3.5" />
+                Top-ups
+              </button>
+            </div>
+            <div className="text-sm text-slate-500">
+              {section === 'topups'
+                ? 'Top-ups add credits only. They do not change your monthly plan.'
+                : 'Pick the monthly tier first. Add top-ups later if Nexus needs more room to run.'}
+            </div>
+          </div>
         </div>
 
         {section === 'plans' ? (
           <>
-            <div className="mt-8 grid gap-6 lg:grid-cols-3">
+            <div className="mt-7 grid gap-5 xl:grid-cols-3">
               {PLANS.map((plan) => (
                 <div
                   key={plan.id}
@@ -200,7 +246,7 @@ export default function Billing() {
               ))}
             </div>
 
-            <div className="mt-10 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
+            <div className="mt-8 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
               <div className="flex items-start gap-4">
                 <div className="rounded-2xl bg-cyan-500/10 p-3 text-cyan-300">
                   <Shield className="h-5 w-5" />
@@ -224,7 +270,7 @@ export default function Billing() {
           </>
         ) : (
           <>
-            <div className="mt-8 grid gap-6 lg:grid-cols-3">
+            <div className="mt-7 grid gap-5 xl:grid-cols-3">
               {TOP_UP_OPTIONS.map((option) => (
                 <div key={option.id} className="rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">{option.label}</p>
@@ -248,7 +294,7 @@ export default function Billing() {
               ))}
             </div>
 
-            <div className="mt-10 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
+            <div className="mt-8 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">How top-ups work</p>
               <div className="mt-4 grid gap-4 md:grid-cols-3">
                 {[
