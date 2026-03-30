@@ -14,6 +14,11 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
   const { snapshot } = useCreditSnapshot();
   const [status, setStatus] = useState<string | null>(null);
   const recommendation = getCreditRecommendation(snapshot);
+
+  if (compact && recommendation.tone === 'good' && !status) {
+    return null;
+  }
+
   const runwayClass =
     recommendation.tone === 'urgent'
       ? 'border-amber-500/30 bg-amber-500/8 text-amber-200'
@@ -58,8 +63,42 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
     void copy(buildTopUpRequest(snapshot), 'Top-up request');
   }
 
+  if (compact) {
+    return (
+      <div className={`rounded-2xl border ${runwayClass} px-3 py-2.5 shadow-[0_12px_30px_rgba(2,6,23,0.14)]`}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-[11px] font-semibold text-white">{recommendation.title}</p>
+              <span className="rounded-full border border-current/20 bg-current/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em]">
+                {formatCredits(snapshot.creditsRemaining)} left
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-300">{status || recommendation.detail}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { void handleTopUp(); }}
+              className="text-[11px] font-medium text-cyan-300 transition-colors hover:text-cyan-200"
+            >
+              Top up
+            </button>
+            <button
+              type="button"
+              onClick={() => { void handleUpgrade(); }}
+              className="text-[11px] font-medium text-violet-300 transition-colors hover:text-violet-200"
+            >
+              Upgrade
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`ui-panel border ${compact ? 'px-3 py-2.5 sm:px-3.5' : 'px-3.5 py-3 sm:px-4'} ${runwayClass}`}>
+    <div className={`ui-panel border px-3.5 py-3 sm:px-4 ${runwayClass}`}>
       <div className={`flex items-start gap-2.5 ${compact ? 'sm:gap-3' : 'sm:gap-3'}`}>
         <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl border border-current/20 bg-current/10 ${compact ? '' : 'sm:h-8 sm:w-8'}`}>
           <Sparkles className="h-4 w-4" />

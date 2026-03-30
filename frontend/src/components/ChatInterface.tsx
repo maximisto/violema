@@ -1029,7 +1029,7 @@ export default function ChatInterface({
         </div>
       </div>
 
-      <div className="flex-shrink-0 px-3 pt-2 sm:px-6 sm:pt-3">
+      <div className="flex-shrink-0 px-3 pt-2 sm:px-6 sm:pt-2.5">
         <div className="mx-auto max-w-[72rem]">
           <BillingGateBar compact />
         </div>
@@ -1039,10 +1039,10 @@ export default function ChatInterface({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto px-3 py-4 pb-24 sm:px-6 sm:py-6 sm:pb-32"
+        className="flex-1 min-h-0 overflow-y-auto px-3 py-4 pb-16 sm:px-6 sm:py-5 sm:pb-20"
       >
         {messages.length === 0 ? (
-          <div className="flex min-h-full items-start justify-center px-1 py-4 sm:py-6">
+          <div className="flex min-h-full items-start justify-center px-1 py-3 sm:py-5">
             <div className="ui-panel-strong relative w-full max-w-[72rem] overflow-hidden px-5 py-6 sm:px-8 sm:py-8">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.18),transparent_48%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.08),transparent_35%)]" />
               <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:gap-8">
@@ -1177,9 +1177,9 @@ export default function ChatInterface({
       )}
 
       {/* Input */}
-      <div className="sticky bottom-0 z-20 flex-shrink-0 border-t border-navy-800/60 bg-gradient-to-t from-navy-950/96 via-navy-950/92 to-navy-950/70 px-3 pt-2 pb-[calc(0.8rem+env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-6">
+      <div className="sticky bottom-0 z-20 flex-shrink-0 border-t border-navy-800/60 bg-gradient-to-t from-navy-950/98 via-navy-950/94 to-navy-950/72 px-3 pt-1.5 pb-[calc(0.7rem+env(safe-area-inset-bottom))] backdrop-blur-xl sm:px-6">
         <div className="mx-auto max-w-[72rem]">
-          <div className="rounded-[1.45rem] border border-navy-700/60 bg-gradient-to-br from-navy-800/72 via-navy-800/58 to-navy-900/76 shadow-[0_18px_42px_rgba(2,6,23,0.24)] transition-all duration-200 focus-within:border-violet-600/50">
+          <div className="rounded-[1.45rem] border border-navy-700/60 bg-gradient-to-br from-navy-800/74 via-navy-800/60 to-navy-900/78 shadow-[0_14px_32px_rgba(2,6,23,0.2)] transition-all duration-200 focus-within:border-violet-600/50">
             {(draftEstimate !== null || lowRunway) && (
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 px-3 py-2 text-[11px] sm:px-4">
                 <div className="flex flex-wrap items-center gap-2">

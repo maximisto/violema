@@ -963,7 +963,7 @@ export default function Dashboard() {
                     setActiveConvoId(convo.id);
                     if (isMobileSidebar) setSidebarOpen(false);
                   }}
-                  className={`w-full text-left px-3.5 py-3 rounded-xl transition-all ${
+                  className={`w-full text-left px-3.5 py-2.5 rounded-xl transition-all ${
                     activeConvoId === convo.id
                       ? 'bg-navy-800 text-white shadow-[0_10px_24px_rgba(2,6,23,0.18)]'
                       : 'text-slate-400 hover:bg-navy-800/60 hover:text-slate-200'
@@ -972,11 +972,13 @@ export default function Dashboard() {
                   <div className="flex items-start gap-2.5 pr-6">
                     <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 opacity-45" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate leading-snug">{convo.title}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-medium leading-snug">{convo.title}</p>
+                        <span className="flex-shrink-0 text-[10px] text-slate-700">{formatTime(convo.timestamp)}</span>
+                      </div>
                       {convo.lastMessage && (
-                        <p className="mt-1 truncate text-[11px] leading-snug text-slate-500">{convo.lastMessage}</p>
+                        <p className="mt-1 truncate text-[10px] leading-snug text-slate-500">{convo.lastMessage}</p>
                       )}
-                      <p className="mt-1 text-[10px] text-slate-700">{formatTime(convo.timestamp)}</p>
                     </div>
                   </div>
                 </button>
