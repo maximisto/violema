@@ -5,6 +5,14 @@ interface SendMessageInput {
   channel?: string;
 }
 
+type MessageChannel = 'slack' | 'email' | 'teams';
+
+interface ValidatedMessageTarget {
+  channel: MessageChannel;
+  target: string;
+  normalizedTarget: string;
+}
+
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -87,7 +95,7 @@ export async function searchWeb(query: string, numResults = 5) {
   };
 }
 
-function inferMessageChannel(input: SendMessageInput): 'slack' | 'email' | 'teams' {
+function inferMessageChannel(input: SendMessageInput): MessageChannel {
   if (input.channel === 'slack' || input.channel === 'email' || input.channel === 'teams') {
     return input.channel;
   }
@@ -99,9 +107,108 @@ function inferMessageChannel(input: SendMessageInput): 'slack' | 'email' | 'team
   return 'slack';
 }
 
+function isSlackChannelId(value: string) {
+  return /^[CGD][A-Z0-9]{8,}$/.test(value);
+}
+
+function isSlackUserId(value: string) {
+  return /^U[A-Z0-9]{8,}$/.test(value);
+}
+
+function toSlackAliasEnvName(target: string) {
+  const normalized = target
+    .trim()
+    .replace(/^#/, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase();
+  return normalized ? `SLACK_CHANNEL_${normalized}` : '';
+}
+
+function readSlackAliasMap() {
+  const raw = process.env.SLACK_CHANNEL_ALIASES?.trim();
+  if (!raw) return {} as Record<string, string>;
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter((entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string')
+        .map(([key, value]) => [key.trim().toLowerCase(), value.trim()])
+        .filter(([, value]) => Boolean(value)),
+    );
+  } catch {
+    return {};
+  }
+}
+
+async function resolveSlackTarget(target: string) {
+  const normalizedTarget = target.trim();
+  if (!normalizedTarget) {
+    throw new Error('Slack target is required.');
+  }
+
+  if (isSlackChannelId(normalizedTarget) || isSlackUserId(normalizedTarget)) {
+    return normalizedTarget;
+  }
+
+  const aliasKey = normalizedTarget.startsWith('#') ? normalizedTarget.toLowerCase() : `#${normalizedTarget.toLowerCase()}`;
+  const aliasMap = readSlackAliasMap();
+  const mappedTarget = aliasMap[aliasKey];
+  if (mappedTarget && (isSlackChannelId(mappedTarget) || isSlackUserId(mappedTarget))) {
+    return mappedTarget;
+  }
+
+  const aliasEnv = process.env[toSlackAliasEnvName(aliasKey)];
+  if (aliasEnv && (isSlackChannelId(aliasEnv.trim()) || isSlackUserId(aliasEnv.trim()))) {
+    return aliasEnv.trim();
+  }
+
+  throw new Error(
+    `Slack target "${normalizedTarget}" is not resolvable. Use a Slack channel ID like C1234567890 or set ${toSlackAliasEnvName(aliasKey)} / SLACK_CHANNEL_ALIASES. ` +
+    'If you want name-based resolution, add channels:read and invite the bot or add chat:write.public as needed.',
+  );
+}
+
+export async function validateMessageTarget(input: { to: string; channel?: string }) {
+  const channel = inferMessageChannel({ ...input, body: '' });
+  const target = input.to.trim();
+
+  if (!target) {
+    throw new Error('Message target is required.');
+  }
+
+  if (channel === 'email') {
+    if (!target.includes('@')) {
+      throw new Error('Email target must be a valid email address.');
+    }
+
+    return {
+      channel,
+      target,
+      normalizedTarget: target.toLowerCase(),
+    } satisfies ValidatedMessageTarget;
+  }
+
+  if (channel === 'slack') {
+    return {
+      channel,
+      target,
+      normalizedTarget: await resolveSlackTarget(target),
+    } satisfies ValidatedMessageTarget;
+  }
+
+  return {
+    channel,
+    target,
+    normalizedTarget: target,
+  } satisfies ValidatedMessageTarget;
+}
+
 async function sendSlackMessage(input: SendMessageInput) {
   const token = getRequiredEnv('SLACK_BOT_TOKEN');
   const text = input.subject ? `${input.subject}\n\n${input.body}` : input.body;
+  const validated = await validateMessageTarget({ to: input.to, channel: 'slack' });
 
   const response = await fetch('https://slack.com/api/chat.postMessage', {
     method: 'POST',
@@ -110,7 +217,7 @@ async function sendSlackMessage(input: SendMessageInput) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      channel: input.to,
+      channel: validated.normalizedTarget,
       text,
       mrkdwn: true,
     }),
@@ -130,10 +237,10 @@ async function sendSlackMessage(input: SendMessageInput) {
   return {
     success: true,
     channel: 'slack',
-    to: input.to,
+    to: validated.target,
     status: 'delivered',
     sent_at: new Date().toISOString(),
-    slack_channel: data.channel || input.to,
+    slack_channel: data.channel || validated.normalizedTarget,
     slack_ts: data.ts || null,
   };
 }

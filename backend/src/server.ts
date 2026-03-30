@@ -5,7 +5,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs';
 import path from 'path';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
-import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
+import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } from './integrations';
 import { createAutomation, getAutomationById, listAutomations, loadPersistedAutomations, triggerAutomationNow, updateAutomation } from './scheduler';
 import {
   addLedgerEntry,
@@ -964,19 +964,10 @@ async function runAutomation(automation: {
   } catch (error) {
     finalizeTaskRun(taskRun.id, {
       status: 'failed',
-      actualCredits: estimate.estimatedCredits,
+      actualCredits: 0,
       error: error instanceof Error ? error.message : 'Unknown automation error',
     });
     updateTask(task.id, { status: 'failed', delegationState: 'review' });
-    addLedgerEntry({
-      workspaceId: DEFAULT_WORKSPACE_ID,
-      source: 'automation_run',
-      deltaCredits: -estimate.estimatedCredits,
-      referenceType: 'automation',
-      referenceId: automation.id,
-      note: `Automation failed: ${automation.name}`,
-      metadata: { taskId: task.id, taskRunId: taskRun.id },
-    });
     console.error(`[automation] ${automation.id} failed`, error);
     return {
       ok: false as const,
@@ -1554,7 +1545,7 @@ app.get('/api/automations', (_req: Request, res: Response) => {
   res.json({ items: listAutomations() });
 });
 
-app.post('/api/automations', (req: Request, res: Response) => {
+app.post('/api/automations', async (req: Request, res: Response) => {
   const body = req.body as {
     name?: string;
     description?: string;
@@ -1571,6 +1562,9 @@ app.post('/api/automations', (req: Request, res: Response) => {
   }
 
   try {
+    if (typeof body.notify === 'string' && body.notify.trim()) {
+      await validateMessageTarget({ to: body.notify.trim() });
+    }
     const record = createAutomation({
       name: body.name.trim(),
       description: typeof body.description === 'string' ? body.description.trim() || undefined : undefined,
@@ -1597,7 +1591,7 @@ app.post('/api/automations/:id/run', (req: Request, res: Response) => {
   res.json({ ok: true, item: record, message: `Triggered ${record.name}` });
 });
 
-app.patch('/api/automations/:id', (req: Request, res: Response) => {
+app.patch('/api/automations/:id', async (req: Request, res: Response) => {
   const patch: Record<string, unknown> = {};
 
   if (typeof req.body.name === 'string') patch.name = req.body.name.trim();
@@ -1617,6 +1611,9 @@ app.patch('/api/automations/:id', (req: Request, res: Response) => {
   }
 
   try {
+    if (typeof patch.notify === 'string' && patch.notify.trim()) {
+      await validateMessageTarget({ to: patch.notify });
+    }
     const updated = updateAutomation(req.params.id, patch, runAutomation);
     if (!updated) {
       res.status(404).json({ error: 'Automation not found' });

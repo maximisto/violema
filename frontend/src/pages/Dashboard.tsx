@@ -662,7 +662,14 @@ export default function Dashboard() {
       notify: task.notify || '',
       condition: task.condition || '',
       actions: Array.isArray(task.actions) && task.actions.length > 0 ? task.actions : ['Generate summary'],
-      destinationType: task.notify?.startsWith('#') ? 'slack' : task.notify?.includes('@') ? 'email' : task.notify ? 'custom' : 'none',
+      destinationType:
+        task.notify?.startsWith('C') || task.notify?.startsWith('G') || task.notify?.startsWith('D') || task.notify?.startsWith('#')
+          ? 'slack'
+          : task.notify?.includes('@')
+            ? 'email'
+            : task.notify
+              ? 'custom'
+              : 'none',
     });
   }, []);
 
@@ -673,7 +680,7 @@ export default function Dashboard() {
       name: '',
       schedule: 'every monday at 9am',
       description: '',
-      notify: '#ops-alerts',
+      notify: '',
       condition: '',
       actions: ['Query Stripe failed payments', 'Generate summary', 'Send alert to Slack'],
       destinationType: 'slack',
@@ -978,10 +985,17 @@ export default function Dashboard() {
       name: `${selectedTask.title} copy`,
       schedule: selectedTask.schedule || selectedTask.time || 'every monday at 9am',
       description: selectedTask.description || '',
-      notify: selectedTask.notify || '#ops-alerts',
+      notify: selectedTask.notify || '',
       condition: selectedTask.condition || '',
       actions: Array.isArray(selectedTask.actions) && selectedTask.actions.length > 0 ? selectedTask.actions : ['Generate summary'],
-      destinationType: selectedTask.notify?.startsWith('#') ? 'slack' : selectedTask.notify?.includes('@') ? 'email' : selectedTask.notify ? 'custom' : 'none',
+      destinationType:
+        selectedTask.notify?.startsWith('C') || selectedTask.notify?.startsWith('G') || selectedTask.notify?.startsWith('D') || selectedTask.notify?.startsWith('#')
+          ? 'slack'
+          : selectedTask.notify?.includes('@')
+            ? 'email'
+            : selectedTask.notify
+              ? 'custom'
+              : 'none',
     });
   }, [selectedTask]);
 
@@ -2021,7 +2035,7 @@ export default function Dashboard() {
                   <span className="ui-section-label px-1">Notify</span>
                   <div className="mt-1 flex flex-wrap gap-2 px-1">
                     {[
-                      { label: 'Slack', value: 'slack', placeholder: '#ops-alerts' },
+                      { label: 'Slack', value: 'slack', placeholder: 'C0123456789' },
                       { label: 'Email', value: 'email', placeholder: 'max@purpleorange.io' },
                       { label: 'Custom', value: 'custom', placeholder: '' },
                       { label: 'None', value: 'none', placeholder: '' },
@@ -2054,10 +2068,13 @@ export default function Dashboard() {
                       value={automationEditor.notify}
                       onChange={(event) => setAutomationEditor((current) => current ? { ...current, notify: event.target.value } : current)}
                       className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                      placeholder="#ops-alerts or max@purpleorange.io"
+                      placeholder="Slack channel ID (C...) or email"
                       disabled={automationEditor.destinationType === 'none'}
                     />
                   </div>
+                  <p className="mt-1 px-1 text-[11px] text-slate-500">
+                    Slack is most reliable with a channel ID like <span className="font-mono text-slate-400">C0123456789</span>. Channel names like <span className="font-mono text-slate-400">#ops-alerts</span> need extra Slack scopes or alias mapping.
+                  </p>
                 </label>
 
                 <label className="block">
