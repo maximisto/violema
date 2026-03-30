@@ -3,11 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   Plus, MessageSquare, Settings, ChevronRight, Zap, LogOut,
   X, CheckSquare, Clock, AlertCircle, Sparkles, PanelLeftClose, PanelLeftOpen, Trash2,
-  Eye, Shield, Search,
+  Eye, Shield, Search, CreditCard, ArrowUpRight,
 } from 'lucide-react';
 import ChatInterface from '../components/ChatInterface';
-import CreditSurface from '../components/CreditSurface';
-import { fetchCreditEstimate, formatCredits } from '../lib/credits';
+import { fetchCreditEstimate, formatCredits, openBillingCheckout, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
@@ -320,6 +319,7 @@ export default function Dashboard() {
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const { snapshot } = useCreditSnapshot();
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
 
@@ -733,6 +733,7 @@ export default function Dashboard() {
   );
   const selectedTask = taskItems.find((task) => task.id === selectedTaskId) ?? taskItems[0];
   const selectedTaskMeta = selectedTask ? getTaskStatusMeta(selectedTask.status as 'scheduled' | 'complete' | 'alert') : null;
+  const lowCreditRunway = snapshot.projectedDaysLeft <= 7;
   const automationActionCount = useMemo(() => {
     if (!automationEditor) return 0;
     return automationEditor.actionsText
@@ -771,6 +772,29 @@ export default function Dashboard() {
     </div>
   );
 
+  const openTopUp = async () => {
+    try {
+      const opened = await openBillingCheckout({ kind: 'top-up', offerId: 'topup_500' });
+      if (opened) return;
+    } catch {
+      // fall through
+    }
+    window.location.assign('/#pricing');
+  };
+
+  const openUpgrade = async () => {
+    try {
+      const opened = await openBillingCheckout({
+        kind: 'subscription',
+        planId: snapshot.planName === 'Starter' ? 'pro' : 'team',
+      });
+      if (opened) return;
+    } catch {
+      // fall through
+    }
+    window.location.assign('/#pricing');
+  };
+
   return (
     <div className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-navy-950 md:h-screen md:min-h-screen">
       {uiNotice && (
@@ -801,25 +825,25 @@ export default function Dashboard() {
         <aside
           className={`${
             isMobileSidebar
-              ? 'fixed inset-y-2 left-2 z-40 w-[calc(100vw-1rem)] max-w-[19rem] rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.55)]'
-              : 'w-[15.25rem] xl:w-[15.75rem] flex-shrink-0'
-          } bg-gradient-to-b from-navy-900/98 via-navy-900/96 to-navy-950/98 border-r border-navy-800 flex flex-col sidebar-enter backdrop-blur-sm`}
+              ? 'fixed inset-y-2 left-2 z-40 w-[calc(100vw-1rem)] max-w-[18.75rem] rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.55)]'
+              : 'w-64 flex-shrink-0'
+          } border-r border-navy-800 bg-navy-900 flex flex-col sidebar-enter`}
         >
           {/* Logo */}
-          <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-navy-800/80 bg-navy-950/25">
+          <div className="flex items-center gap-2 px-4 py-4 border-b border-navy-800">
             <button
               onClick={() => navigate('/')}
               className="flex items-center gap-3.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-1"
               aria-label="Go to Nexus home"
             >
-              <div className="w-8 h-8 overflow-hidden flex-shrink-0">
+              <div className="w-9 h-9 overflow-hidden flex-shrink-0">
                 <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
               </div>
-              <div className="brand-lockup w-[8rem]">
-                <span className="brand-wordmark text-[0.9rem]">
+              <div className="brand-lockup w-[8.95rem]">
+                <span className="brand-wordmark text-[0.98rem]">
                   NEXUS
                 </span>
-                <span className="brand-submark text-[7.2px]">
+                <span className="brand-submark text-[7.9px]">
                   by Purple Orange AI
                 </span>
               </div>
@@ -836,32 +860,62 @@ export default function Dashboard() {
             </button>
           </div>
 
-          <div className="px-2.5 pt-2.5">
-            <CreditSurface compact={isMobileSidebar} />
-          </div>
-
           {/* New chat + Mode selector */}
-          <div className="px-2.5 pt-2.5 pb-2 space-y-2">
+          <div className="px-3 pt-3 pb-2 space-y-2">
             <button
               onClick={handleNewChat}
-              className="ui-button-surface w-full justify-start"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors shadow-glow-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
               <Plus className="w-4 h-4" />
               New conversation
             </button>
-            {/* Mode selector visible on ALL screen sizes via sidebar */}
-            <div className="px-1.5 ui-section-label">
-              Autonomy
-            </div>
             <ModeSelector compact />
           </div>
 
-          {/* Search */}
-          <div className="px-2.5 pb-2">
-            <div className="px-1.5 mb-1 ui-section-label">
-              Search
+          <div className="px-3 pb-2">
+            <div className="rounded-2xl border border-navy-700 bg-navy-950/42 px-3 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Credits</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{formatCredits(snapshot.creditsRemaining)}</p>
+                  <p className="text-[11px] text-slate-500">{snapshot.planName} plan</p>
+                </div>
+                <div className={`rounded-full px-2 py-1 text-[10px] font-medium ${
+                  lowCreditRunway
+                    ? 'border border-amber-500/25 bg-amber-500/10 text-amber-200'
+                    : 'border border-violet-500/20 bg-violet-500/10 text-violet-200'
+                }`}>
+                  {snapshot.projectedDaysLeft}d left
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { void openTopUp(); }}
+                  className="flex-1 rounded-lg border border-navy-700 bg-navy-900/70 px-2.5 py-2 text-[11px] font-medium text-slate-300 transition-colors hover:border-violet-700 hover:text-white"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <CreditCard className="h-3.5 w-3.5" />
+                    Top up
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void openUpgrade(); }}
+                  className="flex-1 rounded-lg border border-violet-700/40 bg-violet-500/10 px-2.5 py-2 text-[11px] font-medium text-violet-200 transition-colors hover:bg-violet-500/16"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                    Upgrade
+                  </span>
+                </button>
+              </div>
             </div>
-            <div className="ui-input-shell relative">
+          </div>
+
+          {/* Search */}
+          <div className="px-3 pb-2">
+            <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
               <input
                 ref={searchRef}
@@ -870,7 +924,7 @@ export default function Dashboard() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search conversations…"
                 aria-label="Search conversations"
-                className="w-full bg-transparent text-xs text-slate-300 placeholder-slate-600 pl-8 pr-3 py-2 outline-none"
+                className="w-full rounded-lg border border-navy-700 bg-navy-800 text-xs text-slate-300 placeholder-slate-600 pl-8 pr-3 py-1.5 outline-none transition-colors focus:border-violet-700"
               />
               {searchQuery && (
                 <button
@@ -886,27 +940,12 @@ export default function Dashboard() {
 
           {/* Conversation list */}
           <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
-            <div className="px-2 pt-1 pb-2 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-600">
-                  {searchQuery ? 'Search results' : 'Recent conversations'}
-                </p>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  {searchQuery
-                    ? `${filteredConvos.length} match${filteredConvos.length !== 1 ? 'es' : ''}`
-                    : 'Active threads and recent work'}
-                </p>
-              </div>
-              <span className="rounded-full border border-navy-700/70 bg-navy-900/60 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                {conversations.length} total
-              </span>
-            </div>
+            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-600">
+              {searchQuery ? `${filteredConvos.length} result${filteredConvos.length !== 1 ? 's' : ''}` : 'Recent'}
+            </p>
 
             {filteredConvos.length === 0 && searchQuery && (
-              <div className="mx-2 rounded-2xl border border-dashed border-navy-700/70 bg-navy-900/35 px-3 py-5 text-center">
-                <p className="text-xs text-slate-500">No conversations found</p>
-                <p className="mt-1 text-[11px] text-slate-600">Try a shorter or different search term.</p>
-              </div>
+              <p className="px-3 py-4 text-center text-xs text-slate-600">No conversations found</p>
             )}
 
             {filteredConvos.map((convo) => (
@@ -924,26 +963,20 @@ export default function Dashboard() {
                     setActiveConvoId(convo.id);
                     if (isMobileSidebar) setSidebarOpen(false);
                   }}
-                  className={`w-full text-left px-3 py-2 rounded-xl transition-all ${
+                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-all ${
                     activeConvoId === convo.id
-                      ? 'bg-gradient-to-r from-violet-500/15 via-navy-800/95 to-navy-800/90 text-white border border-violet-500/25 shadow-[0_12px_28px_rgba(2,6,23,0.24)]'
-                      : 'text-slate-400 border border-transparent bg-navy-900/20 hover:bg-navy-800/65 hover:text-slate-200 hover:border-navy-700/70'
+                      ? 'bg-navy-800 text-white'
+                      : 'text-slate-400 hover:bg-navy-800/60 hover:text-slate-200'
                   }`}
                 >
-                  <div className="flex items-start gap-2.5 pr-7">
-                    <div
-                      className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${
-                        activeConvoId === convo.id ? 'bg-violet-400 shadow-[0_0_0_4px_rgba(168,85,247,0.12)]' : 'bg-slate-700'
-                      }`}
-                    />
+                  <div className="flex items-start gap-2 pr-6">
+                    <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 opacity-50" />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-[13px] font-medium truncate leading-snug tracking-[-0.01em]">{convo.title}</p>
-                        <span className="text-[10px] text-slate-600 flex-shrink-0">{formatTime(convo.timestamp)}</span>
-                      </div>
+                      <p className="text-sm font-medium truncate leading-snug">{convo.title}</p>
                       {convo.lastMessage && (
-                        <p className="text-[10px] text-slate-500 truncate mt-1 leading-snug">{convo.lastMessage}</p>
+                        <p className="mt-0.5 truncate text-[11px] leading-snug text-slate-500">{convo.lastMessage}</p>
                       )}
+                      <p className="mt-0.5 text-[10px] text-slate-700">{formatTime(convo.timestamp)}</p>
                     </div>
                   </div>
                 </button>
@@ -983,22 +1016,22 @@ export default function Dashboard() {
           </div>
 
           {/* User / settings */}
-          <div className="border-t border-navy-800/80 px-2.5 py-2 space-y-1.5 bg-navy-950/15">
+          <div className="border-t border-navy-800 px-3 py-3 space-y-1">
             <button
               onClick={() => {/* settings panel placeholder */}}
-              className="ui-button-ghost w-full justify-start"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
             >
               <Settings className="w-4 h-4" />
               Settings
             </button>
             <button
               onClick={() => navigate('/')}
-              className="ui-button-ghost w-full justify-start"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
             >
               <LogOut className="w-4 h-4" />
               Back to home
             </button>
-            <div className="ui-panel mt-1 flex items-center gap-2.5 px-3 py-2.5 border-navy-800/60 shadow-none">
+            <div className="mt-1 flex items-center gap-2.5 px-3 py-2">
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-700/40 to-navy-700 border border-violet-800/40 flex items-center justify-center text-xs font-bold text-violet-300 flex-shrink-0">
                 U
               </div>
