@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
   Send, ChevronDown, AlertCircle, Square, ChevronDownCircle,
-  Copy, Check, Clock, Brain, ThumbsUp, ThumbsDown, Zap, Shield, Eye, RefreshCw, Sparkles,
+  Copy, Check, Clock, Brain, ThumbsUp, ThumbsDown, Zap, Shield, Eye, RefreshCw, Sparkles, X,
 } from 'lucide-react';
 import type { Message, ToolCall, SSEEvent, AutonomyMode } from '../types';
 import { fetchCreditEstimate, formatCredits, getSuggestedTopUpOfferId, openBillingCheckout, useCreditSnapshot } from '../lib/credits';
@@ -515,7 +515,85 @@ function ThinkingBlock({
   );
 }
 
-const ToolCallBlock = memo(function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
+const ArtifactPreview = memo(function ArtifactPreview({
+  artifact,
+  onClose,
+}: {
+  artifact: ToolArtifact;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Close artifact preview"
+        onClick={onClose}
+        className="absolute inset-0 z-40 bg-black/70 backdrop-blur-[2px]"
+      />
+      <div className="absolute inset-x-4 bottom-4 top-4 z-50 mx-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-[1.7rem] border border-navy-700/80 bg-gradient-to-b from-navy-900/98 via-navy-900/96 to-navy-950/98 shadow-[0_30px_90px_rgba(2,6,23,0.55)]">
+        <div className="flex items-center justify-between border-b border-navy-800/80 px-5 py-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">
+              {artifact.kind === 'screenshot' ? 'Capture preview' : artifact.kind === 'report' ? 'Report preview' : 'Deliverable preview'}
+            </p>
+            <h3 className="mt-1 text-lg font-semibold text-white">{artifact.title}</h3>
+            {artifact.subtitle && <p className="mt-1 text-sm text-slate-500">{artifact.subtitle}</p>}
+          </div>
+          <div className="flex items-center gap-2">
+            {artifact.href && (
+              <a
+                href={artifact.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ui-button-ghost"
+              >
+                Open
+              </a>
+            )}
+            <button
+              onClick={onClose}
+              className="rounded-xl border border-navy-700/80 bg-navy-900/55 p-2 text-slate-400 transition-colors hover:text-white"
+              aria-label="Close artifact preview"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          {artifact.imageUrl && (
+            <div className="overflow-hidden rounded-[1.5rem] border border-navy-700/70 bg-navy-950/60">
+              <img src={artifact.imageUrl} alt={artifact.title} className="max-h-[28rem] w-full object-contain bg-black/20" />
+            </div>
+          )}
+          {artifact.summary && (
+            <div className="mt-4 rounded-2xl border border-navy-700/70 bg-navy-950/40 p-4">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Summary</p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">{artifact.summary}</p>
+            </div>
+          )}
+          {artifact.metrics && artifact.metrics.length > 0 && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {artifact.metrics.map((metric) => (
+                <div key={metric.label} className="rounded-2xl border border-navy-700/70 bg-navy-950/40 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">{metric.label}</p>
+                  <p className="mt-2 text-base font-semibold text-white">{metric.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+});
+
+const ToolCallBlock = memo(function ToolCallBlock({
+  toolCall,
+  onArtifactOpen,
+}: {
+  toolCall: ToolCall;
+  onArtifactOpen?: (artifact: ToolArtifact) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const icon = TOOL_ICONS[toolCall.name] || '🔧';
   const label = TOOL_LABELS[toolCall.name] || toolCall.name;
@@ -619,14 +697,13 @@ const ToolCallBlock = memo(function ToolCallBlock({ toolCall }: { toolCall: Tool
                             {artifact.subtitle && <p className="mt-1 text-xs text-slate-500">{artifact.subtitle}</p>}
                           </div>
                           {artifact.href && (
-                            <a
-                              href={artifact.href}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => onArtifactOpen?.(artifact)}
                               className="ui-pill px-2 py-1 text-[10px] normal-case tracking-normal text-cyan-300 hover:border-cyan-500/30 hover:text-cyan-200"
                             >
-                              Open
-                            </a>
+                              Preview
+                            </button>
                           )}
                         </div>
                         {artifact.summary && <p className="mt-2 text-xs leading-relaxed text-slate-400">{artifact.summary}</p>}
@@ -702,10 +779,12 @@ function MessageBubble({
   message,
   autonomyMode,
   onReaction,
+  onArtifactOpen,
 }: {
   message: Message;
   autonomyMode: AutonomyMode;
   onReaction?: (id: string, r: 'positive' | 'negative') => void;
+  onArtifactOpen?: (artifact: ToolArtifact) => void;
 }) {
   const isUser = message.role === 'user';
   const [hovered, setHovered] = useState(false);
@@ -786,7 +865,7 @@ function MessageBubble({
         {message.toolCalls && message.toolCalls.length > 0 && (
           <div className="mb-4">
             {message.toolCalls.map((tc) => (
-              <ToolCallBlock key={tc.id} toolCall={tc} />
+              <ToolCallBlock key={tc.id} toolCall={tc} onArtifactOpen={onArtifactOpen} />
             ))}
           </div>
         )}
@@ -847,6 +926,7 @@ export default function ChatInterface({
   const [agentStatus, setAgentStatus] = useState<'idle' | 'thinking' | 'working'>('idle');
   const [lastUserInput, setLastUserInput] = useState('');
   const [draftEstimate, setDraftEstimate] = useState<number | null>(null);
+  const [selectedArtifact, setSelectedArtifact] = useState<ToolArtifact | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1285,6 +1365,7 @@ export default function ChatInterface({
                 message={msg}
                 autonomyMode={autonomyMode}
                 onReaction={handleReaction}
+                onArtifactOpen={setSelectedArtifact}
               />
             ))}
           </div>
@@ -1437,6 +1518,10 @@ export default function ChatInterface({
           </div>
         </div>
       </div>
+
+      {selectedArtifact && (
+        <ArtifactPreview artifact={selectedArtifact} onClose={() => setSelectedArtifact(null)} />
+      )}
     </div>
   );
 }

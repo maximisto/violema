@@ -155,6 +155,8 @@ interface AutomationEditorDraft {
   destinationType: 'slack' | 'email' | 'custom' | 'none';
 }
 
+type ThreadFilter = 'all' | 'active' | 'pinned' | 'archived';
+
 interface CreditEstimatePreview {
   estimatedCredits: number;
   monthlyCredits: number;
@@ -341,12 +343,14 @@ export default function Dashboard() {
   const [autonomyMode, setAutonomyMode] = useState<AutonomyMode>('cautious');
   const [searchQuery, setSearchQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [threadFilter, setThreadFilter] = useState<ThreadFilter>('all');
   const [platformTasks, setPlatformTasks] = useState<DashboardTaskItem[]>([]);
   const [liveAutomations, setLiveAutomations] = useState<DashboardTaskItem[]>([]);
   const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | null>(null);
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
+  const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const { snapshot } = useCreditSnapshot();
 
@@ -754,8 +758,19 @@ export default function Dashboard() {
     [conversations, searchQuery]
   );
 
+  const visibleFilteredConvos = useMemo(() => {
+    if (threadFilter === 'all') return filteredConvos;
+    if (threadFilter === 'active') {
+      return filteredConvos.filter((conversation) => conversation.id === activeConvoId);
+    }
+    if (threadFilter === 'pinned') {
+      return filteredConvos.filter((conversation) => conversation.pinned);
+    }
+    return [];
+  }, [activeConvoId, filteredConvos, threadFilter]);
+
   const groupedConversations = useMemo(() => {
-    const sorted = [...filteredConvos].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    const sorted = [...visibleFilteredConvos].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     const active = activeConvoId !== 'new' ? sorted.find((convo) => convo.id === activeConvoId) : undefined;
     const remaining = active ? sorted.filter((convo) => convo.id !== active.id) : sorted;
     const pinned = remaining.filter((convo) => convo.pinned);
@@ -770,7 +785,7 @@ export default function Dashboard() {
     }, []);
 
     return { active, pinned, sections };
-  }, [activeConvoId, filteredConvos]);
+  }, [activeConvoId, visibleFilteredConvos]);
 
   const taskItems: DashboardTaskItem[] = liveAutomations.length > 0
     ? liveAutomations
@@ -859,6 +874,17 @@ export default function Dashboard() {
       return { ...current, actions: [...current.actions, value] };
     });
   }, []);
+
+  const handleAutomationStepDrop = useCallback((targetIndex: number) => {
+    setAutomationEditor((current) => {
+      if (!current || draggedStepIndex === null || draggedStepIndex === targetIndex) return current;
+      const actions = [...current.actions];
+      const [draggedAction] = actions.splice(draggedStepIndex, 1);
+      actions.splice(targetIndex, 0, draggedAction);
+      return { ...current, actions };
+    });
+    setDraggedStepIndex(null);
+  }, [draggedStepIndex]);
 
   const addAutomationTemplate = useCallback((template: string) => {
     setAutomationEditor((current) => {
@@ -1081,15 +1107,42 @@ export default function Dashboard() {
 
           {/* Conversation list */}
           <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
-            <p className="px-1 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-600">
-              {searchQuery ? `${filteredConvos.length} result${filteredConvos.length !== 1 ? 's' : ''}` : 'Threads'}
-            </p>
+            <div className="flex items-center justify-between gap-2 px-1 py-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-600">
+                {threadFilter === 'archived'
+                  ? `${archivedConversations.length} archived`
+                  : searchQuery
+                    ? `${visibleFilteredConvos.length} result${visibleFilteredConvos.length !== 1 ? 's' : ''}`
+                    : 'Threads'}
+              </p>
+              <div className="flex items-center gap-1 rounded-full border border-navy-700/80 bg-navy-950/55 p-1">
+                {([
+                  { value: 'all', label: 'All' },
+                  { value: 'active', label: 'Now' },
+                  { value: 'pinned', label: 'Pinned' },
+                  { value: 'archived', label: 'Archived' },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setThreadFilter(option.value)}
+                    className={`rounded-full px-2 py-1 text-[10px] font-medium transition-colors ${
+                      threadFilter === option.value
+                        ? 'bg-violet-500/14 text-violet-200'
+                        : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-            {filteredConvos.length === 0 && searchQuery && (
+            {threadFilter !== 'archived' && filteredConvos.length === 0 && searchQuery && (
               <p className="px-3 py-4 text-center text-xs text-slate-600">No conversations found</p>
             )}
 
-            {groupedConversations.active && (
+            {threadFilter !== 'archived' && groupedConversations.active && (
               <div className="space-y-1">
                 <p className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-violet-300/70">Active now</p>
                 {[groupedConversations.active].map((convo) => (
@@ -1161,7 +1214,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            {groupedConversations.pinned.length > 0 && (
+            {threadFilter !== 'archived' && groupedConversations.pinned.length > 0 && (
               <div className="space-y-1">
                 <p className="px-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-300/70">Pinned</p>
                 {groupedConversations.pinned.map((convo) => {
@@ -1232,7 +1285,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            {groupedConversations.sections.map((section) => (
+            {threadFilter !== 'archived' && groupedConversations.sections.map((section) => (
               <div key={section.label} className="space-y-1">
                 <p className="px-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">{section.label}</p>
                 {section.items.map((convo) => (
@@ -1334,18 +1387,52 @@ export default function Dashboard() {
 
             {archivedConversations.length > 0 && (
               <div className="space-y-1">
-                <button
-                  type="button"
-                  onClick={() => setShowArchived((current) => !current)}
-                  className="flex w-full items-center justify-between px-1 pt-2 text-left text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600"
-                >
-                  <span>Archived</span>
-                  <span className="inline-flex items-center gap-1">
-                    {archivedConversations.length}
-                    {showArchived ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                  </span>
-                </button>
-                {showArchived && archivedConversations.map((convo) => (
+                {threadFilter === 'archived' ? archivedConversations.map((convo) => (
+                  <div key={convo.id} className="relative">
+                    <button
+                      onClick={() => {
+                        setActiveConvoId(convo.id);
+                        if (isMobileSidebar) setSidebarOpen(false);
+                      }}
+                      className="w-full rounded-xl border border-navy-800/80 bg-navy-950/30 px-3.5 py-2.5 text-left text-slate-500 transition-all hover:border-navy-700 hover:text-slate-300"
+                    >
+                      <div className="flex items-start gap-2.5 pr-12">
+                        <Archive className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 opacity-60" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-sm font-medium leading-snug">{convo.title}</p>
+                            <span className="flex-shrink-0 text-[10px] text-slate-700">{formatTime(convo.timestamp)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                    <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-xl border border-navy-700/80 bg-navy-950/92 p-1 shadow-[0_10px_24px_rgba(2,6,23,0.32)]">
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleConversationArchived(convo.id);
+                        }}
+                        className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-navy-800 hover:text-slate-200"
+                        aria-label="Restore conversation"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowArchived((current) => !current)}
+                    className="flex w-full items-center justify-between px-1 pt-2 text-left text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600"
+                  >
+                    <span>Archived</span>
+                    <span className="inline-flex items-center gap-1">
+                      {archivedConversations.length}
+                      {showArchived ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    </span>
+                  </button>
+                )}
+                {threadFilter !== 'archived' && showArchived && archivedConversations.map((convo) => (
                   <div key={convo.id} className="relative">
                     <button
                       onClick={() => {
@@ -1816,13 +1903,28 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-2 space-y-2">
                   {automationEditor.actions.map((action, index) => (
-                    <div key={`${automationEditor.id}-${index}`} className="rounded-2xl border border-navy-700/80 bg-navy-950/36 p-3">
+                    <div
+                      key={`${automationEditor.id}-${index}`}
+                      draggable
+                      onDragStart={() => setDraggedStepIndex(index)}
+                      onDragEnd={() => setDraggedStepIndex(null)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => handleAutomationStepDrop(index)}
+                      className={`rounded-2xl border bg-navy-950/36 p-3 transition-all ${
+                        draggedStepIndex === index
+                          ? 'border-violet-500/40 shadow-[0_14px_28px_rgba(91,33,182,0.18)]'
+                          : 'border-navy-700/80'
+                      }`}
+                    >
                       <div className="flex items-center justify-between gap-2">
                         <div className="inline-flex items-center gap-2">
                           <span className="flex h-6 w-6 items-center justify-center rounded-full border border-violet-500/20 bg-violet-500/10 text-[11px] font-semibold text-violet-200">
                             {index + 1}
                           </span>
                           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">Step</p>
+                          <span className="rounded-full border border-navy-700/80 bg-navy-900/70 px-2 py-0.5 text-[9px] font-medium text-slate-500">
+                            drag to reorder
+                          </span>
                         </div>
                         <div className="flex items-center gap-1">
                           <button
