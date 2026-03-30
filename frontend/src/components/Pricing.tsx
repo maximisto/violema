@@ -8,8 +8,8 @@ const PLANS = [
     name: 'Starter',
     price: '$29',
     period: 'per month',
-    description: 'A lean entry tier for founders and individuals.',
-    cta: 'Choose Starter',
+    description: 'A lean self-serve tier for founders and operators getting started.',
+    cta: 'Start with Starter',
     featured: false,
     features: [
       '500 Nexus credits',
@@ -22,38 +22,40 @@ const PLANS = [
   {
     id: 'pro',
     name: 'Pro',
-    price: '$50',
+    price: '$79',
     period: 'per month',
-    description: 'The default operating tier for serious teams.',
-    cta: 'Upgrade to Pro',
+    description: 'The default operating tier for serious solo operators and execution-heavy workflows.',
+    cta: 'Choose Pro',
     featured: true,
     badge: 'Most popular',
     features: [
-      '1,000 Nexus credits',
-      '15 active automations',
+      '2,000 Nexus credits',
+      '20 active automations',
       'Multi-agent orchestration',
       'Task automation',
       'Long-term memory',
-      'Slack + Email support',
+      'Slack + email support',
       'Analytics dashboard',
     ],
   },
   {
     id: 'team',
     name: 'Team',
-    price: '$149',
+    price: '$249',
     period: 'per month',
-    description: 'For companies running Nexus as an operating layer.',
-    cta: 'Upgrade to Team',
+    description: 'A real team workspace for coordinated operations, approvals, and shared execution.',
+    cta: 'Choose Team',
     featured: false,
     features: [
-      '5,000 Nexus credits',
+      '7,500 Nexus credits',
       '100 active automations',
+      '5 included seats',
       'Approvals and review gates',
-      'Multi-agent orchestration',
-      'Priority support',
       'Admin visibility',
+      'Shared workspace / shared memory',
+      'Priority support',
     ],
+    footnote: 'Extra seats default to $29/seat/month.',
   },
 ];
 
@@ -85,7 +87,7 @@ export default function Pricing() {
             Simple, transparent pricing
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Start for free. Scale as your team grows. No hidden fees.
+            Start lean, then scale into heavier execution as Nexus takes on more of the work.
           </p>
         </div>
 
@@ -148,13 +150,37 @@ export default function Pricing() {
                   </li>
                 ))}
               </ul>
+
+              {'footnote' in plan && plan.footnote && (
+                <p className="mt-5 text-xs text-slate-500">{plan.footnote}</p>
+              )}
             </div>
           ))}
         </div>
 
-        <p className="text-center text-slate-500 text-sm mt-10">
-          Credits map to actual work. Start lean, then scale up as Nexus takes on more execution.
-        </p>
+        <div className="mt-10 rounded-2xl border border-navy-700/60 bg-navy-900/40 px-6 py-5 text-center">
+          <p className="text-lg font-semibold text-white">Enterprise</p>
+          <p className="mt-2 text-sm text-slate-400">
+            Custom pricing for larger teams that need higher limits, stronger security controls, custom onboarding, and SLA-ready support.
+          </p>
+          <div className="mt-4 flex justify-center">
+            <a
+              href="mailto:sales@purpleorange.io?subject=Nexus%20Enterprise"
+              className="inline-flex rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/16"
+            >
+              Contact sales
+            </a>
+          </div>
+        </div>
+
+        <div className="mt-10 space-y-2 text-center">
+          <p className="text-sm text-slate-400">
+            Credits map to actual agent work. Start lean, then scale as Nexus takes on more execution.
+          </p>
+          <p className="text-sm text-slate-500">
+            500 credits is suited for light weekly usage; higher tiers support heavier multi-agent workflows.
+          </p>
+        </div>
       </div>
     </section>
   );

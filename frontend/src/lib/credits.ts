@@ -57,14 +57,14 @@ const MOCK_CREDIT_SNAPSHOT: CreditSnapshot = {
   source: 'mock',
   workspaceId: 'workspace_default',
   workspaceName: 'Nexus HQ',
-  planName: 'Growth',
-  creditsRemaining: 684,
-  creditsTotal: 1000,
+  planName: 'Pro',
+  creditsRemaining: 1684,
+  creditsTotal: 2000,
   estimatedTaskCost: 18,
-  automationBurnMonthly: 240,
+  automationBurnMonthly: 420,
   referralBonus: 2000,
   topUpSuggestion: 500,
-  projectedDaysLeft: 22,
+  projectedDaysLeft: 18,
   lastUpdatedAt: new Date().toISOString(),
 };
 
@@ -306,6 +306,12 @@ export function getSuggestedTopUpOfferId(snapshot: CreditSnapshot) {
   if (snapshot.topUpSuggestion >= 5000) return 'topup_5000';
   if (snapshot.topUpSuggestion >= 1500) return 'topup_1500';
   return 'topup_500';
+}
+
+export function getSuggestedUpgradePlanId(planName: string): 'pro' | 'team' | null {
+  if (planName === 'Starter') return 'pro';
+  if (planName === 'Pro') return 'team';
+  return null;
 }
 
 export async function createBillingCheckout(input: { kind: 'subscription' | 'top-up'; planId?: 'starter' | 'pro' | 'team'; offerId?: string }) {

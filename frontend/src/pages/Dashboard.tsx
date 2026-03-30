@@ -6,7 +6,7 @@ import {
   Eye, Shield, Search, CreditCard, ArrowUpRight, Pin, Archive, RotateCcw, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import ChatInterface from '../components/ChatInterface';
-import { fetchCreditEstimate, formatCredits, openBillingCheckout, useCreditSnapshot } from '../lib/credits';
+import { fetchCreditEstimate, formatCredits, getSuggestedTopUpOfferId, getSuggestedUpgradePlanId, openBillingCheckout, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
@@ -926,7 +926,7 @@ export default function Dashboard() {
 
   const openTopUp = async () => {
     try {
-      const opened = await openBillingCheckout({ kind: 'top-up', offerId: 'topup_500' });
+      const opened = await openBillingCheckout({ kind: 'top-up', offerId: getSuggestedTopUpOfferId(snapshot) });
       if (opened) return;
     } catch {
       // fall through
@@ -935,10 +935,15 @@ export default function Dashboard() {
   };
 
   const openUpgrade = async () => {
+    const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
+    if (!nextPlanId) {
+      window.location.assign('mailto:sales@purpleorange.io?subject=Nexus%20Enterprise');
+      return;
+    }
     try {
       const opened = await openBillingCheckout({
         kind: 'subscription',
-        planId: snapshot.planName === 'Starter' ? 'pro' : 'team',
+        planId: nextPlanId,
       });
       if (opened) return;
     } catch {

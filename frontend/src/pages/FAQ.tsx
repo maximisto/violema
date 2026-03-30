@@ -97,19 +97,15 @@ const CATEGORIES = [
     faqs: [
       {
         q: 'How does pricing work?',
-        a: 'Nexus offers a free Starter plan (1 seat, 500 tasks/mo, 3 integrations), a Pro plan at $49/seat/mo (unlimited tasks, 50+ integrations, priority Claude access), and an Enterprise plan with custom pricing for advanced security, SSO, SLA, and dedicated infrastructure.',
+        a: 'Nexus offers Starter at $29/month, Pro at $79/month, Team at $249/month, and Enterprise with custom pricing. Credits map to actual agent work, top-ups are one-time add-ons, and the Team tier includes 5 seats plus shared workspace capabilities.',
       },
       {
-        q: 'What counts as a "task"?',
-        a: 'A task is one complete request cycle — from your message to Nexus\'s final response, including all tool calls and reasoning steps within that cycle. Multi-step automations that run in the background count as one task per scheduled execution.',
-      },
-      {
-        q: 'Is there a free trial for Pro?',
-        a: 'Yes. Pro includes a 14-day free trial — no credit card required. You get full access to all Pro features including unlimited tasks and all integrations during the trial period.',
+        q: 'What do credits actually represent?',
+        a: 'Credits map to real agent work. A heavier run that uses multiple tools, automations, or artifacts consumes more credits than a light chat turn. One-time top-ups add credits without changing your subscription tier.',
       },
       {
         q: 'Can I cancel any time?',
-        a: 'Absolutely. No lock-in, no cancellation fees. Cancel from your account settings and your plan downgrades to Starter at the end of your billing period. Your conversation history is preserved.',
+        a: 'Yes. Cancel any time and your paid plan remains active until the end of the current billing period. Your workspace data and conversation history remain intact unless you ask us to delete them.',
       },
     ],
   },

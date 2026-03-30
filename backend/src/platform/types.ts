@@ -201,27 +201,40 @@ export type BillingPlanId = 'starter' | 'pro' | 'team';
 export interface PlanDefinition {
   id: BillingPlanId;
   name: string;
+  stripeProductKey: string;
   monthlyPriceUsd: number;
   includedCredits: number;
   maxAutomations: number;
+  includedSeats: number;
+  extraSeatPriceUsd?: number;
+  supportTier: 'email' | 'slack_email' | 'priority';
   supportsMultiAgent: boolean;
   supportsApprovals: boolean;
+  supportsSharedWorkspace: boolean;
+  supportsLongTermMemory: boolean;
+  supportsAnalyticsDashboard: boolean;
+  features: string[];
   topUpEnabled: boolean;
 }
 
 export interface WorkspaceBillingConfig {
   workspaceId: string;
   planId: BillingPlanId;
+  seatCount: number;
   autoTopUpEnabled: boolean;
   autoTopUpThresholdCredits?: number;
   autoTopUpAmountCredits?: number;
   referralCode: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  subscriptionStatus?: 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'unpaid';
   createdAt: string;
   updatedAt: string;
 }
 
 export interface TopUpOffer {
   id: string;
+  stripeProductKey: string;
   credits: number;
   priceUsd: number;
   bonusCredits?: number;

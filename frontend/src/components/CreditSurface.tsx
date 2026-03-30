@@ -8,6 +8,7 @@ import {
   formatRelativeTime,
   getCreditRecommendation,
   getSuggestedTopUpOfferId,
+  getSuggestedUpgradePlanId,
   useCreditSnapshot,
   useRecentCreditUsage,
 } from '../lib/credits';
@@ -48,8 +49,13 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
   }
 
   async function openPricing() {
+    const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
+    if (!nextPlanId) {
+      window.location.assign('mailto:sales@purpleorange.io?subject=Nexus%20Enterprise');
+      return;
+    }
     try {
-      const session = await createBillingCheckout({ kind: 'subscription', planId: snapshot.planName === 'Starter' ? 'pro' : 'team' });
+      const session = await createBillingCheckout({ kind: 'subscription', planId: nextPlanId });
       if (session.session?.checkoutUrl) {
         window.location.assign(session.session.checkoutUrl);
         return;

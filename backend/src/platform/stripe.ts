@@ -135,11 +135,20 @@ async function createRealCheckoutSession(input: BillingCheckoutSessionInput, pri
 
   const successUrl = getSuccessUrl(input.successUrl);
   const cancelUrl = getCancelUrl(input.cancelUrl);
+  const billing = getBillingStatus(input.workspaceId);
+  const selectedPlan = input.planId ? getPlanDefinition(input.planId) : undefined;
+  const selectedOffer = input.offerId ? listTopUpOffers().find((offer) => offer.id === input.offerId) : undefined;
   const metadata = {
     workspaceId: input.workspaceId,
     kind: input.kind,
+    type: input.kind === 'subscription' ? 'subscription' : 'topup',
+    plan: input.planId || '',
     planId: input.planId || '',
     offerId: input.offerId || '',
+    credits: String(selectedPlan?.includedCredits || selectedOffer?.credits || ''),
+    seats_included: String(selectedPlan?.includedSeats || ''),
+    seat_count: String(billing.config.seatCount || 1),
+    stripe_product_key: selectedPlan?.stripeProductKey || selectedOffer?.stripeProductKey || '',
     ...toMetadata(input.metadata),
   };
 
@@ -282,6 +291,13 @@ function hasLedgerReference(workspaceId: string, referenceId: string): boolean {
   return listLedgerEntries(workspaceId).some((entry) => entry.referenceId === referenceId);
 }
 
+function getPlanIdFromStripeMetadata(metadata?: Record<string, string | null> | null): BillingPlanId | undefined {
+  const extracted = extractMetadata(metadata);
+  const planId = extracted.planId || extracted.plan;
+  if (planId === 'starter' || planId === 'pro' || planId === 'team') return planId;
+  return undefined;
+}
+
 async function fulfillCheckoutSessionCompleted(event: Stripe.Event, session: Stripe.Checkout.Session) {
   const metadata = extractMetadata(session.metadata);
   const workspaceId = metadata.workspaceId || session.client_reference_id || undefined;
@@ -301,23 +317,60 @@ async function fulfillCheckoutSessionCompleted(event: Stripe.Event, session: Str
     purchaseTopUp(workspaceId, offerId, {
       referenceId: session.id,
       note: `Stripe top-up checkout completed: ${offerId}`,
-      metadata: { stripeEventId: event.id, stripeSessionId: session.id, paymentStatus: session.payment_status || 'unknown' },
+      metadata: {
+        stripeEventId: event.id,
+        stripeSessionId: session.id,
+        paymentStatus: session.payment_status || 'unknown',
+        type: 'topup',
+        offerId,
+        credits: metadata.credits || '',
+      },
     });
 
     return { applied: true, workspaceId, kind: 'top_up' as const };
   }
 
   if (session.mode === 'subscription') {
-    const planId = metadata.planId as BillingPlanId | undefined;
-    if (!planId || !['starter', 'pro', 'team'].includes(planId)) {
+    const planId = getPlanIdFromStripeMetadata(session.metadata);
+    if (!planId) {
       return { applied: false, reason: 'missing_plan' as const };
     }
 
-    upsertBillingConfig(workspaceId, { planId });
+    upsertBillingConfig(workspaceId, {
+      planId,
+      seatCount: Number(metadata.seat_count) > 0 ? Number(metadata.seat_count) : 1,
+      stripeCustomerId: typeof session.customer === 'string' ? session.customer : undefined,
+      stripeSubscriptionId: typeof session.subscription === 'string' ? session.subscription : undefined,
+      subscriptionStatus: 'active',
+    });
     return { applied: true, workspaceId, kind: 'subscription' as const };
   }
 
   return { applied: false, reason: 'unsupported_mode' as const };
+}
+
+function fulfillSubscriptionLifecycle(event: Stripe.Event, subscription: Stripe.Subscription) {
+  const metadata = extractMetadata(subscription.metadata);
+  const workspaceId = metadata.workspaceId;
+  if (!workspaceId) {
+    return { applied: false, reason: 'missing_workspace' as const };
+  }
+
+  const planId = getPlanIdFromStripeMetadata(subscription.metadata);
+  upsertBillingConfig(workspaceId, {
+    planId: planId || (subscription.status === 'canceled' ? 'starter' : undefined),
+    stripeCustomerId: typeof subscription.customer === 'string' ? subscription.customer : undefined,
+    stripeSubscriptionId: subscription.id,
+    subscriptionStatus: subscription.status as 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'unpaid',
+  });
+
+  return {
+    applied: true,
+    workspaceId,
+    kind: 'subscription_lifecycle' as const,
+    status: subscription.status,
+    stripeEventId: event.id,
+  };
 }
 
 export async function fulfillStripeWebhookEvent(event: Stripe.Event) {
@@ -331,6 +384,8 @@ export async function fulfillStripeWebhookEvent(event: Stripe.Event) {
     result = await fulfillCheckoutSessionCompleted(event, event.data.object as Stripe.Checkout.Session);
   } else if (event.type === 'checkout.session.async_payment_succeeded') {
     result = await fulfillCheckoutSessionCompleted(event, event.data.object as Stripe.Checkout.Session);
+  } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+    result = fulfillSubscriptionLifecycle(event, event.data.object as Stripe.Subscription);
   }
 
   saveProcessedEvent({

@@ -4,7 +4,7 @@ import {
   Copy, Check, Clock, Brain, ThumbsUp, ThumbsDown, Zap, Shield, Eye, RefreshCw, Sparkles, X,
 } from 'lucide-react';
 import type { Message, ToolCall, SSEEvent, AutonomyMode } from '../types';
-import { fetchCreditEstimate, formatCredits, getSuggestedTopUpOfferId, openBillingCheckout, useCreditSnapshot } from '../lib/credits';
+import { fetchCreditEstimate, formatCredits, getSuggestedTopUpOfferId, getSuggestedUpgradePlanId, openBillingCheckout, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import BillingGateBar from './BillingGateBar';
 
@@ -1193,10 +1193,15 @@ export default function ChatInterface({
   }, []);
 
   const handleUpgradeCheckout = useCallback(async () => {
+    const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
+    if (!nextPlanId) {
+      window.location.assign('mailto:sales@purpleorange.io?subject=Nexus%20Enterprise');
+      return;
+    }
     try {
       const opened = await openBillingCheckout({
         kind: 'subscription',
-        planId: snapshot.planName === 'Starter' ? 'pro' : 'team',
+        planId: nextPlanId,
       });
       if (opened) return;
     } catch {

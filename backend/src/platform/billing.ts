@@ -36,7 +36,15 @@ export interface BillingStatus {
 export type BillingConfigPatch = Partial<
   Pick<
     WorkspaceBillingConfig,
-    'planId' | 'autoTopUpEnabled' | 'autoTopUpThresholdCredits' | 'autoTopUpAmountCredits' | 'referralCode'
+    | 'planId'
+    | 'seatCount'
+    | 'autoTopUpEnabled'
+    | 'autoTopUpThresholdCredits'
+    | 'autoTopUpAmountCredits'
+    | 'referralCode'
+    | 'stripeCustomerId'
+    | 'stripeSubscriptionId'
+    | 'subscriptionStatus'
   >
 >;
 
@@ -47,39 +55,85 @@ const DEFAULT_PLAN_CATALOG: Record<BillingPlanId, PlanDefinition> = {
   starter: {
     id: 'starter',
     name: 'Starter',
+    stripeProductKey: 'nexus_starter_monthly',
     monthlyPriceUsd: 29,
     includedCredits: 500,
     maxAutomations: 3,
+    includedSeats: 1,
+    extraSeatPriceUsd: 29,
+    supportTier: 'email',
     supportsMultiAgent: false,
     supportsApprovals: false,
+    supportsSharedWorkspace: false,
+    supportsLongTermMemory: false,
+    supportsAnalyticsDashboard: false,
+    features: [
+      '500 Nexus credits',
+      '3 active automations',
+      'Web research',
+      'Code execution',
+      'Email support',
+    ],
     topUpEnabled: true,
   },
   pro: {
     id: 'pro',
     name: 'Pro',
-    monthlyPriceUsd: 50,
-    includedCredits: 1000,
-    maxAutomations: 15,
+    stripeProductKey: 'nexus_pro_monthly',
+    monthlyPriceUsd: 79,
+    includedCredits: 2000,
+    maxAutomations: 20,
+    includedSeats: 1,
+    extraSeatPriceUsd: 29,
+    supportTier: 'slack_email',
     supportsMultiAgent: true,
     supportsApprovals: false,
+    supportsSharedWorkspace: false,
+    supportsLongTermMemory: true,
+    supportsAnalyticsDashboard: true,
+    features: [
+      '2,000 Nexus credits',
+      '20 active automations',
+      'Multi-agent orchestration',
+      'Task automation',
+      'Long-term memory',
+      'Slack + email support',
+      'Analytics dashboard',
+    ],
     topUpEnabled: true,
   },
   team: {
     id: 'team',
     name: 'Team',
-    monthlyPriceUsd: 149,
-    includedCredits: 5000,
+    stripeProductKey: 'nexus_team_monthly',
+    monthlyPriceUsd: 249,
+    includedCredits: 7500,
     maxAutomations: 100,
+    includedSeats: 5,
+    extraSeatPriceUsd: 29,
+    supportTier: 'priority',
     supportsMultiAgent: true,
     supportsApprovals: true,
+    supportsSharedWorkspace: true,
+    supportsLongTermMemory: true,
+    supportsAnalyticsDashboard: true,
+    features: [
+      '7,500 Nexus credits',
+      '100 active automations',
+      '5 included seats',
+      'Approvals / review gates',
+      'Admin visibility',
+      'Shared workspace / shared memory',
+      'Priority support',
+    ],
     topUpEnabled: true,
   },
 };
 
 const DEFAULT_TOP_UP_OFFERS: TopUpOffer[] = [
-  { id: 'topup_500', credits: 500, priceUsd: 25 },
-  { id: 'topup_1500', credits: 1500, priceUsd: 65, bonusCredits: 100 },
-  { id: 'topup_5000', credits: 5000, priceUsd: 199, bonusCredits: 500 },
+  { id: 'topup_500', stripeProductKey: 'nexus_topup_500', credits: 500, priceUsd: 35 },
+  { id: 'topup_1500', stripeProductKey: 'nexus_topup_1500', credits: 1500, priceUsd: 99 },
+  { id: 'topup_5000', stripeProductKey: 'nexus_topup_5000', credits: 5000, priceUsd: 249 },
 ];
 
 export function getDefaultPlanCatalog(): PlanDefinition[] {
@@ -97,7 +151,8 @@ export function getPlanDefinition(planId: BillingPlanId): PlanDefinition {
 export function getDefaultBillingConfig(workspaceId: string): WorkspaceBillingConfig {
   return {
     workspaceId,
-    planId: 'pro',
+    planId: 'starter',
+    seatCount: 1,
     autoTopUpEnabled: false,
     autoTopUpThresholdCredits: 100,
     autoTopUpAmountCredits: 500,
@@ -150,7 +205,12 @@ export function upsertBillingConfig(workspaceId: string, patch: BillingConfigPat
 }
 
 export function listTopUpOffers(): TopUpOffer[] {
-  return readJsonFile<TopUpOffer[]>(TOP_UP_OFFERS_FILE, DEFAULT_TOP_UP_OFFERS);
+  const persisted = readJsonFile<TopUpOffer[]>(TOP_UP_OFFERS_FILE, []);
+  const byId = new Map(persisted.map((offer) => [offer.id, offer]));
+  return DEFAULT_TOP_UP_OFFERS.map((offer) => ({
+    ...byId.get(offer.id),
+    ...offer,
+  }));
 }
 
 export function getApplicableTopUpOffer(balanceCredits: number, requiredCredits = 0): TopUpOffer {
@@ -219,7 +279,7 @@ export function calculatePlanLimitState(input: {
       limit: input.plan.maxAutomations,
       message:
         input.automationCount > input.plan.maxAutomations
-          ? `Plan allows ${input.plan.maxAutomations} automations.`
+          ? `Plan allows ${input.plan.maxAutomations} active automations.`
           : 'Automation count is within plan.',
     });
   }
@@ -310,7 +370,9 @@ export function purchaseTopUp(
     note: options?.note || `Top-up purchase: ${offer.credits} credits`,
     metadata: {
       priceUsd: offer.priceUsd,
-      bonusCredits: offer.bonusCredits || 0,
+      type: 'topup',
+      credits: offer.credits,
+      stripeProductKey: offer.stripeProductKey,
       ...(options?.metadata || {}),
     },
   });

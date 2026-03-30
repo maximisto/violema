@@ -4,6 +4,7 @@ import {
   buildReferralMessage,
   buildTopUpRequest,
   getSuggestedTopUpOfferId,
+  getSuggestedUpgradePlanId,
   formatCredits,
   getCreditRecommendation,
   openBillingCheckout,
@@ -38,10 +39,15 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
   }
 
   async function handleUpgrade() {
+    const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
+    if (!nextPlanId) {
+      window.location.assign('mailto:sales@purpleorange.io?subject=Nexus%20Enterprise');
+      return;
+    }
     try {
       const upgraded = await openBillingCheckout({
         kind: 'subscription',
-        planId: snapshot.planName === 'Starter' ? 'pro' : 'team',
+        planId: nextPlanId,
       });
       if (upgraded) return;
     } catch {

@@ -88,9 +88,9 @@ By connecting an integration, you authorise Nexus to interact with that service 
   {
     id: 'payment',
     title: '9. Payment & Subscriptions',
-    content: `**Billing.** Paid subscriptions are billed monthly or annually in advance. Prices are listed on our Pricing page and may change with 30 days' notice.
+    content: `**Billing.** Paid subscriptions are billed monthly in advance. Prices are listed on our Pricing page and may change with 30 days' notice.
 
-**Free trial.** Pro plans include a 14-day free trial. You will not be charged until the trial ends. You may cancel before the trial ends to avoid any charge.
+**Top-ups.** Credits purchased as top-ups are one-time add-ons to an active workspace account. Top-ups do not change your subscription tier, included seats, or feature access.
 
 **Cancellation.** You may cancel your subscription at any time from account settings. Cancellation takes effect at the end of the current billing period. We do not provide refunds for partial periods except where required by law.
 

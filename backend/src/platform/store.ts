@@ -53,8 +53,8 @@ function savePlatformState(state: Partial<JsonStoreShape>) {
 
 export function ensureWorkspaceCredits(
   workspaceId: string,
-  planName = 'Pro',
-  monthlyCredits = 1000
+  planName = 'Starter',
+  monthlyCredits = 500
 ) {
   const state = getPlatformState();
   const existing = state.ledger.filter((entry) => entry.workspaceId === workspaceId);
