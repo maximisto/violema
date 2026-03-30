@@ -1,19 +1,41 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Eye, Globe, Lock, Mail, MonitorSmartphone, Slack } from 'lucide-react';
-import { saveAuthSession, type AccessRole, type AuthMethod } from '../lib/auth';
+import { saveAuthSession, type AuthMethod } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
 
-const METHODS: Array<{ id: AuthMethod; label: string; hint: string }> = [
-  { id: 'email', label: 'Email access', hint: 'Fastest way in right now.' },
-  { id: 'google', label: 'Google Workspace', hint: 'Best for shared team onboarding.' },
-  { id: 'microsoft', label: 'Microsoft', hint: 'For enterprise and internal ops teams.' },
-];
-
-const ROLES: Array<{ id: AccessRole; label: string; hint: string }> = [
-  { id: 'user', label: 'Operator', hint: 'Using Nexus for real work inside your stack.' },
-  { id: 'tester', label: 'Tester', hint: 'Evaluating flows, QA, and product behavior.' },
-  { id: 'investor', label: 'Investor', hint: 'Reviewing the product and commercial surface.' },
+const PROVIDER_METHODS: Array<{
+  id: Exclude<AuthMethod, 'email'>;
+  label: string;
+  accent: string;
+  icon: JSX.Element;
+}> = [
+  {
+    id: 'google',
+    label: 'Continue with Google',
+    accent: 'from-[#3c4043] via-[#5f6368] to-[#3c4043]',
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+        <path fill="#4285F4" d="M21.35 11.1H12v2.9h5.34c-.23 1.4-1.05 2.6-2.23 3.4v2.83h3.6c2.1-1.94 3.31-4.8 3.31-8.13 0-.71-.06-1.24-.17-2Z" />
+        <path fill="#34A853" d="M12 22c2.97 0 5.46-.98 7.28-2.66l-3.6-2.83c-.99.66-2.26 1.05-3.68 1.05-2.83 0-5.23-1.91-6.09-4.47H2.17v2.9A10 10 0 0 0 12 22Z" />
+        <path fill="#FBBC05" d="M5.91 13.09A5.99 5.99 0 0 1 5.6 12c0-.38.05-.75.11-1.09V8.01H2.17A10 10 0 0 0 2 12c0 1.6.38 3.12 1.04 4.47l2.87-2.38Z" />
+        <path fill="#EA4335" d="M12 5.88c1.62 0 3.08.56 4.22 1.66l3.16-3.16C17.45 2.54 14.97 1.5 12 1.5A10 10 0 0 0 2.17 8.01l3.74 2.9C6.77 7.8 9.17 5.88 12 5.88Z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'microsoft',
+    label: 'Continue with Microsoft',
+    accent: 'from-[#00a4ef] via-[#7fba00] to-[#f25022]',
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+        <rect x="2.5" y="2.5" width="8.5" height="8.5" fill="#F25022" rx="1.2" />
+        <rect x="13" y="2.5" width="8.5" height="8.5" fill="#7FBA00" rx="1.2" />
+        <rect x="2.5" y="13" width="8.5" height="8.5" fill="#00A4EF" rx="1.2" />
+        <rect x="13" y="13" width="8.5" height="8.5" fill="#FFB900" rx="1.2" />
+      </svg>
+    ),
+  },
 ];
 
 const EDUCATION_CARDS = [
@@ -43,7 +65,6 @@ export default function Signup() {
   const navigate = useNavigate();
   const nextPath = useNextPath();
   const [method, setMethod] = useState<AuthMethod>('email');
-  const [role, setRole] = useState<AccessRole>('user');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -57,7 +78,7 @@ export default function Signup() {
     saveAuthSession({
       email: email.trim(),
       name: name.trim(),
-      role,
+      role: 'user',
       method,
       acceptedTerms,
       acceptedEducation,
@@ -128,44 +149,38 @@ export default function Signup() {
             </div>
 
             <div className="mt-6">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">Access method</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">Sign in with</p>
               <div className="mt-3 grid gap-2">
-                {METHODS.map((item) => (
+                {PROVIDER_METHODS.map((item) => (
                   <button
                     key={item.id}
                     type="button"
                     onClick={() => setMethod(item.id)}
-                    className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                    className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
                       method === item.id
-                        ? 'border-violet-500/40 bg-violet-500/10'
-                        : 'border-navy-700/80 bg-navy-950/45 hover:border-violet-700/40'
+                        ? 'border-violet-500/40 bg-violet-500/10 shadow-[0_0_0_1px_rgba(168,85,247,0.14)]'
+                        : 'border-navy-700/80 bg-navy-950/45 hover:border-violet-700/40 hover:bg-navy-900/65'
                     }`}
                   >
-                    <p className="text-sm font-semibold text-white">{item.label}</p>
-                    <p className="mt-1 text-sm text-slate-400">{item.hint}</p>
+                    <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${item.accent} text-white shadow-sm`}>
+                      {item.icon}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white">{item.label}</p>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {item.id === 'google' ? 'Fast for workspace users' : 'Preferred for enterprise sign-in'}
+                      </p>
+                    </div>
                   </button>
                 ))}
               </div>
             </div>
 
             <div className="mt-6">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">Account type</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                {ROLES.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setRole(item.id)}
-                    className={`rounded-2xl border px-4 py-3 text-left transition-all ${
-                      role === item.id
-                        ? 'border-cyan-500/35 bg-cyan-500/10'
-                        : 'border-navy-700/80 bg-navy-950/45 hover:border-cyan-700/30'
-                    }`}
-                  >
-                    <p className="text-sm font-semibold text-white">{item.label}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-500">{item.hint}</p>
-                  </button>
-                ))}
+              <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">
+                <span className="h-px flex-1 bg-white/8" />
+                <span>Or use email</span>
+                <span className="h-px flex-1 bg-white/8" />
               </div>
             </div>
 
@@ -224,7 +239,7 @@ export default function Signup() {
               disabled={!canContinue}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-glow-violet transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Continue to plans
+              Create account
               <ArrowRight className="h-4 w-4" />
             </button>
             <p className="mt-3 text-center text-xs text-slate-500">

@@ -38,7 +38,7 @@ export default function Login() {
           </div>
           <h1 className="mt-6 text-3xl font-bold text-white">Return to your workspace</h1>
           <p className="mt-3 text-slate-400">
-            Use the same email you used for access setup. This lightweight sign-in keeps testers, investors, and users out of the product until they’ve gone through the gate.
+            Use the same email you used during setup. This lightweight sign-in restores your local workspace access on this device.
           </p>
 
           <div className="mt-6 grid gap-4">

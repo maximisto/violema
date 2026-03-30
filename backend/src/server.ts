@@ -879,7 +879,7 @@ function normalizeModelTier(profile: TextProfile): 'micro' | 'default' | 'hard' 
 }
 
 interface AutomationExecutionArtifact {
-  kind: 'web_search' | 'query_data' | 'summary' | 'delivery';
+  kind: 'web_search' | 'query_data' | 'summary' | 'delivery' | 'note';
   title: string;
   payload: Record<string, unknown>;
 }
@@ -927,6 +927,72 @@ function inferAutomationQueryDataInput(action: string) {
   }
 
   return null;
+}
+
+function inferAutomationDeliveryTarget(action: string) {
+  const emailMatch = action.match(/([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i);
+  if (emailMatch?.[1]) {
+    return {
+      channel: 'email' as const,
+      target: emailMatch[1].trim(),
+    };
+  }
+
+  const slackChannelMatch = action.match(/(?:to|in|into|post to|send to|deliver to)\s+(#[a-z0-9_-]+)/i) || action.match(/(#[a-z0-9_-]+)/i);
+  if (slackChannelMatch?.[1]) {
+    return {
+      channel: 'slack' as const,
+      target: slackChannelMatch[1].trim(),
+    };
+  }
+
+  const slackUserMatch = action.match(/(@[a-z0-9._-]+)/i);
+  if (slackUserMatch?.[1]) {
+    return {
+      channel: 'slack' as const,
+      target: slackUserMatch[1].trim(),
+    };
+  }
+
+  return null;
+}
+
+function inferAutomationActionKind(action: string) {
+  const normalized = normalizeAutomationActionText(action);
+  const queryDataInput = inferAutomationQueryDataInput(action);
+
+  if (queryDataInput) {
+    return {
+      kind: 'query_data' as const,
+      queryDataInput,
+    };
+  }
+
+  if (/(search|scan internet|scan the internet|scan web|research|news|competitor)/.test(normalized)) {
+    return {
+      kind: 'web_search' as const,
+      query: inferAutomationSearchQuery(action, {
+        name: action,
+      }),
+    };
+  }
+
+  if (/(generate|report|summary|digest|briefing|recap)/.test(normalized)) {
+    return {
+      kind: 'summary' as const,
+    };
+  }
+
+  if (actionNeedsDelivery(action)) {
+    return {
+      kind: 'delivery' as const,
+      deliveryTarget: inferAutomationDeliveryTarget(action),
+    };
+  }
+
+  return {
+    kind: 'note' as const,
+  };
 }
 
 function inferAutomationModelTier(actions: string[]): 'default' | 'ops' {
@@ -986,13 +1052,14 @@ async function executeAutomationCore(
   const artifacts: AutomationExecutionArtifact[] = [];
   const stepErrors: string[] = [];
   let summaryText = '';
+  let summaryRequested = false;
 
   for (const action of automation.actions) {
-    const normalized = normalizeAutomationActionText(action);
+    const step = inferAutomationActionKind(action);
 
     try {
-      if (/(search|scan internet|scan the internet|scan web|research|news|competitor)/.test(normalized)) {
-        const query = inferAutomationSearchQuery(action, automation);
+      if (step.kind === 'web_search') {
+        const query = step.query || inferAutomationSearchQuery(action, automation);
         const payload = await searchWeb(query, 6);
         artifacts.push({
           kind: 'web_search',
@@ -1002,9 +1069,8 @@ async function executeAutomationCore(
         continue;
       }
 
-      const queryDataInput = inferAutomationQueryDataInput(action);
-      if (queryDataInput) {
-        const payload = JSON.parse(await executeToolCall('query_data', queryDataInput)) as Record<string, unknown>;
+      if (step.kind === 'query_data') {
+        const payload = JSON.parse(await executeToolCall('query_data', step.queryDataInput)) as Record<string, unknown>;
         artifacts.push({
           kind: 'query_data',
           title: action,
@@ -1012,14 +1078,58 @@ async function executeAutomationCore(
         });
         continue;
       }
+
+      if (step.kind === 'delivery') {
+        summaryRequested = true;
+        const deliveryTarget = automation.notify?.trim() || step.deliveryTarget?.target?.trim() || null;
+        artifacts.push({
+          kind: 'note',
+          title: action,
+          payload: {
+            requested_delivery: true,
+            delivery_target: deliveryTarget,
+            delivery_channel: step.deliveryTarget?.channel || null,
+            status: deliveryTarget ? 'queued' : 'skipped',
+            note: deliveryTarget
+              ? 'Delivery will be attempted after summary generation.'
+              : 'No delivery target was supplied, so this step was kept local.',
+          },
+        });
+        continue;
+      }
+
+      if (step.kind === 'summary') {
+        summaryRequested = true;
+        artifacts.push({
+          kind: 'note',
+          title: action,
+          payload: {
+            requested_summary: true,
+            note: 'Summary/report requested.',
+          },
+        });
+        continue;
+      }
+
+      if (step.kind === 'note') {
+        artifacts.push({
+          kind: 'note',
+          title: action,
+          payload: {
+            note: 'No direct tool call needed for this step.',
+          },
+        });
+      }
     } catch (error) {
       stepErrors.push(`${action}: ${error instanceof Error ? error.message : 'Unknown step error'}`);
     }
   }
 
   const shouldGenerateSummary =
+    summaryRequested ||
     automation.actions.some(actionNeedsSummary) ||
-    artifacts.some((artifact) => artifact.kind === 'web_search' || artifact.kind === 'query_data');
+    artifacts.some((artifact) => artifact.kind === 'web_search' || artifact.kind === 'query_data' || artifact.kind === 'note') ||
+    stepErrors.length > 0;
 
   if (shouldGenerateSummary) {
     const evidence = artifacts
@@ -1127,21 +1237,22 @@ async function runAutomation(automation: {
     let delivery: Record<string, unknown> | null = null;
     let deliveryError: string | null = null;
 
-    const shouldDeliver = Boolean(
-      automation.notify ||
-      automation.actions.some(actionNeedsDelivery)
-    );
+    const inferredActionDeliveryTarget = automation.actions
+      .map(inferAutomationDeliveryTarget)
+      .find((target): target is { channel: 'slack' | 'email'; target: string } => Boolean(target));
+    const deliveryTarget = automation.notify?.trim() || inferredActionDeliveryTarget?.target || null;
+    const shouldDeliver = Boolean(deliveryTarget);
 
-    if (shouldDeliver && automation.notify) {
+    if (shouldDeliver && deliveryTarget) {
       try {
         delivery = await sendMessage({
-          to: automation.notify,
+          to: deliveryTarget,
           subject: `Automation run: ${automation.name}`,
           body: summary,
         });
         execution.artifacts.push({
           kind: 'delivery',
-          title: `Delivered to ${automation.notify}`,
+          title: `Delivered to ${deliveryTarget}`,
           payload: delivery,
         });
       } catch (error) {
@@ -1169,7 +1280,7 @@ async function runAutomation(automation: {
       delegationState: 'completed',
       metadata: {
         automationId: automation.id,
-        notify: automation.notify || null,
+        notify: deliveryTarget || null,
         delegation: delegation.ownership,
         latestSummary: summary,
         latestArtifacts: execution.artifacts,

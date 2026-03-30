@@ -150,6 +150,21 @@ interface DashboardTaskItem {
   lastRunAt?: string;
   lastRunStatus?: 'succeeded' | 'failed';
   nextRunAt?: string;
+  latestSummary?: string;
+  latestArtifacts?: DashboardTaskArtifact[];
+  taskUpdatedAt?: string;
+}
+
+interface DashboardTaskArtifact {
+  kind: string;
+  title: string;
+  payload: Record<string, unknown>;
+}
+
+interface DashboardEvidenceLink {
+  href: string;
+  label: string;
+  source: string;
 }
 
 interface AutomationEditorDraft {
@@ -263,6 +278,174 @@ function mapTaskIcon(status: DashboardTaskStatus) {
   if (status === 'alert') return AlertCircle;
   if (status === 'complete') return CheckSquare;
   return Clock;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function readArtifacts(value: unknown): DashboardTaskArtifact[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!isRecord(item)) return null;
+      const title = readString(item.title);
+      const kind = readString(item.kind);
+      const payload = isRecord(item.payload) ? item.payload : {};
+      if (!title || !kind) return null;
+      return { title, kind, payload };
+    })
+    .filter((item): item is DashboardTaskArtifact => Boolean(item));
+}
+
+function getTaskMetadataSummary(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
+  return readString(run?.metadata?.summary) || readString(task?.metadata?.latestSummary);
+}
+
+function getTaskMetadataArtifacts(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
+  const runArtifacts = readArtifacts(run?.metadata?.artifacts);
+  if (runArtifacts.length > 0) return runArtifacts;
+  return readArtifacts(task?.metadata?.latestArtifacts);
+}
+
+function getTaskAutomationId(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
+  return readString(run?.metadata?.automationId) || readString(task?.metadata?.automationId);
+}
+
+function normalizeTaskTitle(title: string) {
+  return title.trim().toLowerCase();
+}
+
+function stripMarkdownPreview(value?: string) {
+  if (!value) return '';
+  return value
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function truncateText(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function formatSummaryPreview(value?: string, maxLength = 260) {
+  const normalized = stripMarkdownPreview(value);
+  if (!normalized) return '';
+  return truncateText(normalized, maxLength);
+}
+
+function getHostnameLabel(href: string) {
+  try {
+    return new URL(href).hostname.replace(/^www\./, '');
+  } catch {
+    return 'source';
+  }
+}
+
+function collectEvidenceLinks(
+  value: unknown,
+  links: DashboardEvidenceLink[],
+  seen: Set<string>,
+  source: string,
+  depth = 0,
+) {
+  if (depth > 4 || value == null) return;
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectEvidenceLinks(entry, links, seen, source, depth + 1));
+    return;
+  }
+
+  if (!isRecord(value)) return;
+
+  const href =
+    readString(value.url) ||
+    readString(value.href) ||
+    readString(value.link) ||
+    readString(value.sourceUrl) ||
+    readString(value.source_url);
+
+  if (href && /^https?:\/\//i.test(href) && !seen.has(href)) {
+    const label =
+      readString(value.title) ||
+      readString(value.name) ||
+      readString(value.label) ||
+      getHostnameLabel(href);
+    links.push({ href, label, source });
+    seen.add(href);
+  }
+
+  Object.values(value).forEach((entry) => collectEvidenceLinks(entry, links, seen, source, depth + 1));
+}
+
+function extractEvidenceLinks(artifacts?: DashboardTaskArtifact[]) {
+  if (!artifacts?.length) return [];
+  const links: DashboardEvidenceLink[] = [];
+  const seen = new Set<string>();
+
+  artifacts.forEach((artifact) => {
+    collectEvidenceLinks(artifact.payload, links, seen, artifact.title);
+  });
+
+  return links.slice(0, 4);
+}
+
+function getTaskRunOutcome(task?: DashboardTaskItem) {
+  if (!task) {
+    return {
+      label: 'No runs yet',
+      tone: 'border-navy-700/70 bg-navy-950/50 text-slate-300',
+      detail: 'This automation has not produced a result yet.',
+    };
+  }
+
+  if (task.automationStatus === 'paused') {
+    return {
+      label: 'Paused',
+      tone: 'border-amber-500/20 bg-amber-500/10 text-amber-300',
+      detail: 'Runs are paused until you resume this automation.',
+    };
+  }
+
+  if (task.runStatus === 'running' || task.runStatus === 'retrying') {
+    return {
+      label: task.runStatus === 'retrying' ? 'Retrying' : 'Running',
+      tone: 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300',
+      detail: 'A fresh run is currently in progress.',
+    };
+  }
+
+  if (task.runStatus === 'failed' || task.lastRunStatus === 'failed' || task.status === 'alert') {
+    return {
+      label: 'Last run failed',
+      tone: 'border-red-500/20 bg-red-500/10 text-red-300',
+      detail: 'The most recent run did not complete cleanly.',
+    };
+  }
+
+  if (task.runStatus === 'succeeded' || task.lastRunStatus === 'succeeded' || task.status === 'complete') {
+    return {
+      label: 'Last run succeeded',
+      tone: 'border-green-500/20 bg-green-500/10 text-green-300',
+      detail: 'The latest run completed and produced usable output.',
+    };
+  }
+
+  return {
+    label: 'Waiting for first result',
+    tone: 'border-violet-500/20 bg-violet-500/10 text-violet-300',
+    detail: 'This automation is scheduled but has not finished a run yet.',
+  };
 }
 
 function inferConversationTags(conversation: Conversation) {
@@ -422,98 +605,155 @@ export default function Dashboard() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  useEffect(() => {
-    const controller = new AbortController();
+  const handleNewChat = useCallback(() => {
+    setActiveConvoId('new');
+    setNewConvoMessages([]);
+    setSearchQuery('');
+    if (isMobileSidebar) setSidebarOpen(false);
+  }, []);
+
+  const handleDeleteConvo = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      setDeleteConfirmId(null);
+      if (activeConvoId === id) {
+        setActiveConvoId('new');
+        setNewConvoMessages([]);
+      }
+    },
+    [activeConvoId, isMobileSidebar]
+  );
+
+  const loadTaskPanelData = useCallback(async (signal?: AbortSignal) => {
     const workspace = resolveWorkspaceContext();
     const headers = {
       'X-Workspace-Id': workspace.workspaceId,
       'X-Workspace-Name': workspace.workspaceName,
     };
-
-    Promise.all([
-      fetch('/api/automations', {
-        headers,
-        signal: controller.signal,
-      }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('automations')))),
+    const [automationPayload, taskPayload, runPayload] = await Promise.all([
+      fetch('/api/automations', { headers, signal }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('automations')))),
       fetch(`/api/platform/tasks?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
         headers,
-        signal: controller.signal,
+        signal,
       }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('tasks')))),
       fetch(`/api/platform/task-runs?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
         headers,
-        signal: controller.signal,
+        signal,
       }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('runs')))),
-    ])
-      .then(([automationPayload, taskPayload, runPayload]) => {
-        const automations = Array.isArray(automationPayload?.items) ? automationPayload.items as AutomationApiRecord[] : [];
-        const tasks = Array.isArray(taskPayload?.items) ? taskPayload.items as PlatformTaskRecord[] : [];
-        const runs = Array.isArray(runPayload?.items) ? runPayload.items as PlatformTaskRunRecord[] : [];
-        const latestRunByTask = new Map<string, PlatformTaskRunRecord>();
+    ]);
 
-        runs.forEach((run) => {
-          const existing = latestRunByTask.get(run.taskId);
-          const runTime = Date.parse(run.finishedAt || run.startedAt || '');
-          const existingTime = existing ? Date.parse(existing.finishedAt || existing.startedAt || '') : 0;
-          if (!existing || runTime > existingTime) latestRunByTask.set(run.taskId, run);
-        });
+    const automations = Array.isArray(automationPayload?.items) ? automationPayload.items as AutomationApiRecord[] : [];
+    const tasks = Array.isArray(taskPayload?.items) ? taskPayload.items as PlatformTaskRecord[] : [];
+    const runs = Array.isArray(runPayload?.items) ? runPayload.items as PlatformTaskRunRecord[] : [];
+    const latestRunByTask = new Map<string, PlatformTaskRunRecord>();
 
-        const liveTasks = tasks
-          .slice(0, 12)
-          .map((task) => {
-            const latestRun = latestRunByTask.get(task.id);
-            const status = mapPlatformStatus(latestRun?.status || task.status);
-            return {
-              id: task.id,
-              title: task.title,
-              status,
-              time: formatRelativeTimeFromIso(latestRun?.finishedAt || latestRun?.startedAt || task.updatedAt),
-              icon: mapTaskIcon(status),
-              description: task.description,
-              source: 'live' as const,
-              modelTier: latestRun?.modelTier,
-              agentRole: latestRun?.agentRole,
-              runStatus: latestRun?.status,
-            };
-          });
+    runs.forEach((run) => {
+      const existing = latestRunByTask.get(run.taskId);
+      const runTime = Date.parse(run.finishedAt || run.startedAt || '');
+      const existingTime = existing ? Date.parse(existing.finishedAt || existing.startedAt || '') : 0;
+      if (!existing || runTime > existingTime) latestRunByTask.set(run.taskId, run);
+    });
 
-        const automationItems = automations
-          .slice(0, 12)
-          .map((automation) => ({
-            id: automation.id,
-            title: automation.name,
-            status: automation.status === 'paused' ? 'alert' as DashboardTaskStatus : 'scheduled' as DashboardTaskStatus,
-            time: automation.schedule,
-            icon: automation.status === 'paused' ? AlertCircle : Clock,
-            description: automation.description,
-            source: 'live' as const,
-            automationId: automation.id,
-            schedule: automation.schedule,
-            notify: automation.notify,
-            condition: automation.condition,
-            actions: automation.actions,
-            automationStatus: automation.status,
-          }));
+    const taskContextByAutomationId = new Map<string, { task: PlatformTaskRecord; latestRun?: PlatformTaskRunRecord }>();
+    const taskContextByTitle = new Map<string, { task: PlatformTaskRecord; latestRun?: PlatformTaskRunRecord }>();
 
-        if (automationItems.length > 0) {
-          setLiveAutomations(automationItems);
-          setSelectedTaskId((current) => current || automationItems[0].id);
-        } else {
-          setLiveAutomations([]);
-        }
+    tasks.forEach((task) => {
+      const latestRun = latestRunByTask.get(task.id);
+      const context = { task, latestRun };
+      const automationId = getTaskAutomationId(task, latestRun);
+      if (automationId) taskContextByAutomationId.set(automationId, context);
+      taskContextByTitle.set(normalizeTaskTitle(task.title), context);
+    });
 
-        if (liveTasks.length > 0) {
-          setPlatformTasks(liveTasks);
-        } else {
-          setPlatformTasks([]);
-        }
-      })
+    const liveTasks = tasks
+      .slice(0, 12)
+      .map((task) => {
+        const latestRun = latestRunByTask.get(task.id);
+        const status = mapPlatformStatus(latestRun?.status || task.status);
+        return {
+          id: task.id,
+          title: task.title,
+          status,
+          time: formatRelativeTimeFromIso(latestRun?.finishedAt || latestRun?.startedAt || task.updatedAt),
+          icon: mapTaskIcon(status),
+          description: task.description,
+          source: 'live' as const,
+          modelTier: latestRun?.modelTier,
+          agentRole: latestRun?.agentRole,
+          runStatus: latestRun?.status,
+          lastRunAt: latestRun?.finishedAt || latestRun?.startedAt,
+          latestSummary: getTaskMetadataSummary(task, latestRun),
+          latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
+          taskUpdatedAt: task.updatedAt,
+        };
+      });
+
+    const automationItems = automations
+      .slice(0, 12)
+      .map((automation) => {
+        const taskContext =
+          taskContextByAutomationId.get(automation.id) ||
+          taskContextByTitle.get(normalizeTaskTitle(automation.name));
+        const latestRun = taskContext?.latestRun;
+        const task = taskContext?.task;
+        const status = automation.status === 'paused'
+          ? 'alert' as DashboardTaskStatus
+          : mapPlatformStatus(latestRun?.status || automation.last_run_status || task?.status || 'queued');
+
+        return {
+          id: automation.id,
+          title: automation.name,
+          status,
+          time: automation.next_run_at ? `Next ${formatAutomationRunTime(automation.next_run_at)}` : automation.schedule,
+          icon: status === 'alert' ? AlertCircle : mapTaskIcon(status),
+          description: automation.description || task?.description,
+          source: 'live' as const,
+          modelTier: latestRun?.modelTier,
+          agentRole: latestRun?.agentRole,
+          runStatus: latestRun?.status,
+          automationId: automation.id,
+          schedule: automation.schedule,
+          notify: automation.notify,
+          condition: automation.condition,
+          actions: automation.actions,
+          automationStatus: automation.status,
+          timezone: automation.timezone,
+          lastRunAt: latestRun?.finishedAt || latestRun?.startedAt || automation.last_run_at,
+          lastRunStatus: latestRun?.status === 'succeeded' || latestRun?.status === 'failed'
+            ? latestRun.status
+            : automation.last_run_status,
+          nextRunAt: automation.next_run_at,
+          latestSummary: getTaskMetadataSummary(task, latestRun),
+          latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
+          taskUpdatedAt: task?.updatedAt,
+        };
+      });
+
+    if (automationItems.length > 0) {
+      setLiveAutomations(automationItems);
+      setSelectedTaskId((current) => current || automationItems[0].id);
+    } else {
+      setLiveAutomations([]);
+    }
+
+    if (liveTasks.length > 0) {
+      setPlatformTasks(liveTasks);
+    } else {
+      setPlatformTasks([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadTaskPanelData(controller.signal)
       .catch(() => {
         setLiveAutomations([]);
         setPlatformTasks([]);
       });
 
     return () => controller.abort();
-  }, []);
+  }, [loadTaskPanelData]);
 
   // Close delete confirm on outside activity
   useEffect(() => {
@@ -558,61 +798,9 @@ export default function Dashboard() {
     return () => window.clearTimeout(timeout);
   }, [automationEditor]);
 
-  const handleNewChat = useCallback(() => {
-    setActiveConvoId('new');
-    setNewConvoMessages([]);
-    setSearchQuery('');
-    if (isMobileSidebar) setSidebarOpen(false);
-  }, []);
-
-  const handleDeleteConvo = useCallback(
-    (id: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      setConversations((prev) => prev.filter((c) => c.id !== id));
-      setDeleteConfirmId(null);
-      if (activeConvoId === id) {
-        setActiveConvoId('new');
-        setNewConvoMessages([]);
-      }
-    },
-    [activeConvoId, isMobileSidebar]
-  );
-
   const refreshAutomations = useCallback(async () => {
-    const workspace = resolveWorkspaceContext();
-    const headers = {
-      'X-Workspace-Id': workspace.workspaceId,
-      'X-Workspace-Name': workspace.workspaceName,
-    };
-    const response = await fetch('/api/automations', { headers });
-    if (!response.ok) throw new Error('Could not refresh automations');
-    const payload = await response.json() as { items?: AutomationApiRecord[] };
-    const items = Array.isArray(payload.items) ? payload.items : [];
-    const mapped = items.slice(0, 12).map((automation) => ({
-      id: automation.id,
-      title: automation.name,
-      status: automation.status === 'paused' ? 'alert' as DashboardTaskStatus : 'scheduled' as DashboardTaskStatus,
-      time: automation.next_run_at ? `Next ${formatAutomationRunTime(automation.next_run_at)}` : automation.schedule,
-      icon: automation.status === 'paused' ? AlertCircle : Clock,
-      description: automation.description,
-      source: 'live' as const,
-      automationId: automation.id,
-      schedule: automation.schedule,
-      notify: automation.notify,
-      condition: automation.condition,
-      actions: automation.actions,
-      automationStatus: automation.status,
-      timezone: automation.timezone,
-      lastRunAt: automation.last_run_at,
-      lastRunStatus: automation.last_run_status,
-      nextRunAt: automation.next_run_at,
-    }));
-    setLiveAutomations(mapped);
-    setSelectedTaskId((current) => {
-      if (!mapped.length) return current;
-      return mapped.some((item) => item.id === current) ? current : mapped[0].id;
-    });
-  }, []);
+    await loadTaskPanelData();
+  }, [loadTaskPanelData]);
 
   const showNotice = useCallback((tone: 'success' | 'error', message: string) => {
     setUiNotice({ tone, message });
@@ -871,6 +1059,9 @@ export default function Dashboard() {
   );
   const selectedTask = taskItems.find((task) => task.id === selectedTaskId) ?? taskItems[0];
   const selectedTaskMeta = selectedTask ? getTaskStatusMeta(selectedTask.status as 'scheduled' | 'complete' | 'alert') : null;
+  const selectedTaskOutcome = useMemo(() => getTaskRunOutcome(selectedTask), [selectedTask]);
+  const selectedTaskSummary = useMemo(() => formatSummaryPreview(selectedTask?.latestSummary, 360), [selectedTask?.latestSummary]);
+  const selectedTaskEvidenceLinks = useMemo(() => extractEvidenceLinks(selectedTask?.latestArtifacts), [selectedTask?.latestArtifacts]);
   const lowCreditRunway = snapshot.projectedDaysLeft <= 7;
   const automationActionCount = useMemo(() => {
     if (!automationEditor) return 0;
@@ -1676,7 +1867,7 @@ export default function Dashboard() {
               className={`${
                 isMobileSidebar
                   ? 'fixed inset-x-2 bottom-2 top-20 z-40 rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.58)]'
-                  : 'w-72 flex-shrink-0'
+                  : 'w-[22rem] flex-shrink-0'
               } border-l border-navy-800/80 bg-gradient-to-b from-navy-900/60 via-navy-900/36 to-navy-950/60 flex flex-col overflow-hidden backdrop-blur-md shadow-[inset_1px_0_0_rgba(255,255,255,0.03)]`}
             >
               <div className="flex items-center justify-between px-4 py-3.5 border-b border-navy-800/80 bg-gradient-to-r from-violet-500/8 via-navy-950/30 to-cyan-500/6">
@@ -1739,24 +1930,24 @@ export default function Dashboard() {
                       <p className="mt-1 text-slate-200">{selectedTask?.nextRunAt ? formatAutomationRunTime(selectedTask.nextRunAt) : selectedTask?.time}</p>
                     </div>
                     <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                      <p className="uppercase tracking-[0.18em] text-slate-600">Status</p>
-                      <p className="mt-1 text-slate-200">{selectedTaskMeta?.label ?? 'Scheduled'}</p>
+                      <p className="uppercase tracking-[0.18em] text-slate-600">Last outcome</p>
+                      <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${selectedTaskOutcome.tone}`}>
+                        {selectedTaskOutcome.label}
+                      </span>
                     </div>
                   </div>
-                  {(selectedTask?.lastRunAt || selectedTask?.timezone) && (
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
-                      <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                        <p className="uppercase tracking-[0.18em] text-slate-600">Last run</p>
-                        <p className="mt-1 text-slate-200">
-                          {selectedTask?.lastRunAt ? formatAutomationRunTime(selectedTask.lastRunAt) : 'Not yet'}
-                        </p>
-                      </div>
-                      <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                        <p className="uppercase tracking-[0.18em] text-slate-600">Timezone</p>
-                        <p className="mt-1 text-slate-200">{selectedTask?.timezone || getLocalTimeZone()}</p>
-                      </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                      <p className="uppercase tracking-[0.18em] text-slate-600">Last run</p>
+                      <p className="mt-1 text-slate-200">
+                        {selectedTask?.lastRunAt ? formatAutomationRunTime(selectedTask.lastRunAt) : 'Not yet'}
+                      </p>
                     </div>
-                  )}
+                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                      <p className="uppercase tracking-[0.18em] text-slate-600">Timezone</p>
+                      <p className="mt-1 text-slate-200">{selectedTask?.timezone || getLocalTimeZone()}</p>
+                    </div>
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
                     <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
                       {selectedTask?.source === 'live' ? 'Live task' : 'Preview task'}
@@ -1772,15 +1963,63 @@ export default function Dashboard() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
-                    {selectedTask?.description
-                      ? selectedTask.description
-                      : selectedTask?.status === 'alert'
-                      ? 'This automation needs attention. Use the controls below to inspect, pause, or update it before the next run.'
-                      : selectedTask?.status === 'complete'
-                        ? 'This workflow is running cleanly. Keep it active or copy the pattern into another workflow.'
-                        : 'This workflow is on schedule. Open it for details or tweak the cadence before the next run.'}
-                  </p>
+                  <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Latest result</p>
+                        <p className="mt-1 text-[11px] text-slate-500">{selectedTaskOutcome.detail}</p>
+                      </div>
+                      {selectedTask?.lastRunAt && (
+                        <span className="rounded-full border border-navy-700/70 bg-navy-900/60 px-2 py-0.5 text-[10px] text-slate-400">
+                          {formatRelativeTimeFromIso(selectedTask.lastRunAt)}
+                        </span>
+                      )}
+                    </div>
+                    {selectedTaskSummary ? (
+                      <p className="mt-3 text-[12px] leading-5 text-slate-200">
+                        {selectedTaskSummary}
+                      </p>
+                    ) : (
+                      <div className="mt-3 rounded-xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-2.5 text-[11px] leading-relaxed text-slate-500">
+                        {selectedTaskOutcome.label === 'Last run failed'
+                          ? 'The last run failed before it produced a concise summary. Check the workflow steps or delivery target and run it again.'
+                          : selectedTask?.lastRunAt
+                            ? 'The latest run finished, but it did not store a summary preview yet.'
+                            : 'No run output yet. Start the automation manually or wait for the next scheduled run.'}
+                      </div>
+                    )}
+                    {selectedTaskEvidenceLinks.length > 0 ? (
+                      <div className="mt-3">
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Evidence</p>
+                        <div className="mt-2 space-y-1.5">
+                          {selectedTaskEvidenceLinks.map((link) => (
+                            <a
+                              key={`${link.href}-${link.label}`}
+                              href={link.href}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="group flex items-center justify-between rounded-xl border border-cyan-500/12 bg-cyan-500/6 px-3 py-2 text-left transition-colors hover:border-cyan-400/35 hover:bg-cyan-500/10"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-[11px] font-medium text-slate-100">{link.label}</p>
+                                <p className="truncate text-[10px] text-slate-500">{link.source}</p>
+                              </div>
+                              <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0 text-cyan-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    ) : selectedTask?.lastRunAt ? (
+                      <div className="mt-3 rounded-xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-2.5 text-[11px] text-slate-500">
+                        No evidence links were attached to the latest run.
+                      </div>
+                    ) : null}
+                  </div>
+                  {selectedTask?.description && (
+                    <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+                      {selectedTask.description}
+                    </p>
+                  )}
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       onClick={() => { void handleAutomationRun(selectedTask); }}
@@ -1861,7 +2100,7 @@ export default function Dashboard() {
                           : 'border-navy-700/70 bg-navy-950/34 hover:border-violet-600/30 hover:bg-navy-900/55'
                       }`}
                     >
-                      <div className="flex items-start gap-2.5">
+                  <div className="flex items-start gap-2.5">
                         <div
                           className={`mt-0.5 flex-shrink-0 ${meta.iconColor}`}
                         >
@@ -1881,6 +2120,16 @@ export default function Dashboard() {
                               <span className="text-[10px] text-slate-600">Live</span>
                             )}
                           </div>
+                          <p className={`mt-2 truncate text-[11px] leading-relaxed ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                            {formatSummaryPreview(task.latestSummary, 90)
+                              || (task.lastRunAt
+                                ? task.status === 'alert'
+                                  ? 'Latest run needs attention.'
+                                  : 'Latest run completed without a saved preview.'
+                                : task.description
+                                  ? truncateText(task.description, 90)
+                                  : 'No run result yet.')}
+                          </p>
                         </div>
                         {task.source === 'live' && task.automationId ? (
                           <button
