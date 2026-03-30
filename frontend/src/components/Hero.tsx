@@ -149,9 +149,9 @@ export default function Hero() {
 
             {/* Headline */}
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-white leading-[1.05] mb-6 tracking-tight">
-              Delegate the work.
+              Your AI coworker
               <br />
-              <span className="gradient-text">Nexus gets it done.</span>
+              <span className="gradient-text">for real work.</span>
             </h1>
 
             {/* Sub */}
