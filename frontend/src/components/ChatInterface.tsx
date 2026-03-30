@@ -268,10 +268,9 @@ const MODE_CONFIG = {
 
 const SUGGESTIONS_BY_MODE: Record<AutonomyMode, string[]> = {
   autonomous: [
-    'Pull MRR from Stripe and compare to last month',
-    'Search for AI agent trends and summarize key insights',
+    'Pull MRR from Stripe and compare it to last month',
+    'Search for AI agent trends and summarize the shifts',
     'Write a Python script to calculate CAC from HubSpot',
-    'Create a task: Review Q1 metrics by end of week',
   ],
   cautious: [
     'What are the open GitHub issues and their priorities?',
@@ -1087,10 +1086,10 @@ export default function ChatInterface({
                 <div className="flex flex-col gap-3">
                   <div className="rounded-2xl border border-navy-700/60 bg-navy-950/35 px-4 py-3 text-left">
                     <p className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Suggested prompts</p>
-                    <p className="mt-1 text-sm text-slate-400">Start with one of these and Nexus will pick up the thread.</p>
+                    <p className="mt-1 text-sm text-slate-400">Start with one strong prompt and Nexus will take it from there.</p>
                   </div>
                   <div className="grid grid-cols-1 gap-3">
-                    {suggestions.map((suggestion, i) => (
+                    {suggestions.slice(0, 3).map((suggestion, i) => (
                       <button
                         key={i}
                         onClick={() => sendMessage(suggestion)}

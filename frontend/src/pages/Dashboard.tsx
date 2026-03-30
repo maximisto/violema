@@ -1018,28 +1018,32 @@ export default function Dashboard() {
           </div>
 
           {/* User / settings */}
-          <div className="border-t border-navy-800 px-4 py-3 space-y-1.5">
-            <button
-              onClick={() => {/* settings panel placeholder */}}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-            >
-              <Settings className="w-4 h-4" />
-              Settings
-            </button>
-            <button
-              onClick={() => navigate('/')}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-            >
-              <LogOut className="w-4 h-4" />
-              Back to home
-            </button>
-            <div className="mt-1 flex items-center gap-2.5 px-3 py-2.5">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-700/40 to-navy-700 border border-violet-800/40 flex items-center justify-center text-xs font-bold text-violet-300 flex-shrink-0">
-                U
+          <div className="border-t border-navy-800 px-4 py-3">
+            <div className="rounded-2xl border border-navy-700/80 bg-navy-950/38 px-3.5 py-3 shadow-[0_10px_24px_rgba(2,6,23,0.14)]">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl border border-violet-800/40 bg-gradient-to-br from-violet-700/35 to-navy-700 text-xs font-bold text-violet-300">
+                  U
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-200">You</p>
+                  <p className="truncate text-[11px] text-slate-500">{snapshot.planName} plan · claude-opus-4-6</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-slate-300 truncate">You</p>
-                <p className="text-[10px] text-slate-600 truncate">Free plan · claude-opus-4-6</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {/* settings panel placeholder */}}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-400 transition-colors hover:border-violet-700 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                  Settings
+                </button>
+                <button
+                  onClick={() => navigate('/')}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-400 transition-colors hover:border-violet-700 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Home
+                </button>
               </div>
             </div>
           </div>
@@ -1049,7 +1053,7 @@ export default function Dashboard() {
       {/* ── Main chat area ───────────────────────────────────────────── */}
       <div className="flex min-h-0 flex-1 flex-col min-w-0">
         {/* Top bar */}
-        <header className="flex items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-navy-800/80 bg-gradient-to-r from-navy-950/92 via-navy-900/70 to-navy-950/92 backdrop-blur-md flex-shrink-0 shadow-[0_12px_30px_rgba(2,6,23,0.16)]">
+        <header className="flex items-center gap-3 border-b border-navy-800/80 bg-gradient-to-r from-navy-950/92 via-navy-900/70 to-navy-950/92 px-3 py-2.5 shadow-[0_12px_30px_rgba(2,6,23,0.16)] backdrop-blur-md flex-shrink-0 sm:px-5">
           {(!sidebarOpen || isMobileSidebar) && (
             <button
               onClick={() => setSidebarOpen(true)}
@@ -1060,31 +1064,27 @@ export default function Dashboard() {
             </button>
           )}
 
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-[13px] sm:text-sm font-semibold text-white truncate tracking-[-0.01em]">{convoTitle}</h1>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate text-[13px] font-semibold tracking-[-0.01em] text-white sm:text-sm">{convoTitle}</h1>
               <span className="rounded-full border border-green-500/15 bg-green-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-green-300">
                 Ready
               </span>
             </div>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               <div className="w-1.5 h-1.5 bg-green-400 rounded-full shadow-[0_0_0_4px_rgba(74,222,128,0.08)]" />
               <span className="text-xs text-slate-500">Nexus ready</span>
               {currentMessages.length > 0 && (
                 <>
                   <span className="text-slate-700">·</span>
-                  <span className="text-xs text-slate-600">{currentMessages.length} messages</span>
+                  <span className="text-xs text-slate-600">{currentMessages.length} msgs</span>
                 </>
               )}
-              <span className="text-slate-700">·</span>
-              <span className={`text-xs ${activeMode.statusColor}`}>
-                {activeMode.statusIcon} {activeMode.fullLabel}
-              </span>
             </div>
           </div>
 
           {/* Mode selector — desktop only (mobile uses sidebar) */}
-          <div className="hidden md:block">
+          <div className="hidden xl:block">
             <ModeSelector />
           </div>
 
@@ -1092,14 +1092,14 @@ export default function Dashboard() {
             onClick={() => setTaskPanelOpen((v) => !v)}
             aria-pressed={taskPanelOpen}
             aria-label="Toggle tasks panel"
-            className={`hidden sm:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+            className={`hidden sm:flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
               taskPanelOpen
                 ? 'bg-violet-900/30 border-violet-700/50 text-violet-300 shadow-sm'
                 : 'bg-navy-800/80 border-navy-700 text-slate-400 hover:text-slate-200'
             }`}
           >
             <CheckSquare className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Tasks</span>
+            <span className="hidden lg:inline">Tasks</span>
           </button>
         </header>
 
