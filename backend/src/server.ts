@@ -885,6 +885,7 @@ async function runAutomation(automation: {
   actions: string[];
   notify?: string;
   condition?: string;
+  timezone?: string;
 }) {
   ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
   const delegation = buildDelegationRuntimeContext({
@@ -959,6 +960,7 @@ async function runAutomation(automation: {
       note: `Automation run: ${automation.name}`,
       metadata: { taskId: task.id, taskRunId: taskRun.id },
     });
+    return { ok: true as const };
   } catch (error) {
     finalizeTaskRun(taskRun.id, {
       status: 'failed',
@@ -976,6 +978,10 @@ async function runAutomation(automation: {
       metadata: { taskId: task.id, taskRunId: taskRun.id },
     });
     console.error(`[automation] ${automation.id} failed`, error);
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : 'Unknown automation error',
+    };
   }
 }
 
@@ -1553,6 +1559,7 @@ app.post('/api/automations', (req: Request, res: Response) => {
     name?: string;
     description?: string;
     schedule?: string;
+    timezone?: string;
     actions?: unknown[];
     notify?: string | null;
     condition?: string | null;
@@ -1568,6 +1575,7 @@ app.post('/api/automations', (req: Request, res: Response) => {
       name: body.name.trim(),
       description: typeof body.description === 'string' ? body.description.trim() || undefined : undefined,
       schedule: body.schedule.trim(),
+      timezone: typeof body.timezone === 'string' ? body.timezone.trim() || undefined : undefined,
       actions: body.actions.map((item) => String(item).trim()).filter(Boolean),
       notify: typeof body.notify === 'string' ? body.notify.trim() || undefined : undefined,
       condition: typeof body.condition === 'string' ? body.condition.trim() || undefined : undefined,
@@ -1595,6 +1603,7 @@ app.patch('/api/automations/:id', (req: Request, res: Response) => {
   if (typeof req.body.name === 'string') patch.name = req.body.name.trim();
   if (typeof req.body.description === 'string') patch.description = req.body.description.trim();
   if (typeof req.body.schedule === 'string') patch.schedule = req.body.schedule.trim();
+  if (typeof req.body.timezone === 'string') patch.timezone = req.body.timezone.trim();
   if (typeof req.body.notify === 'string') patch.notify = req.body.notify.trim();
   if (typeof req.body.condition === 'string') patch.condition = req.body.condition.trim();
   if (Array.isArray(req.body.actions)) {

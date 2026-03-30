@@ -117,10 +117,14 @@ interface AutomationApiRecord {
   name: string;
   description?: string;
   schedule: string;
+  timezone?: string;
   actions: string[];
   notify?: string;
   condition?: string;
   status: 'active' | 'paused';
+  last_run_at?: string;
+  last_run_status?: 'succeeded' | 'failed';
+  next_run_at?: string;
   created_at: string;
 }
 
@@ -141,6 +145,10 @@ interface DashboardTaskItem {
   condition?: string;
   actions?: string[];
   automationStatus?: 'active' | 'paused';
+  timezone?: string;
+  lastRunAt?: string;
+  lastRunStatus?: 'succeeded' | 'failed';
+  nextRunAt?: string;
 }
 
 interface AutomationEditorDraft {
@@ -207,6 +215,26 @@ function formatTime(date: Date) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function getLocalTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+function formatAutomationRunTime(value?: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
 }
 
 function formatRelativeTimeFromIso(iso: string) {
@@ -562,7 +590,7 @@ export default function Dashboard() {
       id: automation.id,
       title: automation.name,
       status: automation.status === 'paused' ? 'alert' as DashboardTaskStatus : 'scheduled' as DashboardTaskStatus,
-      time: automation.schedule,
+      time: automation.next_run_at ? `Next ${formatAutomationRunTime(automation.next_run_at)}` : automation.schedule,
       icon: automation.status === 'paused' ? AlertCircle : Clock,
       description: automation.description,
       source: 'live' as const,
@@ -572,6 +600,10 @@ export default function Dashboard() {
       condition: automation.condition,
       actions: automation.actions,
       automationStatus: automation.status,
+      timezone: automation.timezone,
+      lastRunAt: automation.last_run_at,
+      lastRunStatus: automation.last_run_status,
+      nextRunAt: automation.next_run_at,
     }));
     setLiveAutomations(mapped);
     setSelectedTaskId((current) => {
@@ -663,6 +695,7 @@ export default function Dashboard() {
         body: JSON.stringify({
           name: automationEditor.name.trim(),
           schedule: automationEditor.schedule.trim(),
+          timezone: getLocalTimeZone(),
           description: automationEditor.description.trim() || null,
           notify: automationEditor.notify.trim() || null,
           condition: automationEditor.condition.trim() || null,
@@ -1643,14 +1676,28 @@ export default function Dashboard() {
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
                     <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                      <p className="uppercase tracking-[0.18em] text-slate-600">Cadence</p>
-                      <p className="mt-1 text-slate-200">{selectedTask?.time}</p>
+                      <p className="uppercase tracking-[0.18em] text-slate-600">Next run</p>
+                      <p className="mt-1 text-slate-200">{selectedTask?.nextRunAt ? formatAutomationRunTime(selectedTask.nextRunAt) : selectedTask?.time}</p>
                     </div>
                     <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
                       <p className="uppercase tracking-[0.18em] text-slate-600">Status</p>
                       <p className="mt-1 text-slate-200">{selectedTaskMeta?.label ?? 'Scheduled'}</p>
                     </div>
                   </div>
+                  {(selectedTask?.lastRunAt || selectedTask?.timezone) && (
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                      <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                        <p className="uppercase tracking-[0.18em] text-slate-600">Last run</p>
+                        <p className="mt-1 text-slate-200">
+                          {selectedTask?.lastRunAt ? formatAutomationRunTime(selectedTask.lastRunAt) : 'Not yet'}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                        <p className="uppercase tracking-[0.18em] text-slate-600">Timezone</p>
+                        <p className="mt-1 text-slate-200">{selectedTask?.timezone || getLocalTimeZone()}</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
                     <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
                       {selectedTask?.source === 'live' ? 'Live task' : 'Preview task'}
