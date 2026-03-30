@@ -69,13 +69,13 @@ const FEATURES = [
 const STEPS = [
   {
     number: '01',
-    title: 'Add Nexus to Slack',
-    description: 'Install in one click. Nexus joins your workspace and connects to your tools in minutes.',
+    title: 'Create access',
+    description: 'Set up your account, accept the operating rules, and choose where Nexus should work with you first.',
   },
   {
     number: '02',
-    title: 'Assign any task',
-    description: 'Just @mention Nexus in any channel. Describe the goal in plain English — no prompting tricks needed.',
+    title: 'Connect your channels',
+    description: 'Slack, Telegram, Discord, and the web interface all route into the same Nexus workspace and memory.',
   },
   {
     number: '03',

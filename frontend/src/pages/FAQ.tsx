@@ -255,10 +255,10 @@ export default function FAQ() {
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/signup?next=%2Fplans')}
               className="btn-primary"
             >
-              Ask Nexus directly
+              Set up access
             </button>
             <a
               href="mailto:hello@purpleorange.io"

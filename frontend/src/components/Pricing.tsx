@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Check, Zap } from 'lucide-react';
-import { createBillingCheckout } from '../lib/credits';
+import { hasAcceptedAccess } from '../lib/auth';
 
 const PLANS = [
   {
@@ -62,17 +62,12 @@ const PLANS = [
 export default function Pricing() {
   const navigate = useNavigate();
 
-  async function handleCheckout(planId: 'starter' | 'pro' | 'team') {
-    try {
-      const result = await createBillingCheckout({ kind: 'subscription', planId });
-      if (result.session?.checkoutUrl) {
-        window.location.assign(result.session.checkoutUrl);
-        return;
-      }
-    } catch {
-      // fall back below
+  function handleCheckout(planId: 'starter' | 'pro' | 'team') {
+    if (hasAcceptedAccess()) {
+      navigate(`/plans?plan=${planId}`);
+      return;
     }
-    navigate('/dashboard');
+    navigate(`/signup?next=${encodeURIComponent(`/plans?plan=${planId}`)}`);
   }
 
   return (

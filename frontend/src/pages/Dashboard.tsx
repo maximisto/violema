@@ -6,8 +6,7 @@ import {
   Eye, Shield, Search, CreditCard, ArrowUpRight, Pin, Archive, RotateCcw, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import ChatInterface from '../components/ChatInterface';
-import TopUpChooser from '../components/TopUpChooser';
-import { fetchCreditEstimate, formatCredits, getSuggestedTopUpOfferId, getSuggestedUpgradePlanId, openBillingCheckout, useCreditSnapshot } from '../lib/credits';
+import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
@@ -352,8 +351,6 @@ export default function Dashboard() {
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
-  const [topUpChooserOpen, setTopUpChooserOpen] = useState(false);
-  const [topUpBusyOfferId, setTopUpBusyOfferId] = useState<ReturnType<typeof getSuggestedTopUpOfferId> | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const { snapshot } = useCreditSnapshot();
 
@@ -928,39 +925,16 @@ export default function Dashboard() {
   );
 
   const openTopUp = () => {
-    setTopUpChooserOpen(true);
+    navigate('/plans?section=topups');
   };
 
-  const handleTopUpSelect = async (offerId: ReturnType<typeof getSuggestedTopUpOfferId>) => {
-    setTopUpBusyOfferId(offerId);
-    try {
-      const opened = await openBillingCheckout({ kind: 'top-up', offerId });
-      if (opened) return;
-    } catch {
-      // fall through
-    } finally {
-      setTopUpBusyOfferId(null);
-      setTopUpChooserOpen(false);
-    }
-    window.location.assign('/#pricing');
-  };
-
-  const openUpgrade = async () => {
+  const openUpgrade = () => {
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
       window.location.assign('mailto:sales@purpleorange.io?subject=Nexus%20Enterprise');
       return;
     }
-    try {
-      const opened = await openBillingCheckout({
-        kind: 'subscription',
-        planId: nextPlanId,
-      });
-      if (opened) return;
-    } catch {
-      // fall through
-    }
-    window.location.assign('/#pricing');
+    navigate(`/plans?plan=${nextPlanId}`);
   };
 
   const duplicateSelectedAutomation = useCallback(() => {
@@ -993,16 +967,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
-      <TopUpChooser
-        open={topUpChooserOpen}
-        recommendedOfferId={getSuggestedTopUpOfferId(snapshot)}
-        busyOfferId={topUpBusyOfferId}
-        onClose={() => {
-          if (!topUpBusyOfferId) setTopUpChooserOpen(false);
-        }}
-        onSelect={(offerId) => { void handleTopUpSelect(offerId); }}
-      />
 
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
       {sidebarOpen && isMobileSidebar && (

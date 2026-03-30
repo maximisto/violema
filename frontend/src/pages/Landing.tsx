@@ -190,11 +190,11 @@ function ProductDemo() {
             </div>
 
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/signup?next=%2Fplans')}
               className="btn-primary text-base py-3 px-8"
             >
               <Zap className="w-5 h-5" />
-              Try Nexus for free
+              Set up access
             </button>
           </div>
 
@@ -574,7 +574,7 @@ const COMPARISON_ROWS = [
   { feature: '3,000+ integrations', nexus: true, chatgpt: false, viktor: true, devin: false, note: '' },
   { feature: 'Slack / Teams native', nexus: true, chatgpt: false, viktor: true, devin: false, note: '' },
   { feature: 'Long-term memory', nexus: true, chatgpt: 'partial', viktor: true, devin: 'partial', note: '' },
-  { feature: 'Free to start', nexus: true, chatgpt: 'partial', viktor: false, devin: false, note: '$100 free credits' },
+  { feature: 'Built for paid production use', nexus: true, chatgpt: 'partial', viktor: false, devin: false, note: 'Plans + one-time top-ups' },
 ];
 
 function CompCell({ value }: { value: boolean | string }) {
@@ -713,15 +713,15 @@ function FinalCTA() {
           <span className="gradient-text">costs $50/month</span>
         </h2>
         <p className="text-xl text-slate-400 mb-10 max-w-xl mx-auto leading-relaxed">
-          No prompting tricks. No babysitting. Nexus executes, reports back, and gets better every day. Start free — no credit card required.
+          No prompting tricks. No babysitting. Nexus executes, reports back, and gets better every day. Pick a plan, connect your stack, and put it to work.
         </p>
         <div className="flex flex-wrap gap-4 justify-center mb-10">
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/signup?next=%2Fplans')}
             className="btn-primary text-lg py-4 px-8 shadow-glow-violet"
           >
             <Zap className="w-5 h-5" />
-            Start for free
+            Start setup
           </button>
           <button className="btn-secondary text-lg py-4 px-8 group">
             See a live demo
@@ -729,7 +729,7 @@ function FinalCTA() {
           </button>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-slate-500">
-          {['$100 free credits', 'No credit card', 'SOC 2 compliant', 'Cancel anytime'].map((item) => (
+          {['Slack, Telegram, Discord + web', 'Plans and top-ups', 'SOC 2 compliant', 'Cancel anytime'].map((item) => (
             <div key={item} className="flex items-center gap-2">
               <Check className="w-3.5 h-3.5 text-green-500" />
               <span>{item}</span>
