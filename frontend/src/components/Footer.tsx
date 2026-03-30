@@ -7,7 +7,7 @@ const PO_LOGO = '/po-logo.png';
 const LINKS = {
   Product: [
     { label: 'Features', path: '/#features' },
-    { label: 'Integrations', path: '/#integrations' },
+    { label: 'Integrations', path: '/integrations' },
     { label: 'Pricing', path: '/#pricing' },
     { label: 'Changelog', path: '#' },
     { label: 'Roadmap', path: '#' },

@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom';
+
 const INTEGRATIONS = [
   { name: 'Stripe', color: '#635BFF', letter: 'S' },
   { name: 'HubSpot', color: '#FF7A59', letter: 'H' },
@@ -38,6 +40,8 @@ function IntegrationBadge({ name, color, letter }: IntegrationBadgeProps) {
 }
 
 export default function Integrations() {
+  const navigate = useNavigate();
+
   return (
     <section className="py-24 relative overflow-hidden" id="integrations">
       {/* Fade edges */}
@@ -53,6 +57,13 @@ export default function Integrations() {
         <p className="mt-4 max-w-2xl mx-auto text-slate-400">
           Nexus works best when it can see the systems that already run your work. Start with the important tools first, then expand the integration layer over time.
         </p>
+        <button
+          type="button"
+          onClick={() => navigate('/integrations')}
+          className="mt-5 inline-flex items-center justify-center rounded-full border border-cyan-500/25 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/16"
+        >
+          See the integrations map
+        </button>
       </div>
 
       {/* Row 1 — scrolls left */}
