@@ -149,19 +149,19 @@ export default function Hero() {
 
             {/* Headline */}
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-white leading-[1.05] mb-6 tracking-tight">
-              Not a tool.
+              Delegate the work.
               <br />
-              <span className="gradient-text">A hire.</span>
+              <span className="gradient-text">Nexus gets it done.</span>
             </h1>
 
             {/* Sub */}
             <p className="text-lg sm:text-xl text-slate-400 mb-10 max-w-lg leading-relaxed">
-              Nexus is your AI coworker that proactively executes tasks, connects to your entire stack, and gets things done — all from Slack.
+              Nexus is your AI coworker for research, execution, and automation across your stack. It does more than answer. It follows through.
             </p>
 
             {/* Social proof bullets */}
             <div className="flex flex-col sm:flex-row gap-3 mb-10">
-              {['No prompting required', 'Works across 3,000+ tools', 'Ships work autonomously'].map((item) => (
+              {['Executes across your stack', 'Runs research and automations', 'Keeps humans in the loop'].map((item) => (
                 <div key={item} className="flex items-center gap-2 text-sm text-slate-400">
                   <CheckCircle2 className="w-4 h-4 text-violet-400 flex-shrink-0" />
                   <span>{item}</span>
@@ -188,7 +188,7 @@ export default function Hero() {
 
             {/* Trust */}
             <p className="mt-6 text-sm text-slate-500">
-              Free to start • No credit card required • SOC 2 compliant
+              Start lean • Connect your tools • Scale into full execution
             </p>
           </div>
 
