@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Plus, MessageSquare, Settings, ChevronRight, Zap, LogOut,
   X, CheckSquare, Clock, AlertCircle, Sparkles, PanelLeftClose, PanelLeftOpen, Trash2,
-  Eye, Shield, Search, CreditCard, ArrowUpRight,
+  Eye, Shield, Search, CreditCard, ArrowUpRight, Pin, Archive, RotateCcw, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import ChatInterface from '../components/ChatInterface';
 import { fetchCreditEstimate, formatCredits, openBillingCheckout, useCreditSnapshot } from '../lib/credits';
@@ -30,6 +30,9 @@ function loadConvos(): Conversation[] {
     }>;
     return parsed.map((c) => ({
       ...c,
+      pinned: Boolean(c.pinned),
+      archived: Boolean(c.archived),
+      tags: Array.isArray(c.tags) ? c.tags.filter((tag): tag is string => typeof tag === 'string') : [],
       timestamp: new Date(c.timestamp),
       messages: c.messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })),
     }));
@@ -148,7 +151,7 @@ interface AutomationEditorDraft {
   description: string;
   notify: string;
   condition: string;
-  actionsText: string;
+  actions: string[];
   destinationType: 'slack' | 'email' | 'custom' | 'none';
 }
 
@@ -229,6 +232,20 @@ function mapTaskIcon(status: DashboardTaskStatus) {
   if (status === 'alert') return AlertCircle;
   if (status === 'complete') return CheckSquare;
   return Clock;
+}
+
+function inferConversationTags(conversation: Conversation) {
+  if (conversation.tags?.length) return conversation.tags.slice(0, 2);
+
+  const text = `${conversation.title} ${conversation.lastMessage || ''}`.toLowerCase();
+  const inferred: string[] = [];
+
+  if (/(stripe|mrr|revenue|billing|finance|payments)/.test(text)) inferred.push('Revenue');
+  if (/(github|pr|bug|code|debug|build|deploy)/.test(text)) inferred.push('Build');
+  if (/(automation|workflow|slack|email|schedule)/.test(text)) inferred.push('Ops');
+  if (/(research|search|competitor|analysis|summary|report)/.test(text)) inferred.push('Research');
+
+  return inferred.slice(0, 2);
 }
 
 function estimateMonthlyRunsFromSchedule(schedule: string) {
@@ -323,6 +340,7 @@ export default function Dashboard() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [autonomyMode, setAutonomyMode] = useState<AutonomyMode>('cautious');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const [platformTasks, setPlatformTasks] = useState<DashboardTaskItem[]>([]);
   const [liveAutomations, setLiveAutomations] = useState<DashboardTaskItem[]>([]);
   const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
@@ -484,10 +502,7 @@ export default function Dashboard() {
     }
 
     const timeout = window.setTimeout(async () => {
-      const actionCount = automationEditor.actionsText
-        .split('\n')
-        .map((item) => item.trim())
-        .filter(Boolean).length;
+      const actionCount = automationEditor.actions.filter((item) => item.trim()).length;
       const estimate = await fetchCreditEstimate({
         taskKind: 'automation',
         modelTier: actionCount > 3 ? 'ops' : 'default',
@@ -610,7 +625,7 @@ export default function Dashboard() {
       description: task.description || '',
       notify: task.notify || '',
       condition: task.condition || '',
-      actionsText: Array.isArray(task.actions) ? task.actions.join('\n') : '',
+      actions: Array.isArray(task.actions) && task.actions.length > 0 ? task.actions : ['Generate summary'],
       destinationType: task.notify?.startsWith('#') ? 'slack' : task.notify?.includes('@') ? 'email' : task.notify ? 'custom' : 'none',
     });
   }, []);
@@ -624,7 +639,7 @@ export default function Dashboard() {
       description: '',
       notify: '#ops-alerts',
       condition: '',
-      actionsText: 'Query Stripe failed payments\nGenerate summary\nSend alert to Slack',
+      actions: ['Query Stripe failed payments', 'Generate summary', 'Send alert to Slack'],
       destinationType: 'slack',
     });
   }, []);
@@ -633,8 +648,7 @@ export default function Dashboard() {
     if (!automationEditor) return;
     setActionBusy('save');
     try {
-      const actions = automationEditor.actionsText
-        .split('\n')
+      const actions = automationEditor.actions
         .map((item) => item.trim())
         .filter(Boolean);
       const response = await fetch(
@@ -719,17 +733,35 @@ export default function Dashboard() {
 
   const filteredConvos = conversations.filter(
     (c) =>
-      !searchQuery ||
-      c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.lastMessage ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+      !c.archived &&
+      (
+        !searchQuery ||
+        c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.lastMessage ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+      )
+  );
+
+  const archivedConversations = useMemo(
+    () =>
+      conversations
+        .filter((conversation) =>
+          conversation.archived &&
+          (!searchQuery ||
+            conversation.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (conversation.lastMessage ?? '').toLowerCase().includes(searchQuery.toLowerCase()))
+        )
+        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()),
+    [conversations, searchQuery]
   );
 
   const groupedConversations = useMemo(() => {
     const sorted = [...filteredConvos].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     const active = activeConvoId !== 'new' ? sorted.find((convo) => convo.id === activeConvoId) : undefined;
     const remaining = active ? sorted.filter((convo) => convo.id !== active.id) : sorted;
+    const pinned = remaining.filter((convo) => convo.pinned);
+    const sectionItems = remaining.filter((convo) => !convo.pinned);
 
-    const sections = remaining.reduce<Array<{ label: string; items: Conversation[] }>>((acc, convo) => {
+    const sections = sectionItems.reduce<Array<{ label: string; items: Conversation[] }>>((acc, convo) => {
       const label = getConversationSectionLabel(convo.timestamp);
       const existing = acc.find((section) => section.label === label);
       if (existing) existing.items.push(convo);
@@ -737,7 +769,7 @@ export default function Dashboard() {
       return acc;
     }, []);
 
-    return { active, sections };
+    return { active, pinned, sections };
   }, [activeConvoId, filteredConvos]);
 
   const taskItems: DashboardTaskItem[] = liveAutomations.length > 0
@@ -763,11 +795,78 @@ export default function Dashboard() {
   const lowCreditRunway = snapshot.projectedDaysLeft <= 7;
   const automationActionCount = useMemo(() => {
     if (!automationEditor) return 0;
-    return automationEditor.actionsText
-      .split('\n')
+    return automationEditor.actions
       .map((item) => item.trim())
       .filter(Boolean).length;
   }, [automationEditor]);
+  const hasAutomationSteps = automationActionCount > 0;
+
+  const updateConversationMeta = useCallback((id: string, updater: (conversation: Conversation) => Conversation) => {
+    setConversations((prev) => prev.map((conversation) => (conversation.id === id ? updater(conversation) : conversation)));
+  }, []);
+
+  const toggleConversationPinned = useCallback((id: string) => {
+    updateConversationMeta(id, (conversation) => ({ ...conversation, pinned: !conversation.pinned, archived: false }));
+  }, [updateConversationMeta]);
+
+  const toggleConversationArchived = useCallback((id: string) => {
+    updateConversationMeta(id, (conversation) => {
+      const archived = !conversation.archived;
+      return {
+        ...conversation,
+        archived,
+        pinned: archived ? false : conversation.pinned,
+      };
+    });
+    if (activeConvoId === id) {
+      setActiveConvoId('new');
+      setNewConvoMessages([]);
+    }
+  }, [activeConvoId]);
+
+  const updateAutomationStep = useCallback((index: number, value: string) => {
+    setAutomationEditor((current) => {
+      if (!current) return current;
+      const actions = [...current.actions];
+      actions[index] = value;
+      return { ...current, actions };
+    });
+  }, []);
+
+  const moveAutomationStep = useCallback((index: number, direction: -1 | 1) => {
+    setAutomationEditor((current) => {
+      if (!current) return current;
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.actions.length) return current;
+      const actions = [...current.actions];
+      const [item] = actions.splice(index, 1);
+      actions.splice(nextIndex, 0, item);
+      return { ...current, actions };
+    });
+  }, []);
+
+  const removeAutomationStep = useCallback((index: number) => {
+    setAutomationEditor((current) => {
+      if (!current) return current;
+      const actions = current.actions.filter((_, actionIndex) => actionIndex !== index);
+      return { ...current, actions: actions.length > 0 ? actions : [''] };
+    });
+  }, []);
+
+  const appendAutomationStep = useCallback((value = '') => {
+    setAutomationEditor((current) => {
+      if (!current) return current;
+      return { ...current, actions: [...current.actions, value] };
+    });
+  }, []);
+
+  const addAutomationTemplate = useCallback((template: string) => {
+    setAutomationEditor((current) => {
+      if (!current) return current;
+      if (current.actions.includes(template)) return current;
+      return { ...current, actions: [...current.actions.filter(Boolean), template] };
+    });
+  }, []);
 
   useEffect(() => {
     if (!selectedTask && taskItems[0]) {
@@ -832,7 +931,7 @@ export default function Dashboard() {
       description: selectedTask.description || '',
       notify: selectedTask.notify || '#ops-alerts',
       condition: selectedTask.condition || '',
-      actionsText: Array.isArray(selectedTask.actions) ? selectedTask.actions.join('\n') : 'Generate summary',
+      actions: Array.isArray(selectedTask.actions) && selectedTask.actions.length > 0 ? selectedTask.actions : ['Generate summary'],
       destinationType: selectedTask.notify?.startsWith('#') ? 'slack' : selectedTask.notify?.includes('@') ? 'email' : selectedTask.notify ? 'custom' : 'none',
     });
   }, [selectedTask]);
@@ -1009,7 +1108,7 @@ export default function Dashboard() {
                       }}
                       className="w-full rounded-xl bg-navy-800 text-left text-white shadow-[0_10px_24px_rgba(2,6,23,0.18)] transition-all px-3.5 py-2.5 ring-1 ring-violet-500/20"
                     >
-                      <div className="flex items-start gap-2.5 pr-6">
+                      <div className="flex items-start gap-2.5 pr-12">
                         <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-300" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
@@ -1019,11 +1118,117 @@ export default function Dashboard() {
                           {convo.lastMessage && (
                             <p className="mt-1 truncate text-[10px] leading-snug text-slate-400">{convo.lastMessage}</p>
                           )}
+                          {inferConversationTags(convo).length > 0 && (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {inferConversationTags(convo).map((tag) => (
+                                <span key={tag} className="rounded-full border border-violet-500/15 bg-violet-500/10 px-2 py-0.5 text-[9px] font-medium text-violet-100/80">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </button>
+                    {hoveredConvoId === convo.id && (
+                      <div className="absolute right-2 top-2 flex items-center gap-1 rounded-xl border border-navy-700/80 bg-navy-950/92 p-1 shadow-[0_10px_24px_rgba(2,6,23,0.32)]">
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleConversationPinned(convo.id);
+                          }}
+                          className={`rounded-lg p-1 transition-colors hover:bg-navy-800 ${
+                            convo.pinned ? 'text-amber-300' : 'text-slate-500 hover:text-slate-200'
+                          }`}
+                          aria-label={convo.pinned ? 'Unpin conversation' : 'Pin conversation'}
+                        >
+                          <Pin className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleConversationArchived(convo.id);
+                          }}
+                          className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-navy-800 hover:text-slate-200"
+                          aria-label="Archive conversation"
+                        >
+                          <Archive className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {groupedConversations.pinned.length > 0 && (
+              <div className="space-y-1">
+                <p className="px-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-300/70">Pinned</p>
+                {groupedConversations.pinned.map((convo) => {
+                  const tags = inferConversationTags(convo);
+                  return (
+                    <div
+                      key={convo.id}
+                      onMouseEnter={() => setHoveredConvoId(convo.id)}
+                      onMouseLeave={() => setHoveredConvoId(null)}
+                      className="relative"
+                    >
+                      <button
+                        onClick={() => {
+                          setActiveConvoId(convo.id);
+                          if (isMobileSidebar) setSidebarOpen(false);
+                        }}
+                        className="w-full rounded-xl border border-amber-500/15 bg-gradient-to-br from-amber-500/8 to-navy-950/30 px-3.5 py-2.5 text-left text-slate-200 transition-all hover:border-amber-400/25 hover:bg-amber-500/[0.09]"
+                      >
+                        <div className="flex items-start gap-2.5 pr-12">
+                          <Pin className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-300" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium leading-snug">{convo.title}</p>
+                              <span className="flex-shrink-0 text-[10px] text-slate-500">{formatTime(convo.timestamp)}</span>
+                            </div>
+                            {convo.lastMessage && (
+                              <p className="mt-1 truncate text-[10px] leading-snug text-slate-400">{convo.lastMessage}</p>
+                            )}
+                            {tags.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                {tags.map((tag) => (
+                                  <span key={tag} className="rounded-full border border-amber-500/15 bg-amber-500/8 px-2 py-0.5 text-[9px] font-medium text-amber-100/80">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                      {hoveredConvoId === convo.id && (
+                        <div className="absolute right-2 top-2 flex items-center gap-1 rounded-xl border border-navy-700/80 bg-navy-950/92 p-1 shadow-[0_10px_24px_rgba(2,6,23,0.32)]">
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleConversationPinned(convo.id);
+                            }}
+                            className="rounded-lg p-1 text-amber-300 transition-colors hover:bg-navy-800"
+                            aria-label="Unpin conversation"
+                          >
+                            <Pin className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleConversationArchived(convo.id);
+                            }}
+                            className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-navy-800 hover:text-slate-200"
+                            aria-label="Archive conversation"
+                          >
+                            <Archive className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -1056,6 +1261,15 @@ export default function Dashboard() {
                           {convo.lastMessage && (
                             <p className="mt-1 truncate text-[10px] leading-snug text-slate-500">{convo.lastMessage}</p>
                           )}
+                          {inferConversationTags(convo).length > 0 && (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {inferConversationTags(convo).map((tag) => (
+                                <span key={tag} className="rounded-full border border-navy-700/80 bg-navy-900/60 px-2 py-0.5 text-[9px] font-medium text-slate-400">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </button>
@@ -1080,19 +1294,92 @@ export default function Dashboard() {
                           </button>
                         </div>
                       ) : (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(convo.id); }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-700 hover:text-red-400 transition-colors rounded"
-                          aria-label={`Delete conversation "${convo.title}"`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-xl border border-navy-700/80 bg-navy-950/92 p-1 shadow-[0_10px_24px_rgba(2,6,23,0.32)]">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleConversationPinned(convo.id);
+                            }}
+                            className={`rounded-lg p-1 transition-colors hover:bg-navy-800 ${
+                              convo.pinned ? 'text-amber-300' : 'text-slate-500 hover:text-slate-200'
+                            }`}
+                            aria-label={convo.pinned ? 'Unpin conversation' : 'Pin conversation'}
+                          >
+                            <Pin className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleConversationArchived(convo.id);
+                            }}
+                            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-navy-800 hover:text-slate-200"
+                            aria-label={`Archive conversation "${convo.title}"`}
+                          >
+                            <Archive className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(convo.id); }}
+                            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-navy-800 hover:text-red-400"
+                            aria-label={`Delete conversation "${convo.title}"`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )
                     )}
                   </div>
                 ))}
               </div>
             ))}
+
+            {archivedConversations.length > 0 && (
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setShowArchived((current) => !current)}
+                  className="flex w-full items-center justify-between px-1 pt-2 text-left text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600"
+                >
+                  <span>Archived</span>
+                  <span className="inline-flex items-center gap-1">
+                    {archivedConversations.length}
+                    {showArchived ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </span>
+                </button>
+                {showArchived && archivedConversations.map((convo) => (
+                  <div key={convo.id} className="relative">
+                    <button
+                      onClick={() => {
+                        setActiveConvoId(convo.id);
+                        if (isMobileSidebar) setSidebarOpen(false);
+                      }}
+                      className="w-full rounded-xl border border-navy-800/80 bg-navy-950/30 px-3.5 py-2.5 text-left text-slate-500 transition-all hover:border-navy-700 hover:text-slate-300"
+                    >
+                      <div className="flex items-start gap-2.5 pr-12">
+                        <Archive className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 opacity-60" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-sm font-medium leading-snug">{convo.title}</p>
+                            <span className="flex-shrink-0 text-[10px] text-slate-700">{formatTime(convo.timestamp)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                    <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-xl border border-navy-700/80 bg-navy-950/92 p-1 shadow-[0_10px_24px_rgba(2,6,23,0.32)]">
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleConversationArchived(convo.id);
+                        }}
+                        className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-navy-800 hover:text-slate-200"
+                        aria-label="Restore conversation"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* User / settings */}
@@ -1352,7 +1639,7 @@ export default function Dashboard() {
                   )}
                   {selectedTask?.source === 'live' && (
                     <p className="mt-2 text-[11px] text-slate-500">
-                      Tune cadence, steps, destinations, and burn from the builder without leaving the dashboard.
+                      Tune cadence, workflow steps, delivery, and burn without leaving the dashboard.
                     </p>
                   )}
                 </div>
@@ -1514,34 +1801,80 @@ export default function Dashboard() {
               </label>
 
               <label className="block">
-                <span className="ui-section-label px-1">Actions</span>
+                <span className="ui-section-label px-1">Workflow steps</span>
                 <div className="mt-1 flex flex-wrap gap-2 px-1">
                   {ACTION_TEMPLATES.map((template) => (
                     <button
                       key={template}
                       type="button"
-                      onClick={() => setAutomationEditor((current) => {
-                        if (!current) return current;
-                        const currentActions = current.actionsText.split('\n').map((item) => item.trim()).filter(Boolean);
-                        if (currentActions.includes(template)) return current;
-                        return { ...current, actionsText: [...currentActions, template].join('\n') };
-                      })}
+                      onClick={() => addAutomationTemplate(template)}
                       className="ui-pill px-2.5 py-1 text-[10px] normal-case tracking-normal text-slate-300"
                     >
                       + {template}
                     </button>
                   ))}
                 </div>
-                <div className="ui-input-shell mt-1">
-                  <textarea
-                    value={automationEditor.actionsText}
-                    onChange={(event) => setAutomationEditor((current) => current ? { ...current, actionsText: event.target.value } : current)}
-                    rows={5}
-                    className="w-full resize-none bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                    placeholder={'Query Stripe failed payments\nDraft summary\nSend alert to Slack'}
-                  />
+                <div className="mt-2 space-y-2">
+                  {automationEditor.actions.map((action, index) => (
+                    <div key={`${automationEditor.id}-${index}`} className="rounded-2xl border border-navy-700/80 bg-navy-950/36 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="inline-flex items-center gap-2">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-violet-500/20 bg-violet-500/10 text-[11px] font-semibold text-violet-200">
+                            {index + 1}
+                          </span>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">Step</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => moveAutomationStep(index, -1)}
+                            disabled={index === 0}
+                            className="rounded-lg border border-navy-700/70 bg-navy-900/60 p-1 text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label="Move step up"
+                          >
+                            <ChevronUp className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveAutomationStep(index, 1)}
+                            disabled={index === automationEditor.actions.length - 1}
+                            className="rounded-lg border border-navy-700/70 bg-navy-900/60 p-1 text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label="Move step down"
+                          >
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeAutomationStep(index)}
+                            className="rounded-lg border border-navy-700/70 bg-navy-900/60 p-1 text-slate-400 transition-colors hover:text-red-300"
+                            aria-label="Remove step"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="ui-input-shell mt-2">
+                        <input
+                          value={action}
+                          onChange={(event) => updateAutomationStep(index, event.target.value)}
+                          className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                          placeholder="Generate summary"
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <p className="mt-1 px-1 text-[11px] text-slate-500">One action per line.</p>
+                <div className="mt-2 flex flex-wrap gap-2 px-1">
+                  <button
+                    type="button"
+                    onClick={() => appendAutomationStep('')}
+                    className="ui-button-ghost"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add step
+                  </button>
+                </div>
+                <p className="mt-1 px-1 text-[11px] text-slate-500">Build the workflow one step at a time, then reorder or trim as needed.</p>
               </label>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1642,7 +1975,7 @@ export default function Dashboard() {
                 </button>
                 <button
                   onClick={() => { void handleAutomationEditorSave(); }}
-                  disabled={actionBusy === 'save' || !automationEditor.name.trim() || !automationEditor.schedule.trim()}
+                  disabled={actionBusy === 'save' || !automationEditor.name.trim() || !automationEditor.schedule.trim() || !hasAutomationSteps}
                   className="ui-button-surface disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {actionBusy === 'save' ? 'Saving…' : 'Save changes'}

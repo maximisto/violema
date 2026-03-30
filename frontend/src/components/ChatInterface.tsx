@@ -290,6 +290,84 @@ function extractResultMetrics(result?: Record<string, unknown>) {
     }));
 }
 
+interface ToolArtifact {
+  kind: 'screenshot' | 'report' | 'link';
+  title: string;
+  subtitle?: string;
+  href?: string;
+  imageUrl?: string;
+  summary?: string;
+  metrics?: Array<{ label: string; value: string }>;
+}
+
+function resolveArtifactHref(href: string) {
+  if (/^https?:\/\//.test(href)) return href;
+  return href.startsWith('/') ? href : `/${href}`;
+}
+
+function extractToolArtifacts(toolName: string, result?: Record<string, unknown>): ToolArtifact[] {
+  if (!result) return [];
+
+  const artifacts: ToolArtifact[] = [];
+
+  if (toolName === 'browser_screenshot' && typeof result.screenshot_url === 'string') {
+    artifacts.push({
+      kind: 'screenshot',
+      title: typeof result.title === 'string' && result.title ? result.title : 'Browser capture',
+      subtitle: typeof result.url === 'string' ? result.url : undefined,
+      href: resolveArtifactHref(result.screenshot_url),
+      imageUrl: resolveArtifactHref(result.screenshot_url),
+      metrics: [
+        typeof result.width === 'number' && typeof result.height === 'number'
+          ? { label: 'Viewport', value: `${result.width} × ${result.height}` }
+          : null,
+        typeof result.full_page === 'boolean'
+          ? { label: 'Capture', value: result.full_page ? 'Full page' : 'Viewport' }
+          : null,
+      ].filter((item): item is { label: string; value: string } => Boolean(item)),
+    });
+  }
+
+  if (toolName === 'generate_report' && result.report && typeof result.report === 'object') {
+    const report = result.report as Record<string, unknown>;
+    const headlineMetrics =
+      report.sections && typeof report.sections === 'object'
+        ? ((report.sections as Record<string, unknown>).headline_metrics as Record<string, unknown> | undefined) ||
+          ((report.sections as Record<string, unknown>).metrics_snapshot as Record<string, unknown> | undefined)
+        : undefined;
+    const summaryList =
+      report.sections && typeof report.sections === 'object'
+        ? (((report.sections as Record<string, unknown>).highlights as string[] | undefined) ||
+          ((report.sections as Record<string, unknown>).wins as string[] | undefined))
+        : undefined;
+
+    artifacts.push({
+      kind: 'report',
+      title: typeof report.title === 'string' ? report.title : 'Generated report',
+      subtitle: typeof report.period === 'string' ? report.period : undefined,
+      href: typeof result.shareable_url === 'string' ? result.shareable_url : undefined,
+      summary: Array.isArray(summaryList) ? summaryList.slice(0, 2).join(' • ') : undefined,
+      metrics: headlineMetrics
+        ? Object.entries(headlineMetrics)
+            .slice(0, 4)
+            .map(([label, value]) => ({ label: label.replace(/_/g, ' '), value: String(value) }))
+        : [],
+    });
+  }
+
+  if (artifacts.length === 0) {
+    extractResultLinks(result).forEach((link) => {
+      artifacts.push({
+        kind: 'link',
+        title: link.label.replace(/\b\w/g, (char) => char.toUpperCase()),
+        href: resolveArtifactHref(link.href),
+      });
+    });
+  }
+
+  return artifacts.slice(0, 3);
+}
+
 const MODE_CONFIG = {
   autonomous: {
     label: 'Autonomous',
@@ -447,6 +525,7 @@ const ToolCallBlock = memo(function ToolCallBlock({ toolCall }: { toolCall: Tool
   const resultLinks = extractResultLinks(toolCall.result);
   const resultImages = extractResultImages(toolCall.result);
   const resultMetrics = extractResultMetrics(toolCall.result);
+  const artifacts = extractToolArtifacts(toolCall.name, toolCall.result);
 
   const inputSummary = toolCall.input
     ? (Object.values(toolCall.input)[0] as string | undefined)
@@ -521,6 +600,51 @@ const ToolCallBlock = memo(function ToolCallBlock({ toolCall }: { toolCall: Tool
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Result</p>
                 <CopyButton text={formatJsonBlock(toolCall.result)} />
               </div>
+              {artifacts.length > 0 && (
+                <div className="mb-3 grid gap-2 lg:grid-cols-2">
+                  {artifacts.map((artifact) => (
+                    <div key={`${artifact.kind}-${artifact.title}`} className="overflow-hidden rounded-2xl border border-navy-700/70 bg-navy-950/55">
+                      {artifact.imageUrl && (
+                        <a href={artifact.href || artifact.imageUrl} target="_blank" rel="noopener noreferrer" className="block">
+                          <img src={artifact.imageUrl} alt={artifact.title} className="h-40 w-full object-cover" />
+                        </a>
+                      )}
+                      <div className="p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-600">
+                              {artifact.kind === 'screenshot' ? 'Capture' : artifact.kind === 'report' ? 'Report' : 'Deliverable'}
+                            </p>
+                            <h4 className="mt-1 text-sm font-semibold text-white">{artifact.title}</h4>
+                            {artifact.subtitle && <p className="mt-1 text-xs text-slate-500">{artifact.subtitle}</p>}
+                          </div>
+                          {artifact.href && (
+                            <a
+                              href={artifact.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ui-pill px-2 py-1 text-[10px] normal-case tracking-normal text-cyan-300 hover:border-cyan-500/30 hover:text-cyan-200"
+                            >
+                              Open
+                            </a>
+                          )}
+                        </div>
+                        {artifact.summary && <p className="mt-2 text-xs leading-relaxed text-slate-400">{artifact.summary}</p>}
+                        {artifact.metrics && artifact.metrics.length > 0 && (
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {artifact.metrics.map((metric) => (
+                              <div key={metric.label} className="rounded-xl border border-navy-800/70 bg-black/20 px-3 py-2">
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">{metric.label}</p>
+                                <p className="mt-1 text-sm font-medium text-white">{metric.value}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {resultMetrics.length > 0 && (
                 <div className="mb-3 grid gap-2 sm:grid-cols-2">
                   {resultMetrics.map((metric) => (
@@ -533,7 +657,9 @@ const ToolCallBlock = memo(function ToolCallBlock({ toolCall }: { toolCall: Tool
               )}
               {resultImages.length > 0 && (
                 <div className="mb-3 grid gap-2 sm:grid-cols-2">
-                  {resultImages.map((imageUrl) => (
+                  {resultImages
+                    .filter((imageUrl) => !artifacts.some((artifact) => artifact.imageUrl === imageUrl))
+                    .map((imageUrl) => (
                     <a
                       key={imageUrl}
                       href={imageUrl}

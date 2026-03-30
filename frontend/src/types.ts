@@ -29,6 +29,9 @@ export interface Conversation {
   lastMessage?: string;
   timestamp: Date;
   messages: Message[];
+  pinned?: boolean;
+  archived?: boolean;
+  tags?: string[];
 }
 
 export interface SSEEvent {
