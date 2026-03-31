@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Eye, Globe, Lock, Mail, MonitorSmartphone, Slack } from 'lucide-react';
 import { saveAuthSession, type AuthMethod } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
+import { persistWorkspaceContext } from '../lib/workspace';
 
 const PROVIDER_METHODS: Array<{
   id: Exclude<AuthMethod, 'email'>;
@@ -42,7 +43,7 @@ const EDUCATION_CARDS = [
   {
     icon: Slack,
     title: 'Works where teams already are',
-    body: 'Run Nexus from Slack or the web app. Slack is the team-facing layer. The web app is the full workspace.',
+    body: 'Run Violema from Slack or the web app. Slack is the team-facing layer. The web app is the full workspace.',
   },
   {
     icon: Eye,
@@ -75,6 +76,7 @@ export default function Signup() {
   function handleContinue() {
     if (!canContinue) return;
 
+    persistWorkspaceContext();
     saveAuthSession({
       email: email.trim(),
       name: name.trim(),
@@ -97,14 +99,14 @@ export default function Signup() {
           <div className="pt-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-4 py-1.5 text-sm font-medium text-violet-300">
               <Lock className="h-3.5 w-3.5" />
-              Access Nexus
+              Access Violema
             </div>
             <h1 className="mt-6 text-4xl font-extrabold leading-tight text-white sm:text-5xl">
               Set up access before
               <span className="gradient-text"> you enter the workspace.</span>
             </h1>
             <p className="mt-4 max-w-xl text-lg leading-relaxed text-slate-400">
-              Nexus is not a toy chat box. It can message teams, run automations, and move across your stack. We set expectations, permissions, and billing before people touch the product.
+              Violema is not a toy chat box. It can message teams, run automations, and move across your stack. We set expectations, permissions, and billing before people touch the product.
             </p>
 
             <div className="mt-8 grid gap-4">
@@ -141,7 +143,7 @@ export default function Signup() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Registration</p>
-                <h2 className="mt-2 text-2xl font-semibold text-white">Create your Nexus access</h2>
+                <h2 className="mt-2 text-2xl font-semibold text-white">Create your Violema access</h2>
               </div>
               <Link to="/login" className="text-sm font-medium text-slate-400 transition-colors hover:text-white">
                 Already have access?
@@ -158,16 +160,16 @@ export default function Signup() {
                     onClick={() => setMethod(item.id)}
                     className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
                       method === item.id
-                        ? 'border-violet-500/40 bg-violet-500/10 shadow-[0_0_0_1px_rgba(168,85,247,0.14)]'
-                        : 'border-navy-700/80 bg-navy-950/45 hover:border-violet-700/40 hover:bg-navy-900/65'
+                        ? 'border-violet-500/40 bg-white text-slate-950 shadow-[0_0_0_1px_rgba(168,85,247,0.14)]'
+                        : 'border-navy-700/80 bg-white/95 hover:border-violet-700/40 hover:bg-white'
                     }`}
                   >
-                    <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${item.accent} text-white shadow-sm`}>
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-black/5">
                       {item.icon}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white">{item.label}</p>
-                      <p className="mt-0.5 text-xs text-slate-400">
+                      <p className={`text-sm font-semibold ${method === item.id ? 'text-slate-950' : 'text-slate-900'}`}>{item.label}</p>
+                      <p className={`mt-0.5 text-xs ${method === item.id ? 'text-slate-600' : 'text-slate-500'}`}>
                         {item.id === 'google' ? 'Fast for workspace users' : 'Preferred for enterprise sign-in'}
                       </p>
                     </div>
@@ -228,7 +230,7 @@ export default function Signup() {
                   className="mt-1 h-4 w-4 rounded border-navy-700 bg-navy-950 text-violet-500"
                 />
                 <span>
-                  I understand Nexus can send messages, run automations, and take actions across connected tools depending on the mode I choose.
+                  I understand Violema can send messages, run automations, and take actions across connected tools depending on the mode I choose.
                 </span>
               </label>
             </div>

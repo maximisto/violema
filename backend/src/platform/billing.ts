@@ -1,7 +1,7 @@
 import path from 'path';
 import { canSpendCredits } from './ledger';
 import { readJsonFile, writeJsonFile } from './jsonStore';
-import { getWorkspaceLedgerSummary, ensureWorkspaceCredits, listLedgerEntries, addLedgerEntry } from './store';
+import { getWorkspaceLedgerSummary, listLedgerEntries, addLedgerEntry } from './store';
 import type { BillingPlanId, PlanDefinition, TopUpOffer, WorkspaceBillingConfig } from './types';
 
 export type BillingPlanTier = BillingPlanId;
@@ -68,7 +68,7 @@ const DEFAULT_PLAN_CATALOG: Record<BillingPlanId, PlanDefinition> = {
     supportsLongTermMemory: false,
     supportsAnalyticsDashboard: false,
     features: [
-      '500 Nexus credits',
+      '500 Violema credits',
       '3 active automations',
       'Web research',
       'Code execution',
@@ -92,7 +92,7 @@ const DEFAULT_PLAN_CATALOG: Record<BillingPlanId, PlanDefinition> = {
     supportsLongTermMemory: true,
     supportsAnalyticsDashboard: true,
     features: [
-      '2,000 Nexus credits',
+      '2,000 Violema credits',
       '20 active automations',
       'Multi-agent orchestration',
       'Task automation',
@@ -118,7 +118,7 @@ const DEFAULT_PLAN_CATALOG: Record<BillingPlanId, PlanDefinition> = {
     supportsLongTermMemory: true,
     supportsAnalyticsDashboard: true,
     features: [
-      '7,500 Nexus credits',
+      '7,500 Violema credits',
       '100 active automations',
       '5 included seats',
       'Approvals / review gates',
@@ -156,7 +156,7 @@ export function getDefaultBillingConfig(workspaceId: string): WorkspaceBillingCo
     autoTopUpEnabled: false,
     autoTopUpThresholdCredits: 100,
     autoTopUpAmountCredits: 500,
-    referralCode: `NEXUS-${workspaceId.slice(-4).toUpperCase()}`,
+    referralCode: `VIOLEMA-${workspaceId.slice(-4).toUpperCase()}`,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -173,17 +173,18 @@ function writeBillingConfigs(items: WorkspaceBillingConfig[]) {
 export function getBillingConfig(workspaceId: string): WorkspaceBillingConfig {
   const existing = listBillingConfigs().find((item) => item.workspaceId === workspaceId);
   if (existing) {
-    const plan = DEFAULT_PLAN_CATALOG[existing.planId];
-    ensureWorkspaceCredits(workspaceId, plan.name, plan.includedCredits);
     return existing;
   }
 
   const created = getDefaultBillingConfig(workspaceId);
   const items = [created, ...listBillingConfigs()];
   writeBillingConfigs(items);
-  const plan = DEFAULT_PLAN_CATALOG[created.planId];
-  ensureWorkspaceCredits(workspaceId, plan.name, plan.includedCredits);
   return created;
+}
+
+export function getBillingConfigSnapshot(workspaceId: string): WorkspaceBillingConfig {
+  const existing = listBillingConfigs().find((item) => item.workspaceId === workspaceId);
+  return existing || getDefaultBillingConfig(workspaceId);
 }
 
 export function upsertBillingConfig(workspaceId: string, patch: BillingConfigPatch): WorkspaceBillingConfig {
@@ -232,8 +233,10 @@ export function getBillingSourceHint(status: Pick<BillingStatus, 'summary' | 'pl
   return 'Healthy balance.';
 }
 
-export function buildPlanSummary(workspaceId: string): BillingStatus {
-  const config = getBillingConfig(workspaceId);
+export function buildPlanSummary(workspaceId: string, options?: { seedCredits?: boolean }): BillingStatus {
+  const config = options?.seedCredits === false
+    ? getBillingConfigSnapshot(workspaceId)
+    : getBillingConfig(workspaceId);
   const plan = DEFAULT_PLAN_CATALOG[config.planId];
   const summary = getWorkspaceLedgerSummary(workspaceId);
   const statusBase = { summary, plan };
@@ -382,6 +385,10 @@ export function purchaseTopUp(
 
 export function getBillingStatus(workspaceId: string): BillingStatus {
   return buildPlanSummary(workspaceId);
+}
+
+export function getBillingStatusSnapshot(workspaceId: string): BillingStatus {
+  return buildPlanSummary(workspaceId, { seedCredits: false });
 }
 
 export function assertCanSpendCredits(workspaceId: string, estimatedCredits: number) {

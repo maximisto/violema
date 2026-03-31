@@ -55,7 +55,7 @@ export default function Integrations() {
           <span className="gradient-text"> core operating stack</span>
         </h2>
         <p className="mt-4 max-w-2xl mx-auto text-slate-400">
-          Nexus works best when it can see the systems that already run your work. Start with the important tools first, then expand the integration layer over time.
+          Violema works best when it can see the systems that already run your work. Start with the important tools first, then expand the integration layer over time.
         </p>
         <button
           type="button"

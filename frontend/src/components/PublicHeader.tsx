@@ -24,14 +24,14 @@ export default function PublicHeader({
         <button
           className="flex items-center gap-3 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
           onClick={() => navigate('/')}
-          aria-label="Nexus home"
+          aria-label="Violema home"
         >
           <div className="h-10 w-10 flex-shrink-0 overflow-hidden">
             <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo h-full w-full object-contain" />
           </div>
           <div className="brand-lockup w-[10.25rem]">
-            <span className="brand-wordmark text-[1.04rem]">NEXUS</span>
-            <span className="brand-submark text-[8.7px]">by Purple Orange AI</span>
+            <span className="brand-wordmark text-[1.04rem]">VIOLEMA</span>
+            <span className="brand-submark text-[8.7px]">Your AI coworker</span>
           </div>
         </button>
 

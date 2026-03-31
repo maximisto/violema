@@ -39,7 +39,7 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
   async function handleUpgrade() {
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
-      window.location.assign('mailto:sales@purpleorange.io?subject=Nexus%20Enterprise');
+      window.location.assign('mailto:sales@purpleorange.io?subject=Violema%20Enterprise');
       return;
     }
     window.location.assign(`/plans?plan=${nextPlanId}`);

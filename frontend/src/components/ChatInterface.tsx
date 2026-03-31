@@ -813,7 +813,7 @@ function MessageBubble({
       <div className="min-w-0 flex-1 rounded-[1.45rem] border border-navy-800/75 bg-gradient-to-br from-navy-900/84 via-navy-900/60 to-navy-950/74 px-4 py-3.5 shadow-[0_16px_34px_rgba(2,6,23,0.18)]">
         {/* Header */}
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-violet-100">Nexus</span>
+          <span className="text-sm font-semibold text-violet-100">Violema</span>
           {!message.isStreaming && <ModelBadge />}
           <span className="text-xs text-slate-600">
             {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1195,7 +1195,7 @@ export default function ChatInterface({
   const handleUpgradeCheckout = useCallback(async () => {
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
-      window.location.assign('mailto:sales@purpleorange.io?subject=Nexus%20Enterprise');
+      window.location.assign('mailto:sales@purpleorange.io?subject=Violema%20Enterprise');
       return;
     }
     window.location.assign(`/plans?plan=${nextPlanId}`);
@@ -1289,14 +1289,14 @@ export default function ChatInterface({
                 <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
                   <div className="ui-pill mb-4 px-3 py-1 text-violet-300">
                     <Sparkles className="h-3 w-3" />
-                    Nexus workspace
+                    Violema workspace
                   </div>
                   <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-[1.15rem] bg-gradient-to-br from-violet-500 to-violet-700 shadow-glow-violet ring-1 ring-white/10 sm:h-16 sm:w-16">
                     <span className="text-xl font-bold text-white sm:text-2xl">N</span>
                   </div>
-                  <h2 className="text-[1.8rem] font-bold text-white sm:text-[2.4rem]">Hey, I'm Nexus</h2>
+                  <h2 className="text-[1.8rem] font-bold text-white sm:text-[2.4rem]">Hey, I'm Violema</h2>
                   <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.32em] text-violet-300/70 sm:text-[11px]">
-                    by Purple Orange AI
+                    Your AI coworker
                   </p>
                   <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-300">
                     Your AI coworker, tuned for{' '}
@@ -1327,7 +1327,7 @@ export default function ChatInterface({
                 <div className="flex flex-col gap-3">
                   <div className="rounded-2xl border border-navy-700/60 bg-navy-950/35 px-4 py-3 text-left">
                     <p className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Suggested prompts</p>
-                    <p className="mt-1 text-sm text-slate-400">Start with one strong prompt and Nexus will take it from there.</p>
+                    <p className="mt-1 text-sm text-slate-400">Start with one strong prompt and Violema will take it from there.</p>
                   </div>
                   <div className="grid grid-cols-1 gap-3">
                     {suggestions.slice(0, 3).map((suggestion, i) => (
@@ -1468,7 +1468,7 @@ export default function ChatInterface({
                   adjustTextarea();
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder="Message Nexus… (Shift+Enter for new line)"
+                placeholder="Message Violema… (Shift+Enter for new line)"
                 className="chat-input min-h-[2.65rem] flex-1 resize-none bg-transparent text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-600"
                 rows={1}
                 disabled={isLoading}
@@ -1493,7 +1493,7 @@ export default function ChatInterface({
               )}
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 px-3 py-2 text-[11px] text-slate-700 sm:px-4">
-              <span className="max-[460px]:hidden">Nexus can make mistakes. Verify important information.</span>
+              <span className="max-[460px]:hidden">Violema can make mistakes. Verify important information.</span>
               <span className="min-[461px]:hidden">Verify important information.</span>
               <span className="inline-flex items-center gap-2">
                 <kbd className="text-[10px] bg-navy-800 border border-navy-700 px-1.5 py-0.5 rounded font-mono">

@@ -1,7 +1,8 @@
 import path from 'path';
 import Stripe from 'stripe';
 import { listLedgerEntries } from './store';
-import { getBillingStatus, getPlanDefinition, listPlanDefinitions, listTopUpOffers, purchaseTopUp, upsertBillingConfig } from './billing';
+import { addLedgerEntry } from './store';
+import { getBillingStatusSnapshot, getPlanDefinition, listPlanDefinitions, listTopUpOffers, purchaseTopUp, upsertBillingConfig } from './billing';
 import { readJsonFile, writeJsonFile } from './jsonStore';
 import type { BillingPlanId, PlanDefinition, TopUpOffer } from './types';
 
@@ -21,7 +22,7 @@ export interface StripeBillingConfig {
   topUpPriceIds: Record<string, string | null>;
   plans: Array<PlanDefinition & { priceId: string | null }>;
   offers: Array<TopUpOffer & { priceId: string | null }>;
-  billing: ReturnType<typeof getBillingStatus>;
+  billing: ReturnType<typeof getBillingStatusSnapshot>;
 }
 
 export interface BillingCheckoutSessionInput {
@@ -52,10 +53,15 @@ export interface BillingCheckoutSessionResult {
   note?: string;
 }
 
-const DEFAULT_SUCCESS_URL = 'https://nexus.purpleorange.io/settings/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}';
-const DEFAULT_CANCEL_URL = 'https://nexus.purpleorange.io/settings/billing?checkout=cancel';
 const DEFAULT_CURRENCY = 'usd';
 export const STRIPE_EVENTS_FILE = path.join(process.cwd(), 'platform-stripe-events.json');
+
+function getAppBaseUrl(): string {
+  return getEnv('PUBLIC_APP_URL') || getEnv('APP_BASE_URL') || 'https://nexus.purpleorange.io';
+}
+
+const DEFAULT_SUCCESS_URL = `${getAppBaseUrl()}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+const DEFAULT_CANCEL_URL = `${getAppBaseUrl()}/plans?checkout=cancel`;
 
 let cachedStripe: Stripe | null = null;
 let cachedStripeKey: string | null = null;
@@ -135,7 +141,7 @@ async function createRealCheckoutSession(input: BillingCheckoutSessionInput, pri
 
   const successUrl = getSuccessUrl(input.successUrl);
   const cancelUrl = getCancelUrl(input.cancelUrl);
-  const billing = getBillingStatus(input.workspaceId);
+  const billing = getBillingStatusSnapshot(input.workspaceId);
   const selectedPlan = input.planId ? getPlanDefinition(input.planId) : undefined;
   const selectedOffer = input.offerId ? listTopUpOffers().find((offer) => offer.id === input.offerId) : undefined;
   const metadata = {
@@ -181,7 +187,7 @@ async function createRealCheckoutSession(input: BillingCheckoutSessionInput, pri
 }
 
 export function getStripeBillingConfig(workspaceId: string): StripeBillingConfig {
-  const billing = getBillingStatus(workspaceId);
+  const billing = getBillingStatusSnapshot(workspaceId);
   const plans: Array<PlanDefinition & { priceId: string | null }> = listPlanDefinitions().map((plan) => ({
     ...plan,
     priceId: getSubscriptionPriceId(plan.id),
@@ -342,6 +348,22 @@ async function fulfillCheckoutSessionCompleted(event: Stripe.Event, session: Str
       stripeCustomerId: typeof session.customer === 'string' ? session.customer : undefined,
       stripeSubscriptionId: typeof session.subscription === 'string' ? session.subscription : undefined,
       subscriptionStatus: 'active',
+    });
+
+    addLedgerEntry({
+      workspaceId,
+      source: 'monthly_subscription',
+      deltaCredits: getPlanDefinition(planId).includedCredits,
+      referenceType: 'subscription',
+      referenceId: typeof session.subscription === 'string' ? session.subscription : session.id,
+      note: `Stripe subscription checkout completed: ${planId}`,
+      metadata: {
+        stripeEventId: event.id,
+        stripeSessionId: session.id,
+        type: 'subscription',
+        planId,
+        credits: String(getPlanDefinition(planId).includedCredits),
+      },
     });
     return { applied: true, workspaceId, kind: 'subscription' as const };
   }

@@ -62,14 +62,14 @@ export default function SlackSetup() {
               <span className="gradient-text"> you rely on automations.</span>
             </h1>
             <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-400">
-              Slack is the best primary surface for Nexus right now. Set one valid destination once, and your summaries, alerts, and approvals stop failing in the background.
+              Slack is the best primary surface for Violema right now. Set one valid destination once, and your summaries, alerts, and approvals stop failing in the background.
             </p>
 
             <div className="mt-8 grid gap-4">
               {[
                 {
                   title: '1. Install or invite the bot',
-                  body: 'Make sure the Nexus Slack bot is available in your workspace and invited to the channel where you want updates to land.',
+                  body: 'Make sure the Nexus CoWorker Slack bot is available in your workspace and invited to the channel where you want updates to land.',
                 },
                 {
                   title: '2. Copy the channel ID',
@@ -77,7 +77,7 @@ export default function SlackSetup() {
                 },
                 {
                   title: '3. Save one default target',
-                  body: 'Once saved, Nexus can use that Slack destination as the reliable default for automations and alerts in this workspace.',
+                  body: 'Once saved, Violema can use that Slack destination as the reliable default for automations and alerts in this workspace.',
                 },
               ].map((item) => (
                 <div key={item.title} className="ui-panel flex gap-4 p-4">
@@ -161,7 +161,7 @@ export default function SlackSetup() {
                 <div>
                   <p className="text-sm font-semibold text-white">Best current setup</p>
                   <p className="mt-1 text-sm leading-relaxed text-slate-400">
-                    For now, each user should save one real Slack destination during onboarding, then use the web interface and Slack together. That gives Nexus one dependable surface for alerts and approvals without guessing where to post.
+                    For now, each user should save one real Slack destination during onboarding, then use the web interface and Slack together. That gives Violema one dependable surface for alerts and approvals without guessing where to post.
                   </p>
                 </div>
               </div>

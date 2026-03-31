@@ -65,8 +65,8 @@ export interface TopUpOption {
 
 const MOCK_CREDIT_SNAPSHOT: CreditSnapshot = {
   source: 'mock',
-  workspaceId: 'workspace_default',
-  workspaceName: 'Nexus HQ',
+  workspaceId: 'purpleorangehq',
+  workspaceName: 'Purple Orange HQ',
   planName: 'Pro',
   creditsRemaining: 1684,
   creditsTotal: 2000,
@@ -229,18 +229,24 @@ export function useCreditSnapshot() {
   const [snapshot, setSnapshot] = useState<CreditSnapshot>(MOCK_CREDIT_SNAPSHOT);
   const [isLoading, setIsLoading] = useState(true);
 
+  async function refresh(signal?: AbortSignal) {
+    setIsLoading(true);
+    try {
+      const nextSnapshot = await fetchCreditSnapshot(signal);
+      setSnapshot(nextSnapshot);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   useEffect(() => {
     const controller = new AbortController();
-    setIsLoading(true);
-
-    fetchCreditSnapshot(controller.signal)
-      .then(setSnapshot)
-      .finally(() => setIsLoading(false));
+    void refresh(controller.signal);
 
     return () => controller.abort();
   }, []);
 
-  return { snapshot, isLoading };
+  return { snapshot, isLoading, refresh };
 }
 
 export function useRecentCreditUsage() {
@@ -319,7 +325,7 @@ export function getCreditRecommendation(snapshot: CreditSnapshot) {
 
 export function buildTopUpRequest(snapshot: CreditSnapshot) {
   return [
-    'Hi team, I would like to add credits to my Nexus workspace.',
+    'Hi team, I would like to add credits to my Violema workspace.',
     `Workspace: ${snapshot.workspaceName} (${snapshot.workspaceId})`,
     `Current plan: ${snapshot.planName}`,
     `Suggested top-up: ${formatCredits(snapshot.topUpSuggestion)} credits`,
@@ -329,10 +335,10 @@ export function buildTopUpRequest(snapshot: CreditSnapshot) {
 
 export function buildReferralMessage(snapshot: CreditSnapshot) {
   return [
-    'Try Nexus: an AI coworker for chat, research, automations, and delegated work.',
+    'Try Violema: an AI coworker for chat, research, automations, and delegated work.',
     `Workspace: ${snapshot.workspaceName}`,
     `New users get a bonus, and I get ${formatCredits(snapshot.referralBonus)} credits when you join.`,
-    'Start here: https://nexus.purpleorange.io',
+    'Start here: https://violema.com',
   ].join('\n');
 }
 
@@ -348,12 +354,21 @@ export function getSuggestedUpgradePlanId(planName: string): 'pro' | 'team' | nu
   return null;
 }
 
-export async function createBillingCheckout(input: { kind: 'subscription' | 'top-up'; planId?: 'starter' | 'pro' | 'team'; offerId?: TopUpOfferId | string }) {
+export async function createBillingCheckout(input: {
+  kind: 'subscription' | 'top-up';
+  planId?: 'starter' | 'pro' | 'team';
+  offerId?: TopUpOfferId | string;
+  successUrl?: string;
+  cancelUrl?: string;
+}) {
   const request = getWorkspaceRequest(
     input.kind === 'subscription'
       ? '/api/billing/stripe/checkout/subscription'
       : '/api/billing/stripe/checkout/top-up'
   );
+  const successUrl = input.successUrl || `${window.location.origin}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl = input.cancelUrl
+    || `${window.location.origin}${window.location.pathname.startsWith('/dashboard') ? '/dashboard?checkout=cancel' : '/plans?checkout=cancel'}`;
 
   const response = await fetch(request.url, {
     method: 'POST',
@@ -361,7 +376,11 @@ export async function createBillingCheckout(input: { kind: 'subscription' | 'top
       'Content-Type': 'application/json',
       ...request.headers,
     },
-    body: JSON.stringify(input.kind === 'subscription' ? { planId: input.planId } : { offerId: input.offerId }),
+    body: JSON.stringify(
+      input.kind === 'subscription'
+        ? { planId: input.planId, successUrl, cancelUrl }
+        : { offerId: input.offerId, successUrl, cancelUrl }
+    ),
   });
 
   if (!response.ok) {
@@ -374,7 +393,13 @@ export async function createBillingCheckout(input: { kind: 'subscription' | 'top
   }>;
 }
 
-export async function openBillingCheckout(input: { kind: 'subscription' | 'top-up'; planId?: 'starter' | 'pro' | 'team'; offerId?: TopUpOfferId | string }) {
+export async function openBillingCheckout(input: {
+  kind: 'subscription' | 'top-up';
+  planId?: 'starter' | 'pro' | 'team';
+  offerId?: TopUpOfferId | string;
+  successUrl?: string;
+  cancelUrl?: string;
+}) {
   const result = await createBillingCheckout(input);
   if (result.session?.checkoutUrl) {
     window.location.assign(result.session.checkoutUrl);

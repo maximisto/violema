@@ -36,17 +36,17 @@ export default function Navbar() {
           <button
             className="flex items-center gap-4 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-2xl"
             onClick={() => navigate('/')}
-            aria-label="Nexus home"
+          aria-label="Violema home"
           >
             <div className="w-10 h-10 sm:w-11 sm:h-11 overflow-hidden flex-shrink-0">
               <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
             </div>
             <div className="brand-lockup w-[10.4rem] sm:w-[11.7rem]">
               <span className="brand-wordmark text-[1.08rem] sm:text-[1.34rem]">
-                NEXUS
+                VIOLEMA
               </span>
               <span className="brand-submark text-[8.7px] sm:text-[10px]">
-                by Purple Orange AI
+                Your AI coworker
               </span>
             </div>
           </button>

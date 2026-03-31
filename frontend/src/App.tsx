@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import FAQ from './pages/FAQ';
@@ -19,6 +19,7 @@ export default function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
         <Route path="/plans" element={<Billing />} />
+        <Route path="/settings/billing" element={<Navigate to="/plans" replace />} />
         <Route path="/connect/slack" element={<ProtectedRoute><SlackSetup /></ProtectedRoute>} />
         <Route path="/integrations" element={<IntegrationsPage />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

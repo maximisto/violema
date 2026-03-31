@@ -7,7 +7,7 @@ const NATIVE_NOW = [
     name: 'Slack',
     icon: Slack,
     detail: 'Messaging and team coordination',
-    description: 'Send updates, deliver summaries, and run Nexus where teams already work.',
+    description: 'Send updates, deliver summaries, and run Violema where teams already work.',
   },
   {
     name: 'Email',
@@ -31,7 +31,7 @@ const NATIVE_NOW = [
     name: 'Stripe',
     icon: Layers3,
     detail: 'Billing and workspace purchases',
-    description: 'Power subscriptions, top-ups, and billing state directly inside the Nexus commercial surface.',
+    description: 'Power subscriptions, top-ups, and billing state directly inside the Violema commercial surface.',
   },
   {
     name: 'GitHub',
@@ -73,7 +73,7 @@ export default function IntegrationsPage() {
                 <span className="gradient-text"> that actually matter.</span>
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg">
-                Nexus does not need every connector on day one. It needs the right systems first: where work starts, where decisions land, and where execution needs to follow through.
+                Violema does not need every connector on day one. It needs the right systems first: where work starts, where decisions land, and where execution needs to follow through.
               </p>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 {[
@@ -156,7 +156,7 @@ export default function IntegrationsPage() {
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Messaging surfaces</p>
-                <h2 className="mt-1 text-xl font-semibold text-white">Where Nexus shows up</h2>
+                <h2 className="mt-1 text-xl font-semibold text-white">Where Violema shows up</h2>
               </div>
             </div>
             <div className="mt-5 space-y-3">
@@ -222,7 +222,7 @@ export default function IntegrationsPage() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a
-                href="mailto:hello@purpleorange.io?subject=Nexus%20Integrations"
+                href="mailto:hello@purpleorange.io?subject=Violema%20Integrations"
                 className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/16"
               >
                 Talk about custom integrations

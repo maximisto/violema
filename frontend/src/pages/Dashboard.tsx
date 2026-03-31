@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Plus, MessageSquare, Settings, ChevronRight, Zap, LogOut,
   X, CheckSquare, Clock, AlertCircle, Sparkles, PanelLeftClose, PanelLeftOpen, Trash2,
@@ -546,6 +546,7 @@ const fetchSmartTitle = async (messages: { role: string; content: string }[]): P
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const location = useLocation();
   const navigate = useNavigate();
   const [isMobileSidebar, setIsMobileSidebar] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth < 1024 : false
@@ -569,13 +570,15 @@ export default function Dashboard() {
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>('all');
   const [platformTasks, setPlatformTasks] = useState<DashboardTaskItem[]>([]);
   const [liveAutomations, setLiveAutomations] = useState<DashboardTaskItem[]>([]);
+  const [taskPanelLoaded, setTaskPanelLoaded] = useState(false);
+  const [taskPanelRefreshing, setTaskPanelRefreshing] = useState(false);
   const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | 'delete' | null>(null);
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const { snapshot } = useCreditSnapshot();
+  const { snapshot, refresh: refreshCredits } = useCreditSnapshot();
   const authSession = getAuthSession();
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
@@ -755,6 +758,7 @@ export default function Dashboard() {
     } else {
       setPlatformTasks([]);
     }
+    setTaskPanelLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -763,6 +767,7 @@ export default function Dashboard() {
       .catch(() => {
         setLiveAutomations([]);
         setPlatformTasks([]);
+        setTaskPanelLoaded(true);
       });
 
     return () => controller.abort();
@@ -781,6 +786,26 @@ export default function Dashboard() {
     const timeout = window.setTimeout(() => setUiNotice(null), 3200);
     return () => window.clearTimeout(timeout);
   }, [uiNotice]);
+
+  const showNotice = useCallback((tone: 'success' | 'error', message: string) => {
+    setUiNotice({ tone, message });
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const checkoutState = params.get('checkout');
+    if (!checkoutState) return;
+
+    if (checkoutState === 'success') {
+      showNotice('success', 'Stripe checkout completed. Refreshing credits…');
+      void refreshCredits();
+      return;
+    }
+
+    if (checkoutState === 'cancel') {
+      showNotice('error', 'Stripe checkout was canceled.');
+    }
+  }, [location.search, refreshCredits, showNotice]);
 
   useEffect(() => {
     if (!automationEditor) {
@@ -811,13 +836,41 @@ export default function Dashboard() {
     return () => window.clearTimeout(timeout);
   }, [automationEditor]);
 
-  const refreshAutomations = useCallback(async () => {
-    await loadTaskPanelData();
+  const refreshTaskPanel = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = Boolean(options?.silent);
+    if (!silent) setTaskPanelRefreshing(true);
+    try {
+      await loadTaskPanelData();
+    } finally {
+      if (!silent) setTaskPanelRefreshing(false);
+    }
   }, [loadTaskPanelData]);
 
-  const showNotice = useCallback((tone: 'success' | 'error', message: string) => {
-    setUiNotice({ tone, message });
-  }, []);
+  const refreshAutomations = useCallback(async () => {
+    await refreshTaskPanel();
+  }, [refreshTaskPanel]);
+
+  useEffect(() => {
+    if (!taskPanelOpen) return undefined;
+
+    const refreshSilently = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void refreshTaskPanel({ silent: true }).catch(() => {});
+    };
+
+    const intervalId = window.setInterval(refreshSilently, 15000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshSilently();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [taskPanelOpen, refreshTaskPanel]);
 
   const handleAutomationRun = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
@@ -860,6 +913,14 @@ export default function Dashboard() {
     try {
       const response = await fetch(`/api/automations/${task.automationId}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Could not delete automation');
+      setLiveAutomations((current) => {
+        const next = current.filter((item) => item.automationId !== task.automationId);
+        setSelectedTaskId((selected) => {
+          if (selected !== task.id) return selected;
+          return next[0]?.id ?? '';
+        });
+        return next;
+      });
       await refreshAutomations();
       showNotice('success', `Deleted "${task.title}"`);
     } catch {
@@ -1052,16 +1113,9 @@ export default function Dashboard() {
     return { active, pinned, sections };
   }, [activeConvoId, visibleFilteredConvos]);
 
-  const taskItems: DashboardTaskItem[] = liveAutomations.length > 0
-    ? liveAutomations
-    : platformTasks.length > 0
-    ? platformTasks
-    : SAMPLE_TASKS.map((task) => ({
-        ...task,
-        status: task.status as DashboardTaskStatus,
-        description: undefined,
-        source: 'sample' as const,
-      }));
+  const taskItems: DashboardTaskItem[] = liveAutomations;
+  const hasAutomationHistory = platformTasks.length > 0;
+  const showTaskPanelEmptyState = taskPanelLoaded && taskItems.length === 0;
 
   const taskSummary = taskItems.reduce(
     (acc, task) => {
@@ -1165,8 +1219,13 @@ export default function Dashboard() {
   useEffect(() => {
     if (!selectedTask && taskItems[0]) {
       setSelectedTaskId(taskItems[0].id);
+      return;
     }
-  }, [selectedTask, taskItems]);
+
+    if (taskItems.length === 0 && selectedTaskId !== '') {
+      setSelectedTaskId('');
+    }
+  }, [selectedTask, selectedTaskId, taskItems]);
 
   const ModeSelector = ({ compact = false }: { compact?: boolean }) => (
     <div className={`ui-input-shell flex items-center gap-1 p-1 ${compact ? 'w-full' : ''}`}>
@@ -1199,7 +1258,7 @@ export default function Dashboard() {
   const openUpgrade = () => {
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
-      window.location.assign('mailto:sales@purpleorange.io?subject=Nexus%20Enterprise');
+      window.location.assign('mailto:sales@purpleorange.io?subject=Violema%20Enterprise');
       return;
     }
     navigate(`/plans?plan=${nextPlanId}`);
@@ -1266,17 +1325,17 @@ export default function Dashboard() {
             <button
               onClick={() => navigate('/')}
               className="flex items-center gap-3.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-1"
-              aria-label="Go to Nexus home"
+              aria-label="Go to Violema home"
             >
               <div className="w-9 h-9 overflow-hidden flex-shrink-0">
                 <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
               </div>
               <div className="brand-lockup w-[10rem]">
                 <span className="brand-wordmark text-[1.02rem]">
-                  NEXUS
+                  VIOLEMA
                 </span>
                 <span className="brand-submark text-[7.9px]">
-                  by Purple Orange AI
+                  Your AI coworker
                 </span>
               </div>
             </button>
@@ -1811,7 +1870,7 @@ export default function Dashboard() {
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <div className="w-1.5 h-1.5 bg-green-400 rounded-full shadow-[0_0_0_4px_rgba(74,222,128,0.08)]" />
-              <span className="text-xs text-slate-500">Nexus ready</span>
+              <span className="text-xs text-slate-500">Violema ready</span>
               {currentMessages.length > 0 && (
                 <>
                   <span className="text-slate-700">·</span>
@@ -1893,13 +1952,22 @@ export default function Dashboard() {
                     <h3 className="text-sm font-semibold text-white">Automations</h3>
                   </div>
                 </div>
-                <button
-                  onClick={() => setTaskPanelOpen(false)}
-                  aria-label="Close tasks panel"
-                  className="text-slate-500 hover:text-slate-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => { void refreshTaskPanel(); }}
+                    aria-label="Refresh automations"
+                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-navy-900/70 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 ${taskPanelRefreshing ? 'animate-spin' : ''}`} />
+                  </button>
+                  <button
+                    onClick={() => setTaskPanelOpen(false)}
+                    aria-label="Close tasks panel"
+                    className="text-slate-500 hover:text-slate-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               <div className="px-3 pt-3">
@@ -1928,162 +1996,185 @@ export default function Dashboard() {
 
               <div className="px-3 pt-3">
                 <div className="rounded-[1.4rem] border border-violet-500/15 bg-gradient-to-br from-violet-500/8 via-navy-900/70 to-navy-950/92 p-3.5 shadow-[0_16px_34px_rgba(2,6,23,0.16)]">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Selected automation</p>
-                      <h4 className="mt-1 text-sm font-semibold leading-snug text-white">{selectedTask?.title}</h4>
-                    </div>
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${selectedTaskMeta?.chip ?? 'border-navy-700 bg-navy-900 text-slate-400'}`}>
-                      {selectedTaskMeta?.label ?? 'Scheduled'}
-                    </span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
-                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                      <p className="uppercase tracking-[0.18em] text-slate-600">Next run</p>
-                      <p className="mt-1 text-slate-200">{selectedTask?.nextRunAt ? formatAutomationRunTime(selectedTask.nextRunAt) : selectedTask?.time}</p>
-                    </div>
-                    <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                      <p className="uppercase tracking-[0.18em] text-slate-600">Last outcome</p>
-                      <div className="mt-1 flex items-center justify-between gap-2">
-                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${selectedTaskOutcome.tone}`}>
-                          {selectedTaskOutcome.label}
+                  {selectedTask ? (
+                    <>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Selected automation</p>
+                          <h4 className="mt-1 text-sm font-semibold leading-snug text-white">{selectedTask.title}</h4>
+                        </div>
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${selectedTaskMeta?.chip ?? 'border-navy-700 bg-navy-900 text-slate-400'}`}>
+                          {selectedTaskMeta?.label ?? 'Scheduled'}
                         </span>
-                        {selectedTask?.lastRunAt ? (
-                          <span className="text-[10px] text-slate-500">{formatRelativeTimeFromIso(selectedTask.lastRunAt)}</span>
-                        ) : null}
                       </div>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
-                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                      {selectedTask?.source === 'live' ? 'Live task' : 'Preview task'}
-                    </span>
-                    {selectedTask?.agentRole && (
-                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                        {selectedTask.agentRole}
-                      </span>
-                    )}
-                    {selectedTask?.modelTier && (
-                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                        {selectedTask.modelTier}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Latest result</p>
-                        <p className="mt-1 text-[11px] text-slate-500">
-                          {selectedTask?.lastRunAt
-                            ? `${selectedTaskOutcome.detail} Last run ${formatAutomationRunTime(selectedTask.lastRunAt)}.`
-                            : selectedTaskOutcome.detail}
-                        </p>
-                      </div>
-                    </div>
-                    {selectedTask?.failureReason ? (
-                      <div className="mt-3 rounded-xl border border-red-500/18 bg-red-500/8 px-3 py-2.5 text-[11px] leading-relaxed text-red-200">
-                        {selectedTask.failureReason}
-                      </div>
-                    ) : null}
-                    {selectedTaskSummary ? (
-                      <p className="mt-3 text-[13px] leading-6 text-slate-100">
-                        {selectedTaskSummary}
-                      </p>
-                    ) : (
-                      <div className="mt-3 rounded-xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-2.5 text-[11px] leading-relaxed text-slate-500">
-                        {selectedTaskOutcome.label === 'Last run failed'
-                          ? 'The last run failed before it produced a concise summary. Check the workflow steps or delivery target and run it again.'
-                          : selectedTask?.lastRunAt
-                            ? 'The latest run finished, but it did not store a summary preview yet.'
-                            : 'No run output yet. Start the automation manually or wait for the next scheduled run.'}
-                      </div>
-                    )}
-                    {selectedTaskEvidenceLinks.length > 0 ? (
-                      <div className="mt-3">
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Evidence</p>
-                        <div className="mt-2 space-y-1.5">
-                          {selectedTaskEvidenceLinks.map((link) => (
-                            <a
-                              key={`${link.href}-${link.label}`}
-                              href={link.href}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="group flex items-center justify-between rounded-xl border border-cyan-500/12 bg-cyan-500/6 px-3 py-2 text-left transition-colors hover:border-cyan-400/35 hover:bg-cyan-500/10"
-                            >
-                              <div className="min-w-0">
-                                <p className="truncate text-[11px] font-medium text-slate-100">{link.label}</p>
-                                <p className="truncate text-[10px] text-slate-500">Source: {link.source}</p>
-                              </div>
-                              <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0 text-cyan-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-                            </a>
-                          ))}
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                        <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                          <p className="uppercase tracking-[0.18em] text-slate-600">Next run</p>
+                          <p className="mt-1 text-slate-200">{selectedTask.nextRunAt ? formatAutomationRunTime(selectedTask.nextRunAt) : selectedTask.time}</p>
+                        </div>
+                        <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                          <p className="uppercase tracking-[0.18em] text-slate-600">Last outcome</p>
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${selectedTaskOutcome.tone}`}>
+                              {selectedTaskOutcome.label}
+                            </span>
+                            {selectedTask.lastRunAt ? (
+                              <span className="text-[10px] text-slate-500">{formatRelativeTimeFromIso(selectedTask.lastRunAt)}</span>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
-                    ) : selectedTask?.lastRunAt ? (
-                      <div className="mt-3 rounded-xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-2.5 text-[11px] text-slate-500">
-                        No evidence links were attached to the latest run.
+                      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
+                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                          {selectedTask.source === 'live' ? 'Live task' : 'Preview task'}
+                        </span>
+                        {selectedTask.agentRole && (
+                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                            {selectedTask.agentRole}
+                          </span>
+                        )}
+                        {selectedTask.modelTier && (
+                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                            {selectedTask.modelTier}
+                          </span>
+                        )}
                       </div>
-                    ) : null}
-                  </div>
-                  {selectedTask?.description && (
-                    <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
-                      {selectedTask.description}
-                    </p>
-                  )}
-                  <div className="mt-3 flex items-center gap-2">
-                    <button
-                      onClick={() => { void handleAutomationRun(selectedTask); }}
-                      disabled={selectedTask?.source !== 'live' || actionBusy !== null}
-                      className="flex-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {actionBusy === 'run' ? 'Running…' : 'Run now'}
-                    </button>
-                    <button
-                      onClick={() => { void handleAutomationPauseToggle(selectedTask); }}
-                      disabled={selectedTask?.source !== 'live' || actionBusy !== null}
-                      className="flex-1 rounded-xl border border-navy-700/70 bg-navy-950/35 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition-colors hover:bg-navy-900/70 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {actionBusy === 'pause' ? 'Saving…' : selectedTask?.automationStatus === 'paused' ? 'Resume' : 'Pause'}
-                    </button>
-                    <button
-                      onClick={() => { void handleAutomationEdit(selectedTask); }}
-                      disabled={selectedTask?.source !== 'live' || actionBusy !== null}
-                      className="flex-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                  {selectedTask?.source === 'live' && (
-                    <button
-                      onClick={() => confirmAutomationDelete(selectedTask)}
-                      disabled={actionBusy !== null}
-                      className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/18 bg-red-500/6 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      {actionBusy === 'delete' ? 'Deleting…' : 'Delete automation'}
-                    </button>
-                  )}
-                  {selectedTask?.source === 'live' && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <button
-                        onClick={duplicateSelectedAutomation}
-                        className="flex-1 rounded-xl border border-navy-700/70 bg-transparent px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-navy-600 hover:bg-navy-950/35 hover:text-slate-200"
-                      >
-                        Duplicate
-                      </button>
-                      <button
-                        onClick={handleAutomationCreate}
-                        className="flex-1 rounded-xl border border-navy-700/70 bg-transparent px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-navy-600 hover:bg-navy-950/35 hover:text-cyan-200"
-                      >
-                        New from template
-                      </button>
+                      <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Latest result</p>
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              {selectedTask.lastRunAt
+                                ? `${selectedTaskOutcome.detail} Last run ${formatAutomationRunTime(selectedTask.lastRunAt)}.`
+                                : selectedTaskOutcome.detail}
+                            </p>
+                          </div>
+                        </div>
+                        {selectedTask.failureReason ? (
+                          <div className="mt-3 rounded-xl border border-red-500/18 bg-red-500/8 px-3 py-2.5 text-[11px] leading-relaxed text-red-200">
+                            {selectedTask.failureReason}
+                          </div>
+                        ) : null}
+                        {selectedTaskSummary ? (
+                          <p className="mt-3 text-[13px] leading-6 text-slate-100">
+                            {selectedTaskSummary}
+                          </p>
+                        ) : (
+                          <div className="mt-3 rounded-xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-2.5 text-[11px] leading-relaxed text-slate-500">
+                            {selectedTaskOutcome.label === 'Last run failed'
+                              ? 'The last run failed before it produced a concise summary. Check the workflow steps or delivery target and run it again.'
+                              : selectedTask.lastRunAt
+                                ? 'The latest run finished, but it did not store a summary preview yet.'
+                                : 'No run output yet. Start the automation manually or wait for the next scheduled run.'}
+                          </div>
+                        )}
+                        {selectedTaskEvidenceLinks.length > 0 ? (
+                          <div className="mt-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Evidence</p>
+                            <div className="mt-2 space-y-1.5">
+                              {selectedTaskEvidenceLinks.map((link) => (
+                                <a
+                                  key={`${link.href}-${link.label}`}
+                                  href={link.href}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="group flex items-center justify-between rounded-xl border border-cyan-500/12 bg-cyan-500/6 px-3 py-2 text-left transition-colors hover:border-cyan-400/35 hover:bg-cyan-500/10"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="truncate text-[11px] font-medium text-slate-100">{link.label}</p>
+                                    <p className="truncate text-[10px] text-slate-500">Source: {link.source}</p>
+                                  </div>
+                                  <ArrowUpRight className="h-3.5 w-3.5 flex-shrink-0 text-cyan-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ) : selectedTask.lastRunAt ? (
+                          <div className="mt-3 rounded-xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-2.5 text-[11px] text-slate-500">
+                            No evidence links were attached to the latest run.
+                          </div>
+                        ) : null}
+                      </div>
+                      {selectedTask.description && (
+                        <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+                          {selectedTask.description}
+                        </p>
+                      )}
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          onClick={() => { void handleAutomationRun(selectedTask); }}
+                          disabled={selectedTask.source !== 'live' || actionBusy !== null}
+                          className="flex-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {actionBusy === 'run' ? 'Running…' : 'Run now'}
+                        </button>
+                        <button
+                          onClick={() => { void handleAutomationPauseToggle(selectedTask); }}
+                          disabled={selectedTask.source !== 'live' || actionBusy !== null}
+                          className="flex-1 rounded-xl border border-navy-700/70 bg-navy-950/35 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition-colors hover:bg-navy-900/70 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {actionBusy === 'pause' ? 'Saving…' : selectedTask.automationStatus === 'paused' ? 'Resume' : 'Pause'}
+                        </button>
+                        <button
+                          onClick={() => { void handleAutomationEdit(selectedTask); }}
+                          disabled={selectedTask.source !== 'live' || actionBusy !== null}
+                          className="flex-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                      {selectedTask.source === 'live' && (
+                        <button
+                          onClick={() => confirmAutomationDelete(selectedTask)}
+                          disabled={actionBusy !== null}
+                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/18 bg-red-500/6 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {actionBusy === 'delete' ? 'Deleting…' : 'Delete automation'}
+                        </button>
+                      )}
+                      {selectedTask.source === 'live' && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            onClick={duplicateSelectedAutomation}
+                            className="flex-1 rounded-xl border border-navy-700/70 bg-transparent px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-navy-600 hover:bg-navy-950/35 hover:text-slate-200"
+                          >
+                            Duplicate
+                          </button>
+                          <button
+                            onClick={handleAutomationCreate}
+                            className="flex-1 rounded-xl border border-navy-700/70 bg-transparent px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-navy-600 hover:bg-navy-950/35 hover:text-cyan-200"
+                          >
+                            New from template
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-4">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Selected automation</p>
+                      <p className="mt-2 text-sm font-medium text-white">No active automations</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                        {hasAutomationHistory
+                          ? 'Your active automations list is empty. Historical task runs still exist, but deleted workflows will no longer reappear in this rail.'
+                          : 'Create an automation to monitor work, capture results, and keep the latest run visible here.'}
+                      </p>
                     </div>
                   )}
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                {taskItems.map((task) => {
+                {showTaskPanelEmptyState ? (
+                  <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/25 px-4 py-5 text-center">
+                    <p className="text-sm font-medium text-white">No active automations</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                      {hasAutomationHistory
+                        ? 'Deleted or completed workflow runs remain in task history, but only active automations appear in this panel.'
+                        : 'Start with a scheduled automation and the latest result will appear here automatically.'}
+                    </p>
+                  </div>
+                ) : taskItems.map((task) => {
                   const Icon = task.icon;
                   const meta = getTaskStatusMeta(task.status as 'scheduled' | 'complete' | 'alert');
                   const isSelected = selectedTaskId === task.id;

@@ -28,10 +28,10 @@ const STATS = [
 ];
 
 const TERMINAL_MESSAGES = [
-  { role: 'user', content: '@nexus pull the MRR from Stripe and compare to last month' },
+  { role: 'user', content: '@violema pull the MRR from Stripe and compare to last month' },
   { role: 'nexus', content: '📊 Pulling Stripe data...', type: 'thinking' },
   { role: 'nexus', content: 'MRR this month: **$127,450** (+17.8% vs Feb)\nNew subscriptions: 47 | Churn: 3\nNet Revenue Retention: 118% 🚀', type: 'result' },
-  { role: 'user', content: '@nexus send the summary to #revenue-team on Slack' },
+  { role: 'user', content: '@violema send the summary to #revenue-team on Slack' },
   { role: 'nexus', content: '✅ Sent to #revenue-team. Want me to create a weekly automated report?', type: 'result' },
 ];
 
@@ -156,7 +156,7 @@ export default function Hero() {
 
             {/* Sub */}
             <p className="text-lg sm:text-xl text-slate-400 mb-10 max-w-lg leading-relaxed">
-              Nexus is your AI coworker for research, execution, and automation. It does more than answer. It follows through.
+              Violema is your AI coworker for research, execution, and automation. It does more than answer. It follows through.
             </p>
 
             {/* Social proof bullets */}
@@ -221,7 +221,7 @@ export default function Hero() {
                 <div className="flex-1 flex justify-center">
                   <div className="bg-navy-800 rounded-md px-4 py-1 flex items-center gap-2">
                     <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                    <span className="text-xs text-slate-500 font-mono">#general — Nexus AI</span>
+                    <span className="text-xs text-slate-500 font-mono">#general — Violema AI</span>
                   </div>
                 </div>
               </div>
@@ -246,7 +246,7 @@ export default function Hero() {
 
             {/* Floating badge */}
             <div className="absolute -top-3 -right-3 bg-violet-600 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-glow-violet animate-float">
-              Nexus is working...
+              Violema is working...
             </div>
           </div>
         </div>

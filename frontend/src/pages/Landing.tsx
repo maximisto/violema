@@ -86,11 +86,11 @@ function LiveActivity() {
               <span className="text-cyan-400 text-sm font-medium">Always on</span>
             </div>
             <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6 leading-tight">
-              Nexus works{' '}
+              Violema works{' '}
               <span className="gradient-text">while you sleep</span>
             </h2>
             <p className="text-xl text-slate-400 mb-8 leading-relaxed">
-              Hundreds of teams are running Nexus right now — pulling reports, triaging issues, sending updates, and closing the loop on tasks you'd otherwise forget.
+              High-leverage teams are already putting Violema to work — pulling reports, triaging issues, sending updates, and closing the loop on tasks you'd otherwise forget.
             </p>
             <div className="grid grid-cols-2 gap-4">
               {[
@@ -125,7 +125,7 @@ function ProductDemo() {
   const DEMO_MESSAGES = [
     {
       role: 'user',
-      text: '@nexus pull the MRR from Stripe and compare to last month',
+      text: '@violema pull the MRR from Stripe and compare to last month',
     },
     {
       role: 'nexus',
@@ -170,7 +170,7 @@ function ProductDemo() {
               <span className="gradient-text">done in seconds</span>
             </h2>
             <p className="text-xl text-slate-400 mb-8 leading-relaxed">
-              Watch Nexus pull Stripe data, analyze it, message your team, and create follow-up tasks — all from a single Slack message.
+              Watch Violema pull Stripe data, analyze it, message your team, and create follow-up tasks — all from a single Slack message.
             </p>
 
             <div className="space-y-4 mb-10">
@@ -234,7 +234,7 @@ function ProductDemo() {
                           <span className="text-xs text-white font-bold">N</span>
                         </div>
                         <div className="flex-1">
-                          <span className="text-xs text-violet-400 mb-0.5 block font-semibold">Nexus</span>
+                          <span className="text-xs text-violet-400 mb-0.5 block font-semibold">Violema</span>
                           {msg.tool && (
                             <div className="bg-navy-900 border border-navy-700 rounded-lg px-3 py-2 flex items-center gap-2 mb-2">
                               <span>{msg.tool.icon}</span>
@@ -295,8 +295,8 @@ const AUTONOMY_MODES = [
     glow: 'shadow-green-900/20',
     label: 'Autonomous',
     tagline: 'Full autopilot',
-    description: 'Nexus acts immediately with no confirmation needed. Perfect for routine tasks, reports, and anything you trust it to run on its own.',
-    example: 'Every Monday at 9am, Nexus pulls Stripe MRR, generates the executive summary, and posts it to #revenue-team — while you sleep.',
+    description: 'Violema acts immediately with no confirmation needed. Perfect for routine tasks, reports, and anything you trust it to run on its own.',
+    example: 'Every Monday at 9am, Violema pulls Stripe MRR, generates the executive summary, and posts it to #revenue-team — while you sleep.',
     chips: ['No interruptions', 'Fastest execution', 'Best for routine work'],
   },
   {
@@ -308,7 +308,7 @@ const AUTONOMY_MODES = [
     glow: 'shadow-yellow-900/20',
     label: 'Cautious',
     tagline: 'Explain then act',
-    description: 'Before taking significant actions, Nexus tells you what it\'s about to do and why. You stay informed without being slowed down.',
+    description: 'Before taking significant actions, Violema tells you what it\'s about to do and why. You stay informed without being slowed down.',
     example: '"I\'m going to pause 3 campaigns (ROAS < 1.5x) and reallocate $4,200 to the top performer. Proceeding now."',
     chips: ['Transparent intent', 'Informed decisions', 'Best for high-stakes work'],
   },
@@ -321,7 +321,7 @@ const AUTONOMY_MODES = [
     glow: 'shadow-cyan-900/20',
     label: 'Supervised',
     tagline: 'Full reasoning visible',
-    description: 'See every step of Nexus\'s thinking — the reasoning, the alternatives considered, and why it chose the path it took. Maximum transparency.',
+    description: 'See every step of Violema\'s thinking — the reasoning, the alternatives considered, and why it chose the path it took. Maximum transparency.',
     example: 'Step 1: Querying Stripe… Step 2: Cross-referencing PostHog funnel data… Step 3: Identified checkout drop at payment step (mobile only)…',
     chips: ['Full thought process', 'Audit everything', 'Best for learning/debugging'],
   },
@@ -358,7 +358,7 @@ function AutonomyModes() {
             <span className="gradient-text">how much control</span>
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Unlike black-box AI tools, Nexus adapts to your trust level. Start supervised, go autonomous when you're ready.
+            Unlike black-box AI tools, Violema adapts to your trust level. Start supervised, go autonomous when you're ready.
           </p>
         </div>
 
@@ -415,7 +415,7 @@ function AutonomyModes() {
                 </div>
                 <div className="ml-auto flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-                  <span className="text-[10px] text-slate-500">Nexus active</span>
+                  <span className="text-[10px] text-slate-500">Violema active</span>
                 </div>
               </div>
               <div className="p-5 min-h-[200px] flex items-center">
@@ -451,7 +451,7 @@ function AutonomyModes() {
 
 const TESTIMONIALS = [
   {
-    quote: "Nexus replaced 3 hours of Monday morning reporting. It pulls our Stripe, HubSpot, and Linear data, writes the digest, and posts it to Slack before anyone's even logged on.",
+    quote: "Violema replaced 3 hours of Monday morning reporting. It pulls our Stripe, HubSpot, and Linear data, writes the digest, and posts it to Slack before anyone's even logged on.",
     name: 'Sarah Chen',
     role: 'Head of Operations',
     company: 'Loops',
@@ -459,7 +459,7 @@ const TESTIMONIALS = [
     stars: 5,
   },
   {
-    quote: "The supervised mode was a revelation. I could see exactly why Nexus made each decision — it completely changed how I think about delegating work to AI.",
+    quote: "The supervised mode was a revelation. I could see exactly why Violema made each decision — it completely changed how I think about delegating work to AI.",
     name: 'Marcus Webb',
     role: 'CTO',
     company: 'Framer',
@@ -467,7 +467,7 @@ const TESTIMONIALS = [
     stars: 5,
   },
   {
-    quote: "We set up 12 automations in our first week. Nexus now handles all our recurring ops work. My team focuses only on problems that actually need human judgment.",
+    quote: "We set up 12 automations in our first week. Violema now handles all our recurring ops work. My team focuses only on problems that actually need human judgment.",
     name: 'Priya Nair',
     role: 'VP Engineering',
     company: 'Loom',
@@ -475,7 +475,7 @@ const TESTIMONIALS = [
     stars: 5,
   },
   {
-    quote: "The confidence scores on tool calls were a game-changer. I knew exactly when to trust Nexus's output and when to verify. That level of transparency is rare.",
+    quote: "The confidence scores on tool calls were a game-changer. I knew exactly when to trust Violema's output and when to verify. That level of transparency is rare.",
     name: 'James Liu',
     role: 'Founder',
     company: 'Fathom',
@@ -483,7 +483,7 @@ const TESTIMONIALS = [
     stars: 5,
   },
   {
-    quote: "What shocked me: Nexus noticed we had 18 failed payments at risk and proactively drafted a recovery email campaign. We hadn't asked for it. That's a real coworker.",
+    quote: "What shocked me: Violema noticed we had 18 failed payments at risk and proactively drafted a recovery email campaign. We hadn't asked for it. That's a real coworker.",
     name: 'Elena Vasquez',
     role: 'Head of Revenue',
     company: 'Linear',
@@ -491,7 +491,7 @@ const TESTIMONIALS = [
     stars: 5,
   },
   {
-    quote: "We tried ChatGPT, Claude, and Copilot. None of them actually *do* anything. Nexus executes — it takes actions, moves data, sends messages. It's in a different category.",
+    quote: "We tried ChatGPT, Claude, and Copilot. None of them actually *do* anything. Violema executes — it takes actions, moves data, sends messages. It's in a different category.",
     name: 'Tom Okello',
     role: 'COO',
     company: 'Resend',
@@ -525,7 +525,7 @@ function Testimonials() {
             Teams that shipped faster
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Teams use Nexus to cut repetitive work, centralize execution, and keep humans in the loop.
+            Teams use Violema to cut repetitive work, centralize execution, and keep humans in the loop.
           </p>
         </div>
 
@@ -609,7 +609,7 @@ function ComparisonTable() {
             Not all AI is equal
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Chat interfaces suggest. Nexus executes — with full transparency into why.
+            Chat interfaces suggest. Violema executes — with full transparency into why.
           </p>
         </div>
 
@@ -626,7 +626,7 @@ function ComparisonTable() {
                     <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center">
                       <Zap className="w-3.5 h-3.5 text-white" />
                     </div>
-                    <span className="text-xs font-bold text-white">Nexus</span>
+                    <span className="text-xs font-bold text-white">Violema</span>
                   </div>
                 </th>
                 <th className="px-4 py-4 text-center">
@@ -708,12 +708,12 @@ function FinalCTA() {
           <span className="text-violet-300 text-sm font-medium">Access, billing, and onboarding</span>
         </div>
         <h2 className="text-5xl sm:text-6xl font-extrabold text-white mb-6 leading-[1.05]">
-          Put Nexus to work
+          Put Violema to work
           <br />
           <span className="gradient-text">with a plan that fits.</span>
         </h2>
         <p className="text-xl text-slate-400 mb-10 max-w-xl mx-auto leading-relaxed">
-          No prompting tricks. No babysitting. Nexus executes, reports back, and gets better every day. Pick a plan, connect your stack, and put it to work.
+          No prompting tricks. No babysitting. Violema executes, reports back, and gets better every day. Pick a plan, connect your stack, and put it to work.
         </p>
         <div className="flex flex-wrap gap-4 justify-center mb-10">
           <button

@@ -230,10 +230,10 @@ export default function Footer() {
         {/* ── Launch CTA (compact) ─────────────────────────────────────── */}
         <div className="py-14 text-center border-b border-navy-800">
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            Start with Nexus today
+            Start with Violema today
           </h2>
           <p className="text-lg text-slate-400 mb-7 max-w-xl mx-auto">
-            Set up access, pick a plan, and put Nexus to work in the stack you already run.
+            Set up access, pick a plan, and put Violema to work in the stack you already run.
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <button
@@ -263,9 +263,9 @@ export default function Footer() {
                 <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
               </div>
               <div className="flex flex-col">
-                <span className="text-white font-bold text-sm leading-tight">Nexus</span>
+                <span className="text-white font-bold text-sm leading-tight">VIOLEMA</span>
                 <span className="text-[9px] text-violet-400/60 leading-none font-medium tracking-widest uppercase">
-                  by Purple Orange AI
+                  Your AI coworker
                 </span>
               </div>
             </button>

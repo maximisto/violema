@@ -48,7 +48,7 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
   function openPricing() {
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
-      window.location.assign('mailto:sales@purpleorange.io?subject=Nexus%20Enterprise');
+      window.location.assign('mailto:sales@purpleorange.io?subject=Violema%20Enterprise');
       return;
     }
     window.location.assign(`/plans?plan=${nextPlanId}`);
@@ -81,7 +81,7 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
             <Sparkles className="h-3 w-3" />
             Credits
           </div>
-          <h3 className={`mt-2 ${compact ? 'text-[13px]' : 'text-sm'} font-semibold text-white`}>Nexus Credits</h3>
+          <h3 className={`mt-2 ${compact ? 'text-[13px]' : 'text-sm'} font-semibold text-white`}>Violema Credits</h3>
           <p className={`mt-0.5 ${compact ? 'text-[10px]' : 'text-[11px]'} text-slate-500`}>
             {snapshot.workspaceName} · {snapshot.planName} plan · {isLoading ? 'syncing…' : snapshot.source === 'api' ? 'live' : 'preview'}
           </p>
@@ -235,7 +235,7 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
         </p>
         <button
           type="button"
-          onClick={() => copyToClipboard(`Nexus workspace ${snapshot.planName}`, 'Workspace summary')}
+          onClick={() => copyToClipboard(`Violema workspace ${snapshot.planName}`, 'Workspace summary')}
           className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 transition-colors hover:text-slate-300"
         >
           <ExternalLink className="h-3 w-3" />

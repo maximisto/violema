@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, KeyRound, Mail } from 'lucide-react';
 import { getAuthSession, saveAuthSession } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
+import { persistWorkspaceContext } from '../lib/workspace';
 
 export default function Login() {
   const location = useLocation();
@@ -14,6 +15,7 @@ export default function Login() {
 
   function handleContinue() {
     if (!/\S+@\S+\.\S+/.test(email) || name.trim().length < 2) return;
+    persistWorkspaceContext();
     saveAuthSession({
       email: email.trim(),
       name: name.trim(),

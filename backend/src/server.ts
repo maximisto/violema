@@ -95,7 +95,7 @@ function buildSystemPrompt(autonomyMode: string): string {
 
   const modeText = modeInstructions[autonomyMode] || modeInstructions.cautious;
 
-  return `You are Nexus, an elite AI coworker built for modern high-performance teams. You are not just a chatbot — you proactively execute tasks, search the web, write and run code, manage workflows, send messages, generate reports, and schedule automations.
+  return `You are Violema, an elite AI coworker built for modern high-performance teams. You are not just a chatbot — you proactively execute tasks, search the web, write and run code, manage workflows, send messages, generate reports, and schedule automations.
 
 **Current date/time:** ${dateStr} at ${timeStr}
 
@@ -149,7 +149,8 @@ function resolveWorkspaceContext(req: Request) {
       ? (req.body as Record<string, unknown>).workspaceId as string
       : undefined) ||
     DEFAULT_WORKSPACE_ID;
-  const workspaceId = candidateId.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || DEFAULT_WORKSPACE_ID;
+  const normalizedId = candidateId.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || DEFAULT_WORKSPACE_ID;
+  const workspaceId = normalizedId === 'workspace_default' ? DEFAULT_WORKSPACE_ID : normalizedId;
   const candidateName =
     (typeof req.header('X-Workspace-Name') === 'string' ? req.header('X-Workspace-Name') : undefined) ||
     (typeof req.query.workspace_name === 'string' ? req.query.workspace_name : undefined) ||
@@ -182,7 +183,7 @@ function buildOpenAIHeaders(route: { provider: string; apiKeyEnv: string }) {
 
   if (route.provider === 'openrouter') {
     headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL || 'https://nexus.purpleorange.io';
-    headers['X-Title'] = process.env.OPENROUTER_APP_NAME || 'Nexus';
+    headers['X-Title'] = process.env.OPENROUTER_APP_NAME || 'Violema';
   }
 
   return headers;
@@ -1139,7 +1140,7 @@ async function executeAutomationCore(
 
     summaryText = await generateText(
       modelTier,
-      'You execute recurring Nexus automations. Turn the provided evidence into a concise, useful markdown output. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. Be concrete, skim-friendly, and avoid filler.',
+      'You execute recurring Violema automations. Turn the provided evidence into a concise, useful markdown output. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. Be concrete, skim-friendly, and avoid filler.',
       [
         {
           role: 'user',
@@ -1396,7 +1397,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     const delegation = buildDelegationRuntimeContext({
       workspaceId,
       taskKind,
-      title: messages[0]?.content?.slice(0, 72) || 'Nexus task',
+      title: messages[0]?.content?.slice(0, 72) || 'Violema task',
       description: messages[messages.length - 1]?.content || '',
       autonomyMode: normalizeAutonomyMode(autonomyMode),
       priority: canonicalModelTier === 'critical' ? 'high' : 'medium',
@@ -1410,7 +1411,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     const requestedRoute = getChatModelConfig(resolvedProfile);
     const task = createTask({
       workspaceId,
-      title: messages[0]?.content?.slice(0, 72) || 'Nexus task',
+      title: messages[0]?.content?.slice(0, 72) || 'Violema task',
       description: messages[messages.length - 1]?.content || '',
       kind: taskKind,
       priority: canonicalModelTier === 'critical' ? 'high' : 'medium',
@@ -1544,7 +1545,7 @@ app.post('/api/title', async (req: Request, res: Response) => {
   try {
     const excerpt = messages
       .slice(0, 4)
-      .map((m) => `${m.role === 'user' ? 'User' : 'Nexus'}: ${m.content.slice(0, 300)}`)
+      .map((m) => `${m.role === 'user' ? 'User' : 'Violema'}: ${m.content.slice(0, 300)}`)
       .join('\n');
 
     const title = (await generateText(
@@ -1574,7 +1575,7 @@ app.post('/api/summarize', async (req: Request, res: Response) => {
   try {
     const text = messages
       .slice(-6)
-      .map((m) => `${m.role === 'user' ? 'User' : 'Nexus'}: ${m.content.slice(0, 200)}`)
+      .map((m) => `${m.role === 'user' ? 'User' : 'Violema'}: ${m.content.slice(0, 200)}`)
       .join('\n');
 
     const summary = await generateText(
@@ -2061,7 +2062,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
   res.json({
     status: 'ok',
-    service: 'nexus-by-purple-orange-ai',
+    service: 'violema-by-purple-orange-ai',
     models: {
       micro: getMicroModelConfig().model,
       default: getChatModelConfig('default').model,
@@ -2087,7 +2088,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 loadPersistedAutomations(runAutomation);
 
 app.listen(PORT, () => {
-  console.log(`Nexus by Purple Orange AI — backend running on http://localhost:${PORT}`);
+  console.log(`Violema by Purple Orange AI — backend running on http://localhost:${PORT}`);
 });
 
 export default app;

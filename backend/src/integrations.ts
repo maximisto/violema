@@ -259,7 +259,7 @@ async function sendEmailMessage(input: SendMessageInput) {
     body: JSON.stringify({
       From: fromEmail,
       To: input.to,
-      Subject: input.subject || 'Message from Nexus',
+      Subject: input.subject || 'Message from Violema',
       TextBody: input.body,
     }),
   });
@@ -272,7 +272,7 @@ async function sendEmailMessage(input: SendMessageInput) {
     success: true,
     channel: 'email',
     to: input.to,
-    subject: input.subject || 'Message from Nexus',
+    subject: input.subject || 'Message from Violema',
     status: 'delivered',
     sent_at: new Date().toISOString(),
     provider: 'postmark',

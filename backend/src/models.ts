@@ -245,7 +245,7 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
 
   if (route.provider === 'openrouter') {
     headers['HTTP-Referer'] = env('OPENROUTER_SITE_URL') || 'https://nexus.purpleorange.io';
-    headers['X-Title'] = env('OPENROUTER_APP_NAME') || 'Nexus';
+    headers['X-Title'] = env('OPENROUTER_APP_NAME') || 'Violema';
   }
 
   const response = await fetch(`${route.baseUrl}/chat/completions`, {

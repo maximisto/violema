@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@1,800;1,900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -312,7 +314,9 @@
 .brand-wordmark {
   display: block;
   width: 100%;
-  font-weight: 900;
+  font-family: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+  font-style: italic;
+  font-weight: 800;
   letter-spacing: 0.14em;
   line-height: 0.9;
   white-space: nowrap;

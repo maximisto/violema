@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { DEFAULT_AUTOMATION_RUN_CREDIT_COST } from './cost';
-import { getBillingStatus, getApplicableTopUpOffer } from './billing';
+import { getBillingStatusSnapshot, getApplicableTopUpOffer } from './billing';
 import { DEFAULT_WORKSPACE_ID, getWorkspaceProfile } from './workspace';
 
 interface AutomationLike {
@@ -67,7 +67,7 @@ export function buildCreditSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): CreditS
     return sum + estimateMonthlyRuns(automation.cron_expression) * DEFAULT_AUTOMATION_RUN_CREDIT_COST;
   }, 0);
   const workspace = getWorkspaceProfile(workspaceId);
-  const billing = getBillingStatus(workspaceId);
+  const billing = getBillingStatusSnapshot(workspaceId);
   const dailyBurn = automationBurnMonthly / DAYS_IN_MONTH + 8;
   const projectedDaysLeft = dailyBurn > 0
     ? Math.max(1, Math.floor(billing.summary.balanceCredits / dailyBurn))

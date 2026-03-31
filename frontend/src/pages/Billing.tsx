@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, CreditCard, Layers3, MessageSquare, Shield, Sparkles, Users } from 'lucide-react';
-import { TOP_UP_OPTIONS, createBillingCheckout, formatCredits } from '../lib/credits';
+import { TOP_UP_OPTIONS, createBillingCheckout, formatCredits, useCreditSnapshot } from '../lib/credits';
 import { getAuthSession, hasAcceptedAccess, hasSlackConnection } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
+import { persistWorkspaceContext } from '../lib/workspace';
 
 const PLANS = [
   {
@@ -41,10 +42,23 @@ export default function Billing() {
   const location = useLocation();
   const navigate = useNavigate();
   const session = getAuthSession();
+  const { snapshot, refresh } = useCreditSnapshot();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [hoveredPlanId, setHoveredPlanId] = useState<'starter' | 'pro' | 'team' | null>(null);
   const search = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const section = search.get('section') === 'topups' ? 'topups' : 'plans';
   const requestedPlan = search.get('plan');
+  const checkoutState = search.get('checkout');
+  const sessionId = search.get('session_id');
+
+  useEffect(() => {
+    persistWorkspaceContext();
+  }, []);
+
+  useEffect(() => {
+    if (checkoutState !== 'success') return;
+    void refresh();
+  }, [checkoutState, refresh]);
 
   async function handleSubscription(planId: 'starter' | 'pro' | 'team') {
     if (!hasAcceptedAccess()) {
@@ -99,14 +113,14 @@ export default function Billing() {
               </div>
               <h1 className="mt-5 max-w-5xl text-4xl font-extrabold leading-[0.95] text-white sm:text-5xl lg:text-[4rem]">
                 Pick the right runway
-                <span className="gradient-text"> before Nexus starts executing.</span>
+                <span className="gradient-text"> before Violema starts executing.</span>
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg">
                 Plans set your monthly credit budget and automation limits. Top-ups are one-time add-ons for extra work without changing your plan.
               </p>
               <div className="mt-5 space-y-1.5">
                 <p className="text-sm text-slate-300">
-                  Credits map to actual agent work. Start lean, then scale as Nexus takes on more execution.
+                  Credits map to actual agent work. Start lean, then scale as Violema takes on more execution.
                 </p>
                 <p className="text-sm text-slate-500">
                   Starter is for light weekly usage. Higher tiers are built for heavier multi-agent workflows and bigger automation volume.
@@ -164,10 +178,45 @@ export default function Billing() {
                   </div>
                 </div>
               </div>
+          </div>
+        </div>
+
+        {checkoutState ? (
+          <div
+            className={`mt-6 rounded-2xl border px-4 py-3 ${
+              checkoutState === 'success'
+                ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-100'
+                : 'border-amber-500/25 bg-amber-500/10 text-amber-100'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${
+                  checkoutState === 'success' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'
+                }`}
+              >
+                <Check className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">
+                  {checkoutState === 'success' ? 'Checkout complete' : 'Checkout canceled'}
+                </p>
+                <p className="mt-1 text-sm text-current/80">
+                  {checkoutState === 'success'
+                    ? `Stripe returned successfully${sessionId ? ` for session ${sessionId}` : ''}. Credits should update as soon as the webhook lands.`
+                    : 'No charge was made. You can retry the same plan whenever you are ready.'}
+                </p>
+                {checkoutState === 'success' ? (
+                  <p className="mt-2 text-xs text-current/70">
+                    Current balance: {formatCredits(snapshot.creditsRemaining)} credits
+                  </p>
+                ) : null}
+              </div>
             </div>
           </div>
+        ) : null}
 
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/6 pt-5">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/6 pt-5">
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -189,7 +238,7 @@ export default function Billing() {
             <div className="text-sm text-slate-500">
               {section === 'topups'
                 ? 'Top-ups add credits only. They do not change your monthly plan.'
-                : 'Pick the monthly tier first. Add top-ups later if Nexus needs more room to run.'}
+                : 'Pick the monthly tier first. Add top-ups later if Violema needs more room to run.'}
             </div>
           </div>
 
@@ -202,7 +251,7 @@ export default function Billing() {
                 },
                 {
                   title: 'Operate seriously',
-                  body: 'Pro is the working tier for people running Nexus regularly across research, automation, and delegated execution.',
+                  body: 'Pro is the working tier for people running Violema regularly across research, automation, and delegated execution.',
                 },
                 {
                   title: 'Scale as a team',
@@ -232,22 +281,30 @@ export default function Billing() {
 
         {section === 'plans' ? (
           <>
-            <div className="mt-7 grid gap-5 xl:grid-cols-3">
+            <div className="mt-7 grid gap-5 xl:grid-cols-3 items-stretch">
               {PLANS.map((plan) => (
                 <div
                   key={plan.id}
-                  className={`rounded-[1.9rem] border p-6 transition-all ${
-                    plan.featured
-                      ? 'border-violet-500/35 bg-gradient-to-b from-violet-950/60 to-navy-900/80 shadow-[0_18px_50px_rgba(76,29,149,0.22)] ring-1 ring-violet-500/12'
+                  className={`flex h-full flex-col rounded-[1.9rem] border p-6 transition-all ${
+                    hoveredPlanId === plan.id
+                      ? 'border-violet-500/55 bg-gradient-to-b from-violet-950/78 via-navy-900/80 to-navy-900/88 shadow-[0_18px_50px_rgba(76,29,149,0.22)] ring-1 ring-violet-500/15 -translate-y-1'
                       : 'border-navy-700/70 bg-navy-900/45'
                   }`}
+                  onMouseEnter={() => setHoveredPlanId(plan.id)}
+                  onMouseLeave={() => setHoveredPlanId(null)}
+                  onFocusCapture={() => setHoveredPlanId(plan.id)}
+                  onBlurCapture={() => setHoveredPlanId(null)}
                 >
                   {plan.featured && (
-                    <div className="mb-4 inline-flex rounded-full border border-violet-400/30 bg-violet-500/12 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-200">
+                    <div className={`mb-4 inline-flex rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
+                      hoveredPlanId === plan.id
+                        ? 'border-violet-400/30 bg-violet-500/12 text-violet-100'
+                        : 'border-violet-400/20 bg-violet-500/8 text-violet-200/80'
+                    }`}>
                       Most popular
                     </div>
                   )}
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex min-h-[8.5rem] items-start justify-between gap-4">
                     <div>
                       <h2 className="text-2xl font-semibold text-white">{plan.name}</h2>
                       <p className="mt-2 text-sm leading-relaxed text-slate-400">{plan.description}</p>
@@ -286,7 +343,7 @@ export default function Billing() {
                     </div>
                   )}
 
-                  <ul className="mt-5 space-y-3">
+                  <ul className="mt-5 flex-1 space-y-3">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-2.5 text-sm text-slate-300">
                         <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-violet-400" />
@@ -299,7 +356,11 @@ export default function Billing() {
                     type="button"
                     onClick={() => { void handleSubscription(plan.id); }}
                     disabled={busyId !== null}
-                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-violet-500 disabled:cursor-wait disabled:opacity-60"
+                    className={`mt-6 flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-sm font-semibold text-white transition-all disabled:cursor-wait disabled:opacity-60 ${
+                      hoveredPlanId === plan.id
+                        ? 'bg-violet-600 hover:bg-violet-500 shadow-glow-violet'
+                        : 'bg-navy-700 hover:bg-navy-600'
+                    }`}
                   >
                     {busyId === plan.id ? 'Opening Stripe…' : `Choose ${plan.name}`}
                     <ArrowRight className="h-4 w-4" />
@@ -317,10 +378,10 @@ export default function Billing() {
                   <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Enterprise</p>
                   <h3 className="mt-2 text-2xl font-semibold text-white">Custom for bigger teams</h3>
                   <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
-                    Higher limits, security controls, admin workflows, onboarding support, and SLA-ready positioning. Use this when Nexus is becoming part of a broader operating stack.
+                    Higher limits, security controls, admin workflows, onboarding support, and SLA-ready positioning. Use this when Violema is becoming part of a broader operating stack.
                   </p>
                   <a
-                    href="mailto:sales@purpleorange.io?subject=Nexus%20Enterprise"
+                    href="mailto:sales@purpleorange.io?subject=Violema%20Enterprise"
                     className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/16"
                   >
                     Contact sales
@@ -332,13 +393,15 @@ export default function Billing() {
           </>
         ) : (
           <>
-            <div className="mt-7 grid gap-5 xl:grid-cols-3">
+            <div className="mt-7 grid gap-5 xl:grid-cols-3 items-stretch">
               {TOP_UP_OPTIONS.map((option) => (
-                <div key={option.id} className="rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">{option.label}</p>
-                  <p className="mt-4 text-4xl font-extrabold text-white">{formatCredits(option.credits)}</p>
-                  <p className="mt-1 text-sm text-slate-500">one-time credits</p>
-                  <p className="mt-4 text-sm leading-relaxed text-slate-400">{option.description}</p>
+                <div key={option.id} className="flex h-full flex-col rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
+                  <div className="min-h-[9rem]">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">{option.label}</p>
+                    <p className="mt-4 text-4xl font-extrabold text-white">{formatCredits(option.credits)}</p>
+                    <p className="mt-1 text-sm text-slate-500">one-time credits</p>
+                    <p className="mt-4 text-sm leading-relaxed text-slate-400">{option.description}</p>
+                  </div>
                   <div className="mt-6 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
                     <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Price</p>
                     <p className="mt-2 text-xl font-semibold text-white">${option.priceUsd}</p>
@@ -353,7 +416,8 @@ export default function Billing() {
                           : 'A serious burst of execution across multiple automations or artifact-heavy work.'}
                     </p>
                   </div>
-                  <button
+                  <div className="mt-auto pt-6">
+                    <button
                     type="button"
                     onClick={() => { void handleTopUp(option.id); }}
                     disabled={busyId !== null}
@@ -361,7 +425,8 @@ export default function Billing() {
                   >
                     {busyId === option.id ? 'Opening Stripe…' : 'Buy top-up'}
                     <ArrowRight className="h-4 w-4" />
-                  </button>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

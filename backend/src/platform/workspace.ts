@@ -3,7 +3,7 @@ import { readJsonFile, writeJsonFile } from './jsonStore';
 import type { WorkspaceProfile } from './types';
 
 export const WORKSPACES_FILE = path.join(process.cwd(), 'platform-workspaces.json');
-export const DEFAULT_WORKSPACE_ID = 'workspace_default';
+export const DEFAULT_WORKSPACE_ID = 'purpleorangehq';
 
 function toSlug(value: string): string {
   return value
@@ -26,8 +26,8 @@ export function getDefaultWorkspaceProfile(workspaceId = DEFAULT_WORKSPACE_ID): 
   const now = new Date().toISOString();
   return {
     id: workspaceId,
-    slug: workspaceId === DEFAULT_WORKSPACE_ID ? 'default' : toSlug(workspaceId),
-    name: workspaceId === DEFAULT_WORKSPACE_ID ? 'Default Workspace' : `Workspace ${workspaceId.slice(-4).toUpperCase()}`,
+    slug: workspaceId === DEFAULT_WORKSPACE_ID ? 'purpleorangehq' : toSlug(workspaceId),
+    name: workspaceId === DEFAULT_WORKSPACE_ID ? 'Purple Orange HQ' : `Workspace ${workspaceId.slice(-4).toUpperCase()}`,
     createdAt: now,
     updatedAt: now,
   };

@@ -19,7 +19,7 @@ const FEATURES = [
   {
     icon: ListTodo,
     title: 'Task Execution',
-    description: 'Give Nexus a goal and it executes autonomously — breaking it into steps, using tools, and reporting back.',
+    description: 'Give Violema a goal and it executes autonomously — breaking it into steps, using tools, and reporting back.',
     color: 'violet',
     gradient: 'from-violet-500/20 to-violet-600/5',
     border: 'border-violet-800/40',
@@ -27,7 +27,7 @@ const FEATURES = [
   {
     icon: Globe,
     title: 'Web Research',
-    description: 'Nexus searches the web in real time, synthesizes information from multiple sources, and delivers actionable insights.',
+    description: 'Violema searches the web in real time, synthesizes information from multiple sources, and delivers actionable insights.',
     color: 'cyan',
     gradient: 'from-cyan-500/20 to-cyan-600/5',
     border: 'border-cyan-800/40',
@@ -43,7 +43,7 @@ const FEATURES = [
   {
     icon: Clock,
     title: 'Scheduled Automation',
-    description: 'Set Nexus on autopilot. Schedule recurring tasks — daily standups, weekly reports, monthly data pulls.',
+    description: 'Set Violema on autopilot. Schedule recurring tasks — daily standups, weekly reports, monthly data pulls.',
     color: 'cyan',
     gradient: 'from-cyan-500/20 to-blue-600/5',
     border: 'border-cyan-800/40',
@@ -51,7 +51,7 @@ const FEATURES = [
   {
     icon: Plug,
     title: 'Core Integrations',
-    description: 'Start with the systems that matter most first. Nexus is designed to work across your stack and expand through additional connectors over time.',
+    description: 'Start with the systems that matter most first. Violema is designed to work across your stack and expand through additional connectors over time.',
     color: 'violet',
     gradient: 'from-violet-500/20 to-pink-600/5',
     border: 'border-violet-800/40',
@@ -59,7 +59,7 @@ const FEATURES = [
   {
     icon: Brain,
     title: 'Long-term Memory',
-    description: 'Nexus remembers your team\'s context, preferences, and history. It gets smarter with every interaction.',
+    description: 'Violema remembers your team\'s context, preferences, and history. It gets smarter with every interaction.',
     color: 'cyan',
     gradient: 'from-cyan-500/20 to-teal-600/5',
     border: 'border-cyan-800/40',
@@ -70,7 +70,7 @@ const STEPS = [
   {
     number: '01',
     title: 'Create access',
-    description: 'Set up your account, accept the operating rules, and choose where Nexus should work with you first.',
+    description: 'Set up your account, accept the operating rules, and choose where Violema should work with you first.',
   },
   {
     number: '02',
@@ -80,7 +80,7 @@ const STEPS = [
   {
     number: '03',
     title: 'Get it done',
-    description: 'Nexus executes autonomously, reports back with results, and suggests next actions.',
+    description: 'Violema executes autonomously, reports back with results, and suggests next actions.',
   },
 ];
 
@@ -101,7 +101,7 @@ export default function Features() {
               Three steps to done.
             </h2>
             <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-              Nexus integrates with the tools you already use, so your team gets superpowers without changing how you work.
+              Violema integrates with the tools you already use, so your team gets leverage without changing how you work.
             </p>
           </div>
 
@@ -137,11 +137,11 @@ export default function Features() {
               <span className="text-violet-400 text-sm font-medium">Capabilities</span>
             </div>
             <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4">
-              Nexus executes.{' '}
+              Violema executes.{' '}
               <span className="gradient-text">Not just answers.</span>
             </h2>
             <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-              Most AI tools tell you how to do things. Nexus just does them.
+              Most AI tools tell you how to do things. Violema just does them.
             </p>
           </div>
 
