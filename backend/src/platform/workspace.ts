@@ -36,7 +36,22 @@ export function getDefaultWorkspaceProfile(workspaceId = DEFAULT_WORKSPACE_ID): 
 export function getWorkspaceProfile(workspaceId = DEFAULT_WORKSPACE_ID): WorkspaceProfile {
   const items = listWorkspaces();
   const existing = items.find((item) => item.id === workspaceId);
-  if (existing) return existing;
+  if (existing) {
+    if (
+      workspaceId === DEFAULT_WORKSPACE_ID
+      && (existing.name !== 'Purple Orange HQ' || existing.slug !== 'purpleorangehq')
+    ) {
+      const normalized: WorkspaceProfile = {
+        ...existing,
+        name: 'Purple Orange HQ',
+        slug: 'purpleorangehq',
+        updatedAt: new Date().toISOString(),
+      };
+      saveWorkspaces(items.map((item) => (item.id === workspaceId ? normalized : item)));
+      return normalized;
+    }
+    return existing;
+  }
 
   const created = getDefaultWorkspaceProfile(workspaceId);
   saveWorkspaces([created, ...items]);

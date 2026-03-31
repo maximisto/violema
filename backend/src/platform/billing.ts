@@ -173,6 +173,11 @@ function writeBillingConfigs(items: WorkspaceBillingConfig[]) {
 export function getBillingConfig(workspaceId: string): WorkspaceBillingConfig {
   const existing = listBillingConfigs().find((item) => item.workspaceId === workspaceId);
   if (existing) {
+    if (workspaceId === 'purpleorangehq' && existing.referralCode?.startsWith('NEXUS-')) {
+      return upsertBillingConfig(workspaceId, {
+        referralCode: `VIOLEMA-${workspaceId.slice(-4).toUpperCase()}`,
+      });
+    }
     return existing;
   }
 
@@ -184,7 +189,14 @@ export function getBillingConfig(workspaceId: string): WorkspaceBillingConfig {
 
 export function getBillingConfigSnapshot(workspaceId: string): WorkspaceBillingConfig {
   const existing = listBillingConfigs().find((item) => item.workspaceId === workspaceId);
-  return existing || getDefaultBillingConfig(workspaceId);
+  if (!existing) return getDefaultBillingConfig(workspaceId);
+  if (workspaceId === 'purpleorangehq' && existing.referralCode?.startsWith('NEXUS-')) {
+    return {
+      ...existing,
+      referralCode: `VIOLEMA-${workspaceId.slice(-4).toUpperCase()}`,
+    };
+  }
+  return existing;
 }
 
 export function upsertBillingConfig(workspaceId: string, patch: BillingConfigPatch): WorkspaceBillingConfig {
