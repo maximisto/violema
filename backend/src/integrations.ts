@@ -3,6 +3,7 @@ interface SendMessageInput {
   subject?: string;
   body: string;
   channel?: string;
+  threadTs?: string;
 }
 
 type MessageChannel = 'slack' | 'email' | 'teams';
@@ -220,6 +221,7 @@ async function sendSlackMessage(input: SendMessageInput) {
       channel: validated.normalizedTarget,
       text,
       mrkdwn: true,
+      ...(input.threadTs ? { thread_ts: input.threadTs } : {}),
     }),
   });
 

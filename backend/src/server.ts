@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import Anthropic from '@anthropic-ai/sdk';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
@@ -58,6 +59,8 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const SCREENSHOT_DIR = path.join(process.cwd(), 'generated-screenshots');
 const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
+const SLACK_EVENT_CACHE_WINDOW_MS = 5 * 60 * 1000;
+const handledSlackEvents = new Map<string, number>();
 
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
@@ -173,6 +176,137 @@ function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
+}
+
+function verifySlackSignature(rawBody: Buffer, signature: string, timestamp: string) {
+  const signingSecret = getRequiredEnv('SLACK_SIGNING_SECRET');
+  const requestTime = Number(timestamp);
+  if (!Number.isFinite(requestTime)) {
+    throw new Error('Invalid Slack request timestamp');
+  }
+
+  const ageSeconds = Math.abs(Math.floor(Date.now() / 1000) - requestTime);
+  if (ageSeconds > 60 * 5) {
+    throw new Error('Slack request timestamp is too old');
+  }
+
+  const base = `v0:${timestamp}:${rawBody.toString('utf8')}`;
+  const digest = `v0=${crypto.createHmac('sha256', signingSecret).update(base).digest('hex')}`;
+  const expected = Buffer.from(digest, 'utf8');
+  const actual = Buffer.from(signature, 'utf8');
+
+  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+    throw new Error('Invalid Slack signature');
+  }
+}
+
+function pruneHandledSlackEvents(now = Date.now()) {
+  for (const [eventId, handledAt] of handledSlackEvents.entries()) {
+    if (now - handledAt > SLACK_EVENT_CACHE_WINDOW_MS) {
+      handledSlackEvents.delete(eventId);
+    }
+  }
+}
+
+function markSlackEventHandled(eventId: string) {
+  const now = Date.now();
+  pruneHandledSlackEvents(now);
+  if (handledSlackEvents.has(eventId)) return false;
+  handledSlackEvents.set(eventId, now);
+  return true;
+}
+
+function stripSlackMentions(text: string) {
+  return text.replace(/<@[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function needsSlackWebSearch(text: string) {
+  return /(latest|current|today|news|search|look up|find|what happened|recent)/i.test(text);
+}
+
+async function buildSlackReply(prompt: string) {
+  const cleanPrompt = prompt.trim() || 'Help me get started.';
+  if (needsSlackWebSearch(cleanPrompt)) {
+    const search = await searchWeb(cleanPrompt, 5);
+    const evidence = search.results
+      .map((item, index) => `${index + 1}. ${item.title}\nURL: ${item.url}\nSnippet: ${item.snippet}`)
+      .join('\n\n');
+
+    return generateText(
+      'default',
+      'You are Violema, replying inside Slack. Be concise, useful, and action-oriented. Use short paragraphs or bullets. If web search results are provided, summarize them honestly and include source URLs inline when useful.',
+      [
+        {
+          role: 'user',
+          content: `User request:\n${cleanPrompt}\n\nWeb search results:\n${evidence}`,
+        },
+      ],
+      600,
+    );
+  }
+
+  return generateText(
+    'default',
+    'You are Violema, replying inside Slack. Be concise, useful, and action-oriented. Prefer a short direct answer over a long explanation. Use bullets only if they help.',
+    [{ role: 'user', content: cleanPrompt }],
+    500,
+  );
+}
+
+async function handleSlackIncomingEvent(payload: {
+  eventId: string;
+  event: Record<string, unknown>;
+  workspaceId: string;
+}) {
+  const event = payload.event;
+  const channel = typeof event.channel === 'string' ? event.channel : '';
+  const eventType = typeof event.type === 'string' ? event.type : '';
+  const eventText = typeof event.text === 'string' ? event.text : '';
+  const threadTs = typeof event.thread_ts === 'string'
+    ? event.thread_ts
+    : typeof event.ts === 'string'
+      ? event.ts
+      : undefined;
+
+  if (!channel || !threadTs) return;
+  if (event.bot_id || typeof event.subtype === 'string') return;
+  if (eventType !== 'app_mention' && !(eventType === 'message' && event.channel_type === 'im')) return;
+
+  const prompt = stripSlackMentions(eventText);
+  const billing = getBillingStatus(payload.workspaceId);
+  if (billing.summary.balanceCredits <= 0) {
+    await sendMessage({
+      to: channel,
+      channel: 'slack',
+      threadTs,
+      body: [
+        'I can reply here, but this workspace is out of credits right now.',
+        '',
+        `Current balance: **${billing.summary.balanceCredits}** credits`,
+        'Top up or change the plan in the billing flow, then I can continue.',
+      ].join('\n'),
+    });
+    return;
+  }
+
+  try {
+    const reply = await buildSlackReply(prompt);
+    await sendMessage({
+      to: channel,
+      channel: 'slack',
+      threadTs,
+      body: reply || 'I did not get enough signal from that prompt. Try asking more directly.',
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown Slack processing error';
+    console.error('[slack] event handling failed', { eventId: payload.eventId, error: errorMessage });
+    await sendMessage({
+      to: channel,
+      channel: 'slack',
+      threadTs,
+      body: `I hit an error while working on that: ${errorMessage}`,
+    });
+  }
 }
 
 function buildOpenAIHeaders(route: { provider: string; apiKeyEnv: string }) {
@@ -1766,6 +1900,56 @@ app.post('/api/billing/stripe/webhook', async (req: Request, res: Response) => {
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Stripe webhook verification failed' });
   }
+});
+
+app.post('/api/slack/events', async (req: Request, res: Response) => {
+  const signature = req.header('x-slack-signature');
+  const timestamp = req.header('x-slack-request-timestamp');
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+
+  if (!signature || !timestamp || !rawBody) {
+    res.status(400).json({ error: 'Missing Slack signature, timestamp, or raw request body' });
+    return;
+  }
+
+  try {
+    verifySlackSignature(rawBody, signature, timestamp);
+  } catch (error) {
+    res.status(401).json({ error: error instanceof Error ? error.message : 'Slack signature verification failed' });
+    return;
+  }
+
+  const body = req.body as {
+    type?: string;
+    challenge?: string;
+    event_id?: string;
+    team_id?: string;
+    event?: Record<string, unknown>;
+  };
+
+  if (body.type === 'url_verification') {
+    res.json({ challenge: body.challenge || '' });
+    return;
+  }
+
+  if (body.type !== 'event_callback' || !body.event_id || !body.event) {
+    res.json({ ok: true });
+    return;
+  }
+
+  if (!markSlackEventHandled(body.event_id)) {
+    res.json({ ok: true, duplicate: true });
+    return;
+  }
+
+  res.json({ ok: true });
+
+  const workspaceId = DEFAULT_WORKSPACE_ID;
+  void handleSlackIncomingEvent({
+    eventId: body.event_id,
+    event: body.event,
+    workspaceId,
+  });
 });
 
 app.get('/api/billing/stripe/config', (req: Request, res: Response) => {
