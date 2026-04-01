@@ -12,18 +12,23 @@ import { getAuthSession, hasSlackConnection } from '../lib/auth';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
 const PO_LOGO = '/po-logo.png';
+const LEGACY_CONVOS_KEY = 'nexus_convos';
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 
-function saveConvos(convos: Conversation[]) {
+function getConversationsStorageKey(workspaceId: string) {
+  return `violema_convos_${workspaceId}`;
+}
+
+function saveConvos(workspaceId: string, convos: Conversation[]) {
   try {
-    localStorage.setItem('nexus_convos', JSON.stringify(convos));
+    localStorage.setItem(getConversationsStorageKey(workspaceId), JSON.stringify(convos));
   } catch { /* ignore quota errors */ }
 }
 
-function loadConvos(): Conversation[] {
+function loadConvos(workspaceId: string): Conversation[] {
   try {
-    const raw = localStorage.getItem('nexus_convos');
+    const raw = localStorage.getItem(getConversationsStorageKey(workspaceId));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Array<Conversation & {
       timestamp: string;
@@ -39,39 +44,6 @@ function loadConvos(): Conversation[] {
     }));
   } catch { return []; }
 }
-
-// ─── Sample data ──────────────────────────────────────────────────────────────
-
-const SAMPLE_CONVOS: Conversation[] = [
-  {
-    id: 'conv-1',
-    title: 'Q1 revenue analysis',
-    lastMessage: 'Sent MRR summary to #revenue-team — growth +17.8%',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30),
-    messages: [],
-  },
-  {
-    id: 'conv-2',
-    title: 'GitHub PR triage',
-    lastMessage: 'Found 3 PRs needing review, 2 auto-merged',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    messages: [],
-  },
-  {
-    id: 'conv-3',
-    title: 'HubSpot lead enrichment',
-    lastMessage: 'Enriched 47 new leads from LinkedIn data',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5),
-    messages: [],
-  },
-];
-
-const SAMPLE_TASKS = [
-  { id: 1, title: 'Weekly revenue report', status: 'scheduled', time: 'Mon 9am', icon: Clock },
-  { id: 2, title: 'PR review digest', status: 'scheduled', time: 'Daily 5pm', icon: Clock },
-  { id: 3, title: 'Lead enrichment batch', status: 'complete', time: 'Just now', icon: CheckSquare },
-  { id: 4, title: 'Anomaly alert: CAC spike', status: 'alert', time: '2h ago', icon: AlertCircle },
-];
 
 const SCHEDULE_PRESETS = [
   { label: 'Hourly', value: 'every hour' },
@@ -321,12 +293,14 @@ function createWorkflowBlock(kind: WorkflowBlockKind, overrides?: Partial<Workfl
       kind: 'search',
       title: 'Search the web',
       objective: 'Current AI agent news',
+      inputs: { query: 'Current AI agent news', num_results: 6 },
     },
     query: {
       id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       kind: 'query',
       title: 'Query live data',
       objective: 'Stripe failed payments',
+      inputs: { source: 'stripe', query_type: 'failed_payments' },
     },
     capture: {
       id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -375,7 +349,23 @@ function parseLegacyActionToWorkflowBlock(action: string): WorkflowBlockDraft {
   const trimmed = action.trim();
   const normalized = trimmed.toLowerCase();
   if (/query|stripe|posthog|github|linear|notion/.test(normalized)) {
-    return createWorkflowBlock('query', { title: trimmed, objective: trimmed.replace(/^query\s+/i, '') || trimmed });
+    const lower = trimmed.toLowerCase();
+    const source =
+      lower.includes('posthog') ? 'posthog' :
+      lower.includes('github') ? 'github' :
+      lower.includes('linear') ? 'linear' :
+      lower.includes('notion') ? 'notion' :
+      'stripe';
+    const queryType =
+      lower.includes('failed payments') ? 'failed_payments' :
+      lower.includes('funnel') ? 'funnel_analysis' :
+      lower.includes('issues') ? 'open_issues' :
+      'custom';
+    return createWorkflowBlock('query', {
+      title: trimmed,
+      objective: trimmed.replace(/^query\s+/i, '') || trimmed,
+      inputs: { source, query_type: queryType },
+    });
   }
   if (/screenshot|capture/.test(normalized)) {
     const urlMatch = trimmed.match(/https?:\/\/[^\s)]+/i);
@@ -401,7 +391,8 @@ function parseLegacyActionToWorkflowBlock(action: string): WorkflowBlockDraft {
     return createWorkflowBlock('summarize', { title: trimmed, objective: trimmed });
   }
   if (/(search|scan internet|scan the internet|scan web|research|news|competitor)/.test(normalized)) {
-    return createWorkflowBlock('search', { title: trimmed, objective: trimmed.replace(/^(search|research)\s+/i, '') || trimmed });
+    const objective = trimmed.replace(/^(search|research)\s+/i, '') || trimmed;
+    return createWorkflowBlock('search', { title: trimmed, objective, inputs: { query: objective, num_results: 6 } });
   }
   return createWorkflowBlock('note', { title: trimmed, objective: trimmed });
 }
@@ -572,10 +563,6 @@ function getTaskFailureReason(task?: PlatformTaskRecord, run?: PlatformTaskRunRe
 
 function getTaskAutomationId(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
   return readString(run?.metadata?.automationId) || readString(task?.metadata?.automationId);
-}
-
-function normalizeTaskTitle(title: string) {
-  return title.trim().toLowerCase();
 }
 
 function stripMarkdownPreview(value?: string) {
@@ -794,19 +781,20 @@ const fetchSmartTitle = async (messages: { role: string; content: string }[]): P
 export default function Dashboard() {
   const location = useLocation();
   const navigate = useNavigate();
+  const workspace = useMemo(() => resolveWorkspaceContext(), []);
   const [isMobileSidebar, setIsMobileSidebar] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth < 1024 : false
   );
   const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const saved = loadConvos();
-    return saved.length > 0 ? saved : SAMPLE_CONVOS;
+    const saved = loadConvos(resolveWorkspaceContext().workspaceId);
+    return saved;
   });
   const [activeConvoId, setActiveConvoId] = useState<string>('new');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
   const [taskPanelOpen, setTaskPanelOpen] = useState(false); // hidden by default on mobile feel
-  const [selectedTaskId, setSelectedTaskId] = useState<string | number>(SAMPLE_TASKS[0]?.id ?? 0);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | number>('');
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
   const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -851,7 +839,15 @@ export default function Dashboard() {
   }, []);
 
   // Persist conversations
-  useEffect(() => { saveConvos(conversations); }, [conversations]);
+  useEffect(() => { saveConvos(workspace.workspaceId, conversations); }, [conversations, workspace.workspaceId]);
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem(LEGACY_CONVOS_KEY);
+    } catch {
+      // ignore localStorage failures
+    }
+  }, []);
 
   useEffect(() => {
     const onResize = () => {
@@ -916,14 +912,12 @@ export default function Dashboard() {
     });
 
     const taskContextByAutomationId = new Map<string, { task: PlatformTaskRecord; latestRun?: PlatformTaskRunRecord }>();
-    const taskContextByTitle = new Map<string, { task: PlatformTaskRecord; latestRun?: PlatformTaskRunRecord }>();
 
     tasks.forEach((task) => {
       const latestRun = latestRunByTask.get(task.id);
       const context = { task, latestRun };
       const automationId = getTaskAutomationId(task, latestRun);
       if (automationId) taskContextByAutomationId.set(automationId, context);
-      taskContextByTitle.set(normalizeTaskTitle(task.title), context);
     });
 
     const liveTasks = tasks
@@ -954,9 +948,7 @@ export default function Dashboard() {
     const automationItems = automations
       .slice(0, 12)
       .map((automation) => {
-        const taskContext =
-          taskContextByAutomationId.get(automation.id) ||
-          taskContextByTitle.get(normalizeTaskTitle(automation.name));
+        const taskContext = taskContextByAutomationId.get(automation.id);
         const latestRun = taskContext?.latestRun;
         const task = taskContext?.task;
         const status = automation.status === 'paused'
@@ -1100,6 +1092,11 @@ export default function Dashboard() {
     await refreshTaskPanel();
   }, [refreshTaskPanel]);
 
+  const hasRunningAutomation = useMemo(
+    () => liveAutomations.some((task) => task.runStatus === 'running'),
+    [liveAutomations]
+  );
+
   useEffect(() => {
     if (!taskPanelOpen) return undefined;
 
@@ -1108,7 +1105,7 @@ export default function Dashboard() {
       void refreshTaskPanel({ silent: true }).catch(() => {});
     };
 
-    const intervalId = window.setInterval(refreshSilently, 15000);
+    const intervalId = window.setInterval(refreshSilently, hasRunningAutomation ? 3000 : 15000);
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         refreshSilently();
@@ -1120,7 +1117,7 @@ export default function Dashboard() {
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [taskPanelOpen, refreshTaskPanel]);
+  }, [hasRunningAutomation, taskPanelOpen, refreshTaskPanel]);
 
   const handleAutomationRun = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
@@ -2214,7 +2211,7 @@ export default function Dashboard() {
                 isMobileSidebar
                   ? 'fixed inset-x-2 bottom-2 top-20 z-40 rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.58)]'
                   : 'w-[22rem] flex-shrink-0'
-              } border-l border-navy-800/80 bg-gradient-to-b from-navy-900/60 via-navy-900/36 to-navy-950/60 flex flex-col overflow-hidden backdrop-blur-md shadow-[inset_1px_0_0_rgba(255,255,255,0.03)]`}
+              } min-h-0 border-l border-navy-800/80 bg-gradient-to-b from-navy-900/60 via-navy-900/36 to-navy-950/60 flex flex-col overflow-hidden backdrop-blur-md shadow-[inset_1px_0_0_rgba(255,255,255,0.03)]`}
             >
               <div className="flex items-center justify-between px-4 py-3.5 border-b border-navy-800/80 bg-gradient-to-r from-violet-500/8 via-navy-950/30 to-cyan-500/6">
                 <div className="flex items-center gap-2">
@@ -2244,6 +2241,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              <div className="flex-1 min-h-0 overflow-y-auto">
               <div className="px-3 pt-3">
                 <div className="grid grid-cols-3 gap-2">
                   {[
@@ -2477,7 +2475,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              <div className="p-3 pt-0 space-y-2">
                 {showTaskPanelEmptyState ? (
                   <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/25 px-4 py-5 text-center">
                     <p className="text-sm font-medium text-white">No active automations</p>
@@ -2561,6 +2559,7 @@ export default function Dashboard() {
                     </div>
                   );
                 })}
+              </div>
               </div>
 
               <div className="p-3 border-t border-navy-800/80 bg-gradient-to-r from-navy-950/35 via-violet-500/6 to-navy-950/35">
@@ -2780,6 +2779,84 @@ export default function Dashboard() {
                               placeholder="What this step should do"
                             />
                           </div>
+                          {step.kind === 'search' && (
+                            <div className="ui-input-shell">
+                              <input
+                                value={typeof step.inputs?.query === 'string' ? step.inputs.query : ''}
+                                onChange={(event) => {
+                                  const value = event.target.value;
+                                  setAutomationEditor((current) => {
+                                    if (!current) return current;
+                                    const steps = [...current.steps];
+                                    steps[index] = {
+                                      ...steps[index],
+                                      inputs: {
+                                        ...(steps[index].inputs || {}),
+                                        query: value,
+                                        num_results: 6,
+                                      },
+                                    };
+                                    return { ...current, steps };
+                                  });
+                                }}
+                                className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                                placeholder="Search query"
+                              />
+                            </div>
+                          )}
+                          {step.kind === 'query' && (
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <div className="ui-input-shell">
+                                <select
+                                  value={typeof step.inputs?.source === 'string' ? step.inputs.source : 'stripe'}
+                                  onChange={(event) => {
+                                    const value = event.target.value;
+                                    setAutomationEditor((current) => {
+                                      if (!current) return current;
+                                      const steps = [...current.steps];
+                                      steps[index] = {
+                                        ...steps[index],
+                                        inputs: {
+                                          ...(steps[index].inputs || {}),
+                                          source: value,
+                                        },
+                                      };
+                                      return { ...current, steps };
+                                    });
+                                  }}
+                                  className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                                >
+                                  {['stripe', 'posthog', 'github', 'linear', 'notion', 'custom'].map((option) => (
+                                    <option key={option} value={option} className="bg-slate-950 text-slate-100">
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="ui-input-shell">
+                                <input
+                                  value={typeof step.inputs?.query_type === 'string' ? step.inputs.query_type : ''}
+                                  onChange={(event) => {
+                                    const value = event.target.value;
+                                    setAutomationEditor((current) => {
+                                      if (!current) return current;
+                                      const steps = [...current.steps];
+                                      steps[index] = {
+                                        ...steps[index],
+                                        inputs: {
+                                          ...(steps[index].inputs || {}),
+                                          query_type: value,
+                                        },
+                                      };
+                                      return { ...current, steps };
+                                    });
+                                  }}
+                                  className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                                  placeholder="failed_payments"
+                                />
+                              </div>
+                            </div>
+                          )}
                           {step.kind === 'capture' && (
                             <div className="ui-input-shell">
                               <input
