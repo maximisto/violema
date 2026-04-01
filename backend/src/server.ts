@@ -224,33 +224,36 @@ function needsSlackWebSearch(text: string) {
   return /(latest|current|today|news|search|look up|find|what happened|recent)/i.test(text);
 }
 
-async function buildSlackReply(prompt: string) {
-  const cleanPrompt = prompt.trim() || 'Help me get started.';
-  if (needsSlackWebSearch(cleanPrompt)) {
-    const search = await searchWeb(cleanPrompt, 5);
-    const evidence = search.results
-      .map((item, index) => `${index + 1}. ${item.title}\nURL: ${item.url}\nSnippet: ${item.snippet}`)
-      .join('\n\n');
-
-    return generateText(
-      'default',
-      'You are Violema, replying inside Slack. Be concise, useful, and action-oriented. Use short paragraphs or bullets. If web search results are provided, summarize them honestly and include source URLs inline when useful.',
-      [
-        {
-          role: 'user',
-          content: `User request:\n${cleanPrompt}\n\nWeb search results:\n${evidence}`,
-        },
-      ],
-      600,
-    );
+function formatSlackReply(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return 'I did not get enough signal from that prompt. Try asking more directly.';
   }
 
-  return generateText(
-    'default',
-    'You are Violema, replying inside Slack. Be concise, useful, and action-oriented. Prefer a short direct answer over a long explanation. Use bullets only if they help.',
-    [{ role: 'user', content: cleanPrompt }],
-    500,
-  );
+  const normalized = trimmed
+    .replace(/^###\s+(.+)$/gm, '*$1*')
+    .replace(/^##\s+(.+)$/gm, '*$1*')
+    .replace(/^#\s+(.+)$/gm, '*$1*')
+    .replace(/```[\s\S]*?```/g, (block) => block)
+    .replace(/\n{3,}/g, '\n\n');
+
+  return normalized.length > 3500 ? `${normalized.slice(0, 3450).trim()}\n\n_(truncated for Slack)_` : normalized;
+}
+
+function buildSlackTaskPrompt(prompt: string, context: { isDm: boolean }) {
+  const cleaned = prompt.trim() || 'Help me get started.';
+  const deliveryContext = context.isDm
+    ? 'This request came from a direct message in Slack.'
+    : 'This request came from an @mention in a Slack channel. Reply for the thread, not for the whole app.';
+
+  return [
+    deliveryContext,
+    'Reply in Slack format: concise, useful, action-oriented.',
+    'Lead with the answer. Use short paragraphs or bullets. Avoid long preambles.',
+    'If you cite current information, include source URLs inline.',
+    '',
+    `User request: ${cleaned}`,
+  ].join('\n');
 }
 
 async function handleSlackIncomingEvent(payload: {
@@ -270,7 +273,8 @@ async function handleSlackIncomingEvent(payload: {
 
   if (!channel || !threadTs) return;
   if (event.bot_id || typeof event.subtype === 'string') return;
-  if (eventType !== 'app_mention' && !(eventType === 'message' && event.channel_type === 'im')) return;
+  const isDm = eventType === 'message' && event.channel_type === 'im';
+  if (eventType !== 'app_mention' && !isDm) return;
 
   const prompt = stripSlackMentions(eventText);
   const billing = getBillingStatus(payload.workspaceId);
@@ -290,12 +294,18 @@ async function handleSlackIncomingEvent(payload: {
   }
 
   try {
-    const reply = await buildSlackReply(prompt);
+    const profile: TextProfile | 'auto' = needsSlackWebSearch(prompt) ? 'auto' : 'default';
+    const execution = await executeConversationTask({
+      messages: [{ role: 'user', content: buildSlackTaskPrompt(prompt, { isDm }) }],
+      autonomyMode: 'cautious',
+      modelProfile: profile,
+      workspaceId: payload.workspaceId,
+    });
     await sendMessage({
       to: channel,
       channel: 'slack',
       threadTs,
-      body: reply || 'I did not get enough signal from that prompt. Try asking more directly.',
+      body: formatSlackReply(execution.outputText),
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown Slack processing error';
@@ -994,6 +1004,15 @@ interface ChatRequest {
   modelProfile?: TextProfile | 'auto';
 }
 
+interface ChatExecutionResult {
+  taskId: string;
+  taskRunId: string;
+  resolvedProfile: TextProfile;
+  selectedModel: string;
+  outputText: string;
+  toolCallsExecuted: number;
+}
+
 function normalizeAutonomyMode(value: string): 'autonomous' | 'cautious' | 'supervised' {
   return value === 'autonomous' || value === 'supervised' ? value : 'cautious';
 }
@@ -1011,6 +1030,150 @@ function normalizeModelTier(profile: TextProfile): 'micro' | 'default' | 'hard' 
     default:
       return profile;
   }
+}
+
+async function executeConversationTask(input: {
+  messages: ChatMessage[];
+  autonomyMode?: string;
+  modelProfile?: TextProfile | 'auto';
+  workspaceId: string;
+  sendEvent?: (data: Record<string, unknown>) => void;
+}): Promise<ChatExecutionResult> {
+  const { messages, workspaceId } = input;
+  const autonomyMode = input.autonomyMode || 'cautious';
+  const modelProfile = input.modelProfile || 'auto';
+  const noop = () => {};
+  const sendEvent = input.sendEvent || noop;
+  const textParts: string[] = [];
+  const collectEvent = (data: Record<string, unknown>) => {
+    if (data.type === 'text' && typeof data.content === 'string' && data.content.trim()) {
+      textParts.push(data.content);
+    }
+    sendEvent(data);
+  };
+
+  ensureWorkspaceCredits(workspaceId);
+  const routingDecision = modelProfile === 'auto'
+    ? await routeChatProfile(messages)
+    : null;
+  const resolvedProfile: TextProfile = routingDecision?.profile || (modelProfile === 'auto' ? 'default' : modelProfile);
+  const canonicalModelTier = normalizeModelTier(resolvedProfile);
+  const combinedContent = messages.map((message) => message.content).join(' ');
+  const taskKind = canonicalModelTier === 'ops'
+    ? 'automation'
+    : messages.some((message) => /report|analysis|analyze|compare|research/i.test(message.content))
+      ? 'analysis'
+      : 'chat';
+  const delegation = buildDelegationRuntimeContext({
+    workspaceId,
+    taskKind,
+    title: messages[0]?.content?.slice(0, 72) || 'Violema task',
+    description: messages[messages.length - 1]?.content || '',
+    autonomyMode: normalizeAutonomyMode(autonomyMode),
+    priority: canonicalModelTier === 'critical' ? 'high' : 'medium',
+    modelTier: canonicalModelTier,
+    toolCountHint: messages.length,
+    complexity: combinedContent.length > 1200 ? 'high' : combinedContent.length > 500 ? 'medium' : 'low',
+    requiresHumanReview: normalizeAutonomyMode(autonomyMode) === 'supervised',
+  });
+  const modelTier = delegation.plan.suggestedModelTier;
+  const { client, executingRoute } = getChatClient(resolvedProfile);
+  const requestedRoute = getChatModelConfig(resolvedProfile);
+  const task = createTask({
+    workspaceId,
+    title: messages[0]?.content?.slice(0, 72) || 'Violema task',
+    description: messages[messages.length - 1]?.content || '',
+    kind: taskKind,
+    priority: canonicalModelTier === 'critical' ? 'high' : 'medium',
+    autonomyMode: normalizeAutonomyMode(autonomyMode),
+    ...delegation.taskPatch,
+    delegationPlanId: delegation.plan.id,
+    delegationPlan: delegation.plan,
+    metadata: {
+      selectedProfile: resolvedProfile,
+      model: requestedRoute.model,
+      delegation: delegation.ownership,
+    },
+  });
+  updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
+  const estimatedCost = estimateCreditCost({
+    taskKind,
+    modelTier,
+    toolCalls: 0,
+    complexity: combinedContent.length > 1200 ? 'high' : combinedContent.length > 500 ? 'medium' : 'low',
+  });
+  assertCanSpendCredits(workspaceId, estimatedCost.estimatedCredits);
+  const taskRun = createTaskRun({
+    workspaceId,
+    taskId: task.id,
+    ...delegation.taskRunPatch,
+    modelTier,
+    estimatedCredits: estimatedCost.estimatedCredits,
+    delegationPlan: delegation.plan,
+    metadata: { requestedProfile: modelProfile, title: task.title, delegation: delegation.ownership },
+  });
+  const anthropicMessages: Anthropic.MessageParam[] = messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+  }));
+
+  collectEvent({
+    type: 'routing',
+    requested_profile: modelProfile,
+    selected_profile: resolvedProfile,
+    selected_model: requestedRoute.model,
+    reason: routingDecision?.reason || 'explicit_profile',
+    risk: routingDecision?.risk || 'low',
+    needs_tools: routingDecision?.needsTools ?? true,
+  });
+  collectEvent({
+    type: 'delegation_planned',
+    task_id: task.id,
+    task_run_id: taskRun.id,
+    plan: delegation.plan,
+    ownership: delegation.ownership,
+  });
+
+  let toolCallsExecuted = 0;
+  if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
+    if (!client) throw new Error('Missing Anthropic-compatible client.');
+    const execution = await runAnthropicChatLoop(client, executingRoute, anthropicMessages, autonomyMode, collectEvent);
+    toolCallsExecuted = execution.toolCallsExecuted;
+  } else {
+    const execution = await runOpenAIChatLoop(requestedRoute, messages, autonomyMode, collectEvent);
+    toolCallsExecuted = execution.toolCallsExecuted;
+  }
+
+  const actualCost = estimateCreditCost({
+    taskKind,
+    modelTier,
+    toolCalls: toolCallsExecuted,
+    complexity: estimatedCost.breakdown.complexityCredits > 0 ? 'medium' : 'low',
+  });
+  finalizeTaskRun(taskRun.id, {
+    status: 'succeeded',
+    actualCredits: actualCost.estimatedCredits,
+    metadata: { toolCallsExecuted },
+  });
+  updateTask(task.id, { status: 'completed', delegationState: 'completed' });
+  addLedgerEntry({
+    workspaceId,
+    source: 'task_run',
+    deltaCredits: -actualCost.estimatedCredits,
+    referenceType: 'task',
+    referenceId: task.id,
+    note: `Chat task completed: ${task.title}`,
+    metadata: { taskRunId: taskRun.id, toolCallsExecuted },
+  });
+
+  return {
+    taskId: task.id,
+    taskRunId: taskRun.id,
+    resolvedProfile,
+    selectedModel: requestedRoute.model,
+    outputText: textParts.join('').trim(),
+    toolCallsExecuted,
+  };
 }
 
 interface AutomationExecutionArtifact {
@@ -1510,156 +1673,21 @@ app.post('/api/chat', async (req: Request, res: Response) => {
   const sendEvent = (data: Record<string, unknown>) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
-
-  let taskId: string | null = null;
-  let taskRunId: string | null = null;
   const { workspaceId } = resolveWorkspaceContext(req);
 
   try {
-    ensureWorkspaceCredits(workspaceId);
-    const routingDecision = modelProfile === 'auto'
-      ? await routeChatProfile(messages)
-      : null;
-    const resolvedProfile: TextProfile = routingDecision?.profile || (modelProfile === 'auto' ? 'default' : modelProfile);
-    const canonicalModelTier = normalizeModelTier(resolvedProfile);
-    const combinedContent = messages.map((message) => message.content).join(' ');
-    const taskKind = canonicalModelTier === 'ops'
-      ? 'automation'
-      : messages.some((message) => /report|analysis|analyze|compare|research/i.test(message.content))
-        ? 'analysis'
-        : 'chat';
-    const delegation = buildDelegationRuntimeContext({
+    await executeConversationTask({
+      messages,
+      autonomyMode,
+      modelProfile,
       workspaceId,
-      taskKind,
-      title: messages[0]?.content?.slice(0, 72) || 'Violema task',
-      description: messages[messages.length - 1]?.content || '',
-      autonomyMode: normalizeAutonomyMode(autonomyMode),
-      priority: canonicalModelTier === 'critical' ? 'high' : 'medium',
-      modelTier: canonicalModelTier,
-      toolCountHint: messages.length,
-      complexity: combinedContent.length > 1200 ? 'high' : combinedContent.length > 500 ? 'medium' : 'low',
-      requiresHumanReview: normalizeAutonomyMode(autonomyMode) === 'supervised',
+      sendEvent,
     });
-    const modelTier = delegation.plan.suggestedModelTier;
-    const { client, executingRoute } = getChatClient(resolvedProfile);
-    const requestedRoute = getChatModelConfig(resolvedProfile);
-    const task = createTask({
-      workspaceId,
-      title: messages[0]?.content?.slice(0, 72) || 'Violema task',
-      description: messages[messages.length - 1]?.content || '',
-      kind: taskKind,
-      priority: canonicalModelTier === 'critical' ? 'high' : 'medium',
-      autonomyMode: normalizeAutonomyMode(autonomyMode),
-      ...delegation.taskPatch,
-      delegationPlanId: delegation.plan.id,
-      delegationPlan: delegation.plan,
-      metadata: {
-        selectedProfile: resolvedProfile,
-        model: requestedRoute.model,
-        delegation: delegation.ownership,
-      },
-    });
-    taskId = task.id;
-    updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
-    const estimatedCost = estimateCreditCost({
-      taskKind,
-      modelTier,
-      toolCalls: 0,
-      complexity: combinedContent.length > 1200 ? 'high' : combinedContent.length > 500 ? 'medium' : 'low',
-    });
-    assertCanSpendCredits(workspaceId, estimatedCost.estimatedCredits);
-    const taskRun = createTaskRun({
-      workspaceId,
-      taskId: task.id,
-      ...delegation.taskRunPatch,
-      modelTier,
-      estimatedCredits: estimatedCost.estimatedCredits,
-      delegationPlan: delegation.plan,
-      metadata: { requestedProfile: modelProfile, title: task.title, delegation: delegation.ownership },
-    });
-    taskRunId = taskRun.id;
-    const anthropicMessages: Anthropic.MessageParam[] = messages.map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
-
-    sendEvent({
-      type: 'routing',
-      requested_profile: modelProfile,
-      selected_profile: resolvedProfile,
-      selected_model: requestedRoute.model,
-      reason: routingDecision?.reason || 'explicit_profile',
-      risk: routingDecision?.risk || 'low',
-      needs_tools: routingDecision?.needsTools ?? true,
-    });
-    sendEvent({
-      type: 'delegation_planned',
-      task_id: task.id,
-      task_run_id: taskRun.id,
-      plan: delegation.plan,
-      ownership: delegation.ownership,
-    });
-
-    if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
-      if (!client) throw new Error('Missing Anthropic-compatible client.');
-      const execution = await runAnthropicChatLoop(client, executingRoute, anthropicMessages, autonomyMode, sendEvent);
-      const actualCost = estimateCreditCost({
-        taskKind,
-        modelTier,
-        toolCalls: execution.toolCallsExecuted,
-        complexity: estimatedCost.breakdown.complexityCredits > 0 ? 'medium' : 'low',
-      });
-      finalizeTaskRun(taskRun.id, {
-        status: 'succeeded',
-        actualCredits: actualCost.estimatedCredits,
-        metadata: { toolCallsExecuted: execution.toolCallsExecuted },
-      });
-      updateTask(task.id, { status: 'completed', delegationState: 'completed' });
-      addLedgerEntry({
-        workspaceId,
-        source: 'task_run',
-        deltaCredits: -actualCost.estimatedCredits,
-        referenceType: 'task',
-        referenceId: task.id,
-        note: `Chat task completed: ${task.title}`,
-        metadata: { taskRunId: taskRun.id, toolCallsExecuted: execution.toolCallsExecuted },
-      });
-    } else {
-      const execution = await runOpenAIChatLoop(requestedRoute, messages, autonomyMode, sendEvent);
-      const actualCost = estimateCreditCost({
-        taskKind,
-        modelTier,
-        toolCalls: execution.toolCallsExecuted,
-        complexity: estimatedCost.breakdown.complexityCredits > 0 ? 'medium' : 'low',
-      });
-      finalizeTaskRun(taskRun.id, {
-        status: 'succeeded',
-        actualCredits: actualCost.estimatedCredits,
-        metadata: { toolCallsExecuted: execution.toolCallsExecuted },
-      });
-      updateTask(task.id, { status: 'completed', delegationState: 'completed' });
-      addLedgerEntry({
-        workspaceId,
-        source: 'task_run',
-        deltaCredits: -actualCost.estimatedCredits,
-        referenceType: 'task',
-        referenceId: task.id,
-        note: `Chat task completed: ${task.title}`,
-        metadata: { taskRunId: taskRun.id, toolCallsExecuted: execution.toolCallsExecuted },
-      });
-    }
-
     sendEvent({ type: 'done' });
     res.end();
   } catch (error) {
     console.error('Error calling Anthropic API:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    if (typeof taskRunId === 'string') {
-      finalizeTaskRun(taskRunId, { status: 'failed', error: errorMessage });
-    }
-    if (typeof taskId === 'string') {
-      updateTask(taskId, { status: 'failed', delegationState: 'review' });
-    }
     sendEvent({ type: 'error', message: errorMessage });
     res.end();
   }
