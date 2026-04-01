@@ -134,13 +134,13 @@ export function buildDelegationRuntimeContext(input: {
     modelTier: input.modelTier,
     userText,
   });
-  const supportingRoles = input.supportingRolesOverride
+  const initialSupportingRoles = input.supportingRolesOverride
     ? [...new Set(input.supportingRolesOverride.filter((role) => role !== input.executorRoleOverride))]
     : baseTaskPlan.supportingRoles;
   const overrideSteps = input.executorRoleOverride
     ? [
         step(input.executorRoleOverride, 'Lead execution and coordinate the workflow.'),
-        ...supportingRoles.map((role) =>
+        ...initialSupportingRoles.map((role) =>
           step(
             role,
             role === 'reviewer'
@@ -153,7 +153,7 @@ export function buildDelegationRuntimeContext(input: {
   const taskPlan: TaskDelegationPlan = {
     ...baseTaskPlan,
     primaryRole: input.executorRoleOverride || baseTaskPlan.primaryRole,
-    supportingRoles,
+    supportingRoles: initialSupportingRoles,
     rationale: input.reasonOverride || baseTaskPlan.rationale,
     steps: overrideSteps,
   };
