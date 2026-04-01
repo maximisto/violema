@@ -1,15 +1,18 @@
 import fs from 'fs';
 import path from 'path';
 import cron, { ScheduledTask } from 'node-cron';
+import type { PersistedAutomationStep } from './platform/types';
 
 export interface AutomationRecord {
   id: string;
+  version?: 2;
   name: string;
   description?: string;
   schedule: string;
   cron_expression: string;
   timezone?: string;
   actions: string[];
+  steps?: PersistedAutomationStep[];
   notify?: string;
   condition?: string;
   status: 'active' | 'paused';
@@ -370,12 +373,14 @@ export function createAutomation(
   const timezone = normalizeTimeZone(input.timezone);
   const record: AutomationRecord = {
     id: `auto_${Date.now()}`,
+    version: input.steps?.length ? 2 : undefined,
     name: input.name,
     description: input.description,
     schedule: input.schedule,
     cron_expression: cronExpression,
     timezone,
     actions: input.actions,
+    steps: input.steps,
     notify: input.notify,
     condition: input.condition,
     status: 'active',

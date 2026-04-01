@@ -196,6 +196,21 @@ export function finalizeTaskRun(taskRunId: string, patch: {
   return taskRuns.find((run) => run.id === taskRunId) || null;
 }
 
+export function updateTaskRun(taskRunId: string, patch: Partial<Omit<TaskRunRecord, 'id' | 'workspaceId' | 'taskId' | 'startedAt'>>) {
+  const state = getPlatformState();
+  const taskRuns = state.taskRuns.map((run) =>
+    run.id === taskRunId
+      ? {
+          ...run,
+          ...patch,
+          metadata: patch.metadata ? { ...run.metadata, ...patch.metadata } : run.metadata,
+        }
+      : run
+  );
+  savePlatformState({ taskRuns });
+  return taskRuns.find((run) => run.id === taskRunId) || null;
+}
+
 export function addLedgerEntry(input: {
   workspaceId: string;
   source: CreditSource;

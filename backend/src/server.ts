@@ -17,6 +17,7 @@ import {
   type AutomationStepDefinition,
   type AutomationStepExecution,
   type AutomationStepKind,
+  type PersistedAutomationStep,
   buildCreditSnapshot,
   buildDelegationRuntimeContext,
   createTask,
@@ -41,6 +42,7 @@ import {
   summarizeReferralRewards,
   mapTaskRunToStatus,
   updateTask,
+  updateTaskRun,
   upsertBillingConfig,
   upsertWorkspaceProfile,
   listTopUpOffers,
@@ -1299,6 +1301,83 @@ function buildDeliveryTargetFromNotify(notify?: string | null) {
   };
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizePersistedAutomationSteps(input: unknown[]): PersistedAutomationStep[] {
+  return input.reduce<PersistedAutomationStep[]>((steps, item, index) => {
+    if (!isObjectRecord(item)) return steps;
+    const kind = typeof item.kind === 'string' ? item.kind.trim().toLowerCase() : '';
+    if (!['search', 'query', 'summarize', 'deliver', 'capture', 'analyze', 'note'].includes(kind)) return steps;
+
+    const objectiveCandidate = typeof item.objective === 'string'
+      ? item.objective.trim()
+      : typeof item.title === 'string'
+        ? item.title.trim()
+        : '';
+    if (!objectiveCandidate) return steps;
+
+    let deliveryTarget: PersistedAutomationStep['deliveryTarget'] = null;
+    if (
+      isObjectRecord(item.deliveryTarget) &&
+      (item.deliveryTarget.channel === 'slack' || item.deliveryTarget.channel === 'email') &&
+      typeof item.deliveryTarget.target === 'string' &&
+      item.deliveryTarget.target.trim()
+    ) {
+      deliveryTarget = {
+        channel: item.deliveryTarget.channel,
+        target: item.deliveryTarget.target.trim(),
+      };
+    }
+
+    steps.push({
+      id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `step_${index + 1}`,
+      kind: kind as PersistedAutomationStep['kind'],
+      title: typeof item.title === 'string' && item.title.trim() ? item.title.trim() : undefined,
+      objective: objectiveCandidate,
+      inputs: isObjectRecord(item.inputs) ? item.inputs : undefined,
+      deliveryTarget,
+    });
+    return steps;
+  }, []);
+}
+
+function deriveLegacyActionFromStep(step: PersistedAutomationStep) {
+  const objective = step.objective.trim();
+  switch (step.kind) {
+    case 'search':
+      return objective.toLowerCase().includes('search') || objective.toLowerCase().includes('research')
+        ? objective
+        : `Search the web for ${objective}`;
+    case 'query':
+      return objective.toLowerCase().startsWith('query') ? objective : `Query ${objective}`;
+    case 'capture': {
+      const url = typeof step.inputs?.url === 'string' ? step.inputs.url.trim() : '';
+      return url ? `Capture a browser screenshot of ${url}` : objective || 'Capture a browser screenshot';
+    }
+    case 'analyze':
+      return objective.toLowerCase().startsWith('analyze') ? objective : `Analyze ${objective}`;
+    case 'summarize':
+      return objective.toLowerCase().includes('summary') || objective.toLowerCase().includes('digest')
+        ? objective
+        : `Generate summary for ${objective}`;
+    case 'deliver':
+      return step.deliveryTarget?.target
+        ? `Deliver latest result to ${step.deliveryTarget.target}`
+        : objective || 'Deliver latest result';
+    case 'note':
+    default:
+      return objective;
+  }
+}
+
+function deriveLegacyActionsFromSteps(steps: PersistedAutomationStep[]) {
+  return steps
+    .map((step) => deriveLegacyActionFromStep(step).trim())
+    .filter(Boolean);
+}
+
 function maxAutomationModelTier(left: ModelTier, right: ModelTier): ModelTier {
   const rank: Record<ModelTier, number> = {
     micro: 0,
@@ -1454,6 +1533,172 @@ function createAutomationStepDefinition(
   };
 }
 
+function createAutomationStepDefinitionFromPersisted(
+  automation: {
+    id: string;
+    name: string;
+    description?: string;
+    actions: string[];
+    notify?: string;
+    condition?: string;
+  },
+  step: PersistedAutomationStep,
+  index: number,
+): AutomationStepDefinition {
+  const baseId = step.id?.trim() || buildAutomationStepId(automation.id, index);
+  const title = step.title?.trim() || step.objective.trim() || `Step ${index + 1}`;
+  const objective = step.objective.trim() || title;
+  const notifyTarget = buildDeliveryTargetFromNotify(automation.notify);
+  const deliveryTarget = step.deliveryTarget || notifyTarget;
+  const captureInput = isObjectRecord(step.inputs) ? step.inputs : undefined;
+  const url = typeof captureInput?.url === 'string' ? captureInput.url.trim() : '';
+  const normalizedObjective = normalizeAutomationActionText(objective);
+
+  if (step.kind === 'query') {
+    const queryDataInput = isObjectRecord(step.inputs) ? step.inputs : inferAutomationQueryDataInput(objective) || {};
+    return {
+      id: baseId,
+      kind: 'query',
+      title,
+      objective,
+      assignedRole: 'analyst',
+      modelTier: 'micro',
+      estimatedCredits: estimateAutomationStepCredits('query', 'micro', { toolCalls: 1 }),
+      toolName: 'query_data',
+      inputs: queryDataInput,
+    };
+  }
+
+  if (step.kind === 'capture') {
+    return {
+      id: baseId,
+      kind: 'capture',
+      title,
+      objective,
+      assignedRole: 'operator',
+      modelTier: 'micro',
+      estimatedCredits: estimateAutomationStepCredits('capture', 'micro', { toolCalls: url ? 1 : 0 }),
+      toolName: 'browser_screenshot',
+      inputs: captureInput || {},
+    };
+  }
+
+  if (step.kind === 'analyze') {
+    const modelTier = /strateg|competitor|market|deep/i.test(objective) ? 'hard' : 'default';
+    return {
+      id: baseId,
+      kind: 'analyze',
+      title,
+      objective,
+      assignedRole: 'analyst',
+      modelTier,
+      estimatedCredits: estimateAutomationStepCredits('analyze', modelTier, {
+        complexity: modelTier === 'hard' ? 'high' : 'medium',
+      }),
+      toolName: 'generate_text',
+      inputs: isObjectRecord(step.inputs) ? step.inputs : { instruction: objective },
+    };
+  }
+
+  if (step.kind === 'search') {
+    return {
+      id: baseId,
+      kind: 'search',
+      title,
+      objective,
+      assignedRole: 'researcher',
+      modelTier: 'micro',
+      estimatedCredits: estimateAutomationStepCredits('search', 'micro', { toolCalls: 1 }),
+      toolName: 'web_search',
+      inputs: isObjectRecord(step.inputs) && typeof step.inputs.query === 'string'
+        ? step.inputs
+        : {
+            query: inferAutomationSearchQuery(objective, automation),
+            num_results: 6,
+          },
+    };
+  }
+
+  if (step.kind === 'deliver') {
+    return {
+      id: baseId,
+      kind: 'deliver',
+      title,
+      objective,
+      assignedRole: 'operator',
+      modelTier: 'micro',
+      estimatedCredits: estimateAutomationStepCredits('deliver', 'micro', { toolCalls: 1 }),
+      toolName: 'send_message',
+      inputs: isObjectRecord(step.inputs) ? step.inputs : {},
+      deliveryTarget,
+    };
+  }
+
+  if (step.kind === 'summarize') {
+    return {
+      id: baseId,
+      kind: 'summarize',
+      title,
+      objective,
+      assignedRole: 'writer',
+      modelTier: 'default',
+      estimatedCredits: estimateAutomationStepCredits('summarize', 'default', { complexity: 'medium' }),
+      toolName: 'generate_text',
+      inputs: isObjectRecord(step.inputs) ? step.inputs : { instruction: objective },
+    };
+  }
+
+  return {
+    id: baseId,
+    kind: 'note',
+    title,
+    objective: normalizedObjective ? objective : title,
+    assignedRole: 'scheduler',
+    modelTier: 'micro',
+    estimatedCredits: estimateAutomationStepCredits('note', 'micro'),
+    inputs: isObjectRecord(step.inputs) ? step.inputs : { note: objective },
+  };
+}
+
+function canonicalizeAutomationPlanSteps(steps: AutomationStepDefinition[]): AutomationStepDefinition[] {
+  const nextSteps: AutomationStepDefinition[] = [];
+  const summaryInstructions: string[] = [];
+  let summaryIndex = -1;
+
+  for (const step of steps) {
+    if (step.kind === 'summarize') {
+      summaryInstructions.push(step.objective.trim());
+      if (summaryIndex === -1) {
+        summaryIndex = nextSteps.length;
+        nextSteps.push({ ...step });
+      }
+      continue;
+    }
+
+    nextSteps.push(step);
+  }
+
+  if (summaryIndex !== -1) {
+    const mergedInstructions = [...new Set(summaryInstructions.filter(Boolean))];
+    const primarySummary = nextSteps[summaryIndex];
+    nextSteps[summaryIndex] = {
+      ...primarySummary,
+      title: mergedInstructions.length > 1 ? 'Generate summary and highlights' : primarySummary.title,
+      objective: mergedInstructions.length > 1
+        ? `Produce one final summary that satisfies all summary requests:\n- ${mergedInstructions.join('\n- ')}`
+        : primarySummary.objective,
+      inputs: {
+        ...(primarySummary.inputs || {}),
+        instruction: mergedInstructions.length > 1
+          ? `Produce one final summary that satisfies all summary requests:\n- ${mergedInstructions.join('\n- ')}`
+          : (primarySummary.inputs?.instruction || primarySummary.objective),
+      },
+    };
+  }
+
+  return nextSteps;
+}
+
 function deriveAutomationRolePlan(steps: AutomationStepDefinition[]): AutomationRolePlan {
   const roleCounts = new Map<AutomationStepDefinition['assignedRole'], number>();
   steps.forEach((step) => {
@@ -1506,6 +1751,13 @@ function inferAutomationComplexityFromPlan(steps: AutomationStepDefinition[]): '
 
 function estimateAutomationToolCallCount(steps: AutomationStepDefinition[]) {
   return steps.filter((step) => step.toolName && step.toolName !== 'generate_text').length;
+}
+
+function estimateSuccessfulAutomationCredits(stepExecutions: AutomationStepExecution[]) {
+  return stepExecutions.reduce((total, step) => {
+    if (step.status !== 'succeeded') return total;
+    return total + Math.max(0, Math.trunc(step.estimatedCredits || 0));
+  }, 0);
 }
 
 function ensureAutomationSummaryStep(
@@ -1573,11 +1825,15 @@ function buildAutomationExecutionPlan(automation: {
   name: string;
   description?: string;
   actions: string[];
+  steps?: PersistedAutomationStep[];
   notify?: string;
   condition?: string;
 }): AutomationExecutionPlan {
-  const baseSteps = automation.actions.map((action, index) => createAutomationStepDefinition(automation, action, index));
-  const steps = ensureAutomationDeliveryStep(automation, ensureAutomationSummaryStep(automation, baseSteps));
+  const baseSteps = automation.steps?.length
+    ? automation.steps.map((step, index) => createAutomationStepDefinitionFromPersisted(automation, step, index))
+    : automation.actions.map((action, index) => createAutomationStepDefinition(automation, action, index));
+  const canonicalSteps = canonicalizeAutomationPlanSteps(baseSteps);
+  const steps = ensureAutomationDeliveryStep(automation, ensureAutomationSummaryStep(automation, canonicalSteps));
   const rolePlan = deriveAutomationRolePlan(steps);
   const complexity = inferAutomationComplexityFromPlan(steps);
   const suggestedModelTier = inferAutomationModelTierFromPlan(automation, steps);
@@ -1646,11 +1902,20 @@ async function executeAutomationCore(
     name: string;
     description?: string;
     actions: string[];
+    steps?: PersistedAutomationStep[];
     notify?: string;
     condition?: string;
     timezone?: string;
   },
   plan: AutomationExecutionPlan,
+  onProgress?: (state: {
+    artifacts: AutomationExecutionArtifact[];
+    summaryText: string;
+    stepErrors: string[];
+    stepExecutions: AutomationStepExecution[];
+    delivery: Record<string, unknown> | null;
+    deliveryError: string | null;
+  }) => Promise<void> | void,
 ) {
   const artifacts: AutomationExecutionArtifact[] = [];
   const stepExecutions: AutomationStepExecution[] = [];
@@ -1670,6 +1935,17 @@ async function executeAutomationCore(
       status: 'running',
       startedAt: new Date().toISOString(),
     };
+
+    if (onProgress) {
+      await onProgress({
+        artifacts: [...artifacts],
+        summaryText,
+        stepErrors: [...stepErrors],
+        stepExecutions: [...stepExecutions, stepExecution],
+        delivery,
+        deliveryError,
+      });
+    }
 
     try {
       if (step.kind === 'search') {
@@ -1817,6 +2093,16 @@ async function executeAutomationCore(
     } finally {
       stepExecution.finishedAt = new Date().toISOString();
       stepExecutions.push(stepExecution);
+      if (onProgress) {
+        await onProgress({
+          artifacts: [...artifacts],
+          summaryText,
+          stepErrors: [...stepErrors],
+          stepExecutions: [...stepExecutions],
+          delivery,
+          deliveryError,
+        });
+      }
     }
   }
 
@@ -1835,6 +2121,16 @@ async function executeAutomationCore(
       title: `${automation.name} summary`,
       payload: { markdown: summaryText },
     });
+    if (onProgress) {
+      await onProgress({
+        artifacts: [...artifacts],
+        summaryText,
+        stepErrors: [...stepErrors],
+        stepExecutions: [...stepExecutions],
+        delivery,
+        deliveryError,
+      });
+    }
   }
 
   return {
@@ -1853,6 +2149,7 @@ async function runAutomation(automation: {
   name: string;
   description?: string;
   actions: string[];
+  steps?: PersistedAutomationStep[];
   notify?: string;
   condition?: string;
   timezone?: string;
@@ -1890,6 +2187,7 @@ async function runAutomation(automation: {
       automationId: automation.id,
       notify: automation.notify || null,
       delegation: delegation.ownership,
+      sourceSteps: automation.steps,
       automationPlan: executionPlan,
       plannedSteps: executionPlan.steps,
       rolePlan: {
@@ -1918,6 +2216,7 @@ async function runAutomation(automation: {
       automationId: automation.id,
       title: automation.name,
       delegation: delegation.ownership,
+      sourceSteps: automation.steps,
       automationPlan: executionPlan,
       plannedSteps: executionPlan.steps,
       stepExecutions: [],
@@ -1933,7 +2232,60 @@ async function runAutomation(automation: {
     assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimatedCredits);
     updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
 
-    const execution = await executeAutomationCore(automation, executionPlan);
+    const persistProgress = async (progress: {
+      artifacts: AutomationExecutionArtifact[];
+      summaryText: string;
+      stepErrors: string[];
+      stepExecutions: AutomationStepExecution[];
+      delivery: Record<string, unknown> | null;
+      deliveryError: string | null;
+    }) => {
+      updateTaskRun(taskRun.id, {
+        metadata: {
+          automationId: automation.id,
+          title: automation.name,
+          delegation: delegation.ownership,
+          sourceSteps: automation.steps,
+          automationPlan: executionPlan,
+          plannedSteps: executionPlan.steps,
+          stepExecutions: progress.stepExecutions,
+          artifacts: progress.artifacts,
+          summary: progress.summaryText || undefined,
+          stepErrors: progress.stepErrors,
+          delivery: progress.delivery,
+          deliveryError: progress.deliveryError,
+          rolePlan: {
+            primaryRole: executionPlan.primaryRole,
+            supportingRoles: executionPlan.supportingRoles,
+            rationale: executionPlan.rationale,
+          },
+        },
+      });
+
+      updateTask(task.id, {
+        status: 'running',
+        delegationState: 'in_progress',
+        metadata: {
+          automationId: automation.id,
+          notify: automation.notify || null,
+          delegation: delegation.ownership,
+          sourceSteps: automation.steps,
+          latestSummary: progress.summaryText || undefined,
+          latestArtifacts: progress.artifacts,
+          latestStepExecutions: progress.stepExecutions,
+          automationPlan: executionPlan,
+          plannedSteps: executionPlan.steps,
+          rolePlan: {
+            primaryRole: executionPlan.primaryRole,
+            supportingRoles: executionPlan.supportingRoles,
+            rationale: executionPlan.rationale,
+          },
+          deliveryError: progress.deliveryError,
+        },
+      });
+    };
+
+    const execution = await executeAutomationCore(automation, executionPlan, persistProgress);
     const fallbackSummary = [
       `Automation: ${automation.name}`,
       automation.description ? `Description: ${automation.description}` : null,
@@ -1953,13 +2305,7 @@ async function runAutomation(automation: {
       step.status === 'succeeded' &&
       (step.kind === 'search' || step.kind === 'query' || step.kind === 'capture' || step.kind === 'deliver')
     ).length;
-    const actualCredits = estimateCreditCost({
-      taskKind: 'automation',
-      modelTier: execution.plan.suggestedModelTier,
-      automationRuns: 1,
-      toolCalls: actualToolCalls,
-      complexity: execution.plan.complexity,
-    }).estimatedCredits;
+    const actualCredits = estimateSuccessfulAutomationCredits(execution.stepExecutions);
 
     finalizeTaskRun(taskRun.id, {
       status: 'succeeded',
@@ -1970,6 +2316,7 @@ async function runAutomation(automation: {
         artifacts: execution.artifacts,
         stepErrors: execution.stepErrors,
         stepExecutions: execution.stepExecutions,
+        sourceSteps: automation.steps,
         automationPlan: execution.plan,
         plannedSteps: execution.plan.steps,
         actualToolCalls,
@@ -1989,6 +2336,7 @@ async function runAutomation(automation: {
         automationId: automation.id,
         notify: deliveryTarget || null,
         delegation: delegation.ownership,
+        sourceSteps: automation.steps,
         latestSummary: summary,
         latestArtifacts: execution.artifacts,
         latestStepExecutions: execution.stepExecutions,
@@ -2035,6 +2383,7 @@ async function runAutomation(automation: {
         summary: failureSummary,
         plannedSteps: executionPlan.steps,
         stepExecutions: [],
+        sourceSteps: automation.steps,
         artifacts: [
           {
             kind: 'note',
@@ -2054,6 +2403,7 @@ async function runAutomation(automation: {
         automationId: automation.id,
         notify: automation.notify || null,
         delegation: delegation.ownership,
+        sourceSteps: automation.steps,
         latestSummary: failureSummary,
         latestStepExecutions: [],
         automationPlan: executionPlan,
@@ -2569,12 +2919,20 @@ app.post('/api/automations', async (req: Request, res: Response) => {
     schedule?: string;
     timezone?: string;
     actions?: unknown[];
+    steps?: unknown[];
     notify?: string | null;
     condition?: string | null;
   };
 
-  if (!body.name || !body.schedule || !Array.isArray(body.actions) || body.actions.length === 0) {
-    res.status(400).json({ error: 'name, schedule, and at least one action are required' });
+  const normalizedSteps = Array.isArray(body.steps) ? normalizePersistedAutomationSteps(body.steps) : [];
+  const normalizedActions = normalizedSteps.length > 0
+    ? deriveLegacyActionsFromSteps(normalizedSteps)
+    : Array.isArray(body.actions)
+      ? body.actions.map((item) => String(item).trim()).filter(Boolean)
+      : [];
+
+  if (!body.name || !body.schedule || normalizedActions.length === 0) {
+    res.status(400).json({ error: 'name, schedule, and at least one workflow step are required' });
     return;
   }
 
@@ -2587,7 +2945,8 @@ app.post('/api/automations', async (req: Request, res: Response) => {
       description: typeof body.description === 'string' ? body.description.trim() || undefined : undefined,
       schedule: body.schedule.trim(),
       timezone: typeof body.timezone === 'string' ? body.timezone.trim() || undefined : undefined,
-      actions: body.actions.map((item) => String(item).trim()).filter(Boolean),
+      actions: normalizedActions,
+      steps: normalizedSteps.length > 0 ? normalizedSteps : undefined,
       notify: typeof body.notify === 'string' ? body.notify.trim() || undefined : undefined,
       condition: typeof body.condition === 'string' ? body.condition.trim() || undefined : undefined,
     }, runAutomation);
@@ -2617,8 +2976,18 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
   if (typeof req.body.timezone === 'string') patch.timezone = req.body.timezone.trim();
   if (typeof req.body.notify === 'string') patch.notify = req.body.notify.trim();
   if (typeof req.body.condition === 'string') patch.condition = req.body.condition.trim();
+  if (Array.isArray(req.body.steps)) {
+    const normalizedSteps = normalizePersistedAutomationSteps(req.body.steps);
+    patch.steps = normalizedSteps;
+    patch.version = normalizedSteps.length > 0 ? 2 : undefined;
+    patch.actions = deriveLegacyActionsFromSteps(normalizedSteps);
+  }
   if (Array.isArray(req.body.actions)) {
     patch.actions = req.body.actions.map((item: unknown) => String(item).trim()).filter(Boolean);
+    if (!Array.isArray(req.body.steps)) {
+      patch.steps = undefined;
+      patch.version = undefined;
+    }
   }
   if (req.body.notify === null) patch.notify = undefined;
   if (req.body.condition === null) patch.condition = undefined;

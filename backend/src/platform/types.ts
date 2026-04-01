@@ -113,6 +113,15 @@ export interface AutomationStepDeliveryTarget {
   target: string;
 }
 
+export interface PersistedAutomationStep {
+  id: string;
+  kind: AutomationStepKind;
+  title?: string;
+  objective: string;
+  inputs?: Record<string, unknown>;
+  deliveryTarget?: AutomationStepDeliveryTarget | null;
+}
+
 export interface AutomationStepDefinition {
   id: string;
   kind: AutomationStepKind;

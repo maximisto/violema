@@ -80,14 +80,56 @@ const SCHEDULE_PRESETS = [
   { label: 'Every monday', value: 'every monday at 9am' },
 ];
 
-const ACTION_TEMPLATES = [
-  'Query Stripe failed payments',
-  'Query PostHog funnel',
-  'Search the web for competitor moves',
-  'Capture a browser screenshot',
-  'Generate summary',
-  'Send alert to Slack',
-  'Send email digest',
+type WorkflowBlockKind = 'search' | 'query' | 'capture' | 'analyze' | 'summarize' | 'deliver' | 'note';
+
+interface WorkflowBlockDraft {
+  id: string;
+  kind: WorkflowBlockKind;
+  title: string;
+  objective: string;
+  inputs?: Record<string, unknown>;
+  deliveryTarget?: { channel: 'slack' | 'email'; target: string } | null;
+}
+
+const WORKFLOW_BLOCK_OPTIONS: Array<{ kind: WorkflowBlockKind; label: string; description: string }> = [
+  { kind: 'search', label: 'Search', description: 'Research current web information.' },
+  { kind: 'query', label: 'Query', description: 'Pull structured live data from an integration.' },
+  { kind: 'capture', label: 'Capture', description: 'Grab a page or screenshot as evidence.' },
+  { kind: 'analyze', label: 'Analyze', description: 'Compare, diagnose, or interpret findings.' },
+  { kind: 'summarize', label: 'Summarize', description: 'Turn evidence into a readable output.' },
+  { kind: 'deliver', label: 'Deliver', description: 'Send the latest result to the configured destination.' },
+  { kind: 'note', label: 'Note', description: 'Store a workflow instruction with no direct tool call.' },
+];
+
+const ACTION_TEMPLATES: Array<{ label: string; block: WorkflowBlockDraft }> = [
+  {
+    label: 'Stripe failed payments',
+    block: { id: 'template-query-stripe', kind: 'query', title: 'Query Stripe failed payments', objective: 'Stripe failed payments' },
+  },
+  {
+    label: 'PostHog funnel',
+    block: { id: 'template-query-posthog', kind: 'query', title: 'Query PostHog funnel', objective: 'PostHog funnel' },
+  },
+  {
+    label: 'Competitor moves',
+    block: { id: 'template-search-competitor', kind: 'search', title: 'Search competitor moves', objective: 'Competitor pricing changes and product moves this month' },
+  },
+  {
+    label: 'Browser screenshot',
+    block: { id: 'template-capture', kind: 'capture', title: 'Capture a browser screenshot', objective: 'Capture the latest page state', inputs: { url: '' } },
+  },
+  {
+    label: 'Summary',
+    block: { id: 'template-summary', kind: 'summarize', title: 'Generate summary', objective: 'Generate a concise summary from the gathered evidence' },
+  },
+  {
+    label: 'Slack alert',
+    block: { id: 'template-deliver-slack', kind: 'deliver', title: 'Send alert to Slack', objective: 'Deliver the latest result to Slack', deliveryTarget: { channel: 'slack', target: '' } },
+  },
+  {
+    label: 'Email digest',
+    block: { id: 'template-deliver-email', kind: 'deliver', title: 'Send email digest', objective: 'Deliver the latest result by email', deliveryTarget: { channel: 'email', target: '' } },
+  },
 ];
 
 type DashboardTaskStatus = 'scheduled' | 'complete' | 'alert';
@@ -121,6 +163,7 @@ interface AutomationApiRecord {
   schedule: string;
   timezone?: string;
   actions: string[];
+  steps?: WorkflowBlockDraft[];
   notify?: string;
   condition?: string;
   status: 'active' | 'paused';
@@ -146,6 +189,7 @@ interface DashboardTaskItem {
   notify?: string;
   condition?: string;
   actions?: string[];
+  steps?: WorkflowBlockDraft[];
   automationStatus?: 'active' | 'paused';
   timezone?: string;
   lastRunAt?: string;
@@ -188,7 +232,7 @@ interface AutomationEditorDraft {
   description: string;
   notify: string;
   condition: string;
-  actions: string[];
+  steps: WorkflowBlockDraft[];
   destinationType: 'slack' | 'email' | 'custom' | 'none';
 }
 
@@ -268,6 +312,138 @@ function formatAutomationRunTime(value?: string) {
 
 function formatRelativeTimeFromIso(iso: string) {
   return formatTime(new Date(iso));
+}
+
+function createWorkflowBlock(kind: WorkflowBlockKind, overrides?: Partial<WorkflowBlockDraft>): WorkflowBlockDraft {
+  const defaults: Record<WorkflowBlockKind, WorkflowBlockDraft> = {
+    search: {
+      id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind: 'search',
+      title: 'Search the web',
+      objective: 'Current AI agent news',
+    },
+    query: {
+      id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind: 'query',
+      title: 'Query live data',
+      objective: 'Stripe failed payments',
+    },
+    capture: {
+      id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind: 'capture',
+      title: 'Capture browser screenshot',
+      objective: 'Capture the latest page state',
+      inputs: { url: '' },
+    },
+    analyze: {
+      id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind: 'analyze',
+      title: 'Analyze findings',
+      objective: 'Analyze the gathered evidence and extract the important signal',
+    },
+    summarize: {
+      id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind: 'summarize',
+      title: 'Generate summary',
+      objective: 'Generate a concise summary from the gathered evidence',
+    },
+    deliver: {
+      id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind: 'deliver',
+      title: 'Deliver latest result',
+      objective: 'Deliver the latest result to the configured destination',
+      deliveryTarget: null,
+    },
+    note: {
+      id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind: 'note',
+      title: 'Workflow note',
+      objective: 'Keep this workflow instruction as context',
+    },
+  };
+
+  return {
+    ...defaults[kind],
+    ...overrides,
+    id: overrides?.id || defaults[kind].id,
+    inputs: overrides?.inputs ?? defaults[kind].inputs,
+    deliveryTarget: overrides?.deliveryTarget ?? defaults[kind].deliveryTarget,
+  };
+}
+
+function parseLegacyActionToWorkflowBlock(action: string): WorkflowBlockDraft {
+  const trimmed = action.trim();
+  const normalized = trimmed.toLowerCase();
+  if (/query|stripe|posthog|github|linear|notion/.test(normalized)) {
+    return createWorkflowBlock('query', { title: trimmed, objective: trimmed.replace(/^query\s+/i, '') || trimmed });
+  }
+  if (/screenshot|capture/.test(normalized)) {
+    const urlMatch = trimmed.match(/https?:\/\/[^\s)]+/i);
+    return createWorkflowBlock('capture', {
+      title: trimmed,
+      objective: trimmed,
+      inputs: { url: urlMatch?.[0] || '' },
+    });
+  }
+  if (/(analy[sz]e|diagnos|compare|inspect|audit|review)/.test(normalized)) {
+    return createWorkflowBlock('analyze', { title: trimmed, objective: trimmed.replace(/^(analy[sz]e)\s+/i, '') || trimmed });
+  }
+  if (/(send|post|slack|email|deliver|notify|message)/.test(normalized)) {
+    return createWorkflowBlock('deliver', {
+      title: trimmed,
+      objective: trimmed,
+      deliveryTarget: trimmed.includes('@')
+        ? { channel: 'email', target: '' }
+        : { channel: 'slack', target: '' },
+    });
+  }
+  if (/(summary|digest|report|golden nuggets|nuggets|briefing|recap|share with the team)/.test(normalized)) {
+    return createWorkflowBlock('summarize', { title: trimmed, objective: trimmed });
+  }
+  if (/(search|scan internet|scan the internet|scan web|research|news|competitor)/.test(normalized)) {
+    return createWorkflowBlock('search', { title: trimmed, objective: trimmed.replace(/^(search|research)\s+/i, '') || trimmed });
+  }
+  return createWorkflowBlock('note', { title: trimmed, objective: trimmed });
+}
+
+function serializeWorkflowBlockToAction(block: WorkflowBlockDraft): string {
+  const objective = block.objective.trim() || block.title.trim();
+  switch (block.kind) {
+    case 'search':
+      return /^search|^research/i.test(objective) ? objective : `Search the web for ${objective}`;
+    case 'query':
+      return /^query/i.test(objective) ? objective : `Query ${objective}`;
+    case 'capture': {
+      const url = typeof block.inputs?.url === 'string' ? block.inputs.url.trim() : '';
+      return url ? `Capture a browser screenshot of ${url}` : (objective || 'Capture a browser screenshot');
+    }
+    case 'analyze':
+      return /^analy[sz]e/i.test(objective) ? objective : `Analyze ${objective}`;
+    case 'summarize':
+      return /(summary|digest|report|golden nuggets|briefing|recap)/i.test(objective) ? objective : `Generate summary for ${objective}`;
+    case 'deliver':
+      return block.deliveryTarget?.target
+        ? `Deliver latest result to ${block.deliveryTarget.target}`
+        : objective || 'Deliver latest result';
+    case 'note':
+    default:
+      return objective;
+  }
+}
+
+function serializeWorkflowBlocks(blocks: WorkflowBlockDraft[]) {
+  return blocks
+    .map((block) => serializeWorkflowBlockToAction(block).trim())
+    .filter(Boolean);
+}
+
+function workflowBlockHasContent(block: WorkflowBlockDraft) {
+  if (block.kind === 'deliver') return true;
+  if (block.kind === 'capture') {
+    const url = typeof block.inputs?.url === 'string' ? block.inputs.url.trim() : '';
+    return Boolean(block.title.trim() || block.objective.trim() || url);
+  }
+  return Boolean(block.title.trim() || block.objective.trim());
 }
 
 function getConversationSectionLabel(date: Date) {
@@ -803,6 +979,7 @@ export default function Dashboard() {
           notify: automation.notify,
           condition: automation.condition,
           actions: automation.actions,
+          steps: automation.steps,
           automationStatus: automation.status,
           timezone: automation.timezone,
           lastRunAt: latestRun?.finishedAt || latestRun?.startedAt || automation.last_run_at,
@@ -886,11 +1063,12 @@ export default function Dashboard() {
     }
 
     const timeout = window.setTimeout(async () => {
-      const actionCount = automationEditor.actions.filter((item) => item.trim()).length;
+      const actionCount = automationEditor.steps.filter((item) => workflowBlockHasContent(item)).length;
+      const toolCallCount = automationEditor.steps.filter((item) => ['search', 'query', 'capture', 'deliver'].includes(item.kind)).length;
       const estimate = await fetchCreditEstimate({
         taskKind: 'automation',
         modelTier: actionCount > 3 ? 'ops' : 'default',
-        toolCalls: Math.max(1, actionCount),
+        toolCalls: Math.max(1, toolCallCount),
         automationRuns: 1,
         complexity: actionCount > 4 ? 'high' : actionCount > 2 ? 'medium' : 'low',
       });
@@ -1019,7 +1197,11 @@ export default function Dashboard() {
       description: task.description || '',
       notify: task.notify || '',
       condition: task.condition || '',
-      actions: Array.isArray(task.actions) && task.actions.length > 0 ? task.actions : ['Generate summary'],
+      steps: Array.isArray(task.steps) && task.steps.length > 0
+        ? task.steps.map((step) => createWorkflowBlock(step.kind, step))
+        : Array.isArray(task.actions) && task.actions.length > 0
+          ? task.actions.map((action) => parseLegacyActionToWorkflowBlock(action))
+          : [createWorkflowBlock('summarize')],
       destinationType:
         task.notify?.startsWith('C') || task.notify?.startsWith('G') || task.notify?.startsWith('D') || task.notify?.startsWith('#')
           ? 'slack'
@@ -1040,7 +1222,10 @@ export default function Dashboard() {
       description: '',
       notify: '',
       condition: '',
-      actions: ['Query Stripe failed payments', 'Generate summary', 'Send alert to Slack'],
+      steps: [
+        createWorkflowBlock('query', { title: 'Query Stripe failed payments', objective: 'Stripe failed payments' }),
+        createWorkflowBlock('summarize'),
+      ],
       destinationType: 'slack',
     });
   }, []);
@@ -1049,9 +1234,20 @@ export default function Dashboard() {
     if (!automationEditor) return;
     setActionBusy('save');
     try {
-      const actions = automationEditor.actions
-        .map((item) => item.trim())
-        .filter(Boolean);
+      const steps = automationEditor.steps
+        .map((step) => ({
+          ...step,
+          title: step.title.trim(),
+          objective: step.objective.trim(),
+          deliveryTarget: step.kind === 'deliver' && automationEditor.notify.trim()
+            ? {
+                channel: automationEditor.destinationType === 'email' ? 'email' as const : 'slack' as const,
+                target: automationEditor.notify.trim(),
+              }
+            : (step.deliveryTarget || null),
+        }))
+        .filter((step) => workflowBlockHasContent(step));
+      const actions = serializeWorkflowBlocks(steps);
       const response = await fetch(
         automationEditor.mode === 'create' ? '/api/automations' : `/api/automations/${automationEditor.id}`,
         {
@@ -1064,6 +1260,7 @@ export default function Dashboard() {
           description: automationEditor.description.trim() || null,
           notify: automationEditor.notify.trim() || null,
           condition: automationEditor.condition.trim() || null,
+          steps,
           actions,
         }),
       });
@@ -1205,9 +1402,7 @@ export default function Dashboard() {
   const lowCreditRunway = snapshot.projectedDaysLeft <= 7;
   const automationActionCount = useMemo(() => {
     if (!automationEditor) return 0;
-    return automationEditor.actions
-      .map((item) => item.trim())
-      .filter(Boolean).length;
+    return automationEditor.steps.filter((item) => workflowBlockHasContent(item)).length;
   }, [automationEditor]);
   const hasAutomationSteps = automationActionCount > 0;
 
@@ -1237,9 +1432,10 @@ export default function Dashboard() {
   const updateAutomationStep = useCallback((index: number, value: string) => {
     setAutomationEditor((current) => {
       if (!current) return current;
-      const actions = [...current.actions];
-      actions[index] = value;
-      return { ...current, actions };
+      const steps = [...current.steps];
+      const step = steps[index];
+      steps[index] = { ...step, objective: value, title: step.title || value };
+      return { ...current, steps };
     });
   }, []);
 
@@ -1247,45 +1443,46 @@ export default function Dashboard() {
     setAutomationEditor((current) => {
       if (!current) return current;
       const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= current.actions.length) return current;
-      const actions = [...current.actions];
-      const [item] = actions.splice(index, 1);
-      actions.splice(nextIndex, 0, item);
-      return { ...current, actions };
+      if (nextIndex < 0 || nextIndex >= current.steps.length) return current;
+      const steps = [...current.steps];
+      const [item] = steps.splice(index, 1);
+      steps.splice(nextIndex, 0, item);
+      return { ...current, steps };
     });
   }, []);
 
   const removeAutomationStep = useCallback((index: number) => {
     setAutomationEditor((current) => {
       if (!current) return current;
-      const actions = current.actions.filter((_, actionIndex) => actionIndex !== index);
-      return { ...current, actions: actions.length > 0 ? actions : [''] };
+      const steps = current.steps.filter((_, actionIndex) => actionIndex !== index);
+      return { ...current, steps: steps.length > 0 ? steps : [createWorkflowBlock('note')] };
     });
   }, []);
 
-  const appendAutomationStep = useCallback((value = '') => {
+  const appendAutomationStep = useCallback((block?: WorkflowBlockDraft) => {
     setAutomationEditor((current) => {
       if (!current) return current;
-      return { ...current, actions: [...current.actions, value] };
+      return { ...current, steps: [...current.steps, block ? createWorkflowBlock(block.kind, block) : createWorkflowBlock('note')] };
     });
   }, []);
 
   const handleAutomationStepDrop = useCallback((targetIndex: number) => {
     setAutomationEditor((current) => {
       if (!current || draggedStepIndex === null || draggedStepIndex === targetIndex) return current;
-      const actions = [...current.actions];
-      const [draggedAction] = actions.splice(draggedStepIndex, 1);
-      actions.splice(targetIndex, 0, draggedAction);
-      return { ...current, actions };
+      const steps = [...current.steps];
+      const [draggedStep] = steps.splice(draggedStepIndex, 1);
+      steps.splice(targetIndex, 0, draggedStep);
+      return { ...current, steps };
     });
     setDraggedStepIndex(null);
   }, [draggedStepIndex]);
 
-  const addAutomationTemplate = useCallback((template: string) => {
+  const addAutomationTemplate = useCallback((template: WorkflowBlockDraft) => {
     setAutomationEditor((current) => {
       if (!current) return current;
-      if (current.actions.includes(template)) return current;
-      return { ...current, actions: [...current.actions.filter(Boolean), template] };
+      const exists = current.steps.some((step) => step.kind === template.kind && step.objective.trim() === template.objective.trim());
+      if (exists) return current;
+      return { ...current, steps: [...current.steps.filter((step) => workflowBlockHasContent(step)), createWorkflowBlock(template.kind, template)] };
     });
   }, []);
 
@@ -1347,7 +1544,11 @@ export default function Dashboard() {
       description: selectedTask.description || '',
       notify: selectedTask.notify || '',
       condition: selectedTask.condition || '',
-      actions: Array.isArray(selectedTask.actions) && selectedTask.actions.length > 0 ? selectedTask.actions : ['Generate summary'],
+      steps: Array.isArray(selectedTask.steps) && selectedTask.steps.length > 0
+        ? selectedTask.steps.map((step) => createWorkflowBlock(step.kind, step))
+        : Array.isArray(selectedTask.actions) && selectedTask.actions.length > 0
+          ? selectedTask.actions.map((action) => parseLegacyActionToWorkflowBlock(action))
+          : [createWorkflowBlock('summarize')],
       destinationType:
         selectedTask.notify?.startsWith('C') || selectedTask.notify?.startsWith('G') || selectedTask.notify?.startsWith('D') || selectedTask.notify?.startsWith('#')
           ? 'slack'
@@ -2469,19 +2670,19 @@ export default function Dashboard() {
                 <div className="mt-1 flex flex-wrap gap-2 px-1">
                   {ACTION_TEMPLATES.map((template) => (
                     <button
-                      key={template}
+                      key={template.label}
                       type="button"
-                      onClick={() => addAutomationTemplate(template)}
+                      onClick={() => addAutomationTemplate(template.block)}
                       className="ui-pill px-2.5 py-1 text-[10px] normal-case tracking-normal text-slate-300"
                     >
-                      + {template}
+                      + {template.label}
                     </button>
                   ))}
                 </div>
                 <div className="mt-2 space-y-2">
-                  {automationEditor.actions.map((action, index) => (
+                  {automationEditor.steps.map((step, index) => (
                     <div
-                      key={`${automationEditor.id}-${index}`}
+                      key={step.id}
                       draggable
                       onDragStart={() => setDraggedStepIndex(index)}
                       onDragEnd={() => setDraggedStepIndex(null)}
@@ -2516,7 +2717,7 @@ export default function Dashboard() {
                           <button
                             type="button"
                             onClick={() => moveAutomationStep(index, 1)}
-                            disabled={index === automationEditor.actions.length - 1}
+                            disabled={index === automationEditor.steps.length - 1}
                             className="rounded-lg border border-navy-700/70 bg-navy-900/60 p-1 text-slate-400 transition-colors hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                             aria-label="Move step down"
                           >
@@ -2532,13 +2733,81 @@ export default function Dashboard() {
                           </button>
                         </div>
                       </div>
-                      <div className="ui-input-shell mt-2">
-                        <input
-                          value={action}
-                          onChange={(event) => updateAutomationStep(index, event.target.value)}
-                          className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                          placeholder="Generate summary"
-                        />
+                      <div className="mt-2 grid gap-2 md:grid-cols-[180px,minmax(0,1fr)]">
+                        <div className="ui-input-shell">
+                          <select
+                            value={step.kind}
+                            onChange={(event) => {
+                              const nextKind = event.target.value as WorkflowBlockKind;
+                              setAutomationEditor((current) => {
+                                if (!current) return current;
+                                const steps = [...current.steps];
+                                steps[index] = createWorkflowBlock(nextKind, { ...steps[index], kind: nextKind });
+                                return { ...current, steps };
+                              });
+                            }}
+                            className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                          >
+                            {WORKFLOW_BLOCK_OPTIONS.map((option) => (
+                              <option key={option.kind} value={option.kind} className="bg-slate-950 text-slate-100">
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="ui-input-shell">
+                            <input
+                              value={step.title}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setAutomationEditor((current) => {
+                                  if (!current) return current;
+                                  const steps = [...current.steps];
+                                  steps[index] = { ...steps[index], title: value };
+                                  return { ...current, steps };
+                                });
+                              }}
+                              className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                              placeholder="Step title"
+                            />
+                          </div>
+                          <div className="ui-input-shell">
+                            <input
+                              value={step.objective}
+                              onChange={(event) => updateAutomationStep(index, event.target.value)}
+                              className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                              placeholder="What this step should do"
+                            />
+                          </div>
+                          {step.kind === 'capture' && (
+                            <div className="ui-input-shell">
+                              <input
+                                value={typeof step.inputs?.url === 'string' ? step.inputs.url : ''}
+                                onChange={(event) => {
+                                  const value = event.target.value;
+                                  setAutomationEditor((current) => {
+                                    if (!current) return current;
+                                    const steps = [...current.steps];
+                                    steps[index] = {
+                                      ...steps[index],
+                                      inputs: {
+                                        ...(steps[index].inputs || {}),
+                                        url: value,
+                                      },
+                                    };
+                                    return { ...current, steps };
+                                  });
+                                }}
+                                className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                                placeholder="https://example.com"
+                              />
+                            </div>
+                          )}
+                          <p className="px-1 text-[11px] text-slate-500">
+                            {WORKFLOW_BLOCK_OPTIONS.find((option) => option.kind === step.kind)?.description}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -2546,7 +2815,7 @@ export default function Dashboard() {
                 <div className="mt-2 flex flex-wrap gap-2 px-1">
                   <button
                     type="button"
-                    onClick={() => appendAutomationStep('')}
+                    onClick={() => appendAutomationStep()}
                     className="ui-button-ghost"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -2618,9 +2887,9 @@ export default function Dashboard() {
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Actions</p>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Steps</p>
                   <p className="mt-1 text-lg font-semibold text-white">{automationActionCount}</p>
-                  <p className="mt-1 text-[11px] text-slate-500">Each line becomes a live automation step.</p>
+                  <p className="mt-1 text-[11px] text-slate-500">Each block maps to a typed automation step at runtime.</p>
                 </div>
                 <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
                   <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Per run</p>
