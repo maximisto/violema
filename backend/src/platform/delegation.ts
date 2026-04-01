@@ -134,13 +134,28 @@ export function buildDelegationRuntimeContext(input: {
     modelTier: input.modelTier,
     userText,
   });
+  const supportingRoles = input.supportingRolesOverride
+    ? [...new Set(input.supportingRolesOverride.filter((role) => role !== input.executorRoleOverride))]
+    : baseTaskPlan.supportingRoles;
+  const overrideSteps = input.executorRoleOverride
+    ? [
+        step(input.executorRoleOverride, 'Lead execution and coordinate the workflow.'),
+        ...supportingRoles.map((role) =>
+          step(
+            role,
+            role === 'reviewer'
+              ? 'Review the output for correctness and risk.'
+              : 'Support the workflow with specialist execution.'
+          )
+        ),
+      ]
+    : baseTaskPlan.steps;
   const taskPlan: TaskDelegationPlan = {
     ...baseTaskPlan,
     primaryRole: input.executorRoleOverride || baseTaskPlan.primaryRole,
-    supportingRoles: input.supportingRolesOverride
-      ? [...new Set(input.supportingRolesOverride.filter((role) => role !== input.executorRoleOverride))]
-      : baseTaskPlan.supportingRoles,
+    supportingRoles,
     rationale: input.reasonOverride || baseTaskPlan.rationale,
+    steps: overrideSteps,
   };
 
   const ownerRole: AgentRole = 'nexus';

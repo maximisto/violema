@@ -67,6 +67,7 @@ const PORT = process.env.PORT || 3001;
 const SCREENSHOT_DIR = path.join(process.cwd(), 'generated-screenshots');
 const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
 const SLACK_EVENT_CACHE_WINDOW_MS = 5 * 60 * 1000;
+const AUTOMATION_STEP_TIMEOUT_MS = Number(process.env.AUTOMATION_STEP_TIMEOUT_MS || 45000);
 const handledSlackEvents = new Map<string, number>();
 
 const ALLOWED_ORIGINS = [
@@ -1623,6 +1624,22 @@ function buildAutomationEvidenceBlock(
   ].filter(Boolean).join('\n\n');
 }
 
+async function runAutomationStepWithTimeout<T>(label: string, operation: Promise<T>) {
+  let timeoutId: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`${label} timed out after ${Math.round(AUTOMATION_STEP_TIMEOUT_MS / 1000)}s.`));
+        }, AUTOMATION_STEP_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 async function executeAutomationCore(
   automation: {
     id: string;
@@ -1659,7 +1676,7 @@ async function executeAutomationCore(
         const query = typeof step.inputs?.query === 'string'
           ? step.inputs.query
           : inferAutomationSearchQuery(step.title, automation);
-        const payload = await searchWeb(query, 6);
+        const payload = await runAutomationStepWithTimeout(`Search step "${step.title}"`, searchWeb(query, 6));
         artifacts.push({
           kind: 'web_search',
           title: step.title,
@@ -1673,7 +1690,7 @@ async function executeAutomationCore(
       }
 
       if (step.kind === 'query') {
-        const payload = JSON.parse(await executeToolCall('query_data', step.inputs || {})) as Record<string, unknown>;
+        const payload = JSON.parse(await runAutomationStepWithTimeout(`Query step "${step.title}"`, executeToolCall('query_data', step.inputs || {}))) as Record<string, unknown>;
         artifacts.push({
           kind: 'query_data',
           title: step.title,
@@ -1693,7 +1710,7 @@ async function executeAutomationCore(
           continue;
         }
 
-        const payload = JSON.parse(await executeToolCall('browser_screenshot', step.inputs)) as Record<string, unknown>;
+        const payload = JSON.parse(await runAutomationStepWithTimeout(`Capture step "${step.title}"`, executeToolCall('browser_screenshot', step.inputs))) as Record<string, unknown>;
         artifacts.push({
           kind: 'capture',
           title: step.title,
@@ -1707,11 +1724,14 @@ async function executeAutomationCore(
       }
 
       if (step.kind === 'analyze') {
-        const markdown = await generateText(
+        const markdown = await runAutomationStepWithTimeout(
+          `Analysis step "${step.title}"`,
+          generateText(
           step.modelTier || plan.suggestedModelTier,
           'You are an internal VIOLEMA analyst. Produce a compact, decision-ready analysis based only on the supplied evidence. Be concrete and avoid filler.',
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           500,
+          ),
         );
         artifacts.push({
           kind: 'analysis',
@@ -1726,11 +1746,14 @@ async function executeAutomationCore(
       }
 
       if (step.kind === 'summarize') {
-        summaryText = await generateText(
+        summaryText = await runAutomationStepWithTimeout(
+          `Summary step "${step.title}"`,
+          generateText(
           step.modelTier || plan.suggestedModelTier,
           'You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. Be concrete, skim-friendly, and avoid filler.',
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           900,
+          ),
         );
         artifacts.push({
           kind: 'summary',
@@ -1757,11 +1780,11 @@ async function executeAutomationCore(
           automation.description ? `Description: ${automation.description}` : null,
           `Completed steps:\n- ${plan.steps.map((item) => item.title).join('\n- ')}`,
         ].filter(Boolean).join('\n\n');
-        delivery = await sendMessage({
+        delivery = await runAutomationStepWithTimeout(`Delivery step "${step.title}"`, sendMessage({
           to: deliveryTarget,
           subject: `Automation run: ${automation.name}`,
           body,
-        });
+        }));
         artifacts.push({
           kind: 'delivery',
           title: `Delivered to ${deliveryTarget}`,
@@ -1798,11 +1821,14 @@ async function executeAutomationCore(
   }
 
   if (!summaryText && (artifacts.length > 0 || stepErrors.length > 0)) {
-    summaryText = await generateText(
+    summaryText = await runAutomationStepWithTimeout(
+      `Fallback summary for "${automation.name}"`,
+      generateText(
       plan.suggestedModelTier,
       'Summarize the completed automation run in concise markdown. Lead with the highest-value outcome, then note any failure or delivery issue briefly.',
       [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
       600,
+      ),
     );
     artifacts.push({
       kind: 'summary',
