@@ -230,7 +230,11 @@ function formatSlackReply(text: string) {
     return 'I did not get enough signal from that prompt. Try asking more directly.';
   }
 
-  const normalized = trimmed
+  const withoutPlanning = trimmed
+    .replace(/^I(?:'|’)ll [^.]+?\.\s*/i, '')
+    .replace(/^Let me [^.]+?\.\s*/i, '');
+
+  const normalized = withoutPlanning
     .replace(/^###\s+(.+)$/gm, '*$1*')
     .replace(/^##\s+(.+)$/gm, '*$1*')
     .replace(/^#\s+(.+)$/gm, '*$1*')
@@ -297,7 +301,7 @@ async function handleSlackIncomingEvent(payload: {
     const profile: TextProfile | 'auto' = needsSlackWebSearch(prompt) ? 'auto' : 'default';
     const execution = await executeConversationTask({
       messages: [{ role: 'user', content: buildSlackTaskPrompt(prompt, { isDm }) }],
-      autonomyMode: 'cautious',
+      autonomyMode: 'autonomous',
       modelProfile: profile,
       workspaceId: payload.workspaceId,
     });
