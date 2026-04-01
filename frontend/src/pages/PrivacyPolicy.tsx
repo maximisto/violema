@@ -7,20 +7,20 @@ const SECTIONS = [
   {
     id: 'overview',
     title: '1. Overview',
-    content: `Purple Orange AI, Inc. ("Purple Orange AI", "we", "our", or "us") operates Nexus, an AI coworker platform accessible at nexus.purpleorange.io and related subdomains (the "Service"). This Privacy Policy explains how we collect, use, store, and share information when you use the Service.
+    content: `Purple Orange AI, Inc. ("Purple Orange AI", "we", "our", or "us") operates VIOLEMA, an AI coworker platform accessible at violema.com and related subdomains (the "Service"). This Privacy Policy explains how we collect, use, store, and share information when you use the Service.
 
-By using Nexus, you agree to the practices described in this policy. If you do not agree, please discontinue use of the Service.
+By using VIOLEMA, you agree to the practices described in this policy. If you do not agree, please discontinue use of the Service.
 
 Last updated: March 28, 2026.`,
   },
   {
     id: 'collect',
     title: '2. Information We Collect',
-    content: `**Account information.** When you create access for Nexus, we collect the identifying information you provide, such as your name and email address. If additional authentication methods are introduced later, this policy will be updated to reflect them.
+    content: `**Account information.** When you create access for VIOLEMA, we collect the identifying information you provide, such as your name and email address. If additional authentication methods are introduced later, this policy will be updated to reflect them.
 
 **Usage data.** We collect information about how you interact with the Service: features used, autonomy mode selections, tool calls made, conversation metadata (not content), session duration, and error events. This helps us improve reliability and build better features.
 
-**Conversation content.** Your messages to Nexus and Nexus's responses are processed and stored to provide conversation history, smart titles, and summaries. See Section 5 for how we handle AI-generated content.
+**Conversation content.** Your messages to VIOLEMA and VIOLEMA's responses are processed and stored to provide conversation history, smart titles, and summaries. See Section 5 for how we handle AI-generated content.
 
 **Connected integrations.** When you connect third-party tools (Slack, GitHub, Stripe, etc.), we receive OAuth access tokens and the minimum data necessary to execute actions on your behalf. We never store raw secrets in plaintext.
 
@@ -41,7 +41,7 @@ Last updated: March 28, 2026.`,
 
 • **Ensure security** — detect fraud, investigate abuse, enforce our Terms of Service, and comply with legal obligations.
 
-• **Analyse aggregate usage** — understand how teams use Nexus at a population level to prioritise our roadmap. This analysis uses anonymised, aggregated data and never targets individual users.
+• **Analyse aggregate usage** — understand how teams use VIOLEMA at a population level to prioritise our roadmap. This analysis uses anonymised, aggregated data and never targets individual users.
 
 We do **not** use your conversation content or data to train AI models. Your data is yours.`,
   },
@@ -52,7 +52,7 @@ We do **not** use your conversation content or data to train AI models. Your dat
 
 **Service providers.** We use trusted vendors to operate the Service: Anthropic (AI inference), Stripe (payments), infrastructure providers, transactional email providers, and analytics tooling. Each vendor is expected to process data only as needed to operate the Service.
 
-**Connected integrations.** When you instruct Nexus to take an action in a third-party tool, the minimum necessary data is shared with that tool's API. You control which integrations are connected and can revoke access at any time.
+**Connected integrations.** When you instruct VIOLEMA to take an action in a third-party tool, the minimum necessary data is shared with that tool's API. You control which integrations are connected and can revoke access at any time.
 
 **Legal obligations.** We may disclose information if required by law, court order, or governmental authority, or if we believe disclosure is necessary to protect our rights, your safety, or the safety of others.
 
@@ -61,7 +61,7 @@ We do **not** use your conversation content or data to train AI models. Your dat
   {
     id: 'ai',
     title: '5. AI Processing & Anthropic',
-    content: `Nexus sends your messages and conversation context to Anthropic's Claude API to generate responses. Anthropic processes this data as a data processor acting on our behalf, governed by Anthropic's data processing agreement.
+    content: `VIOLEMA sends your messages and conversation context to Anthropic's Claude API to generate responses. Anthropic processes this data as a data processor acting on our behalf, governed by Anthropic's data processing agreement.
 
 **We use Anthropic's API under a terms that prohibit Anthropic from training on your data.** Your conversations are not used to improve Claude or any other AI model.
 
@@ -129,7 +129,7 @@ We do not use advertising cookies, cross-site tracking pixels, or any technology
   {
     id: 'children',
     title: '10. Children\'s Privacy',
-    content: `Nexus is not directed to children under 16. We do not knowingly collect personal data from anyone under 16. If you believe we have inadvertently collected data from a minor, please contact us immediately at privacy@purpleorange.io and we will delete it promptly.`,
+    content: `VIOLEMA is not directed to children under 16. We do not knowingly collect personal data from anyone under 16. If you believe we have inadvertently collected data from a minor, please contact us immediately at privacy@purpleorange.io and we will delete it promptly.`,
   },
   {
     id: 'changes',

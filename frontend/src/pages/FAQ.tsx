@@ -14,20 +14,20 @@ const CATEGORIES = [
     border: 'border-violet-500/20',
     faqs: [
       {
-        q: 'What exactly is Nexus?',
-        a: 'Nexus is your AI coworker for research, execution, and automation. Unlike a chatbot that waits for prompts, Nexus is built to carry work across multiple steps, coordinate with connected tools, and report back with what it did.',
+        q: 'What exactly is VIOLEMA?',
+        a: 'VIOLEMA is your AI coworker for research, execution, and automation. Unlike a chatbot that waits for prompts, VIOLEMA is built to carry work across multiple steps, coordinate with connected tools, and report back with what it did.',
       },
       {
-        q: 'How is Nexus different from ChatGPT or Claude.ai?',
-        a: 'Consumer AI tools are conversational interfaces. Nexus is a work execution layer. It connects to your actual systems, remembers your team\'s context, takes autonomous actions (like triaging PRs, sending Slack digests, or querying your database), and operates in three configurable autonomy modes so you stay in control. It also shows you its full reasoning process so there are no black-box surprises.',
+        q: 'How is VIOLEMA different from ChatGPT or Claude.ai?',
+        a: 'Consumer AI tools are conversational interfaces. VIOLEMA is a work execution layer. It connects to your actual systems, remembers your team\'s context, takes autonomous actions (like triaging PRs, sending Slack digests, or querying your database), and operates in three configurable autonomy modes so you stay in control. It also shows you its full reasoning process so there are no black-box surprises.',
       },
       {
-        q: 'How is Nexus different from Viktor or Devin?',
-        a: 'Viktor focuses mainly on Slack-based task delegation. Devin is purpose-built for software engineering. Nexus is broader — it covers business operations, data analysis, engineering workflows, and customer ops all in one platform. We also lead on reasoning transparency: you can see every thinking step, tool call, and confidence score.',
+        q: 'How is VIOLEMA different from Viktor or Devin?',
+        a: 'Viktor focuses mainly on Slack-based task delegation. Devin is purpose-built for software engineering. VIOLEMA is broader — it covers business operations, data analysis, engineering workflows, and customer ops all in one platform. We also lead on reasoning transparency: you can see every thinking step, tool call, and confidence score.',
       },
       {
-        q: 'Who is Nexus built for?',
-        a: 'Nexus is designed for fast-moving startups and scale-ups with small, high-leverage teams. If you\'re a founder, ops lead, engineer, or business operator who wants to get 10× more done without 10× headcount, Nexus is for you.',
+        q: 'Who is VIOLEMA built for?',
+        a: 'VIOLEMA is designed for fast-moving startups and scale-ups with small, high-leverage teams. If you\'re a founder, ops lead, engineer, or business operator who wants to get 10× more done without 10× headcount, VIOLEMA is for you.',
       },
     ],
   },
@@ -40,24 +40,24 @@ const CATEGORIES = [
     border: 'border-cyan-500/20',
     faqs: [
       {
-        q: 'What can Nexus actually do?',
-        a: 'Today Nexus can search the web for research, write and execute code, send Slack or email messages, capture browser screenshots, schedule recurring automations, and route work across the workspace. The product is designed to expand into more operational systems over time.',
+        q: 'What can VIOLEMA actually do?',
+        a: 'Today VIOLEMA can search the web for research, write and execute code, send Slack or email messages, capture browser screenshots, schedule recurring automations, and route work across the workspace. The product is designed to expand into more operational systems over time.',
       },
       {
         q: 'What are autonomy modes?',
-        a: 'Nexus has three modes: Autonomous (executes everything without asking), Cautious (plans first, asks for approval on irreversible actions), and Supervised (shows full reasoning, waits for your sign-off on every step). You can switch modes per-conversation in real time.',
+        a: 'VIOLEMA has three modes: Autonomous (executes everything without asking), Cautious (plans first, asks for approval on irreversible actions), and Supervised (shows full reasoning, waits for your sign-off on every step). You can switch modes per-conversation in real time.',
       },
       {
         q: 'What does "reasoning transparency" mean?',
-        a: 'Before Nexus takes action, it thinks out loud. You can expand any response to see the full reasoning chain: what it considered, what it ruled out, and why it chose a particular tool or approach. Each tool call also shows a confidence score so you know when to double-check an output.',
+        a: 'Before VIOLEMA takes action, it thinks out loud. You can expand any response to see the full reasoning chain: what it considered, what it ruled out, and why it chose a particular tool or approach. Each tool call also shows a confidence score so you know when to double-check an output.',
       },
       {
-        q: 'Can Nexus run scheduled tasks automatically?',
-        a: 'Yes. You can tell Nexus to run any task on a recurring schedule — "send the weekly eng standup digest every Monday at 9am", "check CAC from PostHog every Friday", etc. Automations run in the background and surface results in your dashboard.',
+        q: 'Can VIOLEMA run scheduled tasks automatically?',
+        a: 'Yes. You can tell VIOLEMA to run any task on a recurring schedule — "send the weekly eng standup digest every Monday at 9am", "check CAC from PostHog every Friday", etc. Automations run in the background and surface results in your dashboard.',
       },
       {
-        q: 'Does Nexus have memory?',
-        a: 'Nexus keeps conversation history and saved thread context today. Broader shared workspace memory is part of the direction, but it is not yet a full always-on company memory system.',
+        q: 'Does VIOLEMA have memory?',
+        a: 'VIOLEMA keeps conversation history and saved thread context today. Broader shared workspace memory is part of the direction, but it is not yet a full always-on company memory system.',
       },
     ],
   },
@@ -70,20 +70,20 @@ const CATEGORIES = [
     border: 'border-green-500/20',
     faqs: [
       {
-        q: 'Is my data safe with Nexus?',
-        a: 'We take security seriously. Data is encrypted in transit, sensitive actions are gated by workspace controls, and we do not use your conversation data to train AI models. If you need specific compliance commitments, talk to us before rolling Nexus into a regulated environment.',
+        q: 'Is my data safe with VIOLEMA?',
+        a: 'We take security seriously. Data is encrypted in transit, sensitive actions are gated by workspace controls, and we do not use your conversation data to train AI models. If you need specific compliance commitments, talk to us before rolling VIOLEMA into a regulated environment.',
       },
       {
-        q: 'Who builds the AI that powers Nexus?',
-        a: 'Nexus uses a routed model stack rather than a single model. Claude Sonnet handles most interactive work, GPT-5 covers harder reasoning, Claude Opus is reserved for critical high-stakes tasks, MiniMax powers heavy operational runs, and Mistral handles embeddings and memory. That keeps the system both capable and efficient.',
+        q: 'Who builds the AI that powers VIOLEMA?',
+        a: 'VIOLEMA uses a routed model stack rather than a single model. Claude Sonnet handles most interactive work, GPT-5 covers harder reasoning, Claude Opus is reserved for critical high-stakes tasks, MiniMax powers heavy operational runs, and Mistral handles embeddings and memory. That keeps the system both capable and efficient.',
       },
       {
-        q: 'Can I connect Nexus to my internal tools without exposing credentials?',
+        q: 'Can I connect VIOLEMA to my internal tools without exposing credentials?',
         a: 'For supported integrations, credentials are handled through the integration layer and scoped to the workspace. If you need custom internal tools or stronger controls, that should be treated as an enterprise setup rather than assumed out of the box.',
       },
       {
         q: 'Do you comply with GDPR, HIPAA, or other regulations?',
-        a: 'Treat Nexus as security-conscious software, not as a pre-certified compliance product. If you need GDPR, HIPAA, SOC 2, or contract-specific guarantees, we should scope that explicitly before rollout.',
+        a: 'Treat VIOLEMA as security-conscious software, not as a pre-certified compliance product. If you need GDPR, HIPAA, SOC 2, or contract-specific guarantees, we should scope that explicitly before rollout.',
       },
     ],
   },
@@ -97,7 +97,7 @@ const CATEGORIES = [
     faqs: [
       {
         q: 'How does pricing work?',
-        a: 'Nexus offers Starter at $29/month, Pro at $79/month, Team at $249/month, and Enterprise with custom pricing. Credits map to actual agent work, top-ups are one-time add-ons, and the Team tier includes 5 seats plus shared workspace capabilities.',
+        a: 'VIOLEMA offers Starter at $29/month, Pro at $79/month, Team at $249/month, and Enterprise with custom pricing. Credits map to actual agent work, top-ups are one-time add-ons, and the Team tier includes 5 seats plus shared workspace capabilities.',
       },
       {
         q: 'What do credits actually represent?',
@@ -118,19 +118,19 @@ const CATEGORIES = [
     border: 'border-purple-500/20',
     faqs: [
       {
-        q: 'Does Nexus have an API?',
+        q: 'Does VIOLEMA have an API?',
         a: 'A broader public API and webhook layer are part of the roadmap. Right now the main surface is the web workspace plus connected messaging and automation flows.',
       },
       {
-        q: 'Can I build custom tools for Nexus?',
+        q: 'Can I build custom tools for VIOLEMA?',
         a: 'Custom connectors are possible, but they are not a polished self-serve workflow yet. Today that should be treated as an implementation project rather than a turnkey button in the product.',
       },
       {
-        q: 'What browsers and platforms does Nexus support?',
-        a: 'Nexus runs in the browser today and works best on current Chrome, Safari, Edge, and Firefox. The web interface is the primary product surface right now.',
+        q: 'What browsers and platforms does VIOLEMA support?',
+        a: 'VIOLEMA runs in the browser today and works best on current Chrome, Safari, Edge, and Firefox. The web interface is the primary product surface right now.',
       },
       {
-        q: 'Is Nexus open source?',
+        q: 'Is VIOLEMA open source?',
         a: 'The core platform is proprietary. We open-source our integration SDKs and tool schemas so the community can contribute new connectors. Check github.com/purpleorangeai for our public repos.',
       },
     ],
@@ -194,7 +194,7 @@ export default function FAQ() {
             </span>
           </h1>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Everything you need to know about Nexus — from capabilities and pricing to security and integrations.
+            Everything you need to know about VIOLEMA — from capabilities and pricing to security and integrations.
           </p>
         </div>
       </section>
