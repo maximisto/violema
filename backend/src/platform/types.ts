@@ -105,6 +105,61 @@ export interface TaskDelegationPlan {
   steps: TaskDelegationStep[];
 }
 
+export type AutomationStepKind = 'search' | 'query' | 'summarize' | 'deliver' | 'capture' | 'analyze' | 'note';
+export type AutomationStepStatus = 'planned' | 'running' | 'succeeded' | 'failed' | 'skipped';
+
+export interface AutomationStepDeliveryTarget {
+  channel: 'slack' | 'email';
+  target: string;
+}
+
+export interface AutomationStepDefinition {
+  id: string;
+  kind: AutomationStepKind;
+  title: string;
+  objective: string;
+  assignedRole: AgentRole;
+  modelTier?: ModelTier;
+  estimatedCredits?: number;
+  dependsOnStepIds?: string[];
+  toolName?: 'web_search' | 'query_data' | 'browser_screenshot' | 'send_message' | 'generate_text';
+  inputs?: Record<string, unknown>;
+  deliveryTarget?: AutomationStepDeliveryTarget | null;
+}
+
+export interface AutomationStepExecution {
+  stepId: string;
+  kind: AutomationStepKind;
+  title: string;
+  assignedRole: AgentRole;
+  modelTier?: ModelTier;
+  status: AutomationStepStatus;
+  startedAt?: string;
+  finishedAt?: string;
+  summary?: string;
+  error?: string;
+  estimatedCredits?: number;
+  output?: Record<string, unknown>;
+  artifactKind?: string;
+}
+
+export interface AutomationRolePlan {
+  primaryRole: AgentRole;
+  supportingRoles: AgentRole[];
+  rationale: string;
+}
+
+export interface AutomationExecutionPlan {
+  primaryRole: AgentRole;
+  supportingRoles: AgentRole[];
+  rationale: string;
+  suggestedModelTier: ModelTier;
+  complexity: 'low' | 'medium' | 'high';
+  estimatedToolCalls: number;
+  estimatedCredits: number;
+  steps: AutomationStepDefinition[];
+}
+
 export interface TaskRunRecord {
   id: string;
   workspaceId: string;

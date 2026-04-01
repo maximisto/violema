@@ -153,6 +153,7 @@ interface DashboardTaskItem {
   nextRunAt?: string;
   latestSummary?: string;
   latestArtifacts?: DashboardTaskArtifact[];
+  latestStepExecutions?: DashboardTaskStepExecution[];
   taskUpdatedAt?: string;
   failureReason?: string;
 }
@@ -161,6 +162,16 @@ interface DashboardTaskArtifact {
   kind: string;
   title: string;
   payload: Record<string, unknown>;
+}
+
+interface DashboardTaskStepExecution {
+  stepId: string;
+  kind: string;
+  title: string;
+  assignedRole: string;
+  status: string;
+  summary?: string;
+  error?: string;
 }
 
 interface DashboardEvidenceLink {
@@ -313,6 +324,65 @@ function getTaskMetadataArtifacts(task?: PlatformTaskRecord, run?: PlatformTaskR
   const runArtifacts = readArtifacts(run?.metadata?.artifacts);
   if (runArtifacts.length > 0) return runArtifacts;
   return readArtifacts(task?.metadata?.latestArtifacts);
+}
+
+function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
+  if (!Array.isArray(value)) return [];
+
+  const items: Array<DashboardTaskStepExecution | null> = value.map((item) => {
+    if (!isRecord(item)) return null;
+    const stepId = readString(item.stepId);
+    const kind = readString(item.kind);
+    const title = readString(item.title);
+    const assignedRole = readString(item.assignedRole);
+    const status = readString(item.status);
+    if (!stepId || !kind || !title || !assignedRole || !status) return null;
+    const stepExecution: DashboardTaskStepExecution = {
+      stepId,
+      kind,
+      title,
+      assignedRole,
+      status,
+      summary: readString(item.summary),
+      error: readString(item.error),
+    };
+    return stepExecution;
+  });
+
+  return items.filter(Boolean) as DashboardTaskStepExecution[];
+}
+
+function readPlannedSteps(value: unknown): DashboardTaskStepExecution[] {
+  if (!Array.isArray(value)) return [];
+
+  const items: Array<DashboardTaskStepExecution | null> = value.map((item) => {
+    if (!isRecord(item)) return null;
+    const stepId = readString(item.id);
+    const kind = readString(item.kind);
+    const title = readString(item.title);
+    const assignedRole = readString(item.assignedRole);
+    if (!stepId || !kind || !title || !assignedRole) return null;
+    return {
+      stepId,
+      kind,
+      title,
+      assignedRole,
+      status: 'planned',
+      summary: readString(item.objective),
+    };
+  });
+
+  return items.filter(Boolean) as DashboardTaskStepExecution[];
+}
+
+function getTaskStepExecutions(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
+  const runSteps = readStepExecutions(run?.metadata?.stepExecutions);
+  if (runSteps.length > 0) return runSteps;
+  const taskSteps = readStepExecutions(task?.metadata?.latestStepExecutions);
+  if (taskSteps.length > 0) return taskSteps;
+  const plannedRunSteps = readPlannedSteps(run?.metadata?.plannedSteps);
+  if (plannedRunSteps.length > 0) return plannedRunSteps;
+  return readPlannedSteps(task?.metadata?.plannedSteps);
 }
 
 function getTaskFailureReason(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
@@ -699,6 +769,7 @@ export default function Dashboard() {
           lastRunAt: latestRun?.finishedAt || latestRun?.startedAt,
           latestSummary: getTaskMetadataSummary(task, latestRun),
           latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
+          latestStepExecutions: getTaskStepExecutions(task, latestRun),
           failureReason: getTaskFailureReason(task, latestRun),
           taskUpdatedAt: task.updatedAt,
         };
@@ -741,6 +812,7 @@ export default function Dashboard() {
           nextRunAt: automation.next_run_at,
           latestSummary: getTaskMetadataSummary(task, latestRun),
           latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
+          latestStepExecutions: getTaskStepExecutions(task, latestRun),
           failureReason: getTaskFailureReason(task, latestRun),
           taskUpdatedAt: task?.updatedAt,
         };
@@ -1129,6 +1201,7 @@ export default function Dashboard() {
   const selectedTaskOutcome = useMemo(() => getTaskRunOutcome(selectedTask), [selectedTask]);
   const selectedTaskSummary = useMemo(() => formatSummaryPreview(selectedTask?.latestSummary, 360), [selectedTask?.latestSummary]);
   const selectedTaskEvidenceLinks = useMemo(() => extractEvidenceLinks(selectedTask?.latestArtifacts), [selectedTask?.latestArtifacts]);
+  const selectedTaskStepExecutions = useMemo(() => selectedTask?.latestStepExecutions || [], [selectedTask?.latestStepExecutions]);
   const lowCreditRunway = snapshot.projectedDaysLeft <= 7;
   const automationActionCount = useMemo(() => {
     if (!automationEditor) return 0;
@@ -2068,6 +2141,45 @@ export default function Dashboard() {
                                 : 'No run output yet. Start the automation manually or wait for the next scheduled run.'}
                           </div>
                         )}
+                        {selectedTaskStepExecutions.length > 0 ? (
+                          <div className="mt-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Execution plan</p>
+                            <div className="mt-2 space-y-2">
+                              {selectedTaskStepExecutions.map((step, index) => {
+                                const tone =
+                                  step.status === 'failed'
+                                    ? 'border-red-500/16 bg-red-500/8 text-red-200'
+                                    : step.status === 'skipped'
+                                      ? 'border-amber-500/16 bg-amber-500/8 text-amber-200'
+                                      : 'border-navy-700/60 bg-navy-950/42 text-slate-200';
+
+                                return (
+                                  <div key={step.stepId} className={`rounded-xl border px-3 py-2.5 ${tone}`}>
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-[11px] font-medium text-inherit">
+                                          {index + 1}. {step.title}
+                                        </p>
+                                        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                                          {step.assignedRole} · {step.kind}
+                                        </p>
+                                      </div>
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                                        {step.status}
+                                      </span>
+                                    </div>
+                                    {step.summary ? (
+                                      <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{step.summary}</p>
+                                    ) : null}
+                                    {step.error ? (
+                                      <p className="mt-2 text-[11px] leading-relaxed text-red-200">{step.error}</p>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
                         {selectedTaskEvidenceLinks.length > 0 ? (
                           <div className="mt-3">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Evidence</p>

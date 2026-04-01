@@ -124,13 +124,24 @@ export function buildDelegationRuntimeContext(input: {
   complexity?: 'low' | 'medium' | 'high';
   requiresHumanReview?: boolean;
   userText?: string;
+  executorRoleOverride?: AgentRole;
+  supportingRolesOverride?: AgentRole[];
+  reasonOverride?: string;
 }): DelegationRuntimeContext {
   const userText = input.userText || [input.title, input.description || ''].filter(Boolean).join(' ').trim();
-  const taskPlan = buildDelegationPlan({
+  const baseTaskPlan = buildDelegationPlan({
     taskKind: input.taskKind,
     modelTier: input.modelTier,
     userText,
   });
+  const taskPlan: TaskDelegationPlan = {
+    ...baseTaskPlan,
+    primaryRole: input.executorRoleOverride || baseTaskPlan.primaryRole,
+    supportingRoles: input.supportingRolesOverride
+      ? [...new Set(input.supportingRolesOverride.filter((role) => role !== input.executorRoleOverride))]
+      : baseTaskPlan.supportingRoles,
+    rationale: input.reasonOverride || baseTaskPlan.rationale,
+  };
 
   const ownerRole: AgentRole = 'nexus';
   const executorRole = taskPlan.primaryRole;

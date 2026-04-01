@@ -10,7 +10,13 @@ import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } f
 import { createAutomation, deleteAutomation, getAutomationById, listAutomations, loadPersistedAutomations, triggerAutomationNow, updateAutomation } from './scheduler';
 import {
   addLedgerEntry,
+  type AgentRole,
   assertCanSpendCredits,
+  type AutomationExecutionPlan,
+  type AutomationRolePlan,
+  type AutomationStepDefinition,
+  type AutomationStepExecution,
+  type AutomationStepKind,
   buildCreditSnapshot,
   buildDelegationRuntimeContext,
   createTask,
@@ -29,6 +35,7 @@ import {
   listTasks,
   markReferralQualified,
   markReferralRewarded,
+  type ModelTier,
   purchaseTopUp,
   recordReferralEvent,
   summarizeReferralRewards,
@@ -1181,7 +1188,7 @@ async function executeConversationTask(input: {
 }
 
 interface AutomationExecutionArtifact {
-  kind: 'web_search' | 'query_data' | 'summary' | 'delivery' | 'note';
+  kind: 'web_search' | 'query_data' | 'summary' | 'delivery' | 'note' | 'analysis' | 'capture';
   title: string;
   payload: Record<string, unknown>;
 }
@@ -1259,84 +1266,361 @@ function inferAutomationDeliveryTarget(action: string) {
   return null;
 }
 
-function inferAutomationActionKind(action: string) {
-  const normalized = normalizeAutomationActionText(action);
-  const queryDataInput = inferAutomationQueryDataInput(action);
-
-  if (queryDataInput) {
-    return {
-      kind: 'query_data' as const,
-      queryDataInput,
-    };
-  }
-
-  if (/(search|scan internet|scan the internet|scan web|research|news|competitor)/.test(normalized)) {
-    return {
-      kind: 'web_search' as const,
-      query: inferAutomationSearchQuery(action, {
-        name: action,
-      }),
-    };
-  }
-
-  if (/(generate|report|summary|digest|briefing|recap)/.test(normalized)) {
-    return {
-      kind: 'summary' as const,
-    };
-  }
-
-  if (actionNeedsDelivery(action)) {
-    return {
-      kind: 'delivery' as const,
-      deliveryTarget: inferAutomationDeliveryTarget(action),
-    };
-  }
-
-  return {
-    kind: 'note' as const,
-  };
-}
-
-function inferAutomationModelTier(actions: string[]): 'default' | 'ops' {
-  const joined = actions.map(normalizeAutomationActionText).join(' ');
-  if (/(batch|bulk|pipeline|queue|monitor|backfill|thousands|large volume|throughput)/.test(joined)) {
-    return 'ops';
-  }
-  return 'default';
-}
-
-function inferAutomationComplexity(actions: string[]): 'low' | 'medium' | 'high' {
-  if (actions.length >= 6) return 'high';
-  if (actions.length >= 4) return 'medium';
-  return 'low';
-}
-
-function inferAutomationToolCallCount(
-  actions: string[],
-  notify?: string
-) {
-  let count = 0;
-
-  for (const action of actions) {
-    const normalized = normalizeAutomationActionText(action);
-    if (/(search|scan internet|scan the internet|scan web|research|news|competitor)/.test(normalized)) count += 1;
-    if (inferAutomationQueryDataInput(action)) count += 1;
-    if (/(screenshot|capture)/.test(normalized)) count += 1;
-  }
-
-  if (notify && actions.some(actionNeedsDelivery)) {
-    count += 1;
-  }
-
-  return Math.max(0, count);
-}
-
 function actionNeedsSummary(action: string) {
   return /(summary|digest|report|golden nuggets|nuggets|share with the team)/i.test(action);
 }
 
 function actionNeedsDelivery(action: string) {
   return /(send|post|slack|email|deliver|notify|message)/i.test(action);
+}
+
+function buildAutomationStepId(automationId: string, index: number) {
+  return `auto_step_${automationId}_${index + 1}`;
+}
+
+function inferAutomationScreenshotInput(action: string) {
+  const urlMatch = action.match(/https?:\/\/[^\s)]+/i);
+  if (!urlMatch?.[0]) return null;
+
+  return {
+    url: urlMatch[0].replace(/[.,!?]+$/, ''),
+    full_page: true,
+    wait_until: 'networkidle' as const,
+  };
+}
+
+function buildDeliveryTargetFromNotify(notify?: string | null) {
+  const target = notify?.trim();
+  if (!target) return null;
+  return {
+    channel: target.includes('@') ? 'email' as const : 'slack' as const,
+    target,
+  };
+}
+
+function maxAutomationModelTier(left: ModelTier, right: ModelTier): ModelTier {
+  const rank: Record<ModelTier, number> = {
+    micro: 0,
+    default: 1,
+    ops: 2,
+    hard: 3,
+    critical: 4,
+  };
+
+  return rank[right] > rank[left] ? right : left;
+}
+
+function estimateAutomationStepCredits(
+  kind: AutomationStepKind,
+  modelTier: ModelTier,
+  options?: { complexity?: 'low' | 'medium' | 'high'; toolCalls?: number },
+) {
+  const taskKind = kind === 'search'
+    ? 'research'
+    : kind === 'query' || kind === 'analyze'
+      ? 'analysis'
+      : kind === 'summarize'
+        ? 'report'
+        : kind === 'deliver'
+          ? 'message'
+          : 'automation';
+
+  return estimateCreditCost({
+    taskKind,
+    modelTier,
+    toolCalls: options?.toolCalls || 0,
+    complexity: options?.complexity,
+  }).estimatedCredits;
+}
+
+function createAutomationStepDefinition(
+  automation: {
+    id: string;
+    name: string;
+    description?: string;
+    actions: string[];
+    notify?: string;
+    condition?: string;
+  },
+  action: string,
+  index: number,
+): AutomationStepDefinition {
+  const normalized = normalizeAutomationActionText(action);
+  const queryDataInput = inferAutomationQueryDataInput(action);
+  const notifyTarget = buildDeliveryTargetFromNotify(automation.notify);
+  const explicitDeliveryTarget = inferAutomationDeliveryTarget(action);
+  const screenshotInput = inferAutomationScreenshotInput(action);
+
+  if (queryDataInput) {
+    return {
+      id: buildAutomationStepId(automation.id, index),
+      kind: 'query',
+      title: action,
+      objective: `Pull the requested live data for "${action}".`,
+      assignedRole: 'analyst',
+      modelTier: 'micro',
+      estimatedCredits: estimateAutomationStepCredits('query', 'micro', { toolCalls: 1 }),
+      toolName: 'query_data',
+      inputs: queryDataInput,
+    };
+  }
+
+  if (/(screenshot|capture)/.test(normalized)) {
+    return {
+      id: buildAutomationStepId(automation.id, index),
+      kind: 'capture',
+      title: action,
+      objective: `Capture the requested page state for "${action}".`,
+      assignedRole: 'operator',
+      modelTier: 'micro',
+      estimatedCredits: estimateAutomationStepCredits('capture', 'micro', { toolCalls: screenshotInput ? 1 : 0 }),
+      toolName: 'browser_screenshot',
+      inputs: screenshotInput || {},
+    };
+  }
+
+  if (/(analy[sz]e|diagnos|compare|inspect|audit|review)/.test(normalized)) {
+    return {
+      id: buildAutomationStepId(automation.id, index),
+      kind: 'analyze',
+      title: action,
+      objective: action,
+      assignedRole: 'analyst',
+      modelTier: /strateg|competitor|market|deep/i.test(action) ? 'hard' : 'default',
+      estimatedCredits: estimateAutomationStepCredits('analyze', /strateg|competitor|market|deep/i.test(action) ? 'hard' : 'default', {
+        complexity: /strateg|competitor|market|deep/i.test(action) ? 'high' : 'medium',
+      }),
+      toolName: 'generate_text',
+      inputs: { instruction: action },
+    };
+  }
+
+  if (/(search|scan internet|scan the internet|scan web|research|news|competitor)/.test(normalized)) {
+    return {
+      id: buildAutomationStepId(automation.id, index),
+      kind: 'search',
+      title: action,
+      objective: `Gather the external evidence needed for "${action}".`,
+      assignedRole: 'researcher',
+      modelTier: 'micro',
+      estimatedCredits: estimateAutomationStepCredits('search', 'micro', { toolCalls: 1 }),
+      toolName: 'web_search',
+      inputs: {
+        query: inferAutomationSearchQuery(action, automation),
+        num_results: 6,
+      },
+    };
+  }
+
+  if (actionNeedsDelivery(action)) {
+    return {
+      id: buildAutomationStepId(automation.id, index),
+      kind: 'deliver',
+      title: action,
+      objective: `Deliver the latest automation result for "${action}".`,
+      assignedRole: 'operator',
+      modelTier: 'micro',
+      estimatedCredits: estimateAutomationStepCredits('deliver', 'micro', { toolCalls: 1 }),
+      toolName: 'send_message',
+      inputs: {},
+      deliveryTarget: explicitDeliveryTarget || notifyTarget,
+    };
+  }
+
+  if (actionNeedsSummary(action) || /(generate|briefing|recap)/.test(normalized)) {
+    return {
+      id: buildAutomationStepId(automation.id, index),
+      kind: 'summarize',
+      title: action,
+      objective: action,
+      assignedRole: 'writer',
+      modelTier: 'default',
+      estimatedCredits: estimateAutomationStepCredits('summarize', 'default', { complexity: 'medium' }),
+      toolName: 'generate_text',
+      inputs: { instruction: action },
+    };
+  }
+
+  return {
+    id: buildAutomationStepId(automation.id, index),
+    kind: 'note',
+    title: action,
+    objective: action,
+    assignedRole: 'scheduler',
+    modelTier: 'micro',
+    estimatedCredits: estimateAutomationStepCredits('note', 'micro'),
+    inputs: { note: action },
+  };
+}
+
+function deriveAutomationRolePlan(steps: AutomationStepDefinition[]): AutomationRolePlan {
+  const roleCounts = new Map<AutomationStepDefinition['assignedRole'], number>();
+  steps.forEach((step) => {
+    roleCounts.set(step.assignedRole, (roleCounts.get(step.assignedRole) || 0) + 1);
+  });
+
+  const primaryRole = steps
+    .map((step) => step.assignedRole)
+    .sort((left, right) => (roleCounts.get(right) || 0) - (roleCounts.get(left) || 0))[0] || 'scheduler';
+  const supportingRoles = [...new Set(steps.map((step) => step.assignedRole).filter((role) => role !== primaryRole))];
+
+  return {
+    primaryRole,
+    supportingRoles,
+    rationale: supportingRoles.length > 0
+      ? `${primaryRole} leads the workflow while specialist workers handle evidence, synthesis, or delivery.`
+      : `${primaryRole} can handle the workflow directly without extra handoffs.`,
+  };
+}
+
+function inferAutomationModelTierFromPlan(
+  automation: { name: string; description?: string; condition?: string },
+  steps: AutomationStepDefinition[],
+): ModelTier {
+  const joined = [automation.name, automation.description || '', automation.condition || '', ...steps.map((step) => step.title)]
+    .join(' ')
+    .toLowerCase();
+
+  if (/(batch|bulk|pipeline|queue|backfill|thousands|large volume|throughput)/.test(joined)) {
+    return 'ops';
+  }
+
+  if (steps.filter((step) => step.toolName && step.toolName !== 'generate_text').length >= 4) {
+    return 'ops';
+  }
+
+  return steps.reduce<ModelTier>((current, step) => maxAutomationModelTier(current, step.modelTier || 'micro'), 'micro');
+}
+
+function inferAutomationComplexityFromPlan(steps: AutomationStepDefinition[]): 'low' | 'medium' | 'high' {
+  const weightedStepCount = steps.reduce((total, step) => {
+    if (step.kind === 'analyze' || step.kind === 'capture') return total + 2;
+    return total + 1;
+  }, 0);
+
+  if (weightedStepCount >= 8) return 'high';
+  if (weightedStepCount >= 5) return 'medium';
+  return 'low';
+}
+
+function estimateAutomationToolCallCount(steps: AutomationStepDefinition[]) {
+  return steps.filter((step) => step.toolName && step.toolName !== 'generate_text').length;
+}
+
+function ensureAutomationSummaryStep(
+  automation: { id: string },
+  steps: AutomationStepDefinition[],
+): AutomationStepDefinition[] {
+  const hasEvidence = steps.some((step) => ['search', 'query', 'capture', 'analyze'].includes(step.kind));
+  const hasSummary = steps.some((step) => step.kind === 'summarize');
+  if (!hasEvidence || hasSummary) return steps;
+
+  const summaryStep: AutomationStepDefinition = {
+    id: buildAutomationStepId(automation.id, steps.length),
+    kind: 'summarize',
+    title: 'Generate automation summary',
+    objective: 'Generate a concise, decision-ready summary from the gathered evidence.',
+    assignedRole: 'writer',
+    modelTier: 'default',
+    estimatedCredits: estimateAutomationStepCredits('summarize', 'default', { complexity: 'medium' }),
+    toolName: 'generate_text',
+    inputs: { instruction: 'Generate a concise, decision-ready summary from the gathered evidence.' },
+    dependsOnStepIds: steps.map((step) => step.id),
+  };
+
+  const firstDeliveryIndex = steps.findIndex((step) => step.kind === 'deliver');
+  if (firstDeliveryIndex === -1) {
+    return [...steps, summaryStep] as AutomationStepDefinition[];
+  }
+
+  return [
+    ...steps.slice(0, firstDeliveryIndex),
+    summaryStep,
+    ...steps.slice(firstDeliveryIndex),
+  ] as AutomationStepDefinition[];
+}
+
+function ensureAutomationDeliveryStep(
+  automation: { id: string; notify?: string },
+  steps: AutomationStepDefinition[],
+): AutomationStepDefinition[] {
+  const deliveryTarget = buildDeliveryTargetFromNotify(automation.notify);
+  if (!deliveryTarget || steps.some((step) => step.kind === 'deliver')) return steps;
+
+  const deliveryStep: AutomationStepDefinition = {
+    id: buildAutomationStepId(automation.id, steps.length),
+    kind: 'deliver',
+    title: 'Deliver latest result',
+    objective: 'Send the latest automation result to the configured destination.',
+    assignedRole: 'operator',
+    modelTier: 'micro',
+    estimatedCredits: estimateAutomationStepCredits('deliver', 'micro', { toolCalls: 1 }),
+    toolName: 'send_message',
+    inputs: {},
+    deliveryTarget,
+    dependsOnStepIds: steps.filter((step) => step.kind !== 'deliver').map((step) => step.id),
+  };
+
+  return [
+    ...steps,
+    deliveryStep,
+  ] as AutomationStepDefinition[];
+}
+
+function buildAutomationExecutionPlan(automation: {
+  id: string;
+  name: string;
+  description?: string;
+  actions: string[];
+  notify?: string;
+  condition?: string;
+}): AutomationExecutionPlan {
+  const baseSteps = automation.actions.map((action, index) => createAutomationStepDefinition(automation, action, index));
+  const steps = ensureAutomationDeliveryStep(automation, ensureAutomationSummaryStep(automation, baseSteps));
+  const rolePlan = deriveAutomationRolePlan(steps);
+  const complexity = inferAutomationComplexityFromPlan(steps);
+  const suggestedModelTier = inferAutomationModelTierFromPlan(automation, steps);
+  const estimatedToolCalls = estimateAutomationToolCallCount(steps);
+
+  return {
+    ...rolePlan,
+    suggestedModelTier,
+    complexity,
+    estimatedToolCalls,
+    estimatedCredits: estimateCreditCost({
+      taskKind: 'automation',
+      modelTier: suggestedModelTier,
+      automationRuns: 1,
+      toolCalls: estimatedToolCalls,
+      complexity,
+    }).estimatedCredits,
+    steps,
+  };
+}
+
+function buildAutomationEvidenceBlock(
+  automation: { name: string; description?: string; condition?: string; actions: string[] },
+  artifacts: AutomationExecutionArtifact[],
+  stepExecutions: AutomationStepExecution[],
+  stepErrors: string[],
+) {
+  const evidence = artifacts
+    .map((artifact) => `## ${artifact.title}\n${JSON.stringify(artifact.payload, null, 2)}`)
+    .join('\n\n');
+  const stepNotes = stepExecutions
+    .filter((step) => step.summary)
+    .map((step) => `- ${step.assignedRole} · ${step.title}: ${step.summary}`)
+    .join('\n');
+
+  return [
+    `Automation: ${automation.name}`,
+    automation.description ? `Description: ${automation.description}` : null,
+    automation.condition ? `Condition: ${automation.condition}` : null,
+    `Requested steps:\n- ${automation.actions.join('\n- ')}`,
+    stepNotes ? `Execution notes:\n${stepNotes}` : null,
+    evidence ? `Evidence:\n${evidence}` : null,
+    stepErrors.length > 0 ? `Execution errors:\n- ${stepErrors.join('\n- ')}` : null,
+  ].filter(Boolean).join('\n\n');
 }
 
 async function executeAutomationCore(
@@ -1349,115 +1633,177 @@ async function executeAutomationCore(
     condition?: string;
     timezone?: string;
   },
-  modelTier: 'default' | 'ops'
+  plan: AutomationExecutionPlan,
 ) {
   const artifacts: AutomationExecutionArtifact[] = [];
+  const stepExecutions: AutomationStepExecution[] = [];
   const stepErrors: string[] = [];
   let summaryText = '';
-  let summaryRequested = false;
+  let delivery: Record<string, unknown> | null = null;
+  let deliveryError: string | null = null;
 
-  for (const action of automation.actions) {
-    const step = inferAutomationActionKind(action);
+  for (const step of plan.steps) {
+    const stepExecution: AutomationStepExecution = {
+      stepId: step.id,
+      kind: step.kind,
+      title: step.title,
+      assignedRole: step.assignedRole,
+      modelTier: step.modelTier,
+      estimatedCredits: step.estimatedCredits,
+      status: 'running',
+      startedAt: new Date().toISOString(),
+    };
 
     try {
-      if (step.kind === 'web_search') {
-        const query = step.query || inferAutomationSearchQuery(action, automation);
+      if (step.kind === 'search') {
+        const query = typeof step.inputs?.query === 'string'
+          ? step.inputs.query
+          : inferAutomationSearchQuery(step.title, automation);
         const payload = await searchWeb(query, 6);
         artifacts.push({
           kind: 'web_search',
-          title: action,
+          title: step.title,
           payload,
         });
+        stepExecution.status = 'succeeded';
+        stepExecution.summary = `Gathered current web evidence for "${query}".`;
+        stepExecution.output = { query, resultCount: Array.isArray((payload as { results?: unknown[] }).results) ? ((payload as { results?: unknown[] }).results?.length || 0) : undefined };
+        stepExecution.artifactKind = 'web_search';
         continue;
       }
 
-      if (step.kind === 'query_data') {
-        const payload = JSON.parse(await executeToolCall('query_data', step.queryDataInput)) as Record<string, unknown>;
+      if (step.kind === 'query') {
+        const payload = JSON.parse(await executeToolCall('query_data', step.inputs || {})) as Record<string, unknown>;
         artifacts.push({
           kind: 'query_data',
-          title: action,
+          title: step.title,
           payload,
         });
+        stepExecution.status = 'succeeded';
+        stepExecution.summary = 'Pulled the requested live data successfully.';
+        stepExecution.output = payload;
+        stepExecution.artifactKind = 'query_data';
         continue;
       }
 
-      if (step.kind === 'delivery') {
-        summaryRequested = true;
-        const deliveryTarget = automation.notify?.trim() || step.deliveryTarget?.target?.trim() || null;
+      if (step.kind === 'capture') {
+        if (!step.inputs?.url) {
+          stepExecution.status = 'skipped';
+          stepExecution.summary = 'Skipped screenshot step because no URL was provided.';
+          continue;
+        }
+
+        const payload = JSON.parse(await executeToolCall('browser_screenshot', step.inputs)) as Record<string, unknown>;
         artifacts.push({
-          kind: 'note',
-          title: action,
-          payload: {
-            requested_delivery: true,
-            delivery_target: deliveryTarget,
-            delivery_channel: step.deliveryTarget?.channel || null,
-            status: deliveryTarget ? 'queued' : 'skipped',
-            note: deliveryTarget
-              ? 'Delivery will be attempted after summary generation.'
-              : 'No delivery target was supplied, so this step was kept local.',
-          },
+          kind: 'capture',
+          title: step.title,
+          payload,
         });
+        stepExecution.status = 'succeeded';
+        stepExecution.summary = 'Captured the requested page state.';
+        stepExecution.output = payload;
+        stepExecution.artifactKind = 'capture';
         continue;
       }
 
-      if (step.kind === 'summary') {
-        summaryRequested = true;
+      if (step.kind === 'analyze') {
+        const markdown = await generateText(
+          step.modelTier || plan.suggestedModelTier,
+          'You are an internal VIOLEMA analyst. Produce a compact, decision-ready analysis based only on the supplied evidence. Be concrete and avoid filler.',
+          [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
+          500,
+        );
         artifacts.push({
-          kind: 'note',
-          title: action,
-          payload: {
-            requested_summary: true,
-            note: 'Summary/report requested.',
-          },
+          kind: 'analysis',
+          title: step.title,
+          payload: { markdown },
         });
+        stepExecution.status = 'succeeded';
+        stepExecution.summary = markdown.slice(0, 180).trim();
+        stepExecution.output = { markdown };
+        stepExecution.artifactKind = 'analysis';
         continue;
       }
 
-      if (step.kind === 'note') {
+      if (step.kind === 'summarize') {
+        summaryText = await generateText(
+          step.modelTier || plan.suggestedModelTier,
+          'You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. Be concrete, skim-friendly, and avoid filler.',
+          [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
+          900,
+        );
         artifacts.push({
-          kind: 'note',
-          title: action,
-          payload: {
-            note: 'No direct tool call needed for this step.',
-          },
+          kind: 'summary',
+          title: step.title,
+          payload: { markdown: summaryText },
         });
+        stepExecution.status = 'succeeded';
+        stepExecution.summary = summaryText.slice(0, 180).trim();
+        stepExecution.output = { markdown: summaryText };
+        stepExecution.artifactKind = 'summary';
+        continue;
       }
+
+      if (step.kind === 'deliver') {
+        const deliveryTarget = step.deliveryTarget?.target?.trim() || automation.notify?.trim() || null;
+        if (!deliveryTarget) {
+          stepExecution.status = 'skipped';
+          stepExecution.summary = 'Skipped delivery because no target was configured.';
+          continue;
+        }
+
+        const body = summaryText || [
+          `Automation: ${automation.name}`,
+          automation.description ? `Description: ${automation.description}` : null,
+          `Completed steps:\n- ${plan.steps.map((item) => item.title).join('\n- ')}`,
+        ].filter(Boolean).join('\n\n');
+        delivery = await sendMessage({
+          to: deliveryTarget,
+          subject: `Automation run: ${automation.name}`,
+          body,
+        });
+        artifacts.push({
+          kind: 'delivery',
+          title: `Delivered to ${deliveryTarget}`,
+          payload: delivery,
+        });
+        stepExecution.status = 'succeeded';
+        stepExecution.summary = `Delivered the latest result to ${deliveryTarget}.`;
+        stepExecution.output = delivery;
+        stepExecution.artifactKind = 'delivery';
+        continue;
+      }
+
+      artifacts.push({
+        kind: 'note',
+        title: step.title,
+        payload: { note: step.objective },
+      });
+      stepExecution.status = 'succeeded';
+      stepExecution.summary = 'Kept as an orchestration note with no direct tool call.';
+      stepExecution.output = { note: step.objective };
+      stepExecution.artifactKind = 'note';
     } catch (error) {
-      stepErrors.push(`${action}: ${error instanceof Error ? error.message : 'Unknown step error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown step error';
+      stepErrors.push(`${step.title}: ${errorMessage}`);
+      if (step.kind === 'deliver') {
+        deliveryError = errorMessage;
+      }
+      stepExecution.status = 'failed';
+      stepExecution.error = errorMessage;
+    } finally {
+      stepExecution.finishedAt = new Date().toISOString();
+      stepExecutions.push(stepExecution);
     }
   }
 
-  const shouldGenerateSummary =
-    summaryRequested ||
-    automation.actions.some(actionNeedsSummary) ||
-    artifacts.some((artifact) => artifact.kind === 'web_search' || artifact.kind === 'query_data' || artifact.kind === 'note') ||
-    stepErrors.length > 0;
-
-  if (shouldGenerateSummary) {
-    const evidence = artifacts
-      .map((artifact) => `## ${artifact.title}\n${JSON.stringify(artifact.payload, null, 2)}`)
-      .join('\n\n');
-    const stepErrorBlock = stepErrors.length > 0 ? `\n\nStep errors:\n- ${stepErrors.join('\n- ')}` : '';
-
+  if (!summaryText && (artifacts.length > 0 || stepErrors.length > 0)) {
     summaryText = await generateText(
-      modelTier,
-      'You execute recurring Violema automations. Turn the provided evidence into a concise, useful markdown output. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. Be concrete, skim-friendly, and avoid filler.',
-      [
-        {
-          role: 'user',
-          content: [
-            `Automation: ${automation.name}`,
-            automation.description ? `Description: ${automation.description}` : null,
-            automation.condition ? `Condition: ${automation.condition}` : null,
-            `Requested steps:\n- ${automation.actions.join('\n- ')}`,
-            evidence ? `Evidence:\n${evidence}` : null,
-            stepErrorBlock ? `Execution notes:${stepErrorBlock}` : null,
-          ].filter(Boolean).join('\n\n'),
-        },
-      ],
-      900,
+      plan.suggestedModelTier,
+      'Summarize the completed automation run in concise markdown. Lead with the highest-value outcome, then note any failure or delivery issue briefly.',
+      [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
+      600,
     );
-
     artifacts.push({
       kind: 'summary',
       title: `${automation.name} summary`,
@@ -1466,9 +1812,13 @@ async function executeAutomationCore(
   }
 
   return {
+    plan,
     artifacts,
     summaryText,
     stepErrors,
+    stepExecutions,
+    delivery,
+    deliveryError,
   };
 }
 
@@ -1482,9 +1832,11 @@ async function runAutomation(automation: {
   timezone?: string;
 }) {
   ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
-  const modelTier = inferAutomationModelTier(automation.actions);
-  const complexity = inferAutomationComplexity(automation.actions);
-  const toolCallCount = inferAutomationToolCallCount(automation.actions, automation.notify);
+  const executionPlan = buildAutomationExecutionPlan(automation);
+  const modelTier = executionPlan.suggestedModelTier;
+  const complexity = executionPlan.complexity;
+  const toolCallCount = executionPlan.estimatedToolCalls;
+  const executionRole = executionPlan.primaryRole;
   const delegation = buildDelegationRuntimeContext({
     workspaceId: DEFAULT_WORKSPACE_ID,
     taskKind: 'automation',
@@ -1495,6 +1847,9 @@ async function runAutomation(automation: {
     modelTier,
     toolCountHint: automation.actions.length,
     complexity,
+    executorRoleOverride: executionRole,
+    supportingRolesOverride: executionPlan.supportingRoles,
+    reasonOverride: executionPlan.rationale,
   });
   const task = createTask({
     workspaceId: DEFAULT_WORKSPACE_ID,
@@ -1505,30 +1860,54 @@ async function runAutomation(automation: {
     ...delegation.taskPatch,
     delegationPlanId: delegation.plan.id,
     delegationPlan: delegation.plan,
-    metadata: { automationId: automation.id, notify: automation.notify || null, delegation: delegation.ownership },
+    metadata: {
+      automationId: automation.id,
+      notify: automation.notify || null,
+      delegation: delegation.ownership,
+      automationPlan: executionPlan,
+      plannedSteps: executionPlan.steps,
+      rolePlan: {
+        primaryRole: executionPlan.primaryRole,
+        supportingRoles: executionPlan.supportingRoles,
+        rationale: executionPlan.rationale,
+      },
+    },
   });
   const estimate = estimateCreditCost({
     taskKind: 'automation',
-    modelTier: delegation.plan.suggestedModelTier,
+    modelTier,
     automationRuns: 1,
     toolCalls: toolCallCount,
     complexity,
   });
+  const estimatedCredits = Math.max(estimate.estimatedCredits, executionPlan.estimatedCredits);
   const taskRun = createTaskRun({
     workspaceId: DEFAULT_WORKSPACE_ID,
     taskId: task.id,
     ...delegation.taskRunPatch,
-    modelTier: delegation.plan.suggestedModelTier,
-    estimatedCredits: estimate.estimatedCredits,
+    modelTier,
+    estimatedCredits,
     delegationPlan: delegation.plan,
-    metadata: { automationId: automation.id, title: automation.name, delegation: delegation.ownership },
+    metadata: {
+      automationId: automation.id,
+      title: automation.name,
+      delegation: delegation.ownership,
+      automationPlan: executionPlan,
+      plannedSteps: executionPlan.steps,
+      stepExecutions: [],
+      rolePlan: {
+        primaryRole: executionPlan.primaryRole,
+        supportingRoles: executionPlan.supportingRoles,
+        rationale: executionPlan.rationale,
+      },
+    },
   });
 
   try {
-    assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimate.estimatedCredits);
+    assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimatedCredits);
     updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
 
-    const execution = await executeAutomationCore(automation, delegation.plan.suggestedModelTier === 'ops' ? 'ops' : 'default');
+    const execution = await executeAutomationCore(automation, executionPlan);
     const fallbackSummary = [
       `Automation: ${automation.name}`,
       automation.description ? `Description: ${automation.description}` : null,
@@ -1537,45 +1916,44 @@ async function runAutomation(automation: {
     ].filter(Boolean).join('\n\n');
     const summary = execution.summaryText || fallbackSummary;
 
-    let delivery: Record<string, unknown> | null = null;
-    let deliveryError: string | null = null;
+    const inferredActionDeliveryTarget = executionPlan.steps.find((step) => step.kind === 'deliver')?.deliveryTarget?.target;
+    const deliveryTarget = automation.notify?.trim() || inferredActionDeliveryTarget || null;
 
-    const inferredActionDeliveryTarget = automation.actions
-      .map(inferAutomationDeliveryTarget)
-      .find((target): target is { channel: 'slack' | 'email'; target: string } => Boolean(target));
-    const deliveryTarget = automation.notify?.trim() || inferredActionDeliveryTarget?.target || null;
-    const shouldDeliver = Boolean(deliveryTarget);
-
-    if (shouldDeliver && deliveryTarget) {
-      try {
-        delivery = await sendMessage({
-          to: deliveryTarget,
-          subject: `Automation run: ${automation.name}`,
-          body: summary,
-        });
-        execution.artifacts.push({
-          kind: 'delivery',
-          title: `Delivered to ${deliveryTarget}`,
-          payload: delivery,
-        });
-      } catch (error) {
-        deliveryError = error instanceof Error ? error.message : 'Unknown delivery error';
-        console.error(`[automation] ${automation.id} delivery failed`, error);
-      }
-    } else {
+    if (!deliveryTarget) {
       console.log(`[automation] ${automation.id}\n${summary}`);
     }
 
+    const actualToolCalls = execution.stepExecutions.filter((step) =>
+      step.status === 'succeeded' &&
+      (step.kind === 'search' || step.kind === 'query' || step.kind === 'capture' || step.kind === 'deliver')
+    ).length;
+    const actualCredits = estimateCreditCost({
+      taskKind: 'automation',
+      modelTier: execution.plan.suggestedModelTier,
+      automationRuns: 1,
+      toolCalls: actualToolCalls,
+      complexity: execution.plan.complexity,
+    }).estimatedCredits;
+
     finalizeTaskRun(taskRun.id, {
       status: 'succeeded',
-      actualCredits: estimate.estimatedCredits,
+      actualCredits,
       metadata: {
         automationId: automation.id,
         summary,
         artifacts: execution.artifacts,
         stepErrors: execution.stepErrors,
-        delivery,
-        deliveryError,
+        stepExecutions: execution.stepExecutions,
+        automationPlan: execution.plan,
+        plannedSteps: execution.plan.steps,
+        actualToolCalls,
+        rolePlan: {
+          primaryRole: execution.plan.primaryRole,
+          supportingRoles: execution.plan.supportingRoles,
+          rationale: execution.plan.rationale,
+        },
+        delivery: execution.delivery,
+        deliveryError: execution.deliveryError,
       },
     });
     updateTask(task.id, {
@@ -1587,25 +1965,34 @@ async function runAutomation(automation: {
         delegation: delegation.ownership,
         latestSummary: summary,
         latestArtifacts: execution.artifacts,
-        deliveryError,
+        latestStepExecutions: execution.stepExecutions,
+        automationPlan: execution.plan,
+        plannedSteps: execution.plan.steps,
+        rolePlan: {
+          primaryRole: execution.plan.primaryRole,
+          supportingRoles: execution.plan.supportingRoles,
+          rationale: execution.plan.rationale,
+        },
+        deliveryError: execution.deliveryError,
       },
     });
     addLedgerEntry({
       workspaceId: DEFAULT_WORKSPACE_ID,
       source: 'automation_run',
-      deltaCredits: -estimate.estimatedCredits,
+      deltaCredits: -actualCredits,
       referenceType: 'automation',
       referenceId: automation.id,
       note: `Automation run: ${automation.name}`,
       metadata: {
         taskId: task.id,
         taskRunId: taskRun.id,
-        deliveryError,
+        actualToolCalls,
+        deliveryError: execution.deliveryError,
       },
     });
     return {
       ok: true as const,
-      deliveryError: deliveryError || undefined,
+      deliveryError: execution.deliveryError || undefined,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown automation error';
@@ -1620,6 +2007,8 @@ async function runAutomation(automation: {
       metadata: {
         automationId: automation.id,
         summary: failureSummary,
+        plannedSteps: executionPlan.steps,
+        stepExecutions: [],
         artifacts: [
           {
             kind: 'note',
@@ -1640,6 +2029,9 @@ async function runAutomation(automation: {
         notify: automation.notify || null,
         delegation: delegation.ownership,
         latestSummary: failureSummary,
+        latestStepExecutions: [],
+        automationPlan: executionPlan,
+        plannedSteps: executionPlan.steps,
         latestArtifacts: [
           {
             kind: 'note',
