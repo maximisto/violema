@@ -174,9 +174,20 @@ export function getBillingConfig(workspaceId: string): WorkspaceBillingConfig {
   const existing = listBillingConfigs().find((item) => item.workspaceId === workspaceId);
   if (existing) {
     if (workspaceId === 'purpleorangehq' && existing.referralCode?.startsWith('NEXUS-')) {
-      return upsertBillingConfig(workspaceId, {
+      const next: WorkspaceBillingConfig = {
+        ...existing,
         referralCode: `VIOLEMA-${workspaceId.slice(-4).toUpperCase()}`,
-      });
+        updatedAt: new Date().toISOString(),
+      };
+      const items = listBillingConfigs();
+      const index = items.findIndex((item) => item.workspaceId === workspaceId);
+      if (index === -1) {
+        items.unshift(next);
+      } else {
+        items[index] = next;
+      }
+      writeBillingConfigs(items);
+      return next;
     }
     return existing;
   }
