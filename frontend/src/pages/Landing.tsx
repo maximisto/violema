@@ -178,7 +178,7 @@ function ProductDemo() {
                 { icon: BarChart3, text: 'Pulls live data from your connected tools' },
                 { icon: MessageSquare, text: 'Proactively communicates results to your team' },
                 { icon: CheckCircle, text: 'Creates and assigns follow-up tasks automatically' },
-                { icon: TrendingUp, text: 'Learns from your workflows over time' },
+                { icon: TrendingUp, text: 'Optimizes worker routing and handoffs over time' },
               ].map(({ icon: Icon, text }, i) => (
                 <div key={i} className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-violet-600/20 flex items-center justify-center flex-shrink-0">

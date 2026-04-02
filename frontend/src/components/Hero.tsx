@@ -49,7 +49,7 @@ function TerminalMessage({ msg, visible }: { msg: typeof TERMINAL_MESSAGES[0]; v
         </div>
       ) : (
         <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex-shrink-0 flex items-center justify-center">
-          <span className="text-xs text-white font-bold">N</span>
+          <span className="violema-glyph text-xs text-white">V</span>
         </div>
       )}
       <div className={`flex-1 text-sm ${isUser ? 'text-slate-300' : 'text-slate-200'}`}>
@@ -156,12 +156,12 @@ export default function Hero() {
 
             {/* Sub */}
             <p className="text-lg sm:text-xl text-slate-400 mb-10 max-w-lg leading-relaxed">
-              Violema is your AI coworker for research, execution, and automation. It does more than answer. It follows through.
+              Violema is your AI coworker for research, execution, and automation. Under the hood it coordinates a core team of specialist agents, then opens temporary worker lanes when a task needs parallel execution, tighter memory grouping, or leaner token use.
             </p>
 
             {/* Social proof bullets */}
             <div className="flex flex-col sm:flex-row gap-3 mb-10">
-              {['Executes across your stack', 'Runs research and automations', 'Keeps humans in the loop'].map((item) => (
+              {['Core specialist team', 'On-demand worker lanes', 'Budget-aware orchestration'].map((item) => (
                 <div key={item} className="flex items-center gap-2 text-sm text-slate-400">
                   <CheckCircle2 className="w-4 h-4 text-violet-400 flex-shrink-0" />
                   <span>{item}</span>
@@ -188,7 +188,7 @@ export default function Hero() {
 
             {/* Trust */}
             <p className="mt-6 text-sm text-slate-500">
-              Start lean • Connect your tools • Scale into full execution
+              Specialist workers • Temporary lanes when needed • Tight memory and token routing
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">

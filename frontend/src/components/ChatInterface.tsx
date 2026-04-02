@@ -1292,7 +1292,7 @@ export default function ChatInterface({
                     Violema workspace
                   </div>
                   <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-[1.15rem] bg-gradient-to-br from-violet-500 to-violet-700 shadow-glow-violet ring-1 ring-white/10 sm:h-16 sm:w-16">
-                    <span className="text-xl font-bold text-white sm:text-2xl">N</span>
+                    <span className="violema-glyph text-[1.35rem] text-white sm:text-[1.7rem]">V</span>
                   </div>
                   <h2 className="text-[1.8rem] font-bold text-white sm:text-[2.4rem]">Hey, I'm Violema</h2>
                   <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.32em] text-violet-300/70 sm:text-[11px]">
@@ -1301,9 +1301,9 @@ export default function ChatInterface({
                   <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-300">
                     Your AI coworker, tuned for{' '}
                     <span className={`font-semibold ${modeConfig.color}`}>{modeLabel.toLowerCase()}</span>
-                    {' '}work. Ask for research, automations, screenshots, or just start with a task.
+                    {' '}work. Violema coordinates specialist agents behind the scenes and opens temporary worker lanes when a task benefits from parallel execution, tighter context grouping, or lower token waste.
                   </p>
-                  <p className="mt-2 max-w-xl text-sm text-slate-500">{modeConfig.description}. Switch modes in the sidebar.</p>
+                  <p className="mt-2 max-w-xl text-sm text-slate-500">{modeConfig.description}. Switch modes in the sidebar and let the manager route the right workers into the job.</p>
 
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
                     <span className="ui-pill">Research</span>

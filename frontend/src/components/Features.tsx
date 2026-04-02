@@ -59,7 +59,7 @@ const FEATURES = [
   {
     icon: Brain,
     title: 'Long-term Memory',
-    description: 'Violema remembers your team\'s context, preferences, and history. It gets smarter with every interaction.',
+    description: 'Violema keeps thread context, workspace memory, and handoff state organized so specialist workers can stay focused without wasting tokens.',
     color: 'cyan',
     gradient: 'from-cyan-500/20 to-teal-600/5',
     border: 'border-cyan-800/40',

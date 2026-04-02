@@ -340,6 +340,14 @@
   text-transform: uppercase;
 }
 
+.violema-glyph {
+  font-family: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  transform: translateX(-0.04em);
+}
+
 /* ── Smooth sidebar collapse ──────────────────────────────────────── */
 .sidebar-enter {
   animation: sidebarSlideIn 0.2s ease-out;
