@@ -119,7 +119,7 @@ export default function Hero() {
   }, []);
 
   return (
-    <section className="relative min-h-screen flex items-center pt-16 overflow-hidden">
+    <section className="relative min-h-screen flex items-center pt-12 sm:pt-16 overflow-hidden">
       {/* Background gradients */}
       <div className="absolute inset-0 bg-hero-gradient" />
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-violet-700/10 rounded-full blur-3xl pointer-events-none" />
@@ -135,12 +135,12 @@ export default function Hero() {
         }}
       />
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 w-full">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-18 sm:py-24 w-full">
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           {/* Left: Copy */}
           <div className="animate-fade-in-up">
             {/* Badge */}
-            <div className="inline-flex items-center gap-2 bg-violet-950/60 border border-violet-800/50 rounded-full px-4 py-1.5 mb-8">
+            <div className="inline-flex items-center gap-2 bg-violet-950/60 border border-violet-800/50 rounded-full px-4 py-1.5 mb-6 sm:mb-8">
               <Sparkles className="w-3.5 h-3.5 text-violet-400" />
               <span className="text-violet-300 text-sm font-medium">Now in beta</span>
               <span className="w-px h-3 bg-violet-700" />
@@ -155,12 +155,12 @@ export default function Hero() {
             </h1>
 
             {/* Sub */}
-            <p className="text-lg sm:text-xl text-slate-400 mb-10 max-w-2xl leading-relaxed">
+            <p className="text-lg sm:text-xl text-slate-400 mb-7 sm:mb-10 max-w-2xl leading-relaxed">
               Violema coordinates specialized agents to carry work through from start to finish.
             </p>
 
             {/* Social proof bullets */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-10">
+            <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 mb-7 sm:mb-10">
               {[
                 'Works across your tools',
                 'Automates recurring work',
@@ -174,7 +174,7 @@ export default function Hero() {
             </div>
 
             {/* CTAs */}
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap gap-3 sm:gap-4">
               <button
                 onClick={() => navigate('/signup?next=%2Fplans')}
                 className="btn-primary text-base py-3 px-6 shadow-glow-violet animate-glow"
@@ -191,11 +191,11 @@ export default function Hero() {
             </div>
 
             {/* Trust */}
-            <p className="mt-6 text-sm text-slate-500">
+            <p className="mt-4 sm:mt-6 text-sm text-slate-500">
               One manager • Six specialists • Extra capacity when needed
             </p>
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-4 sm:mt-5 flex flex-wrap gap-2">
               {[
                 { icon: Slack, label: 'Slack' },
                 { icon: Globe, label: 'Web app' },
