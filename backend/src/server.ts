@@ -13,6 +13,7 @@ import {
   applyWorkerRuntimeActivity,
   type AgentRole,
   assertCanSpendCredits,
+  calculateRuntimeCredits,
   type AutomationExecutionPlan,
   type AutomationRolePlan,
   type AutomationStepDefinition,
@@ -56,6 +57,7 @@ import {
 } from './platform';
 import {
   generateText,
+  generateTextDetailed,
   getChatClient,
   getChatModelConfig,
   getMicroModelConfig,
@@ -1823,9 +1825,66 @@ function estimateAutomationToolCallCount(steps: AutomationStepDefinition[]) {
 
 function estimateSuccessfulAutomationCredits(stepExecutions: AutomationStepExecution[]) {
   return stepExecutions.reduce((total, step) => {
-    if (step.status !== 'succeeded') return total;
-    return total + Math.max(0, Math.trunc(step.estimatedCredits || 0));
+    if (step.status === 'skipped' || step.status === 'planned') return total;
+    return total + Math.max(0, Math.trunc(step.actualCredits ?? step.charge?.actualCredits ?? step.estimatedCredits ?? 0));
   }, 0);
+}
+
+function inferAutomationStepTaskKind(kind: AutomationStepKind) {
+  if (kind === 'search' || kind === 'capture') return 'research' as const;
+  if (kind === 'query' || kind === 'analyze') return 'analysis' as const;
+  if (kind === 'summarize') return 'report' as const;
+  if (kind === 'deliver') return 'message' as const;
+  return 'automation' as const;
+}
+
+function inferAutomationStepComplexity(step: AutomationStepExecution): 'low' | 'medium' | 'high' {
+  if (step.kind === 'analyze') return step.modelTier === 'hard' || step.modelTier === 'critical' ? 'high' : 'medium';
+  if (step.kind === 'summarize') return 'medium';
+  return 'low';
+}
+
+function attachAutomationStepCharge(step: AutomationStepExecution) {
+  if (step.status === 'skipped' || step.status === 'planned') {
+    step.actualCredits = 0;
+    return step;
+  }
+
+  const startedAt = step.startedAt ? Date.parse(step.startedAt) : Number.NaN;
+  const finishedAt = step.finishedAt ? Date.parse(step.finishedAt) : Number.NaN;
+  const durationMs =
+    Number.isFinite(startedAt) && Number.isFinite(finishedAt) && finishedAt >= startedAt
+      ? Math.max(0, finishedAt - startedAt)
+      : undefined;
+  const toolCalls = step.toolCalls ?? ((step.kind === 'search' || step.kind === 'query' || step.kind === 'capture' || step.kind === 'deliver') ? 1 : 0);
+  const artifactCount = step.artifactCount ?? (step.artifactKind ? 1 : 0);
+  const runtimeCharge = calculateRuntimeCredits({
+    taskKind: inferAutomationStepTaskKind(step.kind),
+    modelTier: step.modelTier || 'micro',
+    toolCalls,
+    artifactCount,
+    durationSeconds: durationMs ? Math.ceil(durationMs / 1000) : undefined,
+    complexity: inferAutomationStepComplexity(step),
+    inputTokens: step.tokenUsage?.inputTokens,
+    outputTokens: step.tokenUsage?.outputTokens,
+    totalTokens: step.tokenUsage?.totalTokens,
+  });
+
+  step.durationMs = durationMs;
+  step.toolCalls = toolCalls;
+  step.artifactCount = artifactCount;
+  step.actualCredits = runtimeCharge.actualCredits;
+  step.charge = {
+    actualCredits: runtimeCharge.actualCredits,
+    tokenCredits: runtimeCharge.breakdown.tokenCredits,
+    toolCredits: runtimeCharge.breakdown.toolCredits,
+    artifactCredits: runtimeCharge.breakdown.artifactCredits,
+    durationCredits: runtimeCharge.breakdown.durationCredits,
+    complexityCredits: runtimeCharge.breakdown.complexityCredits,
+    baseCredits: runtimeCharge.breakdown.baseCredits,
+    rationale: runtimeCharge.rationale,
+  };
+  return step;
 }
 
 function ensureAutomationSummaryStep(
@@ -2047,6 +2106,8 @@ async function executeAutomationCore(
         stepExecution.summary = `Gathered current web evidence for "${query}".`;
         stepExecution.output = { query, resultCount: Array.isArray((payload as { results?: unknown[] }).results) ? ((payload as { results?: unknown[] }).results?.length || 0) : undefined };
         stepExecution.artifactKind = 'web_search';
+        stepExecution.toolCalls = 1;
+        stepExecution.artifactCount = 1;
         continue;
       }
 
@@ -2061,6 +2122,8 @@ async function executeAutomationCore(
         stepExecution.summary = 'Pulled the requested live data successfully.';
         stepExecution.output = payload;
         stepExecution.artifactKind = 'query_data';
+        stepExecution.toolCalls = 1;
+        stepExecution.artifactCount = 1;
         continue;
       }
 
@@ -2081,19 +2144,22 @@ async function executeAutomationCore(
         stepExecution.summary = 'Captured the requested page state.';
         stepExecution.output = payload;
         stepExecution.artifactKind = 'capture';
+        stepExecution.toolCalls = 1;
+        stepExecution.artifactCount = 1;
         continue;
       }
 
       if (step.kind === 'analyze') {
-        const markdown = await runAutomationStepWithTimeout(
+        const analysisResult = await runAutomationStepWithTimeout(
           `Analysis step "${step.title}"`,
-          generateText(
+          generateTextDetailed(
           step.modelTier || plan.suggestedModelTier,
           'You are an internal VIOLEMA analyst. Produce a compact, decision-ready analysis based only on the supplied evidence. Be concrete and avoid filler.',
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           500,
           ),
         );
+        const markdown = analysisResult.text;
         artifacts.push({
           kind: 'analysis',
           title: step.title,
@@ -2103,19 +2169,22 @@ async function executeAutomationCore(
         stepExecution.summary = markdown.slice(0, 180).trim();
         stepExecution.output = { markdown };
         stepExecution.artifactKind = 'analysis';
+        stepExecution.artifactCount = 1;
+        stepExecution.tokenUsage = analysisResult.usage;
         continue;
       }
 
       if (step.kind === 'summarize') {
-        summaryText = await runAutomationStepWithTimeout(
+        const summaryResult = await runAutomationStepWithTimeout(
           `Summary step "${step.title}"`,
-          generateText(
+          generateTextDetailed(
           step.modelTier || plan.suggestedModelTier,
           'You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. Be concrete, skim-friendly, and avoid filler.',
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           900,
           ),
         );
+        summaryText = summaryResult.text;
         artifacts.push({
           kind: 'summary',
           title: step.title,
@@ -2125,6 +2194,8 @@ async function executeAutomationCore(
         stepExecution.summary = summaryText.slice(0, 180).trim();
         stepExecution.output = { markdown: summaryText };
         stepExecution.artifactKind = 'summary';
+        stepExecution.artifactCount = 1;
+        stepExecution.tokenUsage = summaryResult.usage;
         continue;
       }
 
@@ -2155,6 +2226,8 @@ async function executeAutomationCore(
         stepExecution.summary = `Delivered the latest result to ${deliveryTarget}.`;
         stepExecution.output = delivery;
         stepExecution.artifactKind = 'delivery';
+        stepExecution.toolCalls = 1;
+        stepExecution.artifactCount = 1;
         continue;
       }
 
@@ -2167,6 +2240,7 @@ async function executeAutomationCore(
       stepExecution.summary = 'Kept as an orchestration note with no direct tool call.';
       stepExecution.output = { note: step.objective };
       stepExecution.artifactKind = 'note';
+      stepExecution.artifactCount = 1;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown step error';
       stepErrors.push(`${step.title}: ${errorMessage}`);
@@ -2177,20 +2251,22 @@ async function executeAutomationCore(
       stepExecution.error = errorMessage;
     } finally {
       stepExecution.finishedAt = new Date().toISOString();
+      attachAutomationStepCharge(stepExecution);
       await emitProgress();
     }
   }
 
   if (!summaryText && (artifacts.length > 0 || stepErrors.length > 0)) {
-    summaryText = await runAutomationStepWithTimeout(
+    const fallbackSummaryResult = await runAutomationStepWithTimeout(
       `Fallback summary for "${automation.name}"`,
-      generateText(
+      generateTextDetailed(
       plan.suggestedModelTier,
       'Summarize the completed automation run in concise markdown. Lead with the highest-value outcome, then note any failure or delivery issue briefly.',
       [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
       600,
       ),
     );
+    summaryText = fallbackSummaryResult.text;
     artifacts.push({
       kind: 'summary',
       title: `${automation.name} summary`,
@@ -2392,10 +2468,7 @@ async function runAutomation(automation: {
       console.log(`[automation] ${automation.id}\n${summary}`);
     }
 
-    const actualToolCalls = execution.stepExecutions.filter((step) =>
-      step.status === 'succeeded' &&
-      (step.kind === 'search' || step.kind === 'query' || step.kind === 'capture' || step.kind === 'deliver')
-    ).length;
+    const actualToolCalls = execution.stepExecutions.reduce((total, step) => total + Math.max(0, Math.trunc(step.toolCalls || 0)), 0);
     const actualCredits = estimateSuccessfulAutomationCredits(execution.stepExecutions);
 
     finalizeTaskRun(taskRun.id, {
@@ -2407,6 +2480,14 @@ async function runAutomation(automation: {
         artifacts: execution.artifacts,
         stepErrors: execution.stepErrors,
         stepExecutions: execution.stepExecutions,
+        stepCharges: execution.stepExecutions.map((step) => ({
+          stepId: step.stepId,
+          title: step.title,
+          status: step.status,
+          actualCredits: step.actualCredits || 0,
+          charge: step.charge,
+          tokenUsage: step.tokenUsage,
+        })),
         sourceSteps: automation.steps,
         automationPlan: execution.plan,
         plannedSteps: execution.plan.steps,
@@ -2434,6 +2515,14 @@ async function runAutomation(automation: {
         latestSummary: summary,
         latestArtifacts: execution.artifacts,
         latestStepExecutions: execution.stepExecutions,
+        stepCharges: execution.stepExecutions.map((step) => ({
+          stepId: step.stepId,
+          title: step.title,
+          status: step.status,
+          actualCredits: step.actualCredits || 0,
+          charge: step.charge,
+          tokenUsage: step.tokenUsage,
+        })),
         automationPlan: execution.plan,
         plannedSteps: execution.plan.steps,
         rolePlan: {
@@ -2458,6 +2547,12 @@ async function runAutomation(automation: {
         taskId: task.id,
         taskRunId: taskRun.id,
         actualToolCalls,
+        stepCharges: execution.stepExecutions.map((step) => ({
+          stepId: step.stepId,
+          title: step.title,
+          status: step.status,
+          actualCredits: step.actualCredits || 0,
+        })),
         deliveryError: execution.deliveryError,
       },
     });

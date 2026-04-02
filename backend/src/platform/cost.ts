@@ -22,6 +22,31 @@ export interface CostEstimateBreakdown {
   complexityCredits: number;
 }
 
+export interface RuntimeCreditInput {
+  taskKind: TaskKind;
+  modelTier: ModelTier;
+  toolCalls?: number;
+  artifactCount?: number;
+  complexity?: 'low' | 'medium' | 'high';
+  durationSeconds?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+export interface RuntimeCreditResult {
+  actualCredits: number;
+  breakdown: {
+    baseCredits: number;
+    tokenCredits: number;
+    toolCredits: number;
+    artifactCredits: number;
+    durationCredits: number;
+    complexityCredits: number;
+  };
+  rationale: string[];
+}
+
 export interface CostEstimate {
   estimatedCredits: number;
   breakdown: CostEstimateBreakdown;
@@ -53,6 +78,13 @@ export const DEFAULT_AUTOMATION_RUN_CREDIT_COST = 15;
 export const DEFAULT_REVIEW_CREDIT_COST = 8;
 export const DEFAULT_ARTIFACT_CREDIT_COST = 5;
 export const DEFAULT_DURATION_CREDIT_COST_PER_MINUTE = 2;
+const MODEL_TIER_CREDITS_PER_1K_TOKENS: Record<ModelTier, number> = {
+  micro: 1,
+  default: 4,
+  hard: 10,
+  critical: 18,
+  ops: 5,
+};
 
 function normalizeCount(value?: number): number {
   if (!value || !Number.isFinite(value)) return 0;
@@ -126,4 +158,49 @@ export function estimateUsageEventCredits(event: UsageEvent): number {
     toolCalls: event.toolCount,
     durationSeconds: event.durationMs ? Math.ceil(event.durationMs / 1000) : undefined,
   }).estimatedCredits;
+}
+
+export function calculateRuntimeCredits(input: RuntimeCreditInput): RuntimeCreditResult {
+  const baseCredits = BASE_TASK_CREDITS[input.taskKind] || 0;
+  const toolCredits = normalizeCount(input.toolCalls) * DEFAULT_TOOL_CREDIT_COST;
+  const artifactCredits = normalizeCount(input.artifactCount) * DEFAULT_ARTIFACT_CREDIT_COST;
+  const durationCredits = Math.ceil(normalizeCount(input.durationSeconds) / 60) * DEFAULT_DURATION_CREDIT_COST_PER_MINUTE;
+  const complexityCredits =
+    input.complexity === 'high' ? 12 : input.complexity === 'medium' ? 5 : 0;
+
+  const totalTokens =
+    normalizeCount(input.totalTokens) ||
+    normalizeCount(input.inputTokens) + normalizeCount(input.outputTokens);
+  const tokenCredits =
+    totalTokens > 0
+      ? Math.max(1, Math.ceil(totalTokens / 1000) * (MODEL_TIER_CREDITS_PER_1K_TOKENS[input.modelTier] || 0))
+      : 0;
+
+  const actualCredits =
+    baseCredits +
+    tokenCredits +
+    toolCredits +
+    artifactCredits +
+    durationCredits +
+    complexityCredits;
+
+  return {
+    actualCredits,
+    breakdown: {
+      baseCredits,
+      tokenCredits,
+      toolCredits,
+      artifactCredits,
+      durationCredits,
+      complexityCredits,
+    },
+    rationale: [
+      `base:${baseCredits}`,
+      `tokens:${tokenCredits}`,
+      `tools:${toolCredits}`,
+      `artifacts:${artifactCredits}`,
+      `duration:${durationCredits}`,
+      `complexity:${complexityCredits}`,
+    ],
+  };
 }

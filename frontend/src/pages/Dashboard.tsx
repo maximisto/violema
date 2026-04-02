@@ -122,6 +122,8 @@ interface PlatformTaskRunRecord {
   status: string;
   modelTier: string;
   agentRole: string;
+  estimatedCredits?: number;
+  actualCredits?: number;
   startedAt: string;
   finishedAt?: string;
   error?: string;
@@ -175,6 +177,8 @@ interface DashboardTaskItem {
   workerTopology?: DashboardWorkerTopology;
   taskUpdatedAt?: string;
   failureReason?: string;
+  actualCredits?: number;
+  estimatedCredits?: number;
 }
 
 interface DashboardTaskArtifact {
@@ -194,6 +198,27 @@ interface DashboardTaskStepExecution {
   startedAt?: string;
   finishedAt?: string;
   modelTier?: string;
+  actualCredits?: number;
+  toolCalls?: number;
+  artifactCount?: number;
+  durationMs?: number;
+  tokenUsage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+  charge?: {
+    actualCredits: number;
+    tokenCredits: number;
+    toolCredits: number;
+    artifactCredits: number;
+    durationCredits: number;
+    complexityCredits: number;
+    baseCredits: number;
+    rationale: string[];
+  };
+  output?: Record<string, unknown>;
+  artifactKind?: string;
 }
 
 interface DashboardEvidenceLink {
@@ -320,6 +345,43 @@ function formatAutomationRunTime(value?: string) {
 
 function formatRelativeTimeFromIso(iso: string) {
   return formatTime(new Date(iso));
+}
+
+function formatCompactDuration(durationMs?: number) {
+  if (!durationMs || durationMs <= 0) return null;
+  if (durationMs < 1000) return `${durationMs}ms`;
+  const seconds = durationMs / 1000;
+  if (seconds < 60) return `${seconds.toFixed(seconds >= 10 ? 0 : 1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+function formatTokenCount(value?: number) {
+  if (!value || value <= 0) return null;
+  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k tokens`;
+  return `${value} tokens`;
+}
+
+function formatStepOutputPreview(step: DashboardTaskStepExecution) {
+  if (step.error) return step.error;
+  if (step.output?.markdown && typeof step.output.markdown === 'string') {
+    return formatSummaryPreview(step.output.markdown, 220);
+  }
+  if (typeof step.output?.query === 'string') {
+    const resultCount = typeof step.output.resultCount === 'number' ? `${step.output.resultCount} results` : null;
+    return [step.output.query, resultCount].filter(Boolean).join(' · ');
+  }
+  if (typeof step.output?.url === 'string') {
+    return step.output.url;
+  }
+  if (typeof step.output?.channel === 'string') {
+    return step.output.channel;
+  }
+  if (typeof step.summary === 'string' && step.summary.trim()) {
+    return step.summary.trim();
+  }
+  return null;
 }
 
 function createWorkflowBlock(kind: WorkflowBlockKind, overrides?: Partial<WorkflowBlockDraft>): WorkflowBlockDraft {
@@ -551,6 +613,33 @@ function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
       startedAt: readString(item.startedAt),
       finishedAt: readString(item.finishedAt),
       modelTier: readString(item.modelTier),
+      actualCredits: typeof item.actualCredits === 'number' ? item.actualCredits : undefined,
+      toolCalls: typeof item.toolCalls === 'number' ? item.toolCalls : undefined,
+      artifactCount: typeof item.artifactCount === 'number' ? item.artifactCount : undefined,
+      durationMs: typeof item.durationMs === 'number' ? item.durationMs : undefined,
+      tokenUsage: isRecord(item.tokenUsage)
+        ? {
+            inputTokens: typeof item.tokenUsage.inputTokens === 'number' ? item.tokenUsage.inputTokens : undefined,
+            outputTokens: typeof item.tokenUsage.outputTokens === 'number' ? item.tokenUsage.outputTokens : undefined,
+            totalTokens: typeof item.tokenUsage.totalTokens === 'number' ? item.tokenUsage.totalTokens : undefined,
+          }
+        : undefined,
+      charge: isRecord(item.charge)
+        ? {
+            actualCredits: typeof item.charge.actualCredits === 'number' ? item.charge.actualCredits : 0,
+            tokenCredits: typeof item.charge.tokenCredits === 'number' ? item.charge.tokenCredits : 0,
+            toolCredits: typeof item.charge.toolCredits === 'number' ? item.charge.toolCredits : 0,
+            artifactCredits: typeof item.charge.artifactCredits === 'number' ? item.charge.artifactCredits : 0,
+            durationCredits: typeof item.charge.durationCredits === 'number' ? item.charge.durationCredits : 0,
+            complexityCredits: typeof item.charge.complexityCredits === 'number' ? item.charge.complexityCredits : 0,
+            baseCredits: typeof item.charge.baseCredits === 'number' ? item.charge.baseCredits : 0,
+            rationale: Array.isArray(item.charge.rationale)
+              ? item.charge.rationale.filter((entry): entry is string => typeof entry === 'string')
+              : [],
+          }
+        : undefined,
+      output: isRecord(item.output) ? item.output : undefined,
+      artifactKind: readString(item.artifactKind),
     };
     return stepExecution;
   });
@@ -685,6 +774,8 @@ function applyTaskRunSnapshot(item: DashboardTaskItem, task?: PlatformTaskRecord
     workerTopology: getTaskWorkerTopology(task, run) || item.workerTopology,
     failureReason: getTaskFailureReason(task, run) || undefined,
     taskUpdatedAt: task?.updatedAt || item.taskUpdatedAt,
+    actualCredits: typeof run?.actualCredits === 'number' ? run.actualCredits : item.actualCredits,
+    estimatedCredits: typeof run?.estimatedCredits === 'number' ? run.estimatedCredits : item.estimatedCredits,
   };
 }
 
@@ -1150,6 +1241,8 @@ export default function Dashboard() {
           workerTopology: getTaskWorkerTopology(task, latestRun),
           failureReason: getTaskFailureReason(task, latestRun),
           taskUpdatedAt: task.updatedAt,
+          actualCredits: latestRun?.actualCredits,
+          estimatedCredits: latestRun?.estimatedCredits,
         };
       });
 
@@ -1195,6 +1288,8 @@ export default function Dashboard() {
           workerTopology: getTaskWorkerTopology(task, latestRun),
           failureReason: getTaskFailureReason(task, latestRun),
           taskUpdatedAt: task?.updatedAt,
+          actualCredits: latestRun?.actualCredits,
+          estimatedCredits: latestRun?.estimatedCredits,
         };
       });
 
@@ -1675,6 +1770,16 @@ export default function Dashboard() {
   const selectedTaskStepExecutions = useMemo(() => selectedTask?.latestStepExecutions || [], [selectedTask?.latestStepExecutions]);
   const selectedTaskWorkerView = useMemo(() => summarizeWorkerLanes(selectedTask), [selectedTask]);
   const selectedTaskWorkerHistory = useMemo(() => buildWorkerActivationHistory(selectedTask), [selectedTask]);
+  const selectedTaskRunEconomics = useMemo(() => {
+    const steps = selectedTask?.latestStepExecutions || [];
+    const actualCredits = typeof selectedTask?.actualCredits === 'number'
+      ? selectedTask.actualCredits
+      : steps.reduce((total, step) => total + Math.max(0, step.actualCredits || 0), 0);
+    const estimatedCredits = typeof selectedTask?.estimatedCredits === 'number' ? selectedTask.estimatedCredits : null;
+    const totalTokens = steps.reduce((total, step) => total + Math.max(0, step.tokenUsage?.totalTokens || 0), 0);
+    const totalToolCalls = steps.reduce((total, step) => total + Math.max(0, step.toolCalls || 0), 0);
+    return { actualCredits, estimatedCredits, totalTokens, totalToolCalls };
+  }, [selectedTask]);
   const lowCreditRunway = snapshot.projectedDaysLeft <= 7;
   const automationActionCount = useMemo(() => {
     if (!automationEditor) return 0;
@@ -2689,6 +2794,29 @@ export default function Dashboard() {
                             </p>
                           </div>
                         </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500 xl:grid-cols-4">
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Run cost</p>
+                            <p className="mt-1 text-slate-100">
+                              {selectedTaskRunEconomics.actualCredits > 0 ? `${formatCredits(selectedTaskRunEconomics.actualCredits)} cr` : '—'}
+                            </p>
+                            {selectedTaskRunEconomics.estimatedCredits ? (
+                              <p className="mt-1 text-[10px] text-slate-500">Est. {formatCredits(selectedTaskRunEconomics.estimatedCredits)} cr</p>
+                            ) : null}
+                          </div>
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Tokens</p>
+                            <p className="mt-1 text-slate-100">{formatTokenCount(selectedTaskRunEconomics.totalTokens) || '—'}</p>
+                          </div>
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Tool calls</p>
+                            <p className="mt-1 text-slate-100">{selectedTaskRunEconomics.totalToolCalls || '—'}</p>
+                          </div>
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Step count</p>
+                            <p className="mt-1 text-slate-100">{selectedTaskStepExecutions.length || '—'}</p>
+                          </div>
+                        </div>
                         {selectedTask.failureReason ? (
                           <div className="mt-3 rounded-xl border border-red-500/18 bg-red-500/8 px-3 py-2.5 text-[11px] leading-relaxed text-red-200">
                             {selectedTask.failureReason}
@@ -2773,11 +2901,48 @@ export default function Dashboard() {
                                         {step.status}
                                       </span>
                                     </div>
+                                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-slate-500">
+                                      {step.modelTier ? (
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                                          {step.modelTier}
+                                        </span>
+                                      ) : null}
+                                      {typeof step.actualCredits === 'number' ? (
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                                          {formatCredits(step.actualCredits)} cr
+                                        </span>
+                                      ) : null}
+                                      {step.tokenUsage?.totalTokens ? (
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                                          {formatTokenCount(step.tokenUsage.totalTokens)}
+                                        </span>
+                                      ) : null}
+                                      {step.toolCalls ? (
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                                          {step.toolCalls} tool {step.toolCalls === 1 ? 'call' : 'calls'}
+                                        </span>
+                                      ) : null}
+                                      {step.durationMs ? (
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                                          {formatCompactDuration(step.durationMs)}
+                                        </span>
+                                      ) : null}
+                                    </div>
                                     {step.summary ? (
                                       <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{step.summary}</p>
                                     ) : null}
+                                    {formatStepOutputPreview(step) && formatStepOutputPreview(step) !== step.summary ? (
+                                      <div className="mt-2 rounded-lg border border-white/6 bg-white/4 px-2.5 py-2 text-[11px] leading-relaxed text-slate-300">
+                                        {formatStepOutputPreview(step)}
+                                      </div>
+                                    ) : null}
                                     {step.error ? (
                                       <p className="mt-2 text-[11px] leading-relaxed text-red-200">{step.error}</p>
+                                    ) : null}
+                                    {step.charge ? (
+                                      <p className="mt-2 text-[10px] text-slate-500">
+                                        {step.charge.rationale.join(' · ')}
+                                      </p>
                                     ) : null}
                                   </div>
                                 );

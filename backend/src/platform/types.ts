@@ -193,6 +193,25 @@ export interface AutomationStepExecution {
   summary?: string;
   error?: string;
   estimatedCredits?: number;
+  actualCredits?: number;
+  toolCalls?: number;
+  artifactCount?: number;
+  durationMs?: number;
+  tokenUsage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+  charge?: {
+    actualCredits: number;
+    tokenCredits: number;
+    toolCredits: number;
+    artifactCredits: number;
+    durationCredits: number;
+    complexityCredits: number;
+    baseCredits: number;
+    rationale: string[];
+  };
   output?: Record<string, unknown>;
   artifactKind?: string;
 }

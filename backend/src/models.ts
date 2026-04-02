@@ -24,6 +24,17 @@ export interface RoutingDecision {
   needsTools: boolean;
 }
 
+export interface TextGenerationUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+export interface TextGenerationResult {
+  text: string;
+  usage?: TextGenerationUsage;
+}
+
 function env(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
 }
@@ -237,7 +248,7 @@ function anthropicTextFromResponse(response: { content: Array<{ type: string; te
   return parts.join('\n\n').trim();
 }
 
-async function generateWithOpenAI(route: ModelRoute, system: string, messages: MessageParam[], maxTokens: number) {
+async function generateWithOpenAI(route: ModelRoute, system: string, messages: MessageParam[], maxTokens: number): Promise<TextGenerationResult> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${requireEnv(route.apiKeyEnv)}`,
@@ -272,16 +283,26 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
   const data = await response.json() as {
     error?: { message?: string };
     choices?: Array<{ message?: { content?: string } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   };
 
   if (!response.ok) {
     throw new Error(`OpenAI request failed: ${data.error?.message || response.statusText}`);
   }
 
-  return data.choices?.[0]?.message?.content?.trim() || '';
+  return {
+    text: data.choices?.[0]?.message?.content?.trim() || '',
+    usage: data.usage
+      ? {
+          inputTokens: data.usage.prompt_tokens,
+          outputTokens: data.usage.completion_tokens,
+          totalTokens: data.usage.total_tokens,
+        }
+      : undefined,
+  };
 }
 
-async function generateWithAnthropicLike(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number) {
+async function generateWithAnthropicLike(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number): Promise<TextGenerationResult> {
   const resolvedProfile = resolveTextProfile(profile);
   if (resolvedProfile !== 'default' && resolvedProfile !== 'critical' && resolvedProfile !== 'ops') {
     throw new Error(`Unsupported Anthropic-compatible profile: ${profile}`);
@@ -295,10 +316,23 @@ async function generateWithAnthropicLike(profile: TextProfile, system: string, m
     messages,
   });
 
-  return anthropicTextFromResponse(response);
+  const usage = 'usage' in response && response.usage
+    ? {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        totalTokens:
+          (response.usage.input_tokens || 0) +
+          (response.usage.output_tokens || 0),
+      }
+    : undefined;
+
+  return {
+    text: anthropicTextFromResponse(response),
+    usage,
+  };
 }
 
-export async function generateText(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number) {
+export async function generateTextDetailed(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number): Promise<TextGenerationResult> {
   const route = getTextRoute(profile);
 
   if (route.provider === 'openai' || route.provider === 'openrouter') {
@@ -310,6 +344,11 @@ export async function generateText(profile: TextProfile, system: string, message
   }
 
   throw new Error(`Unsupported text provider for ${profile}: ${route.provider}`);
+}
+
+export async function generateText(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number) {
+  const result = await generateTextDetailed(profile, system, messages, maxTokens);
+  return result.text;
 }
 
 export function getChatClient(profile: TextProfile = 'default') {
