@@ -2,6 +2,14 @@ import { useNavigate } from 'react-router-dom';
 import { Play, ArrowRight, Sparkles, CheckCircle2, Globe, Slack } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
+function DiscordIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
+      <path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037 13.7 13.7 0 0 0-.608 1.249 18.27 18.27 0 0 0-5.487 0 13.6 13.6 0 0 0-.617-1.249.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.045-.32 13.579.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.1 14.1 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128q.152-.111.297-.23a.074.074 0 0 1 .077-.01c3.927 1.792 8.18 1.792 12.062 0a.074.074 0 0 1 .078.01q.146.12.297.23a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03M8.02 15.331c-1.182 0-2.157-1.085-2.157-2.418s.956-2.418 2.157-2.418c1.21 0 2.167 1.094 2.157 2.418s-.956 2.418-2.157 2.418m7.975 0c-1.182 0-2.157-1.085-2.157-2.418s.956-2.418 2.157-2.418c1.21 0 2.167 1.094 2.157 2.418s-.947 2.418-2.157 2.418"/>
+    </svg>
+  );
+}
+
 function useCountUp(target: number, duration = 1800, start = false) {
   const [count, setCount] = useState(0);
   useEffect(() => {
@@ -119,7 +127,7 @@ export default function Hero() {
   }, []);
 
   return (
-    <section className="relative min-h-screen flex items-center pt-20 sm:pt-16 overflow-hidden">
+    <section className="relative min-h-screen flex items-center pt-[4.6rem] sm:pt-16 overflow-hidden">
       {/* Background gradients */}
       <div className="absolute inset-0 bg-hero-gradient" />
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-violet-700/10 rounded-full blur-3xl pointer-events-none" />
@@ -135,7 +143,7 @@ export default function Hero() {
         }}
       />
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-24 w-full">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-24 w-full">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           {/* Left: Copy */}
           <div className="animate-fade-in-up">
@@ -188,17 +196,10 @@ export default function Hero() {
               </button>
             </div>
 
-            {/* Trust */}
-            <p className="mt-3 sm:mt-6 max-w-[20rem] sm:max-w-none text-[0.88rem] sm:text-sm leading-snug text-slate-500">
-              One manager • Six specialists
-              <br className="sm:hidden" />
-              <span className="hidden sm:inline"> • </span>
-              Extra capacity when needed
-            </p>
-
             <div className="mt-3.5 sm:mt-5 flex flex-wrap gap-2">
               {[
                 { icon: Slack, label: 'Slack' },
+                { icon: DiscordIcon, label: 'Discord' },
                 { icon: Globe, label: 'Web app' },
               ].map(({ icon: Icon, label }) => (
                 <div key={label} className="ui-pill px-3 py-1.5 text-slate-300">
