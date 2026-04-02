@@ -116,6 +116,29 @@ function broadcastTaskPanelEvent(workspaceId: string, event: Record<string, unkn
   }
 }
 
+function buildTaskRunSnapshotEvent(
+  workspaceId: string,
+  taskRunId: string,
+  phase: 'progress' | 'completed' | 'failed',
+) {
+  const run = listTaskRuns(workspaceId).find((item) => item.id === taskRunId);
+  if (!run) return null;
+  const task = listTasks(workspaceId).find((item) => item.id === run.taskId) || null;
+
+  return {
+    type: 'task_run_snapshot',
+    phase,
+    workspaceId,
+    taskRunId,
+    taskId: run.taskId,
+    automationId:
+      (typeof run.metadata?.automationId === 'string' ? run.metadata.automationId : undefined) ||
+      (typeof task?.metadata?.automationId === 'string' ? task.metadata.automationId : undefined),
+    run,
+    task,
+  };
+}
+
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (curl, Postman, same-origin nginx proxy)
@@ -2295,6 +2318,7 @@ async function runAutomation(automation: {
       stepExecutions: AutomationStepExecution[];
       delivery: Record<string, unknown> | null;
       deliveryError: string | null;
+      workerTopology: AutomationExecutionPlan['topology'];
     }) => {
       updateTaskRun(taskRun.id, {
         metadata: {
@@ -2317,7 +2341,7 @@ async function runAutomation(automation: {
             elasticLanes: executionPlan.elasticLanes,
             primaryBand: executionPlan.primaryBand,
           },
-          workerTopology: executionPlan.topology,
+          workerTopology: progress.workerTopology,
         },
       });
 
@@ -2341,20 +2365,15 @@ async function runAutomation(automation: {
             elasticLanes: executionPlan.elasticLanes,
             primaryBand: executionPlan.primaryBand,
           },
-          workerTopology: executionPlan.topology,
+          workerTopology: progress.workerTopology,
           deliveryError: progress.deliveryError,
         },
       });
 
-      const latestStep = progress.stepExecutions[progress.stepExecutions.length - 1];
-      broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
-        type: 'automation_progress',
-        automationId: automation.id,
-        taskId: task.id,
-        taskRunId: taskRun.id,
-        latestStepId: latestStep?.stepId,
-        latestStepStatus: latestStep?.status,
-      });
+      const snapshotEvent = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, 'progress');
+      if (snapshotEvent) {
+        broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, snapshotEvent);
+      }
     };
 
     const execution = await executeAutomationCore(automation, executionPlan, persistProgress);
@@ -2399,7 +2418,7 @@ async function runAutomation(automation: {
           elasticLanes: execution.plan.elasticLanes,
           primaryBand: execution.plan.primaryBand,
         },
-        workerTopology: execution.plan.topology,
+        workerTopology: applyWorkerRuntimeActivity(execution.plan.topology, execution.stepExecutions),
         delivery: execution.delivery,
         deliveryError: execution.deliveryError,
       },
@@ -2424,7 +2443,7 @@ async function runAutomation(automation: {
           elasticLanes: execution.plan.elasticLanes,
           primaryBand: execution.plan.primaryBand,
         },
-        workerTopology: execution.plan.topology,
+        workerTopology: applyWorkerRuntimeActivity(execution.plan.topology, execution.stepExecutions),
         deliveryError: execution.deliveryError,
       },
     });
@@ -2442,13 +2461,10 @@ async function runAutomation(automation: {
         deliveryError: execution.deliveryError,
       },
     });
-    broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
-      type: 'automation_run_finished',
-      automationId: automation.id,
-      taskId: task.id,
-      taskRunId: taskRun.id,
-      status: 'succeeded',
-    });
+    const completedSnapshot = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, 'completed');
+    if (completedSnapshot) {
+      broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, completedSnapshot);
+    }
     return {
       ok: true as const,
       deliveryError: execution.deliveryError || undefined,
@@ -2475,7 +2491,7 @@ async function runAutomation(automation: {
           elasticLanes: executionPlan.elasticLanes,
           primaryBand: executionPlan.primaryBand,
         },
-        workerTopology: executionPlan.topology,
+        workerTopology: applyWorkerRuntimeActivity(executionPlan.topology, []),
         sourceSteps: automation.steps,
         artifacts: [
           {
@@ -2508,7 +2524,7 @@ async function runAutomation(automation: {
           elasticLanes: executionPlan.elasticLanes,
           primaryBand: executionPlan.primaryBand,
         },
-        workerTopology: executionPlan.topology,
+        workerTopology: applyWorkerRuntimeActivity(executionPlan.topology, []),
         latestArtifacts: [
           {
             kind: 'note',
@@ -2521,14 +2537,10 @@ async function runAutomation(automation: {
         ],
       },
     });
-    broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
-      type: 'automation_run_finished',
-      automationId: automation.id,
-      taskId: task.id,
-      taskRunId: taskRun.id,
-      status: 'failed',
-      error: errorMessage,
-    });
+    const failedSnapshot = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, 'failed');
+    if (failedSnapshot) {
+      broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, failedSnapshot);
+    }
     console.error(`[automation] ${automation.id} failed`, error);
     return {
       ok: false as const,

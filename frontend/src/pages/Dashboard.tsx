@@ -147,6 +147,8 @@ interface AutomationApiRecord {
 
 interface DashboardTaskItem {
   id: string | number;
+  taskId?: string;
+  taskRunId?: string;
   title: string;
   status: DashboardTaskStatus;
   time: string;
@@ -659,6 +661,33 @@ function getTaskAutomationId(task?: PlatformTaskRecord, run?: PlatformTaskRunRec
   return readString(run?.metadata?.automationId) || readString(task?.metadata?.automationId);
 }
 
+function applyTaskRunSnapshot(item: DashboardTaskItem, task?: PlatformTaskRecord, run?: PlatformTaskRunRecord): DashboardTaskItem {
+  const status = item.automationStatus === 'paused'
+    ? 'alert'
+    : mapPlatformStatus(run?.status || item.runStatus || item.lastRunStatus || task?.status || 'queued');
+
+  return {
+    ...item,
+    taskId: task?.id || item.taskId,
+    taskRunId: run?.id || item.taskRunId,
+    status,
+    modelTier: run?.modelTier || item.modelTier,
+    agentRole: run?.agentRole || item.agentRole,
+    runStatus: run?.status || item.runStatus,
+    lastRunAt: run?.finishedAt || run?.startedAt || item.lastRunAt,
+    lastRunStatus:
+      run?.status === 'succeeded' || run?.status === 'failed'
+        ? run.status
+        : item.lastRunStatus,
+    latestSummary: getTaskMetadataSummary(task, run) || item.latestSummary,
+    latestArtifacts: getTaskMetadataArtifacts(task, run) || item.latestArtifacts,
+    latestStepExecutions: getTaskStepExecutions(task, run),
+    workerTopology: getTaskWorkerTopology(task, run) || item.workerTopology,
+    failureReason: getTaskFailureReason(task, run) || undefined,
+    taskUpdatedAt: task?.updatedAt || item.taskUpdatedAt,
+  };
+}
+
 function stripMarkdownPreview(value?: string) {
   if (!value) return '';
   return value
@@ -1103,6 +1132,8 @@ export default function Dashboard() {
         const status = mapPlatformStatus(latestRun?.status || task.status);
         return {
           id: task.id,
+          taskId: task.id,
+          taskRunId: latestRun?.id,
           title: task.title,
           status,
           time: formatRelativeTimeFromIso(latestRun?.finishedAt || latestRun?.startedAt || task.updatedAt),
@@ -1134,6 +1165,8 @@ export default function Dashboard() {
 
         return {
           id: automation.id,
+          taskId: task?.id,
+          taskRunId: latestRun?.id,
           title: automation.name,
           status,
           time: automation.next_run_at ? `Next ${formatAutomationRunTime(automation.next_run_at)}` : automation.schedule,
@@ -1191,6 +1224,72 @@ export default function Dashboard() {
 
     return () => controller.abort();
   }, [loadTaskPanelData]);
+
+  const handleTaskPanelStreamMessage = useCallback((raw: string) => {
+    try {
+      const payload = JSON.parse(raw) as unknown;
+      if (!isRecord(payload)) return;
+
+      if (readString(payload.type) === 'task_run_snapshot') {
+        const task = isRecord(payload.task) ? payload.task as PlatformTaskRecord : undefined;
+        const run = isRecord(payload.run) ? payload.run as PlatformTaskRunRecord : undefined;
+        const automationId = readString(payload.automationId);
+        const taskId = readString(payload.taskId);
+        const taskRunId = readString(payload.taskRunId);
+
+        if (!run) return;
+
+        setLiveAutomations((current) => current.map((item) => {
+          const matches =
+            (automationId && item.automationId === automationId) ||
+            (taskId && item.taskId === taskId) ||
+            (taskRunId && item.taskRunId === taskRunId);
+          return matches ? applyTaskRunSnapshot(item, task, run) : item;
+        }));
+
+        setPlatformTasks((current) => current.map((item) => {
+          const matches =
+            (taskId && item.taskId === taskId) ||
+            (taskRunId && item.taskRunId === taskRunId);
+          return matches ? applyTaskRunSnapshot(item, task, run) : item;
+        }));
+        return;
+      }
+
+      const type = readString(payload.type);
+      if (
+        type === 'automation_created' ||
+        type === 'automation_updated' ||
+        type === 'automation_deleted' ||
+        type === 'automation_triggered' ||
+        type === 'automation_run_started' ||
+        type === 'automation_run_finished'
+      ) {
+        void refreshTaskPanel({ silent: true }).catch(() => {});
+      }
+    } catch {
+      // ignore malformed stream payloads
+    }
+  }, [refreshTaskPanel]);
+
+  useEffect(() => {
+    if (!taskPanelOpen) return undefined;
+
+    const streamUrl = `/api/platform/stream?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`;
+    const source = new EventSource(streamUrl);
+
+    source.onmessage = (event) => {
+      handleTaskPanelStreamMessage(event.data);
+    };
+
+    source.onerror = () => {
+      // EventSource retries by default. Keep the poller as the recovery path.
+    };
+
+    return () => {
+      source.close();
+    };
+  }, [handleTaskPanelStreamMessage, taskPanelOpen, workspace.workspaceId, workspace.workspaceName]);
 
   // Close delete confirm on outside activity
   useEffect(() => {
