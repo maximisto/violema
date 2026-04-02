@@ -1225,72 +1225,6 @@ export default function Dashboard() {
     return () => controller.abort();
   }, [loadTaskPanelData]);
 
-  const handleTaskPanelStreamMessage = useCallback((raw: string) => {
-    try {
-      const payload = JSON.parse(raw) as unknown;
-      if (!isRecord(payload)) return;
-
-      if (readString(payload.type) === 'task_run_snapshot') {
-        const task = isRecord(payload.task) ? payload.task as PlatformTaskRecord : undefined;
-        const run = isRecord(payload.run) ? payload.run as PlatformTaskRunRecord : undefined;
-        const automationId = readString(payload.automationId);
-        const taskId = readString(payload.taskId);
-        const taskRunId = readString(payload.taskRunId);
-
-        if (!run) return;
-
-        setLiveAutomations((current) => current.map((item) => {
-          const matches =
-            (automationId && item.automationId === automationId) ||
-            (taskId && item.taskId === taskId) ||
-            (taskRunId && item.taskRunId === taskRunId);
-          return matches ? applyTaskRunSnapshot(item, task, run) : item;
-        }));
-
-        setPlatformTasks((current) => current.map((item) => {
-          const matches =
-            (taskId && item.taskId === taskId) ||
-            (taskRunId && item.taskRunId === taskRunId);
-          return matches ? applyTaskRunSnapshot(item, task, run) : item;
-        }));
-        return;
-      }
-
-      const type = readString(payload.type);
-      if (
-        type === 'automation_created' ||
-        type === 'automation_updated' ||
-        type === 'automation_deleted' ||
-        type === 'automation_triggered' ||
-        type === 'automation_run_started' ||
-        type === 'automation_run_finished'
-      ) {
-        void refreshTaskPanel({ silent: true }).catch(() => {});
-      }
-    } catch {
-      // ignore malformed stream payloads
-    }
-  }, [refreshTaskPanel]);
-
-  useEffect(() => {
-    if (!taskPanelOpen) return undefined;
-
-    const streamUrl = `/api/platform/stream?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`;
-    const source = new EventSource(streamUrl);
-
-    source.onmessage = (event) => {
-      handleTaskPanelStreamMessage(event.data);
-    };
-
-    source.onerror = () => {
-      // EventSource retries by default. Keep the poller as the recovery path.
-    };
-
-    return () => {
-      source.close();
-    };
-  }, [handleTaskPanelStreamMessage, taskPanelOpen, workspace.workspaceId, workspace.workspaceName]);
-
   // Close delete confirm on outside activity
   useEffect(() => {
     if (deleteConfirmId) {
@@ -1369,6 +1303,72 @@ export default function Dashboard() {
     await refreshTaskPanel();
   }, [refreshTaskPanel]);
 
+  const handleTaskPanelStreamMessage = useCallback((raw: string) => {
+    try {
+      const payload = JSON.parse(raw) as unknown;
+      if (!isRecord(payload)) return;
+
+      if (readString(payload.type) === 'task_run_snapshot') {
+        const task = isRecord(payload.task) ? payload.task as unknown as PlatformTaskRecord : undefined;
+        const run = isRecord(payload.run) ? payload.run as unknown as PlatformTaskRunRecord : undefined;
+        const automationId = readString(payload.automationId);
+        const taskId = readString(payload.taskId);
+        const taskRunId = readString(payload.taskRunId);
+
+        if (!run) return;
+
+        setLiveAutomations((current) => current.map((item) => {
+          const matches =
+            (automationId && item.automationId === automationId) ||
+            (taskId && item.taskId === taskId) ||
+            (taskRunId && item.taskRunId === taskRunId);
+          return matches ? applyTaskRunSnapshot(item, task, run) : item;
+        }));
+
+        setPlatformTasks((current) => current.map((item) => {
+          const matches =
+            (taskId && item.taskId === taskId) ||
+            (taskRunId && item.taskRunId === taskRunId);
+          return matches ? applyTaskRunSnapshot(item, task, run) : item;
+        }));
+        return;
+      }
+
+      const type = readString(payload.type);
+      if (
+        type === 'automation_created' ||
+        type === 'automation_updated' ||
+        type === 'automation_deleted' ||
+        type === 'automation_triggered' ||
+        type === 'automation_run_started' ||
+        type === 'automation_run_finished'
+      ) {
+        void refreshTaskPanel({ silent: true }).catch(() => {});
+      }
+    } catch {
+      // ignore malformed stream payloads
+    }
+  }, [refreshTaskPanel]);
+
+  useEffect(() => {
+    if (!taskPanelOpen) return undefined;
+
+    const streamUrl = `/api/platform/stream?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`;
+    const source = new EventSource(streamUrl);
+
+    source.onmessage = (event) => {
+      handleTaskPanelStreamMessage(event.data);
+    };
+
+    source.onerror = () => {
+      // EventSource retries by default. Keep the poller as the recovery path.
+    };
+
+    return () => {
+      source.close();
+    };
+  }, [handleTaskPanelStreamMessage, taskPanelOpen, workspace.workspaceId, workspace.workspaceName]);
+
   const hasRunningAutomation = useMemo(
     () => liveAutomations.some((task) => task.runStatus === 'running'),
     [liveAutomations]
@@ -1395,39 +1395,6 @@ export default function Dashboard() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [hasRunningAutomation, taskPanelOpen, refreshTaskPanel]);
-
-  useEffect(() => {
-    if (!taskPanelOpen || typeof window === 'undefined') return undefined;
-
-    const workspace = resolveWorkspaceContext();
-    const streamUrl = `/api/platform/stream?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`;
-    const eventSource = new EventSource(streamUrl);
-    let refreshTimeout: number | null = null;
-
-    const scheduleRefresh = () => {
-      if (refreshTimeout !== null) window.clearTimeout(refreshTimeout);
-      refreshTimeout = window.setTimeout(() => {
-        void refreshTaskPanel({ silent: true }).catch(() => {});
-        refreshTimeout = null;
-      }, 120);
-    };
-
-    eventSource.onmessage = () => {
-      scheduleRefresh();
-    };
-
-    eventSource.onerror = () => {
-      if (refreshTimeout !== null) {
-        window.clearTimeout(refreshTimeout);
-        refreshTimeout = null;
-      }
-    };
-
-    return () => {
-      eventSource.close();
-      if (refreshTimeout !== null) window.clearTimeout(refreshTimeout);
-    };
-  }, [refreshTaskPanel, taskPanelOpen]);
 
   const handleAutomationRun = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
