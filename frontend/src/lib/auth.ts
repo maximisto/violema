@@ -15,11 +15,12 @@ export interface AuthSession {
   slackConnectedAt?: string;
 }
 
-const SESSION_KEY = 'nexus_auth_session';
+const SESSION_KEY = 'violema_auth_session';
+const LEGACY_SESSION_KEY = 'nexus_auth_session';
 
 export function getAuthSession(): AuthSession | null {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    const raw = localStorage.getItem(SESSION_KEY) || localStorage.getItem(LEGACY_SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<AuthSession>;
     if (
@@ -41,10 +42,12 @@ export function getAuthSession(): AuthSession | null {
 
 export function saveAuthSession(session: AuthSession) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  localStorage.removeItem(LEGACY_SESSION_KEY);
 }
 
 export function clearAuthSession() {
   localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(LEGACY_SESSION_KEY);
 }
 
 export function hasAcceptedAccess(): boolean {

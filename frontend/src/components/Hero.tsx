@@ -29,10 +29,10 @@ const STATS = [
 
 const TERMINAL_MESSAGES = [
   { role: 'user', content: '@violema pull the MRR from Stripe and compare to last month' },
-  { role: 'nexus', content: '📊 Pulling Stripe data...', type: 'thinking' },
-  { role: 'nexus', content: 'MRR this month: **$127,450** (+17.8% vs Feb)\nNew subscriptions: 47 | Churn: 3\nNet Revenue Retention: 118% 🚀', type: 'result' },
+  { role: 'violema', content: '📊 Pulling Stripe data...', type: 'thinking' },
+  { role: 'violema', content: 'MRR this month: **$127,450** (+17.8% vs Feb)\nNew subscriptions: 47 | Churn: 3\nNet Revenue Retention: 118% 🚀', type: 'result' },
   { role: 'user', content: '@violema send the summary to #revenue-team on Slack' },
-  { role: 'nexus', content: '✅ Sent to #revenue-team. Want me to create a weekly automated report?', type: 'result' },
+  { role: 'violema', content: '✅ Sent to #revenue-team. Want me to create a weekly automated report?', type: 'result' },
 ];
 
 function TerminalMessage({ msg, visible }: { msg: typeof TERMINAL_MESSAGES[0]; visible: boolean }) {

@@ -873,7 +873,7 @@ function MessageBubble({
         {/* Message content */}
         {message.content && (
           <div
-            className="prose-nexus text-sm leading-relaxed"
+            className="prose-violema text-sm leading-relaxed"
             dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
           />
         )}

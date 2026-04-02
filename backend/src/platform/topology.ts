@@ -1,5 +1,6 @@
 import type {
   AgentRole,
+  AutomationStepExecution,
   IntelligenceBand,
   ModelTier,
   TaskKind,
@@ -237,5 +238,66 @@ export function buildWorkerTopologySnapshot(input: {
     },
     workers,
     summary: 'Six resident specialists stay online. Four elastic lanes spin up only when the manager needs more reasoning depth, throughput, or tighter memory control.',
+  };
+}
+
+export function applyWorkerRuntimeActivity(
+  topology: WorkerTopologySnapshot,
+  stepExecutions: AutomationStepExecution[],
+): WorkerTopologySnapshot {
+  if (stepExecutions.length === 0) return topology;
+
+  const completedOrRunning = stepExecutions.filter((step) =>
+    step.status === 'running' || step.status === 'succeeded' || step.status === 'failed'
+  );
+
+  if (completedOrRunning.length === 0) return topology;
+
+  const currentStep = [...completedOrRunning].reverse().find((step) => step.status === 'running');
+  const lastStep = [...completedOrRunning].reverse()[0];
+  const engagedRoles = new Set<AgentRole>([topology.primaryRole]);
+  completedOrRunning.forEach((step) => engagedRoles.add(step.assignedRole));
+
+  const workers = topology.workers.map((worker) => {
+    const relevantSteps = completedOrRunning.filter((step) => step.assignedRole === worker.assignedRole);
+    const latestStep = relevantSteps[relevantSteps.length - 1];
+    const isManager = worker.role === 'nexus';
+    const isCurrent = currentStep?.assignedRole === worker.assignedRole;
+    const isEngaged = isManager || engagedRoles.has(worker.assignedRole);
+
+    let reason = worker.reason;
+    if (isCurrent && currentStep) {
+      reason = isManager && currentStep.assignedRole !== worker.assignedRole
+        ? `Routing ${currentStep.assignedRole} through "${currentStep.title}".`
+        : `Executing "${currentStep.title}".`;
+    } else if (latestStep?.status === 'failed') {
+      reason = `Blocked on "${latestStep.title}".${latestStep.error ? ` ${latestStep.error}` : ''}`.trim();
+    } else if (latestStep?.status === 'succeeded') {
+      reason = `Completed "${latestStep.title}" and handed work forward.`;
+    } else if (isManager) {
+      reason = 'Coordinating the active workflow and worker handoffs.';
+    }
+
+    return {
+      ...worker,
+      status: isEngaged ? 'active' : 'standby',
+      reason,
+    } as WorkerSnapshotCard;
+  });
+
+  const currentLabel = currentStep
+    ? workers.find((worker) => worker.assignedRole === currentStep.assignedRole)?.label || currentStep.assignedRole
+    : null;
+  const summary = currentStep
+    ? `${currentLabel} is executing "${currentStep.title}". ${engagedRoles.size} lanes are engaged in this run.`
+    : lastStep?.status === 'failed'
+      ? `${engagedRoles.size} lanes engaged before the run blocked on "${lastStep.title}".`
+      : `${engagedRoles.size} lanes were activated across ${completedOrRunning.length} workflow steps.`;
+
+  return {
+    ...topology,
+    activeRoles: workers.filter((worker) => worker.status === 'active').map((worker) => worker.role),
+    workers,
+    summary,
   };
 }

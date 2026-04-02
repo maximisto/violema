@@ -1,6 +1,6 @@
-# Nexus VPS deploy
+# VIOLEMA VPS deploy
 
-1. Point `nexus.purpleorange.io` at the VPS public IP.
+1. Point `violema.com` and `www.violema.com` at the VPS public IP.
 2. SSH into the VPS as `root` or a sudo user.
 3. Run:
 
@@ -8,6 +8,12 @@
 git clone https://github.com/maximisto/test-repo.git /tmp/test-repo
 cd /tmp/test-repo/deploy
 sudo bash deploy.sh
+```
+
+Optional overrides:
+
+```bash
+sudo DOMAIN=violema.com APP_DIR=/var/www/nexus PM2_APP_NAME=violema-backend bash deploy.sh
 ```
 
 4. Before rerunning if the backend stops on startup, create:
@@ -20,6 +26,10 @@ TAVILY_API_KEY=your_tavily_key
 POSTMARK_API_KEY=your_postmark_server_api_key
 POSTMARK_FROM_EMAIL=demo@yourdomain.com
 SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
+PUBLIC_APP_URL=https://violema.com
+APP_BASE_URL=https://violema.com
+OPENROUTER_SITE_URL=https://violema.com
+OPENROUTER_APP_NAME=VIOLEMA
 PORT=3001
 NODE_ENV=production
 EOF
@@ -29,10 +39,10 @@ EOF
 
 ```bash
 pm2 status
-pm2 logs nexus-backend
+pm2 logs violema-backend
 sudo systemctl status nginx
-curl -I https://nexus.purpleorange.io
-curl https://nexus.purpleorange.io/api/health
+curl -I https://violema.com
+curl https://violema.com/api/health
 ```
 
 Notes:

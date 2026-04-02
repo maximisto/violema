@@ -189,6 +189,9 @@ interface DashboardTaskStepExecution {
   status: string;
   summary?: string;
   error?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  modelTier?: string;
 }
 
 interface DashboardEvidenceLink {
@@ -215,6 +218,16 @@ interface DashboardWorkerTopology {
   primaryBand: string;
   workers: DashboardWorkerCard[];
   summary?: string;
+}
+
+interface DashboardWorkerActivationEvent {
+  id: string;
+  label: string;
+  role: string;
+  laneType: 'core' | 'elastic';
+  detail: string;
+  timeLabel: string;
+  status: 'running' | 'succeeded' | 'failed' | 'planned';
 }
 
 interface AutomationEditorDraft {
@@ -533,6 +546,9 @@ function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
       status,
       summary: readString(item.summary),
       error: readString(item.error),
+      startedAt: readString(item.startedAt),
+      finishedAt: readString(item.finishedAt),
+      modelTier: readString(item.modelTier),
     };
     return stepExecution;
   });
@@ -799,6 +815,57 @@ function summarizeWorkerLanes(task?: DashboardTaskItem) {
   }
 
   return { manager: null as DashboardWorkerCard | null, core: [] as DashboardWorkerCard[], elastic: [] as DashboardWorkerCard[], totalActiveLanes: 0, summary: '' };
+}
+
+function buildWorkerActivationHistory(task?: DashboardTaskItem): DashboardWorkerActivationEvent[] {
+  if (!task) return [];
+
+  const workerMap = new Map((task.workerTopology?.workers || []).map((worker) => [worker.assignedRole, worker]));
+  const timeline: Array<DashboardWorkerActivationEvent & { sortValue: number }> = [];
+  const kickoffAt = task.lastRunAt || task.taskUpdatedAt;
+
+  if (task.workerTopology?.primaryRole) {
+    const manager = task.workerTopology.workers.find((worker) => worker.role === 'nexus');
+    timeline.push({
+      id: `manager-${task.id}`,
+      label: manager?.label || 'Violema Manager',
+      role: task.workerTopology.primaryRole,
+      laneType: manager?.laneType || 'core',
+      detail: task.runStatus === 'running'
+        ? 'Opened the run plan and is actively routing specialist work.'
+        : 'Opened the run plan and assigned the resident team for execution.',
+      timeLabel: kickoffAt ? formatRelativeTimeFromIso(kickoffAt) : 'just now',
+      status: task.runStatus === 'failed' ? 'failed' : task.runStatus === 'running' ? 'running' : 'succeeded',
+      sortValue: kickoffAt ? Date.parse(kickoffAt) : Number.POSITIVE_INFINITY,
+    });
+  }
+
+  (task.latestStepExecutions || []).forEach((step, index) => {
+    const worker = workerMap.get(step.assignedRole);
+    const timestamp = step.startedAt || step.finishedAt || task.lastRunAt || task.taskUpdatedAt;
+    timeline.push({
+      id: `${step.stepId}-${index}`,
+      label: worker?.label || step.assignedRole,
+      role: step.assignedRole,
+      laneType: worker?.laneType || 'core',
+      detail: step.error || step.summary || `${step.title} · ${step.kind}`,
+      timeLabel: timestamp ? formatRelativeTimeFromIso(timestamp) : `Step ${index + 1}`,
+      status:
+        step.status === 'failed'
+          ? 'failed'
+          : step.status === 'running'
+            ? 'running'
+            : step.status === 'planned'
+              ? 'planned'
+              : 'succeeded',
+      sortValue: timestamp ? Date.parse(timestamp) : Number.POSITIVE_INFINITY - index,
+    });
+  });
+
+  return timeline
+    .sort((left, right) => left.sortValue - right.sortValue)
+    .slice(0, 8)
+    .map(({ sortValue: _sortValue, ...item }) => item);
 }
 
 function inferConversationTags(conversation: Conversation) {
@@ -1230,6 +1297,39 @@ export default function Dashboard() {
     };
   }, [hasRunningAutomation, taskPanelOpen, refreshTaskPanel]);
 
+  useEffect(() => {
+    if (!taskPanelOpen || typeof window === 'undefined') return undefined;
+
+    const workspace = resolveWorkspaceContext();
+    const streamUrl = `/api/platform/stream?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`;
+    const eventSource = new EventSource(streamUrl);
+    let refreshTimeout: number | null = null;
+
+    const scheduleRefresh = () => {
+      if (refreshTimeout !== null) window.clearTimeout(refreshTimeout);
+      refreshTimeout = window.setTimeout(() => {
+        void refreshTaskPanel({ silent: true }).catch(() => {});
+        refreshTimeout = null;
+      }, 120);
+    };
+
+    eventSource.onmessage = () => {
+      scheduleRefresh();
+    };
+
+    eventSource.onerror = () => {
+      if (refreshTimeout !== null) {
+        window.clearTimeout(refreshTimeout);
+        refreshTimeout = null;
+      }
+    };
+
+    return () => {
+      eventSource.close();
+      if (refreshTimeout !== null) window.clearTimeout(refreshTimeout);
+    };
+  }, [refreshTaskPanel, taskPanelOpen]);
+
   const handleAutomationRun = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
     setActionBusy('run');
@@ -1508,6 +1608,7 @@ export default function Dashboard() {
   const selectedTaskEvidenceLinks = useMemo(() => extractEvidenceLinks(selectedTask?.latestArtifacts), [selectedTask?.latestArtifacts]);
   const selectedTaskStepExecutions = useMemo(() => selectedTask?.latestStepExecutions || [], [selectedTask?.latestStepExecutions]);
   const selectedTaskWorkerView = useMemo(() => summarizeWorkerLanes(selectedTask), [selectedTask]);
+  const selectedTaskWorkerHistory = useMemo(() => buildWorkerActivationHistory(selectedTask), [selectedTask]);
   const lowCreditRunway = snapshot.projectedDaysLeft <= 7;
   const automationActionCount = useMemo(() => {
     if (!automationEditor) return 0;
@@ -2540,9 +2641,48 @@ export default function Dashboard() {
                                 : 'No run output yet. Start the automation manually or wait for the next scheduled run.'}
                           </div>
                         )}
+                        {selectedTaskWorkerHistory.length > 0 ? (
+                          <div className="mt-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Lane activation history</p>
+                            <div className="mt-2 space-y-2">
+                              {selectedTaskWorkerHistory.map((event) => {
+                                const tone =
+                                  event.status === 'failed'
+                                    ? 'border-red-500/16 bg-red-500/8 text-red-200'
+                                    : event.status === 'running'
+                                      ? event.laneType === 'elastic'
+                                        ? 'border-cyan-500/16 bg-cyan-500/8 text-cyan-100'
+                                        : 'border-violet-500/16 bg-violet-500/8 text-violet-100'
+                                      : event.status === 'planned'
+                                        ? 'border-amber-500/16 bg-amber-500/8 text-amber-100'
+                                        : 'border-navy-700/60 bg-navy-950/42 text-slate-200';
+
+                                return (
+                                  <div key={event.id} className={`rounded-xl border px-3 py-2.5 ${tone}`}>
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-[11px] font-medium text-inherit">{event.label}</p>
+                                        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                                          {event.role} · {event.laneType === 'elastic' ? 'elastic lane' : 'resident specialist'}
+                                        </p>
+                                      </div>
+                                      <div className="text-right">
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                                          {event.status}
+                                        </span>
+                                        <p className="mt-1 text-[10px] text-slate-500">{event.timeLabel}</p>
+                                      </div>
+                                    </div>
+                                    <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{event.detail}</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
                         {selectedTaskStepExecutions.length > 0 ? (
                           <div className="mt-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Recent handoffs</p>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Step handoffs</p>
                             <div className="mt-2 space-y-2">
                               {selectedTaskStepExecutions.slice(0, 4).map((step, index) => {
                                 const tone =

@@ -69,7 +69,7 @@ export default function SlackSetup() {
               {[
                 {
                   title: '1. Install or invite the bot',
-                  body: 'Make sure the Nexus CoWorker Slack bot is available in your workspace and invited to the channel where you want updates to land.',
+                  body: 'Make sure the VIOLEMA Slack bot is available in your workspace and invited to the channel where you want updates to land.',
                 },
                 {
                   title: '2. Copy the channel ID',

@@ -10,6 +10,7 @@ import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } f
 import { createAutomation, deleteAutomation, getAutomationById, listAutomations, loadPersistedAutomations, triggerAutomationNow, updateAutomation } from './scheduler';
 import {
   addLedgerEntry,
+  applyWorkerRuntimeActivity,
   type AgentRole,
   assertCanSpendCredits,
   type AutomationExecutionPlan,
@@ -73,13 +74,47 @@ const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
 const SLACK_EVENT_CACHE_WINDOW_MS = 5 * 60 * 1000;
 const AUTOMATION_STEP_TIMEOUT_MS = Number(process.env.AUTOMATION_STEP_TIMEOUT_MS || 45000);
 const handledSlackEvents = new Map<string, number>();
+const taskPanelStreamClients = new Map<string, Set<Response>>();
 
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'https://violema.com',
+  'https://www.violema.com',
+  'http://violema.com',
+  'http://www.violema.com',
   'https://nexus.purpleorange.io',
   'http://nexus.purpleorange.io',
 ];
+
+function addTaskPanelStreamClient(workspaceId: string, res: Response) {
+  const set = taskPanelStreamClients.get(workspaceId) || new Set<Response>();
+  set.add(res);
+  taskPanelStreamClients.set(workspaceId, set);
+}
+
+function removeTaskPanelStreamClient(workspaceId: string, res: Response) {
+  const set = taskPanelStreamClients.get(workspaceId);
+  if (!set) return;
+  set.delete(res);
+  if (set.size === 0) {
+    taskPanelStreamClients.delete(workspaceId);
+  }
+}
+
+function broadcastTaskPanelEvent(workspaceId: string, event: Record<string, unknown>) {
+  const subscribers = taskPanelStreamClients.get(workspaceId);
+  if (!subscribers || subscribers.size === 0) return;
+
+  const payload = `data: ${JSON.stringify({ ...event, emittedAt: new Date().toISOString() })}\n\n`;
+  for (const subscriber of subscribers) {
+    try {
+      subscriber.write(payload);
+    } catch {
+      removeTaskPanelStreamClient(workspaceId, subscriber);
+    }
+  }
+}
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -342,7 +377,7 @@ function buildOpenAIHeaders(route: { provider: string; apiKeyEnv: string }) {
   };
 
   if (route.provider === 'openrouter') {
-    headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL || 'https://nexus.purpleorange.io';
+    headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL || 'https://violema.com';
     headers['X-Title'] = process.env.OPENROUTER_APP_NAME || 'Violema';
   }
 
@@ -707,7 +742,7 @@ const NEXUS_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'schedule_automation',
-    description: 'Schedule a recurring automation or monitoring task. Nexus will run it automatically on the specified schedule.',
+    description: 'Schedule a recurring automation or monitoring task. Violema will run it automatically on the specified schedule.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -1935,6 +1970,7 @@ async function executeAutomationCore(
     stepExecutions: AutomationStepExecution[];
     delivery: Record<string, unknown> | null;
     deliveryError: string | null;
+    workerTopology: AutomationExecutionPlan['topology'];
   }) => Promise<void> | void,
 ) {
   const artifacts: AutomationExecutionArtifact[] = [];
@@ -1943,6 +1979,20 @@ async function executeAutomationCore(
   let summaryText = '';
   let delivery: Record<string, unknown> | null = null;
   let deliveryError: string | null = null;
+
+  const emitProgress = async () => {
+    if (!onProgress) return;
+    const runtimeTopology = applyWorkerRuntimeActivity(plan.topology, stepExecutions);
+    await onProgress({
+      artifacts: [...artifacts],
+      summaryText,
+      stepErrors: [...stepErrors],
+      stepExecutions: [...stepExecutions],
+      delivery,
+      deliveryError,
+      workerTopology: runtimeTopology,
+    });
+  };
 
   for (const step of plan.steps) {
     const stepExecution: AutomationStepExecution = {
@@ -1955,17 +2005,9 @@ async function executeAutomationCore(
       status: 'running',
       startedAt: new Date().toISOString(),
     };
+    stepExecutions.push(stepExecution);
 
-    if (onProgress) {
-      await onProgress({
-        artifacts: [...artifacts],
-        summaryText,
-        stepErrors: [...stepErrors],
-        stepExecutions: [...stepExecutions, stepExecution],
-        delivery,
-        deliveryError,
-      });
-    }
+    await emitProgress();
 
     try {
       if (step.kind === 'search') {
@@ -2112,17 +2154,7 @@ async function executeAutomationCore(
       stepExecution.error = errorMessage;
     } finally {
       stepExecution.finishedAt = new Date().toISOString();
-      stepExecutions.push(stepExecution);
-      if (onProgress) {
-        await onProgress({
-          artifacts: [...artifacts],
-          summaryText,
-          stepErrors: [...stepErrors],
-          stepExecutions: [...stepExecutions],
-          delivery,
-          deliveryError,
-        });
-      }
+      await emitProgress();
     }
   }
 
@@ -2141,16 +2173,7 @@ async function executeAutomationCore(
       title: `${automation.name} summary`,
       payload: { markdown: summaryText },
     });
-    if (onProgress) {
-      await onProgress({
-        artifacts: [...artifacts],
-        summaryText,
-        stepErrors: [...stepErrors],
-        stepExecutions: [...stepExecutions],
-        delivery,
-        deliveryError,
-      });
-    }
+    await emitProgress();
   }
 
   return {
@@ -2254,6 +2277,13 @@ async function runAutomation(automation: {
     },
   });
 
+  broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+    type: 'automation_run_started',
+    automationId: automation.id,
+    taskId: task.id,
+    taskRunId: taskRun.id,
+  });
+
   try {
     assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimatedCredits);
     updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
@@ -2314,6 +2344,16 @@ async function runAutomation(automation: {
           workerTopology: executionPlan.topology,
           deliveryError: progress.deliveryError,
         },
+      });
+
+      const latestStep = progress.stepExecutions[progress.stepExecutions.length - 1];
+      broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+        type: 'automation_progress',
+        automationId: automation.id,
+        taskId: task.id,
+        taskRunId: taskRun.id,
+        latestStepId: latestStep?.stepId,
+        latestStepStatus: latestStep?.status,
       });
     };
 
@@ -2402,6 +2442,13 @@ async function runAutomation(automation: {
         deliveryError: execution.deliveryError,
       },
     });
+    broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+      type: 'automation_run_finished',
+      automationId: automation.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      status: 'succeeded',
+    });
     return {
       ok: true as const,
       deliveryError: execution.deliveryError || undefined,
@@ -2473,6 +2520,14 @@ async function runAutomation(automation: {
           },
         ],
       },
+    });
+    broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+      type: 'automation_run_finished',
+      automationId: automation.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      status: 'failed',
+      error: errorMessage,
     });
     console.error(`[automation] ${automation.id} failed`, error);
     return {
@@ -3005,6 +3060,10 @@ app.post('/api/automations', async (req: Request, res: Response) => {
       condition: typeof body.condition === 'string' ? body.condition.trim() || undefined : undefined,
     }, runAutomation);
 
+    broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+      type: 'automation_created',
+      automationId: record.id,
+    });
     res.status(201).json({ ok: true, item: record });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Could not create automation' });
@@ -3018,6 +3077,10 @@ app.post('/api/automations/:id/run', (req: Request, res: Response) => {
     return;
   }
 
+  broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+    type: 'automation_triggered',
+    automationId: record.id,
+  });
   res.json({ ok: true, item: record, message: `Triggered ${record.name}` });
 });
 
@@ -3059,6 +3122,10 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Automation not found' });
       return;
     }
+    broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+      type: 'automation_updated',
+      automationId: updated.id,
+    });
     res.json({ ok: true, item: updated });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Could not update automation' });
@@ -3072,7 +3139,39 @@ app.delete('/api/automations/:id', (req: Request, res: Response) => {
     return;
   }
 
+  broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+    type: 'automation_deleted',
+    automationId: removed.id,
+  });
   res.json({ ok: true, item: removed });
+});
+
+app.get('/api/platform/stream', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+
+  addTaskPanelStreamClient(workspaceId, res);
+  res.write(`data: ${JSON.stringify({ type: 'connected', workspaceId, emittedAt: new Date().toISOString() })}\n\n`);
+
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`: heartbeat ${Date.now()}\n\n`);
+    } catch {
+      clearInterval(heartbeat);
+      removeTaskPanelStreamClient(workspaceId, res);
+    }
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    removeTaskPanelStreamClient(workspaceId, res);
+    res.end();
+  });
 });
 
 app.get('/api/platform/tasks', (req: Request, res: Response) => {

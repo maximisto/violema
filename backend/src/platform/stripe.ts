@@ -57,7 +57,7 @@ const DEFAULT_CURRENCY = 'usd';
 export const STRIPE_EVENTS_FILE = path.join(process.cwd(), 'platform-stripe-events.json');
 
 function getAppBaseUrl(): string {
-  return getEnv('PUBLIC_APP_URL') || getEnv('APP_BASE_URL') || 'https://nexus.purpleorange.io';
+  return getEnv('PUBLIC_APP_URL') || getEnv('APP_BASE_URL') || 'https://violema.com';
 }
 
 const DEFAULT_SUCCESS_URL = `${getAppBaseUrl()}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`;

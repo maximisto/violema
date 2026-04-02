@@ -1,7 +1,7 @@
 {
-  "name": "nexus-backend",
+  "name": "violema-backend",
   "version": "1.0.0",
-  "description": "Nexus Backend API",
+  "description": "VIOLEMA backend API",
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",

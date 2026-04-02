@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# Nexus by Purple Orange AI — VPS Deploy Script
+# VIOLEMA by Purple Orange AI — VPS Deploy Script
 # Run as root (or a sudo user) on Hostinger VPS
 # Usage:  sudo bash deploy.sh [--skip-deps]
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-DOMAIN="nexus.purpleorange.io"
-APP_DIR="/var/www/nexus"
+DOMAIN="${DOMAIN:-violema.com}"
+APP_DIR="${APP_DIR:-/var/www/nexus}"
 REPO_URL="https://github.com/maximisto/test-repo.git"
 BRANCH="claude/build-ai-assistant-platform-BsdRr"
-LOG_DIR="/var/log/nexus"
+LOG_DIR="${LOG_DIR:-/var/log/nexus}"
 NGINX_SITE="/etc/nginx/sites-available/$DOMAIN"
 SSL_CERT_PATH="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+PM2_APP_NAME="${PM2_APP_NAME:-violema-backend}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
@@ -23,7 +24,7 @@ write_bootstrap_nginx_config() {
   cat >"$NGINX_SITE" <<EOF
 server {
     listen 80;
-    server_name $DOMAIN;
+    server_name $DOMAIN www.$DOMAIN;
 
     root $APP_DIR/frontend/dist;
     index index.html;
@@ -48,6 +49,13 @@ server {
     }
 }
 EOF
+}
+
+render_production_nginx_config() {
+  sed \
+    -e "s|__APP_DOMAIN__|$DOMAIN|g" \
+    -e "s|__APP_DIR__|$APP_DIR|g" \
+    "$APP_DIR/deploy/nginx.conf" > "$NGINX_SITE"
 }
 
 # ── 1. Dependencies ──────────────────────────────────────────────────────────
@@ -107,7 +115,7 @@ chown -R www-data:www-data "$APP_DIR/frontend/dist" 2>/dev/null || true
 # ── 6. nginx ─────────────────────────────────────────────────────────────────
 info "Configuring nginx…"
 if [[ -f "$SSL_CERT_PATH" ]]; then
-  cp "$APP_DIR/deploy/nginx.conf" "$NGINX_SITE"
+  render_production_nginx_config
 else
   info "No SSL certificate found yet, writing bootstrap HTTP-only nginx config…"
   write_bootstrap_nginx_config
@@ -122,14 +130,14 @@ systemctl reload nginx
 
 # ── 7. SSL with Let's Encrypt ────────────────────────────────────────────────
 if [[ ! -f "$SSL_CERT_PATH" ]]; then
-  info "Obtaining SSL certificate for $DOMAIN…"
-  certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos \
+  info "Obtaining SSL certificate for $DOMAIN and www.$DOMAIN…"
+  certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos \
     --redirect --email "admin@purpleorange.io" || \
-  warn "Certbot failed. Run manually: certbot --nginx -d $DOMAIN"
+  warn "Certbot failed. Run manually: certbot --nginx -d $DOMAIN -d www.$DOMAIN"
 
   if [[ -f "$SSL_CERT_PATH" ]]; then
     info "SSL certificate issued, switching nginx to the production HTTPS config…"
-    cp "$APP_DIR/deploy/nginx.conf" "$NGINX_SITE"
+    render_production_nginx_config
     nginx -t || die "nginx config test failed after SSL issuance — check $NGINX_SITE"
     systemctl reload nginx
   fi
@@ -142,7 +150,8 @@ fi
 info "Starting / restarting backend with PM2…"
 cd "$APP_DIR"
 pm2 delete nexus-backend 2>/dev/null || true
-pm2 start deploy/ecosystem.config.cjs
+pm2 delete "$PM2_APP_NAME" 2>/dev/null || true
+PM2_APP_NAME="$PM2_APP_NAME" APP_BACKEND_CWD="$APP_DIR/backend" pm2 start deploy/ecosystem.config.cjs
 pm2 save
 pm2 startup | tail -1 | bash 2>/dev/null || warn "Run 'pm2 startup' manually to enable auto-restart on reboot."
 
@@ -150,11 +159,11 @@ pm2 startup | tail -1 | bash 2>/dev/null || warn "Run 'pm2 startup' manually to 
 systemctl reload nginx
 
 echo ""
-echo -e "${GREEN}✓ Nexus deployed successfully!${NC}"
+echo -e "${GREEN}✓ VIOLEMA deployed successfully!${NC}"
 echo -e "  → https://$DOMAIN"
 echo ""
 echo "Useful commands:"
-echo "  pm2 logs nexus-backend        # live backend logs"
+echo "  pm2 logs $PM2_APP_NAME        # live backend logs"
 echo "  pm2 status                    # process status"
 echo "  sudo systemctl status nginx   # nginx status"
 echo "  sudo certbot renew --dry-run  # test SSL auto-renewal"

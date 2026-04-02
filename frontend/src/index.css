@@ -122,71 +122,87 @@
 }
 
 /* Prose / markdown rendering */
+.prose-violema,
 .prose-nexus {
   @apply text-slate-300 leading-relaxed;
 }
 
+.prose-violema h1, .prose-violema h2, .prose-violema h3,
 .prose-nexus h1, .prose-nexus h2, .prose-nexus h3 {
   @apply text-white font-semibold mt-4 mb-2;
 }
 
-.prose-nexus h1 { @apply text-xl; }
-.prose-nexus h2 { @apply text-lg; }
-.prose-nexus h3 { @apply text-base; }
+.prose-violema h1, .prose-nexus h1 { @apply text-xl; }
+.prose-violema h2, .prose-nexus h2 { @apply text-lg; }
+.prose-violema h3, .prose-nexus h3 { @apply text-base; }
 
+.prose-violema p,
 .prose-nexus p {
   @apply mb-3;
 }
 
+.prose-violema ul, .prose-violema ol,
 .prose-nexus ul, .prose-nexus ol {
   @apply pl-5 mb-3 space-y-1;
 }
 
-.prose-nexus ul { @apply list-disc; }
-.prose-nexus ol { @apply list-decimal; }
+.prose-violema ul, .prose-nexus ul { @apply list-disc; }
+.prose-violema ol, .prose-nexus ol { @apply list-decimal; }
 
+.prose-violema li,
 .prose-nexus li { @apply text-slate-300; }
 
+.prose-violema strong,
 .prose-nexus strong {
   @apply text-white font-semibold;
 }
 
+.prose-violema em,
 .prose-nexus em {
   @apply text-slate-200 italic;
 }
 
+.prose-violema code,
 .prose-nexus code {
   @apply bg-navy-900 text-violet-300 px-1.5 py-0.5 rounded text-sm font-mono;
 }
 
+.prose-violema pre,
 .prose-nexus pre {
   @apply bg-navy-950 border border-navy-700 rounded-lg p-4 overflow-x-auto my-3;
 }
 
+.prose-violema pre code,
 .prose-nexus pre code {
   @apply bg-transparent text-cyan-300 p-0;
 }
 
+.prose-violema blockquote,
 .prose-nexus blockquote {
   @apply border-l-2 border-violet-500 pl-4 text-slate-400 italic my-3;
 }
 
+.prose-violema a,
 .prose-nexus a {
   @apply text-violet-400 hover:text-violet-300 underline underline-offset-2;
 }
 
+.prose-violema hr,
 .prose-nexus hr {
   @apply border-navy-700 my-4;
 }
 
+.prose-violema table,
 .prose-nexus table {
   @apply w-full border-collapse my-3;
 }
 
+.prose-violema th,
 .prose-nexus th {
   @apply bg-navy-800 text-slate-200 font-semibold px-3 py-2 text-left border border-navy-700;
 }
 
+.prose-violema td,
 .prose-nexus td {
   @apply px-3 py-2 border border-navy-700 text-slate-300;
 }

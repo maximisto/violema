@@ -1,9 +1,9 @@
 module.exports = {
   apps: [
     {
-      name: 'nexus-backend',
+      name: process.env.PM2_APP_NAME || 'violema-backend',
       script: './dist/server.js',
-      cwd: '/var/www/nexus/backend',
+      cwd: process.env.APP_BACKEND_CWD || '/var/www/nexus/backend',
       instances: 1,
       autorestart: true,
       watch: false,
@@ -12,7 +12,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3001,
       },
-      // ANTHROPIC_API_KEY must be in /var/www/nexus/backend/.env
+      // ANTHROPIC_API_KEY must be in the backend .env for the active deploy path
       // PM2 loads dotenv automatically via the backend's own dotenv.config()
       error_file: '/var/log/nexus/err.log',
       out_file: '/var/log/nexus/out.log',

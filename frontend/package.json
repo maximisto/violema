@@ -1,7 +1,7 @@
 {
-  "name": "nexus-frontend",
+  "name": "violema-frontend",
   "version": "1.0.0",
-  "description": "Nexus Frontend",
+  "description": "VIOLEMA frontend",
   "type": "module",
   "scripts": {
     "dev": "vite",

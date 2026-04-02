@@ -1,7 +1,7 @@
 {
-  "name": "nexus",
+  "name": "violema",
   "version": "1.0.0",
-  "description": "Nexus AI Coworker Platform",
+  "description": "VIOLEMA AI coworker platform",
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && npm run dev",

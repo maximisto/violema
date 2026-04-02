@@ -128,12 +128,12 @@ function ProductDemo() {
       text: '@violema pull the MRR from Stripe and compare to last month',
     },
     {
-      role: 'nexus',
+      role: 'violema',
       text: null,
       tool: { name: 'query_data', label: 'Querying Stripe', icon: '📊' },
     },
     {
-      role: 'nexus',
+      role: 'violema',
       text: '**MRR Report — March 2026**\n\n📈 **$127,450** this month (+17.8% vs February)\n\n| Metric | This Month | Last Month |\n|--------|-----------|------------|\n| MRR | $127,450 | $108,230 |\n| New Subs | 47 | 39 |\n| Churn | 3 | 5 |\n| NRR | 118% | 112% |\n\nStrong growth. Churn improved significantly. Want me to send this to #revenue-team?',
     },
     {
@@ -141,7 +141,7 @@ function ProductDemo() {
       text: 'Yes, send to #revenue-team and create a task to review by EOW',
     },
     {
-      role: 'nexus',
+      role: 'violema',
       text: null,
       tools: [
         { name: 'send_message', label: 'Sending to #revenue-team', icon: '📨' },
@@ -149,7 +149,7 @@ function ProductDemo() {
       ],
     },
     {
-      role: 'nexus',
+      role: 'violema',
       text: '✅ Done! I\'ve sent the MRR summary to **#revenue-team** and created task **TASK-4821** "Review Q1 MRR Metrics" assigned to you, due Friday.',
     },
   ];
@@ -231,7 +231,7 @@ function ProductDemo() {
                     ) : (
                       <div className="flex gap-2.5">
                         <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex-shrink-0 flex items-center justify-center">
-                          <span className="text-xs text-white font-bold">N</span>
+                          <span className="text-xs text-white font-bold">V</span>
                         </div>
                         <div className="flex-1">
                           <span className="text-xs text-violet-400 mb-0.5 block font-semibold">Violema</span>
@@ -565,16 +565,16 @@ function Testimonials() {
 // ─── Comparison Table ─────────────────────────────────────────────────────────
 
 const COMPARISON_ROWS = [
-  { feature: 'Actually executes tasks', nexus: true, chatgpt: false, viktor: true, devin: true, note: '' },
-  { feature: 'Reasoning transparency', nexus: true, chatgpt: false, viktor: false, devin: false, note: 'See every thought step' },
-  { feature: 'Autonomy modes (3 levels)', nexus: true, chatgpt: false, viktor: false, devin: false, note: 'Auto / Cautious / Supervised' },
-  { feature: 'Confidence scoring on actions', nexus: true, chatgpt: false, viktor: false, devin: false, note: '' },
-  { feature: 'Proactive anomaly detection', nexus: true, chatgpt: false, viktor: true, devin: false, note: '' },
-  { feature: 'Scheduled automations', nexus: true, chatgpt: false, viktor: true, devin: false, note: '' },
-  { feature: 'Extensible integration layer', nexus: true, chatgpt: false, viktor: true, devin: false, note: 'Core tools first, then custom expansion' },
-  { feature: 'Slack / Teams native', nexus: true, chatgpt: false, viktor: true, devin: false, note: '' },
-  { feature: 'Long-term memory', nexus: true, chatgpt: 'partial', viktor: true, devin: 'partial', note: '' },
-  { feature: 'Built for paid production use', nexus: true, chatgpt: 'partial', viktor: false, devin: false, note: 'Plans + one-time top-ups' },
+  { feature: 'Actually executes tasks', violema: true, chatgpt: false, viktor: true, devin: true, note: '' },
+  { feature: 'Reasoning transparency', violema: true, chatgpt: false, viktor: false, devin: false, note: 'See every thought step' },
+  { feature: 'Autonomy modes (3 levels)', violema: true, chatgpt: false, viktor: false, devin: false, note: 'Auto / Cautious / Supervised' },
+  { feature: 'Confidence scoring on actions', violema: true, chatgpt: false, viktor: false, devin: false, note: '' },
+  { feature: 'Proactive anomaly detection', violema: true, chatgpt: false, viktor: true, devin: false, note: '' },
+  { feature: 'Scheduled automations', violema: true, chatgpt: false, viktor: true, devin: false, note: '' },
+  { feature: 'Extensible integration layer', violema: true, chatgpt: false, viktor: true, devin: false, note: 'Core tools first, then custom expansion' },
+  { feature: 'Slack / Teams native', violema: true, chatgpt: false, viktor: true, devin: false, note: '' },
+  { feature: 'Long-term memory', violema: true, chatgpt: 'partial', viktor: true, devin: 'partial', note: '' },
+  { feature: 'Built for paid production use', violema: true, chatgpt: 'partial', viktor: false, devin: false, note: 'Plans + one-time top-ups' },
 ];
 
 function CompCell({ value }: { value: boolean | string }) {
@@ -673,7 +673,7 @@ function ComparisonTable() {
                     </div>
                   </td>
                   <td className="px-4 py-3.5 bg-violet-950/10">
-                    <CompCell value={row.nexus} />
+                    <CompCell value={row.violema} />
                   </td>
                   <td className="px-4 py-3.5">
                     <CompCell value={row.chatgpt} />
