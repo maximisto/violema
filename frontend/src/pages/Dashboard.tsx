@@ -8,7 +8,7 @@ import {
 import ChatInterface from '../components/ChatInterface';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
-import { getAuthSession, hasSlackConnection } from '../lib/auth';
+import { getAuthSession, hasSlackConnection, isAdminSession } from '../lib/auth';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
 const PO_LOGO = '/po-logo.png';
@@ -1103,13 +1103,14 @@ export default function Dashboard() {
   const [taskPanelLoaded, setTaskPanelLoaded] = useState(false);
   const [taskPanelRefreshing, setTaskPanelRefreshing] = useState(false);
   const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
-  const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | 'delete' | null>(null);
+  const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | 'delete' | 'grant' | null>(null);
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const { snapshot, refresh: refreshCredits } = useCreditSnapshot();
   const authSession = getAuthSession();
+  const canLoadTestCredits = isAdminSession(authSession);
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
 
@@ -1915,6 +1916,38 @@ export default function Dashboard() {
     navigate(`/plans?plan=${nextPlanId}`);
   };
 
+  const grantTestCredits = useCallback(async () => {
+    if (!authSession?.email || !canLoadTestCredits) return;
+
+    setActionBusy('grant');
+    try {
+      const response = await fetch('/api/admin/test-credits', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Workspace-Id': workspace.workspaceId,
+          'X-Workspace-Name': workspace.workspaceName,
+          'X-Admin-Email': authSession.email,
+        },
+        body: JSON.stringify({
+          amount: 5000,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Could not load test credits');
+      }
+
+      await refreshCredits();
+      showNotice('success', 'Loaded 5,000 founder test credits.');
+    } catch (error) {
+      showNotice('error', error instanceof Error ? error.message : 'Could not load test credits');
+    } finally {
+      setActionBusy(null);
+    }
+  }, [authSession?.email, canLoadTestCredits, refreshCredits, showNotice, workspace.workspaceId, workspace.workspaceName]);
+
   const duplicateSelectedAutomation = useCallback(() => {
     if (!selectedTask) return;
     setAutomationEditor({
@@ -2056,6 +2089,26 @@ export default function Dashboard() {
                   </span>
                 </button>
               </div>
+              {canLoadTestCredits ? (
+                <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/8 p-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300/90">Founder testing</p>
+                      <p className="mt-1 text-[11px] leading-snug text-slate-300">
+                        Load a private 5k credit grant for admin-only testing on this workspace.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { void grantTestCredits(); }}
+                      disabled={actionBusy === 'grant'}
+                      className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-2 text-[11px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/16 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {actionBusy === 'grant' ? 'Loading…' : 'Load 5k'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 

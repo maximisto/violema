@@ -1,4 +1,4 @@
-export type AccessRole = 'user' | 'tester' | 'investor';
+export type AccessRole = 'user' | 'tester' | 'investor' | 'admin';
 export type AuthMethod = 'email' | 'google' | 'microsoft';
 
 export interface AuthSession {
@@ -17,6 +17,18 @@ export interface AuthSession {
 
 const SESSION_KEY = 'violema_auth_session';
 const LEGACY_SESSION_KEY = 'nexus_auth_session';
+const ADMIN_EMAILS = new Set([
+  'max@purpleorange.io',
+  'max@violema.com',
+]);
+
+function normalizeEmail(value: string | undefined | null) {
+  return (value || '').trim().toLowerCase();
+}
+
+export function isAdminEmail(email: string | undefined | null) {
+  return ADMIN_EMAILS.has(normalizeEmail(email));
+}
 
 export function getAuthSession(): AuthSession | null {
   try {
@@ -58,4 +70,9 @@ export function hasAcceptedAccess(): boolean {
 export function hasSlackConnection(): boolean {
   const session = getAuthSession();
   return Boolean(session?.slackWorkspace && session?.slackChannelId);
+}
+
+export function isAdminSession(session: AuthSession | null = getAuthSession()): boolean {
+  if (!session) return false;
+  return session.role === 'admin' || isAdminEmail(session.email);
 }

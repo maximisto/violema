@@ -77,6 +77,7 @@ const SLACK_EVENT_CACHE_WINDOW_MS = 5 * 60 * 1000;
 const AUTOMATION_STEP_TIMEOUT_MS = Number(process.env.AUTOMATION_STEP_TIMEOUT_MS || 45000);
 const handledSlackEvents = new Map<string, number>();
 const taskPanelStreamClients = new Map<string, Set<Response>>();
+const DEFAULT_ADMIN_EMAILS = ['max@purpleorange.io', 'max@violema.com'];
 
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
@@ -248,6 +249,38 @@ function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
+}
+
+function normalizeEmail(value: string | undefined | null) {
+  return (value || '').trim().toLowerCase();
+}
+
+function getAdminEmailAllowlist() {
+  const configured = (process.env.ADMIN_EMAILS || process.env.TEST_CREDIT_ADMIN_EMAILS || '')
+    .split(',')
+    .map((item) => normalizeEmail(item))
+    .filter(Boolean);
+
+  return new Set(configured.length > 0 ? configured : DEFAULT_ADMIN_EMAILS);
+}
+
+function resolveAdminEmail(req: Request) {
+  const headerValue = typeof req.header('X-Admin-Email') === 'string' ? req.header('X-Admin-Email') : undefined;
+  const bodyValue =
+    typeof (req.body as Record<string, unknown> | undefined)?.adminEmail === 'string'
+      ? String((req.body as Record<string, unknown>).adminEmail)
+      : undefined;
+  return normalizeEmail(headerValue || bodyValue);
+}
+
+function assertAdminAccess(req: Request) {
+  const adminEmail = resolveAdminEmail(req);
+  if (!adminEmail || !getAdminEmailAllowlist().has(adminEmail)) {
+    const error = new Error('Admin access required');
+    (error as Error & { statusCode?: number }).statusCode = 403;
+    throw error;
+  }
+  return adminEmail;
 }
 
 function verifySlackSignature(rawBody: Buffer, signature: string, timestamp: string) {
@@ -2897,6 +2930,47 @@ app.post('/api/billing/top-up', (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Could not apply top-up' });
+  }
+});
+
+app.post('/api/admin/test-credits', (req: Request, res: Response) => {
+  try {
+    const adminEmail = assertAdminAccess(req);
+    const { workspaceId } = resolveWorkspaceContext(req);
+    const requestedAmount = Number((req.body as Record<string, unknown> | undefined)?.amount);
+    const amount = Number.isFinite(requestedAmount)
+      ? Math.max(100, Math.min(50000, Math.trunc(requestedAmount)))
+      : 5000;
+
+    const entry = addLedgerEntry({
+      workspaceId,
+      source: 'manual_adjustment',
+      deltaCredits: amount,
+      referenceType: 'manual',
+      referenceId: `admin_test_${Date.now()}`,
+      note: `Founder test credit grant by ${adminEmail}`,
+      metadata: {
+        adminEmail,
+        testingOnly: true,
+      },
+    });
+
+    res.json({
+      ok: true,
+      entry,
+      billing: getBillingStatus(workspaceId),
+    });
+  } catch (error) {
+    let statusCode = 400;
+    if (error instanceof Error) {
+      const taggedError = error as Error & { statusCode?: number };
+      if (typeof taggedError.statusCode === 'number') {
+        statusCode = taggedError.statusCode;
+      }
+    }
+    res.status(statusCode).json({
+      error: error instanceof Error ? error.message : 'Could not load test credits',
+    });
   }
 });
 

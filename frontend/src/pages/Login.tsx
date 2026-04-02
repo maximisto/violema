@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, KeyRound, Mail } from 'lucide-react';
-import { getAuthSession, saveAuthSession } from '../lib/auth';
+import { getAuthSession, isAdminEmail, saveAuthSession } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
 
@@ -19,7 +19,7 @@ export default function Login() {
     saveAuthSession({
       email: email.trim(),
       name: name.trim(),
-      role: existing?.role || 'user',
+      role: isAdminEmail(email) ? 'admin' : existing?.role || 'user',
       method: existing?.method || 'email',
       acceptedTerms: true,
       acceptedEducation: true,
