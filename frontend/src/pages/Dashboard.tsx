@@ -170,6 +170,7 @@ interface DashboardTaskItem {
   latestSummary?: string;
   latestArtifacts?: DashboardTaskArtifact[];
   latestStepExecutions?: DashboardTaskStepExecution[];
+  workerTopology?: DashboardWorkerTopology;
   taskUpdatedAt?: string;
   failureReason?: string;
 }
@@ -194,6 +195,26 @@ interface DashboardEvidenceLink {
   href: string;
   label: string;
   source: string;
+}
+
+interface DashboardWorkerCard {
+  role: string;
+  label: string;
+  laneType: 'core' | 'elastic';
+  assignedRole: string;
+  band: string;
+  modelLabel: string;
+  status: 'active' | 'standby';
+  summary: string;
+  reason: string;
+}
+
+interface DashboardWorkerTopology {
+  version: string;
+  primaryRole: string;
+  primaryBand: string;
+  workers: DashboardWorkerCard[];
+  summary?: string;
 }
 
 interface AutomationEditorDraft {
@@ -519,6 +540,54 @@ function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
   return items.filter(Boolean) as DashboardTaskStepExecution[];
 }
 
+function readWorkerTopology(value: unknown): DashboardWorkerTopology | undefined {
+  if (!isRecord(value)) return undefined;
+  const version = readString(value.version);
+  const primaryRole = readString(value.primaryRole);
+  const primaryBand = readString(value.primaryBand);
+  if (!version || !primaryRole || !primaryBand) return undefined;
+
+  const workers = Array.isArray(value.workers)
+    ? value.workers
+        .map((item) => {
+          if (!isRecord(item)) return null;
+          const role = readString(item.role);
+          const label = readString(item.label);
+          const laneType = readString(item.laneType);
+          const assignedRole = readString(item.assignedRole);
+          const band = readString(item.band);
+          const modelLabel = readString(item.modelLabel);
+          const status = readString(item.status);
+          const summary = readString(item.summary);
+          const reason = readString(item.reason);
+          if (
+            !role ||
+            !label ||
+            (laneType !== 'core' && laneType !== 'elastic') ||
+            !assignedRole ||
+            !band ||
+            !modelLabel ||
+            (status !== 'active' && status !== 'standby') ||
+            !summary ||
+            !reason
+          ) {
+            return null;
+          }
+
+          return { role, label, laneType, assignedRole, band, modelLabel, status, summary, reason } as DashboardWorkerCard;
+        })
+        .filter((item): item is DashboardWorkerCard => Boolean(item))
+    : [];
+
+  return {
+    version,
+    primaryRole,
+    primaryBand,
+    workers,
+    summary: readString(value.summary),
+  };
+}
+
 function readPlannedSteps(value: unknown): DashboardTaskStepExecution[] {
   if (!Array.isArray(value)) return [];
 
@@ -550,6 +619,15 @@ function getTaskStepExecutions(task?: PlatformTaskRecord, run?: PlatformTaskRunR
   const plannedRunSteps = readPlannedSteps(run?.metadata?.plannedSteps);
   if (plannedRunSteps.length > 0) return plannedRunSteps;
   return readPlannedSteps(task?.metadata?.plannedSteps);
+}
+
+function getTaskWorkerTopology(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
+  return (
+    readWorkerTopology(run?.metadata?.topology) ||
+    readWorkerTopology(run?.metadata?.workerTopology) ||
+    readWorkerTopology(task?.metadata?.workerTopology) ||
+    readWorkerTopology(isRecord(task?.metadata?.automationPlan) ? task?.metadata?.automationPlan.topology : undefined)
+  );
 }
 
 function getTaskFailureReason(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
@@ -690,6 +768,37 @@ function getTaskRunOutcome(task?: DashboardTaskItem) {
     tone: 'border-violet-500/20 bg-violet-500/10 text-violet-300',
     detail: 'This automation is scheduled but has not finished a run yet.',
   };
+}
+
+function getWorkerLaneTone(status: DashboardWorkerCard['status'], laneType: DashboardWorkerCard['laneType']) {
+  if (status === 'standby') {
+    return 'border-navy-700/70 bg-navy-950/30 text-slate-400';
+  }
+  if (laneType === 'elastic') {
+    return 'border-cyan-500/16 bg-cyan-500/8 text-cyan-100';
+  }
+  return 'border-violet-500/16 bg-violet-500/8 text-violet-100';
+}
+
+function summarizeWorkerLanes(task?: DashboardTaskItem) {
+  if (!task) {
+    return { manager: null as DashboardWorkerCard | null, core: [] as DashboardWorkerCard[], elastic: [] as DashboardWorkerCard[], totalActiveLanes: 0, summary: '' };
+  }
+
+  if (task.workerTopology?.workers?.length) {
+    const workers = task.workerTopology.workers;
+    const manager = workers.find((worker) => worker.role === 'nexus') || null;
+    const activeWorkers = workers.filter((worker) => worker.status === 'active').length;
+    return {
+      manager,
+      core: workers.filter((worker) => worker.laneType === 'core' && worker.role !== 'nexus'),
+      elastic: workers.filter((worker) => worker.laneType === 'elastic'),
+      totalActiveLanes: activeWorkers,
+      summary: task.workerTopology.summary || '',
+    };
+  }
+
+  return { manager: null as DashboardWorkerCard | null, core: [] as DashboardWorkerCard[], elastic: [] as DashboardWorkerCard[], totalActiveLanes: 0, summary: '' };
 }
 
 function inferConversationTags(conversation: Conversation) {
@@ -940,6 +1049,7 @@ export default function Dashboard() {
           latestSummary: getTaskMetadataSummary(task, latestRun),
           latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
           latestStepExecutions: getTaskStepExecutions(task, latestRun),
+          workerTopology: getTaskWorkerTopology(task, latestRun),
           failureReason: getTaskFailureReason(task, latestRun),
           taskUpdatedAt: task.updatedAt,
         };
@@ -982,6 +1092,7 @@ export default function Dashboard() {
           latestSummary: getTaskMetadataSummary(task, latestRun),
           latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
           latestStepExecutions: getTaskStepExecutions(task, latestRun),
+          workerTopology: getTaskWorkerTopology(task, latestRun),
           failureReason: getTaskFailureReason(task, latestRun),
           taskUpdatedAt: task?.updatedAt,
         };
@@ -1396,6 +1507,7 @@ export default function Dashboard() {
   const selectedTaskSummary = useMemo(() => formatSummaryPreview(selectedTask?.latestSummary, 360), [selectedTask?.latestSummary]);
   const selectedTaskEvidenceLinks = useMemo(() => extractEvidenceLinks(selectedTask?.latestArtifacts), [selectedTask?.latestArtifacts]);
   const selectedTaskStepExecutions = useMemo(() => selectedTask?.latestStepExecutions || [], [selectedTask?.latestStepExecutions]);
+  const selectedTaskWorkerView = useMemo(() => summarizeWorkerLanes(selectedTask), [selectedTask]);
   const lowCreditRunway = snapshot.projectedDaysLeft <= 7;
   const automationActionCount = useMemo(() => {
     if (!automationEditor) return 0;
@@ -2314,6 +2426,94 @@ export default function Dashboard() {
                       <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Worker view</p>
+                            <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                              {selectedTaskWorkerView.summary || (
+                                selectedTaskWorkerView.manager
+                                  ? 'The manager owns orchestration. Core workers stay resident and elastic lanes open only when the run needs more depth or throughput.'
+                                  : 'Worker topology appears here once the run captures orchestrated assignments.'
+                              )}
+                            </p>
+                          </div>
+                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                            {selectedTaskWorkerView.totalActiveLanes} active lanes
+                          </span>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {selectedTaskWorkerView.manager ? (
+                            <div className={`rounded-xl border px-3 py-2.5 ${getWorkerLaneTone(selectedTaskWorkerView.manager.status, selectedTaskWorkerView.manager.laneType)}`}>
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-[11px] font-medium text-inherit">{selectedTaskWorkerView.manager.label}</p>
+                                  <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                                    {selectedTaskWorkerView.manager.assignedRole} · {selectedTaskWorkerView.manager.band} band
+                                  </p>
+                                </div>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                                  {selectedTaskWorkerView.manager.status}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{selectedTaskWorkerView.manager.reason}</p>
+                              <p className="mt-1 text-[10px] text-slate-500">{selectedTaskWorkerView.manager.modelLabel}</p>
+                            </div>
+                          ) : null}
+                          {selectedTaskWorkerView.core.length > 0 ? (
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Core team</p>
+                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                {selectedTaskWorkerView.core.map((lane) => (
+                                <div key={lane.role} className={`rounded-xl border px-3 py-2.5 ${getWorkerLaneTone(lane.status, lane.laneType)}`}>
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <p className="truncate text-[11px] font-medium text-inherit">{lane.label}</p>
+                                      <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                                        {lane.assignedRole} · {lane.band} band
+                                      </p>
+                                    </div>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                                      {lane.status}
+                                    </span>
+                                  </div>
+                                  <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{lane.summary}</p>
+                                  <p className="mt-1 text-[10px] text-slate-500">{lane.modelLabel}</p>
+                                </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {selectedTaskWorkerView.elastic.length > 0 ? (
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Elastic lanes</p>
+                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                {selectedTaskWorkerView.elastic.map((lane) => (
+                                  <div key={lane.role} className={`rounded-xl border px-3 py-2.5 ${getWorkerLaneTone(lane.status, lane.laneType)}`}>
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-[11px] font-medium text-inherit">{lane.label}</p>
+                                        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                                          {lane.assignedRole} · {lane.band} band
+                                        </p>
+                                      </div>
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                                        {lane.status}
+                                      </span>
+                                    </div>
+                                    <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{lane.reason}</p>
+                                    <p className="mt-1 text-[10px] text-slate-500">{lane.modelLabel}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : !selectedTaskWorkerView.manager ? (
+                            <div className="rounded-xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-2.5 text-[11px] leading-relaxed text-slate-500">
+                              This run has not recorded worker topology yet. It will appear once the workflow stores manager, core, and elastic-lane assignments.
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Latest result</p>
                             <p className="mt-1 text-[11px] text-slate-500">
                               {selectedTask.lastRunAt
@@ -2342,9 +2542,9 @@ export default function Dashboard() {
                         )}
                         {selectedTaskStepExecutions.length > 0 ? (
                           <div className="mt-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Execution plan</p>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Recent handoffs</p>
                             <div className="mt-2 space-y-2">
-                              {selectedTaskStepExecutions.map((step, index) => {
+                              {selectedTaskStepExecutions.slice(0, 4).map((step, index) => {
                                 const tone =
                                   step.status === 'failed'
                                     ? 'border-red-500/16 bg-red-500/8 text-red-200'
@@ -2377,6 +2577,11 @@ export default function Dashboard() {
                                 );
                               })}
                             </div>
+                            {selectedTaskStepExecutions.length > 4 ? (
+                              <p className="mt-2 text-[10px] text-slate-600">
+                                Showing the latest 4 handoffs. The worker view above keeps the full lane picture readable.
+                              </p>
+                            ) : null}
                           </div>
                         ) : null}
                         {selectedTaskEvidenceLinks.length > 0 ? (

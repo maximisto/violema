@@ -59,7 +59,7 @@ const FEATURES = [
   {
     icon: Brain,
     title: 'Long-term Memory',
-    description: 'Violema keeps thread context, workspace memory, and handoff state organized so specialist workers can stay focused without wasting tokens.',
+    description: 'Violema keeps thread context, workspace memory, and handoff state organized so six resident specialists and four elastic lanes can stay aligned without wasting tokens.',
     color: 'cyan',
     gradient: 'from-cyan-500/20 to-teal-600/5',
     border: 'border-cyan-800/40',
@@ -142,6 +142,9 @@ export default function Features() {
             </h2>
             <p className="text-xl text-slate-400 max-w-2xl mx-auto">
               Most AI tools tell you how to do things. Violema just does them.
+            </p>
+            <p className="mt-4 text-sm text-slate-500 max-w-3xl mx-auto">
+              The runtime is manager-led: one orchestration lane routes typed steps into six resident specialists for research, analysis, build work, operations, review, and coordination. Four elastic lanes open only when a run needs more reasoning depth, burst throughput, or tighter memory control.
             </p>
           </div>
 

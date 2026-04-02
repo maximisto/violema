@@ -1301,9 +1301,9 @@ export default function ChatInterface({
                   <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-300">
                     Your AI coworker, tuned for{' '}
                     <span className={`font-semibold ${modeConfig.color}`}>{modeLabel.toLowerCase()}</span>
-                    {' '}work. Violema coordinates specialist agents behind the scenes and opens temporary worker lanes when a task benefits from parallel execution, tighter context grouping, or lower token waste.
+                    {' '}work. Violema manages six resident specialists by default, then opens up to four elastic worker lanes when a run needs harder reasoning, cleaner context grouping, or better token efficiency.
                   </p>
-                  <p className="mt-2 max-w-xl text-sm text-slate-500">{modeConfig.description}. Switch modes in the sidebar and let the manager route the right workers into the job.</p>
+                  <p className="mt-2 max-w-xl text-sm text-slate-500">{modeConfig.description}. Switch modes in the sidebar and let the manager decide when to keep work lean versus when to open more lanes.</p>
 
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
                     <span className="ui-pill">Research</span>
