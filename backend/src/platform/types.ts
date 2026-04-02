@@ -10,7 +10,19 @@ export type CreditSource =
 
 export type CreditDirection = 'grant' | 'debit';
 export type ModelTier = 'micro' | 'default' | 'hard' | 'critical' | 'ops';
-export type AgentRole = 'nexus' | 'researcher' | 'operator' | 'engineer' | 'reviewer' | 'analyst' | 'scheduler' | 'writer';
+export type IntelligenceBand = 'micro' | 'default' | 'hard' | 'critical';
+export type WorkerLaneType = 'core' | 'elastic';
+export type AgentRole =
+  | 'nexus'
+  | 'researcher'
+  | 'operator'
+  | 'engineer'
+  | 'reviewer'
+  | 'analyst'
+  | 'scheduler'
+  | 'writer'
+  | 'messenger'
+  | 'monitor';
 export type TaskKind = 'chat' | 'research' | 'analysis' | 'engineering' | 'automation' | 'message' | 'report' | 'review' | 'scheduling';
 export type TaskStatus = 'queued' | 'running' | 'waiting_review' | 'blocked' | 'completed' | 'failed' | 'canceled';
 export type TaskRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'retrying';
@@ -105,6 +117,39 @@ export interface TaskDelegationPlan {
   steps: TaskDelegationStep[];
 }
 
+export interface WorkerDefinition {
+  role: AgentRole;
+  label: string;
+  laneType: WorkerLaneType;
+  preferredBand: IntelligenceBand;
+  fallbackBands: IntelligenceBand[];
+  summary: string;
+}
+
+export interface WorkerSnapshotCard {
+  role: AgentRole;
+  label: string;
+  laneType: WorkerLaneType;
+  assignedRole: AgentRole;
+  band: IntelligenceBand;
+  modelLabel: string;
+  status: 'active' | 'standby';
+  summary: string;
+  reason: string;
+}
+
+export interface WorkerTopologySnapshot {
+  version: 'violema-10';
+  primaryRole: AgentRole;
+  primaryBand: IntelligenceBand;
+  coreWorkers: AgentRole[];
+  elasticLanes: AgentRole[];
+  activeRoles: AgentRole[];
+  bandByRole: Partial<Record<AgentRole, IntelligenceBand>>;
+  workers: WorkerSnapshotCard[];
+  summary: string;
+}
+
 export type AutomationStepKind = 'search' | 'query' | 'summarize' | 'deliver' | 'capture' | 'analyze' | 'note';
 export type AutomationStepStatus = 'planned' | 'running' | 'succeeded' | 'failed' | 'skipped';
 
@@ -156,17 +201,22 @@ export interface AutomationRolePlan {
   primaryRole: AgentRole;
   supportingRoles: AgentRole[];
   rationale: string;
+  elasticLanes?: AgentRole[];
+  primaryBand?: IntelligenceBand;
 }
 
 export interface AutomationExecutionPlan {
   primaryRole: AgentRole;
   supportingRoles: AgentRole[];
   rationale: string;
+  elasticLanes?: AgentRole[];
+  primaryBand?: IntelligenceBand;
   suggestedModelTier: ModelTier;
   complexity: 'low' | 'medium' | 'high';
   estimatedToolCalls: number;
   estimatedCredits: number;
   steps: AutomationStepDefinition[];
+  topology: WorkerTopologySnapshot;
 }
 
 export interface TaskRunRecord {
@@ -215,6 +265,8 @@ export interface TaskOwnershipMetadata {
   requiresReview: boolean;
   reason: string;
   confidence: 'low' | 'medium' | 'high';
+  elasticLanes?: AgentRole[];
+  primaryBand?: IntelligenceBand;
 }
 
 export interface WorkspaceProfile {

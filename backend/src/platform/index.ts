@@ -6,6 +6,7 @@ export * from './ledger';
 export * from './referrals';
 export * from './stripe';
 export * from './store';
+export * from './topology';
 export * from './types';
 export * from './usage';
 export * from './workspace';

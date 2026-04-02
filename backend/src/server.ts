@@ -20,6 +20,7 @@ import {
   type PersistedAutomationStep,
   buildCreditSnapshot,
   buildDelegationRuntimeContext,
+  buildWorkerTopologySnapshot,
   createTask,
   createTaskRun,
   DEFAULT_WORKSPACE_ID,
@@ -41,6 +42,7 @@ import {
   recordReferralEvent,
   summarizeReferralRewards,
   mapTaskRunToStatus,
+  isElasticLane,
   updateTask,
   updateTaskRun,
   upsertBillingConfig,
@@ -1498,7 +1500,7 @@ function createAutomationStepDefinition(
       kind: 'deliver',
       title: action,
       objective: `Deliver the latest automation result for "${action}".`,
-      assignedRole: 'operator',
+      assignedRole: 'messenger',
       modelTier: 'micro',
       estimatedCredits: estimateAutomationStepCredits('deliver', 'micro', { toolCalls: 1 }),
       toolName: 'send_message',
@@ -1625,7 +1627,7 @@ function createAutomationStepDefinitionFromPersisted(
       kind: 'deliver',
       title,
       objective,
-      assignedRole: 'operator',
+      assignedRole: 'messenger',
       modelTier: 'micro',
       estimatedCredits: estimateAutomationStepCredits('deliver', 'micro', { toolCalls: 1 }),
       toolName: 'send_message',
@@ -1705,17 +1707,25 @@ function deriveAutomationRolePlan(steps: AutomationStepDefinition[]): Automation
     roleCounts.set(step.assignedRole, (roleCounts.get(step.assignedRole) || 0) + 1);
   });
 
-  const primaryRole = steps
+  const primaryCandidates = steps
     .map((step) => step.assignedRole)
-    .sort((left, right) => (roleCounts.get(right) || 0) - (roleCounts.get(left) || 0))[0] || 'scheduler';
-  const supportingRoles = [...new Set(steps.map((step) => step.assignedRole).filter((role) => role !== primaryRole))];
+    .filter((role) => !isElasticLane(role));
+  const primaryRole = primaryCandidates
+    .sort((left, right) => (roleCounts.get(right) || 0) - (roleCounts.get(left) || 0))[0] || 'operator';
+  const supportingRoles = [...new Set(
+    steps
+      .map((step) => step.assignedRole)
+      .filter((role) => role !== primaryRole && !isElasticLane(role))
+  )];
+  const elasticLanes = [...new Set(steps.map((step) => step.assignedRole).filter((role) => isElasticLane(role)))];
 
   return {
     primaryRole,
     supportingRoles,
+    elasticLanes,
     rationale: supportingRoles.length > 0
-      ? `${primaryRole} leads the workflow while specialist workers handle evidence, synthesis, or delivery.`
-      : `${primaryRole} can handle the workflow directly without extra handoffs.`,
+      ? `${primaryRole} leads the workflow while core specialists support the run and elastic lanes absorb delivery or cadence work.`
+      : `${primaryRole} can handle the workflow directly while elastic lanes remain available only if needed.`,
   };
 }
 
@@ -1805,7 +1815,7 @@ function ensureAutomationDeliveryStep(
     kind: 'deliver',
     title: 'Deliver latest result',
     objective: 'Send the latest automation result to the configured destination.',
-    assignedRole: 'operator',
+    assignedRole: 'messenger',
     modelTier: 'micro',
     estimatedCredits: estimateAutomationStepCredits('deliver', 'micro', { toolCalls: 1 }),
     toolName: 'send_message',
@@ -1838,9 +1848,18 @@ function buildAutomationExecutionPlan(automation: {
   const complexity = inferAutomationComplexityFromPlan(steps);
   const suggestedModelTier = inferAutomationModelTierFromPlan(automation, steps);
   const estimatedToolCalls = estimateAutomationToolCallCount(steps);
+  const topology = buildWorkerTopologySnapshot({
+    primaryRole: rolePlan.primaryRole,
+    supportingRoles: rolePlan.supportingRoles,
+    elasticLanes: rolePlan.elasticLanes,
+    modelTier: suggestedModelTier,
+    complexity,
+    taskKind: 'automation',
+  });
 
   return {
     ...rolePlan,
+    primaryBand: topology.primaryBand,
     suggestedModelTier,
     complexity,
     estimatedToolCalls,
@@ -1852,6 +1871,7 @@ function buildAutomationExecutionPlan(automation: {
       complexity,
     }).estimatedCredits,
     steps,
+    topology,
   };
 }
 
@@ -2194,7 +2214,10 @@ async function runAutomation(automation: {
         primaryRole: executionPlan.primaryRole,
         supportingRoles: executionPlan.supportingRoles,
         rationale: executionPlan.rationale,
+        elasticLanes: executionPlan.elasticLanes,
+        primaryBand: executionPlan.primaryBand,
       },
+      workerTopology: executionPlan.topology,
     },
   });
   const estimate = estimateCreditCost({
@@ -2224,7 +2247,10 @@ async function runAutomation(automation: {
         primaryRole: executionPlan.primaryRole,
         supportingRoles: executionPlan.supportingRoles,
         rationale: executionPlan.rationale,
+        elasticLanes: executionPlan.elasticLanes,
+        primaryBand: executionPlan.primaryBand,
       },
+      workerTopology: executionPlan.topology,
     },
   });
 
@@ -2258,7 +2284,10 @@ async function runAutomation(automation: {
             primaryRole: executionPlan.primaryRole,
             supportingRoles: executionPlan.supportingRoles,
             rationale: executionPlan.rationale,
+            elasticLanes: executionPlan.elasticLanes,
+            primaryBand: executionPlan.primaryBand,
           },
+          workerTopology: executionPlan.topology,
         },
       });
 
@@ -2279,7 +2308,10 @@ async function runAutomation(automation: {
             primaryRole: executionPlan.primaryRole,
             supportingRoles: executionPlan.supportingRoles,
             rationale: executionPlan.rationale,
+            elasticLanes: executionPlan.elasticLanes,
+            primaryBand: executionPlan.primaryBand,
           },
+          workerTopology: executionPlan.topology,
           deliveryError: progress.deliveryError,
         },
       });
@@ -2324,7 +2356,10 @@ async function runAutomation(automation: {
           primaryRole: execution.plan.primaryRole,
           supportingRoles: execution.plan.supportingRoles,
           rationale: execution.plan.rationale,
+          elasticLanes: execution.plan.elasticLanes,
+          primaryBand: execution.plan.primaryBand,
         },
+        workerTopology: execution.plan.topology,
         delivery: execution.delivery,
         deliveryError: execution.deliveryError,
       },
@@ -2346,7 +2381,10 @@ async function runAutomation(automation: {
           primaryRole: execution.plan.primaryRole,
           supportingRoles: execution.plan.supportingRoles,
           rationale: execution.plan.rationale,
+          elasticLanes: execution.plan.elasticLanes,
+          primaryBand: execution.plan.primaryBand,
         },
+        workerTopology: execution.plan.topology,
         deliveryError: execution.deliveryError,
       },
     });
@@ -2383,6 +2421,14 @@ async function runAutomation(automation: {
         summary: failureSummary,
         plannedSteps: executionPlan.steps,
         stepExecutions: [],
+        rolePlan: {
+          primaryRole: executionPlan.primaryRole,
+          supportingRoles: executionPlan.supportingRoles,
+          rationale: executionPlan.rationale,
+          elasticLanes: executionPlan.elasticLanes,
+          primaryBand: executionPlan.primaryBand,
+        },
+        workerTopology: executionPlan.topology,
         sourceSteps: automation.steps,
         artifacts: [
           {
@@ -2408,6 +2454,14 @@ async function runAutomation(automation: {
         latestStepExecutions: [],
         automationPlan: executionPlan,
         plannedSteps: executionPlan.steps,
+        rolePlan: {
+          primaryRole: executionPlan.primaryRole,
+          supportingRoles: executionPlan.supportingRoles,
+          rationale: executionPlan.rationale,
+          elasticLanes: executionPlan.elasticLanes,
+          primaryBand: executionPlan.primaryBand,
+        },
+        workerTopology: executionPlan.topology,
         latestArtifacts: [
           {
             kind: 'note',

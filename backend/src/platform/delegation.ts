@@ -1,12 +1,14 @@
 import type {
   AgentRole,
   DelegationPlan,
+  IntelligenceBand,
   ModelTier,
   TaskDelegationPlan,
   TaskDelegationStep,
   TaskKind,
   TaskOwnershipMetadata,
 } from './types';
+import { buildWorkerTopologySnapshot, isElasticLane, selectPrimaryWorkerRole } from './topology';
 
 function step(role: AgentRole, objective: string): TaskDelegationStep {
   return {
@@ -22,15 +24,7 @@ export function selectPrimaryRole(input: {
   modelTier: ModelTier;
   userText: string;
 }): AgentRole {
-  const text = input.userText.toLowerCase();
-
-  if (input.taskKind === 'automation' || /schedule|monitor|watch|cron|automation/.test(text)) return 'scheduler';
-  if (input.taskKind === 'engineering' || /bug|code|build|deploy|typescript|react|api|server/.test(text)) return 'engineer';
-  if (input.taskKind === 'analysis' || /analy[sz]e|compare|market|research|investigate/.test(text)) return 'researcher';
-  if (/review|check|verify|audit/.test(text) || input.modelTier === 'critical') return 'reviewer';
-  if (/write|draft|memo|report|summary/.test(text)) return 'writer';
-  if (input.modelTier === 'ops') return 'operator';
-  return 'nexus';
+  return selectPrimaryWorkerRole(input);
 }
 
 export function buildDelegationPlan(input: {
@@ -52,6 +46,15 @@ export function buildDelegationPlan(input: {
         steps.push(step('reviewer', 'Stress-test claims and identify gaps or risks.'));
       }
       break;
+    case 'analyst':
+      steps.push(step('analyst', 'Interpret the evidence and determine the actionable conclusion.'));
+      supportingRoles.add('writer');
+      steps.push(step('writer', 'Package the analysis into a concise deliverable.'));
+      if (input.modelTier === 'hard' || input.modelTier === 'critical') {
+        supportingRoles.add('reviewer');
+        steps.push(step('reviewer', 'Check the reasoning, risks, and final recommendations.'));
+      }
+      break;
     case 'engineer':
       steps.push(step('engineer', 'Implement the requested technical change.'));
       if (input.modelTier !== 'micro') {
@@ -59,19 +62,41 @@ export function buildDelegationPlan(input: {
         steps.push(step('reviewer', 'Validate behavior, regressions, and test coverage.'));
       }
       break;
-    case 'scheduler':
-      steps.push(step('scheduler', 'Translate the request into a reliable recurring workflow.'));
-      supportingRoles.add('operator');
-      steps.push(step('operator', 'Prepare integrations and notifications for the run.'));
-      break;
     case 'reviewer':
       steps.push(step('reviewer', 'Evaluate the output for correctness and risk.'));
       break;
+    case 'operator':
+      steps.push(step('operator', 'Coordinate the workflow, tools, and external actions.'));
+      supportingRoles.add('scheduler');
+      steps.push(step('scheduler', 'Handle timing, cadence, and recurring execution glue.'));
+      if (input.taskKind === 'automation' || /monitor|watch|cron|automation/.test(input.userText.toLowerCase())) {
+        supportingRoles.add('monitor');
+        steps.push(step('monitor', 'Watch recurring inputs and trigger conditions.'));
+      }
+      if (input.taskKind === 'message' || /slack|email|deliver|notify|reply/.test(input.userText.toLowerCase())) {
+        supportingRoles.add('messenger');
+        steps.push(step('messenger', 'Handle outbound delivery into external destinations.'));
+      }
+      break;
     case 'writer':
       steps.push(step('writer', 'Draft the deliverable clearly and efficiently.'));
+      if (input.modelTier === 'hard' || input.modelTier === 'critical') {
+        supportingRoles.add('reviewer');
+        steps.push(step('reviewer', 'Check the final language for accuracy and risk.'));
+      }
       break;
-    case 'operator':
-      steps.push(step('operator', 'Coordinate integrations, actions, and output delivery.'));
+    case 'scheduler':
+      steps.push(step('scheduler', 'Translate the request into a reliable recurring workflow.'));
+      supportingRoles.add('monitor');
+      steps.push(step('monitor', 'Watch the recurring inputs and trigger conditions.'));
+      supportingRoles.add('messenger');
+      steps.push(step('messenger', 'Handle output delivery when a run completes.'));
+      break;
+    case 'messenger':
+      steps.push(step('messenger', 'Deliver the response through the requested communication channel.'));
+      break;
+    case 'monitor':
+      steps.push(step('monitor', 'Observe the recurring source signals and flag meaningful changes.'));
       break;
     default:
       steps.push(step('nexus', 'Handle the request directly while coordinating tools as needed.'));
@@ -165,12 +190,22 @@ export function buildDelegationRuntimeContext(input: {
       ? 'reviewer'
       : undefined;
   const supportingRoles = [...new Set(taskPlan.supportingRoles.filter((role) => role !== reviewerRole))];
+  const elasticLanes = [...new Set([executorRole, ...supportingRoles].filter((role) => isElasticLane(role)))];
   const suggestedModelTier =
     input.taskKind === 'engineering' && input.modelTier === 'micro'
       ? 'default'
       : input.complexity === 'high' && input.modelTier === 'micro'
         ? 'default'
         : input.modelTier;
+  const topology = buildWorkerTopologySnapshot({
+    primaryRole: executorRole,
+    supportingRoles,
+    elasticLanes,
+    modelTier: suggestedModelTier,
+    complexity: input.complexity,
+    taskKind: input.taskKind,
+  });
+  const primaryBand = topology.primaryBand as IntelligenceBand;
 
   const plan: DelegationPlan = {
     id: `delegation_${input.workspaceId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -198,6 +233,7 @@ export function buildDelegationRuntimeContext(input: {
       toolCountHint: input.toolCountHint || 0,
       complexity: input.complexity || 'low',
       steps: taskPlan.steps,
+      topology,
     },
   };
 
@@ -211,6 +247,8 @@ export function buildDelegationRuntimeContext(input: {
     requiresReview: plan.requiresReview,
     reason: plan.reason,
     confidence: plan.confidence,
+    elasticLanes,
+    primaryBand,
   };
 
   return {
