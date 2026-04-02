@@ -19,7 +19,7 @@ const FEATURES = [
   {
     icon: ListTodo,
     title: 'Task Execution',
-    description: 'Give Violema a goal and it executes autonomously — breaking it into steps, using tools, and reporting back.',
+    description: 'Give Violema a goal and it gets the work done — breaking it into steps, using tools, and reporting back clearly.',
     color: 'violet',
     gradient: 'from-violet-500/20 to-violet-600/5',
     border: 'border-violet-800/40',
@@ -51,7 +51,7 @@ const FEATURES = [
   {
     icon: Plug,
     title: 'Core Integrations',
-    description: 'Start with the systems that matter most first. Violema is designed to work across your stack and expand through additional connectors over time.',
+    description: 'Start with the systems that matter most first. Violema executes across your stack and expands through additional connectors over time.',
     color: 'violet',
     gradient: 'from-violet-500/20 to-pink-600/5',
     border: 'border-violet-800/40',
@@ -59,7 +59,7 @@ const FEATURES = [
   {
     icon: Brain,
     title: 'Long-term Memory',
-    description: 'Violema keeps thread context, workspace memory, and handoff state organized so six resident specialists and four elastic lanes can stay aligned without wasting tokens.',
+    description: 'Violema keeps thread context, workspace memory, and handoff state organized so the team of specialists stays aligned without wasting tokens.',
     color: 'cyan',
     gradient: 'from-cyan-500/20 to-teal-600/5',
     border: 'border-cyan-800/40',
@@ -137,11 +137,11 @@ export default function Features() {
               <span className="text-violet-400 text-sm font-medium">Capabilities</span>
             </div>
             <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4">
-              Violema executes.{' '}
+              Violema gets the work done.{' '}
               <span className="gradient-text">Not just answers.</span>
             </h2>
             <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-              Most AI tools tell you how to do things. Violema just does them.
+              Most AI tools stop at advice. Violema handles research, execution, and automation with humans kept in the loop.
             </p>
             <p className="mt-4 text-sm text-slate-500 max-w-3xl mx-auto">
               The runtime is manager-led: one orchestration lane routes typed steps into six resident specialists for research, analysis, build work, operations, review, and coordination. Four elastic lanes open only when a run needs more reasoning depth, burst throughput, or tighter memory control.

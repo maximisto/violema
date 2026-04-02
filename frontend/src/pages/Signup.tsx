@@ -43,17 +43,17 @@ const EDUCATION_CARDS = [
   {
     icon: Slack,
     title: 'Works where teams already are',
-    body: 'Run Violema from Slack or the web app. Slack is the team-facing layer. The web app is the full workspace.',
+    body: 'Run Violema from Slack or the web app. Slack is the team-facing layer. The web app is the full control surface.',
   },
   {
     icon: Eye,
-    title: 'Choose the right autonomy level',
-    body: 'Go autonomous for routine execution, cautious for explained actions, or supervised when you want full reasoning visible.',
+    title: 'Humans stay in the loop',
+    body: 'Choose the right autonomy level for the job. Violema can move fast, but approvals and reasoning visibility stay available when they matter.',
   },
   {
     icon: MonitorSmartphone,
-    title: 'Credits map to real execution',
-    body: 'Plans set your monthly runway. Top-ups are one-time add-ons when you want more research, automations, or delegated work.',
+    title: 'Built for real execution',
+    body: 'One manager coordinates a team of specialists to handle research, execution, and automation without wasting context or tokens.',
   },
 ];
 
@@ -106,7 +106,7 @@ export default function Signup() {
               <span className="gradient-text"> you enter the workspace.</span>
             </h1>
             <p className="mt-4 max-w-xl text-lg leading-relaxed text-slate-400">
-              Violema is not a toy chat box. It can message teams, run automations, and move across your stack. We set expectations, permissions, and billing before people touch the product.
+              Violema doesn’t just answer. It gets the work done. We set expectations, permissions, and billing first because this product can research, execute, automate, and communicate across your stack.
             </p>
 
             <div className="mt-8 grid gap-4">
@@ -136,6 +136,9 @@ export default function Signup() {
                   </div>
                 ))}
               </div>
+              <p className="mt-3 text-xs leading-relaxed text-slate-500">
+                One manager leads six resident specialists and opens four elastic lanes only when the run justifies it.
+              </p>
             </div>
           </div>
 

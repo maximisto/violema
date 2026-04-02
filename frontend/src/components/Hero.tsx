@@ -155,13 +155,19 @@ export default function Hero() {
             </h1>
 
             {/* Sub */}
-            <p className="text-lg sm:text-xl text-slate-400 mb-10 max-w-xl leading-relaxed">
-              Violema handles research, execution, and automation through one manager, six resident specialists, and four elastic worker lanes that spin up only when the job needs more depth, parallel throughput, or tighter memory control.
+            <p className="text-lg sm:text-xl text-slate-400 mb-10 max-w-2xl leading-relaxed">
+              Violema doesn’t just answer. It gets the work done.
+              <br />
+              Research, execution, and automation, coordinated by a manager agent leading a team of specialists.
             </p>
 
             {/* Social proof bullets */}
             <div className="flex flex-col sm:flex-row gap-3 mb-10">
-              {['6 resident specialists', '4 elastic worker lanes', 'Budget-aware orchestration'].map((item) => (
+              {[
+                'Executes across your stack',
+                'Automates research and follow-through',
+                'Keeps humans in the loop',
+              ].map((item) => (
                 <div key={item} className="flex items-center gap-2 text-sm text-slate-400">
                   <CheckCircle2 className="w-4 h-4 text-violet-400 flex-shrink-0" />
                   <span>{item}</span>
@@ -188,7 +194,7 @@ export default function Hero() {
 
             {/* Trust */}
             <p className="mt-6 text-sm text-slate-500">
-              One manager • Six resident specialists • Four elastic lanes only when the run justifies them
+              One manager • Six resident specialists • Four elastic lanes, activated only when the run justifies it
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">

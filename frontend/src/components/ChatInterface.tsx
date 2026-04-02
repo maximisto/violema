@@ -1299,27 +1299,28 @@ export default function ChatInterface({
                     Your AI coworker
                   </p>
                   <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-300">
-                    Your AI coworker, tuned for{' '}
-                    <span className={`font-semibold ${modeConfig.color}`}>{modeLabel.toLowerCase()}</span>
-                    {' '}work. Violema manages six resident specialists by default, then opens up to four elastic worker lanes when a run needs harder reasoning, cleaner context grouping, or better token efficiency.
+                    Violema doesn’t just answer. It gets the work done.
+                    <br />
+                    Research, execution, and automation, coordinated by a manager agent leading a team of specialists.
                   </p>
-                  <p className="mt-2 max-w-xl text-sm text-slate-500">{modeConfig.description}. Switch modes in the sidebar and let the manager decide when to keep work lean versus when to open more lanes.</p>
+                  <p className="mt-2 max-w-xl text-sm text-slate-500">
+                    {modeConfig.description}. The manager keeps six resident specialists ready and opens up to four elastic lanes only when the run needs more depth, cleaner context grouping, or tighter token control.
+                  </p>
 
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
-                    <span className="ui-pill">Research</span>
-                    <span className="ui-pill">Automate</span>
-                    <span className="ui-pill">Inspect</span>
-                    <span className="ui-pill">Draft</span>
+                    <span className="ui-pill">Executes across your stack</span>
+                    <span className="ui-pill">Automates follow-through</span>
+                    <span className="ui-pill">Keeps humans in the loop</span>
                   </div>
 
                   <div className="mt-6 grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="ui-panel p-4 text-left shadow-none">
                       <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/70">Start here</p>
-                      <p className="mt-1 text-sm font-medium text-white">Ask for a search, a summary, or a plan.</p>
+                      <p className="mt-1 text-sm font-medium text-white">Ask for a search, an execution task, or an automation.</p>
                     </div>
                     <div className="ui-panel p-4 text-left shadow-none">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">System state</p>
-                      <p className="mt-1 text-sm font-medium text-white">Mode, credits, and automation gate are visible above.</p>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">Runtime model</p>
+                      <p className="mt-1 text-sm font-medium text-white">One manager, six resident specialists, and four elastic lanes when justified.</p>
                     </div>
                   </div>
                 </div>

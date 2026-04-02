@@ -90,7 +90,7 @@ function LiveActivity() {
               <span className="gradient-text">while you sleep</span>
             </h2>
             <p className="text-xl text-slate-400 mb-8 leading-relaxed">
-              High-leverage teams are already putting Violema to work — pulling reports, triaging issues, sending updates, and closing the loop on tasks you'd otherwise forget.
+              Violema doesn’t just answer. It gets the work done — pulling reports, triaging issues, sending updates, and closing the loop on follow-through your team would otherwise miss.
             </p>
             <div className="grid grid-cols-2 gap-4">
               {[
@@ -170,15 +170,15 @@ function ProductDemo() {
               <span className="gradient-text">done in seconds</span>
             </h2>
             <p className="text-xl text-slate-400 mb-8 leading-relaxed">
-              Watch Violema pull Stripe data, analyze it, message your team, and create follow-up tasks — all from a single Slack message.
+              Watch Violema pull Stripe data, analyze it, message your team, and create follow-up tasks — all coordinated by a manager leading a team of specialists.
             </p>
 
             <div className="space-y-4 mb-10">
               {[
-                { icon: BarChart3, text: 'Pulls live data from your connected tools' },
-                { icon: MessageSquare, text: 'Proactively communicates results to your team' },
-                { icon: CheckCircle, text: 'Creates and assigns follow-up tasks automatically' },
-                { icon: TrendingUp, text: 'Optimizes worker routing and handoffs over time' },
+                { icon: BarChart3, text: 'Executes across your connected tools' },
+                { icon: MessageSquare, text: 'Communicates results back to the right humans' },
+                { icon: CheckCircle, text: 'Automates research and follow-through' },
+                { icon: TrendingUp, text: 'Routes work through specialists and elastic lanes only when justified' },
               ].map(({ icon: Icon, text }, i) => (
                 <div key={i} className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-violet-600/20 flex items-center justify-center flex-shrink-0">
