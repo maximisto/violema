@@ -20,7 +20,7 @@ function normalizeWorkspaceId(value: string | null): string | null {
 
 function normalizeWorkspaceName(value: string | null): string | null {
   if (!value) return null;
-  if (value === 'Nexus HQ' || value === 'Default Workspace') return DEFAULT_WORKSPACE.workspaceName;
+  if (value === 'Default Workspace' || value === 'Workspace Default') return DEFAULT_WORKSPACE.workspaceName;
   return value;
 }
 
