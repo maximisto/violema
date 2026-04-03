@@ -4,12 +4,15 @@ import { fetchBackendAuthSession, hasAcceptedAccess } from '../lib/auth';
 
 export default function ProtectedRoute({ children }: { children: JSX.Element }) {
   const location = useLocation();
-  const [status, setStatus] = useState<'checking' | 'allowed' | 'blocked'>('checking');
+  const [status, setStatus] = useState<'checking' | 'allowed' | 'blocked'>(() =>
+    hasAcceptedAccess() ? 'allowed' : 'checking'
+  );
 
   useEffect(() => {
     let active = true;
 
     const check = async () => {
+      const localAccess = hasAcceptedAccess();
       const backendSession = await fetchBackendAuthSession().catch(() => null);
       if (!active) return;
 
@@ -18,7 +21,7 @@ export default function ProtectedRoute({ children }: { children: JSX.Element }) 
         return;
       }
 
-      setStatus(hasAcceptedAccess() ? 'allowed' : 'blocked');
+      setStatus(localAccess ? 'allowed' : 'blocked');
     };
 
     void check();
