@@ -285,6 +285,15 @@
   animation-play-state: paused;
 }
 
+.panel-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
 /* ── Brand lockup ─────────────────────────────────────────────────── */
 @keyframes brand-float {
   0%, 100% {

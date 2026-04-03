@@ -2,40 +2,24 @@ import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Eye, Globe, Lock, Mail, MonitorSmartphone, Slack } from 'lucide-react';
 import { beginOAuthFlow, isAdminEmail, persistAuthSessionToBackend, saveAuthSession, type AuthMethod } from '../lib/auth';
+import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
 
 const PROVIDER_METHODS: Array<{
   id: Exclude<AuthMethod, 'email'>;
-  label: string;
-  accent: string;
   icon: JSX.Element;
+  note: string;
 }> = [
   {
     id: 'google',
-    label: 'Continue with Google',
-    accent: 'from-[#3c4043] via-[#5f6368] to-[#3c4043]',
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-        <path fill="#4285F4" d="M21.35 11.1H12v2.9h5.34c-.23 1.4-1.05 2.6-2.23 3.4v2.83h3.6c2.1-1.94 3.31-4.8 3.31-8.13 0-.71-.06-1.24-.17-2Z" />
-        <path fill="#34A853" d="M12 22c2.97 0 5.46-.98 7.28-2.66l-3.6-2.83c-.99.66-2.26 1.05-3.68 1.05-2.83 0-5.23-1.91-6.09-4.47H2.17v2.9A10 10 0 0 0 12 22Z" />
-        <path fill="#FBBC05" d="M5.91 13.09A5.99 5.99 0 0 1 5.6 12c0-.38.05-.75.11-1.09V8.01H2.17A10 10 0 0 0 2 12c0 1.6.38 3.12 1.04 4.47l2.87-2.38Z" />
-        <path fill="#EA4335" d="M12 5.88c1.62 0 3.08.56 4.22 1.66l3.16-3.16C17.45 2.54 14.97 1.5 12 1.5A10 10 0 0 0 2.17 8.01l3.74 2.9C6.77 7.8 9.17 5.88 12 5.88Z" />
-      </svg>
-    ),
+    icon: <GoogleMark />,
+    note: 'Best for personal and workspace Google identities.',
   },
   {
     id: 'microsoft',
-    label: 'Continue with Microsoft',
-    accent: 'from-[#00a4ef] via-[#7fba00] to-[#f25022]',
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-        <rect x="2.5" y="2.5" width="8.5" height="8.5" fill="#F25022" rx="1.2" />
-        <rect x="13" y="2.5" width="8.5" height="8.5" fill="#7FBA00" rx="1.2" />
-        <rect x="2.5" y="13" width="8.5" height="8.5" fill="#00A4EF" rx="1.2" />
-        <rect x="13" y="13" width="8.5" height="8.5" fill="#FFB900" rx="1.2" />
-      </svg>
-    ),
+    icon: <MicrosoftMark />,
+    note: 'Best for company-managed Microsoft and Entra accounts.',
   },
 ];
 
@@ -186,22 +170,13 @@ export default function Signup() {
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">Sign in with</p>
               <div className="mt-3 grid gap-2">
                 {PROVIDER_METHODS.map((item) => (
-                  <button
+                  <AuthProviderButton
                     key={item.id}
-                    type="button"
                     onClick={() => handleProviderAuth(item.id)}
-                    className="flex items-center gap-3 rounded-2xl border border-navy-700/80 bg-white/95 px-4 py-3 text-left transition-all hover:border-violet-700/40 hover:bg-white"
-                  >
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-black/5">
-                      {item.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        {item.id === 'google' ? 'Fast for workspace users' : 'Preferred for enterprise sign-in'}
-                      </p>
-                    </div>
-                  </button>
+                    provider={item.id}
+                    icon={item.icon}
+                    note={item.note}
+                  />
                 ))}
               </div>
             </div>

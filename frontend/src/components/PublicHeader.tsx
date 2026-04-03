@@ -1,7 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
-const PO_LOGO = '/po-logo.png';
+const VIOLEMA_MARK = '/violema-mark.svg';
 
 type PublicHeaderProps = {
   backHref?: string;
@@ -27,7 +27,7 @@ export default function PublicHeader({
           aria-label="Violema home"
         >
           <div className="h-10 w-10 flex-shrink-0 overflow-hidden">
-            <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo h-full w-full object-contain" />
+            <img src={VIOLEMA_MARK} alt="Violema" className="po-logo h-full w-full object-contain" />
           </div>
           <div className="brand-lockup w-[10.25rem]">
             <span className="brand-wordmark text-[1.04rem]">VIOLEMA</span>

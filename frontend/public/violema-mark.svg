@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="violema-orange" x1="16" y1="8" x2="48" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FDBA74"/>
+      <stop offset="0.45" stop-color="#FB923C"/>
+      <stop offset="1" stop-color="#F97316"/>
+    </linearGradient>
+    <linearGradient id="violema-core" x1="24" y1="20" x2="40" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF7ED" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#FFEDD5" stop-opacity="0.62"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(32 32)">
+    <g fill="url(#violema-orange)">
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6"/>
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6" transform="rotate(30)"/>
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6" transform="rotate(60)"/>
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6" transform="rotate(90)"/>
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6" transform="rotate(120)"/>
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6" transform="rotate(150)"/>
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6" transform="rotate(180)"/>
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6" transform="rotate(210)"/>
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6" transform="rotate(240)"/>
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6" transform="rotate(270)"/>
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6" transform="rotate(300)"/>
+      <rect x="-2.6" y="-29" width="5.2" height="12.5" rx="2.6" transform="rotate(330)"/>
+    </g>
+    <circle r="15.5" stroke="url(#violema-orange)" stroke-width="4.5" stroke-opacity="0.92"/>
+    <circle r="8.5" fill="url(#violema-core)" fill-opacity="0.95"/>
+  </g>
+</svg>

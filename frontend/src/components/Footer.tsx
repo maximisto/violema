@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowRight, Sparkles, Check, Loader2 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 
-const PO_LOGO = '/po-logo.png';
+const VIOLEMA_MARK = '/violema-mark.svg';
 
 const LINKS = {
   Product: [
@@ -259,8 +259,8 @@ export default function Footer() {
               className="flex items-center gap-2.5 mb-4 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-lg"
               onClick={() => navigate('/')}
             >
-              <div className="w-8 h-8 rounded-full bg-white/95 shadow-md overflow-hidden flex-shrink-0 p-0.5 group-hover:shadow-glow-violet transition-all">
-                <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/[0.03] p-0.5 shadow-[0_12px_24px_rgba(2,6,23,0.18)] transition-all group-hover:shadow-glow-violet">
+                <img src={VIOLEMA_MARK} alt="Violema" className="po-logo w-full h-full object-contain" />
               </div>
               <div className="flex flex-col">
                 <span className="text-white font-bold text-sm leading-tight">VIOLEMA</span>
@@ -303,8 +303,8 @@ export default function Footer() {
         {/* ── Bottom bar ───────────────────────────────────────────────── */}
         <div className="py-6 border-t border-navy-800 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-5 h-5 rounded-full bg-white/90 overflow-hidden flex-shrink-0 p-px">
-              <img src={PO_LOGO} alt="Purple Orange LLC" className="po-logo w-full h-full object-contain" />
+            <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/[0.03] p-px">
+              <img src={VIOLEMA_MARK} alt="Violema" className="po-logo w-full h-full object-contain" />
             </div>
             <p className="text-slate-600 text-sm">
               © {new Date().getFullYear()} Purple Orange LLC. All rights reserved.

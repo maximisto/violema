@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
-const PO_LOGO = '/po-logo.png';
+const VIOLEMA_MARK = '/violema-mark.svg';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -39,7 +39,7 @@ export default function Navbar() {
           aria-label="Violema home"
           >
             <div className="w-10 h-10 sm:w-11 sm:h-11 overflow-hidden flex-shrink-0">
-              <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
+              <img src={VIOLEMA_MARK} alt="Violema" className="po-logo w-full h-full object-contain" />
             </div>
             <div className="brand-lockup w-[10.4rem] sm:w-[11.7rem]">
               <span className="brand-wordmark text-[1.08rem] sm:text-[1.34rem]">

@@ -11,7 +11,7 @@ import { resolveWorkspaceContext } from '../lib/workspace';
 import { getAuthSession, hasSlackConnection, isAdminSession } from '../lib/auth';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
-const PO_LOGO = '/po-logo.png';
+const VIOLEMA_MARK = '/violema-mark.svg';
 const LEGACY_CONVOS_KEY = 'nexus_convos';
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
@@ -2004,9 +2004,9 @@ export default function Dashboard() {
         <aside
           className={`${
             isMobileSidebar
-              ? 'fixed inset-y-2 left-2 z-40 w-[calc(100vw-1rem)] max-w-[19.75rem] rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.55)]'
+              ? 'fixed inset-y-2 left-2 z-40 w-[calc(100vw-1rem)] max-w-[19.75rem] rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.55)] [touch-action:pan-y]'
               : 'w-72 flex-shrink-0'
-          } border-r border-navy-800 bg-navy-900 flex flex-col sidebar-enter`}
+          } min-h-0 overflow-hidden border-r border-navy-800 bg-navy-900 flex flex-col sidebar-enter`}
         >
           {/* Logo */}
           <div className="flex items-center gap-2.5 px-4 py-4 border-b border-navy-800">
@@ -2016,7 +2016,7 @@ export default function Dashboard() {
               aria-label="Go to Violema home"
             >
               <div className="w-9 h-9 overflow-hidden flex-shrink-0">
-                <img src={PO_LOGO} alt="Purple Orange AI" className="po-logo w-full h-full object-contain" />
+                <img src={VIOLEMA_MARK} alt="Violema" className="po-logo w-full h-full object-contain" />
               </div>
               <div className="brand-lockup w-[10rem]">
                 <span className="brand-wordmark text-[1.02rem]">
@@ -2138,7 +2138,7 @@ export default function Dashboard() {
           </div>
 
           {/* Conversation list */}
-          <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
+          <div className="panel-scroll flex-1 min-h-0 px-3 pb-3 space-y-1">
             <div className="flex items-center justify-between gap-2 px-1 py-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-600">
                 {threadFilter === 'archived'
@@ -2643,10 +2643,19 @@ export default function Dashboard() {
 
       {/* Task panel */}
       {taskPanelOpen && (
+            <>
+            {isMobileSidebar && (
+              <button
+                type="button"
+                onClick={() => setTaskPanelOpen(false)}
+                aria-label="Close automations overlay"
+                className="absolute inset-0 z-30 bg-black/55 backdrop-blur-[1px] lg:hidden"
+              />
+            )}
             <aside
               className={`${
                 isMobileSidebar
-                  ? 'fixed inset-x-2 bottom-2 top-20 z-40 rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.58)]'
+                  ? 'fixed inset-x-2 bottom-2 top-20 z-40 rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.58)] [touch-action:pan-y]'
                   : 'w-[22rem] flex-shrink-0'
               } min-h-0 border-l border-navy-800/80 bg-gradient-to-b from-navy-900/60 via-navy-900/36 to-navy-950/60 flex flex-col overflow-hidden backdrop-blur-md shadow-[inset_1px_0_0_rgba(255,255,255,0.03)]`}
             >
@@ -2678,7 +2687,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="panel-scroll flex-1 min-h-0 pb-3">
               <div className="px-3 pt-3">
                 <div className="grid grid-cols-3 gap-2">
                   {[
@@ -3204,6 +3213,7 @@ export default function Dashboard() {
                 </p>
               </div>
             </aside>
+          </>
           )}
         </div>
       </div>
@@ -3216,7 +3226,7 @@ export default function Dashboard() {
             onClick={() => setAutomationEditor(null)}
             className="absolute inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
           />
-          <aside className="absolute right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col border-l border-navy-700/80 bg-gradient-to-b from-navy-900/98 via-navy-900/96 to-navy-950/98 shadow-[0_24px_64px_rgba(2,6,23,0.58)]">
+            <aside className="absolute right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col border-l border-navy-700/80 bg-gradient-to-b from-navy-900/98 via-navy-900/96 to-navy-950/98 shadow-[0_24px_64px_rgba(2,6,23,0.58)] [touch-action:pan-y]">
             <div className="flex items-center justify-between border-b border-navy-800/80 px-5 py-4">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">Automation editor</p>
@@ -3233,7 +3243,7 @@ export default function Dashboard() {
               </button>
             </div>
 
-            <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+            <div className="panel-scroll flex-1 space-y-4 px-5 py-5 pb-8">
               <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/80">Builder</p>
                 <p className="mt-1 text-sm text-white">Set the cadence, stack the steps, pick the destination, and watch the credit pressure update.</p>
