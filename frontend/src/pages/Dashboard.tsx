@@ -3099,17 +3099,15 @@ export default function Dashboard() {
                         </div>
                       )}
                     </>
-                  ) : (
+                  ) : taskItems.length > 0 ? (
                     <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-4">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Selected automation</p>
-                      <p className="mt-2 text-sm font-medium text-white">No active automations</p>
+                      <p className="mt-2 text-sm font-medium text-white">Choose an automation</p>
                       <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-                        {hasAutomationHistory
-                          ? 'Your active automations list is empty. Historical task runs still exist, but deleted workflows will no longer reappear in this rail.'
-                          : 'Create an automation to monitor work, capture results, and keep the latest run visible here.'}
+                        Pick one workflow from the list below to inspect its latest result, worker activity, and delivery state.
                       </p>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
