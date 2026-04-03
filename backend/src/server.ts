@@ -293,6 +293,123 @@ function buildAuthCookie(token: string) {
   ].filter(Boolean).join('; ');
 }
 
+type OAuthProvider = 'google' | 'microsoft';
+
+interface OAuthStatePayload {
+  provider: OAuthProvider;
+  intent: 'signup' | 'login';
+  next: string;
+  acceptedTerms: boolean;
+  acceptedEducation: boolean;
+  issuedAt: number;
+}
+
+function getAuthPublicOrigin(req: Request) {
+  const configured = process.env.AUTH_PUBLIC_URL?.trim();
+  if (configured) {
+    return configured.replace(/\/+$/, '');
+  }
+
+  const forwardedProto = (req.header('x-forwarded-proto') || req.protocol || 'http').split(',')[0]?.trim() || 'http';
+  const forwardedHost = (req.header('x-forwarded-host') || req.header('host') || 'localhost:3001').split(',')[0]?.trim() || 'localhost:3001';
+  return `${forwardedProto}://${forwardedHost}`;
+}
+
+function sanitizeNextPath(value: string | undefined, fallback = '/dashboard') {
+  if (!value) return fallback;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return fallback;
+  return trimmed;
+}
+
+function getAuthStateSecret() {
+  return (
+    process.env.AUTH_STATE_SECRET?.trim() ||
+    process.env.SLACK_SIGNING_SECRET?.trim() ||
+    process.env.STRIPE_WEBHOOK_SECRET?.trim() ||
+    'violema-auth-state-dev-secret'
+  );
+}
+
+function encodeOAuthState(payload: OAuthStatePayload) {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', getAuthStateSecret()).update(encoded).digest('hex');
+  return `${encoded}.${signature}`;
+}
+
+function decodeOAuthState(state: string | undefined): OAuthStatePayload | null {
+  if (!state) return null;
+  const [encoded, signature] = state.split('.');
+  if (!encoded || !signature) return null;
+  const expected = crypto.createHmac('sha256', getAuthStateSecret()).update(encoded).digest('hex');
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  const signatureBuffer = Buffer.from(signature, 'hex');
+  if (expectedBuffer.length !== signatureBuffer.length || !crypto.timingSafeEqual(expectedBuffer, signatureBuffer)) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8')) as Partial<OAuthStatePayload>;
+    if (
+      (payload.provider !== 'google' && payload.provider !== 'microsoft') ||
+      (payload.intent !== 'signup' && payload.intent !== 'login') ||
+      typeof payload.next !== 'string' ||
+      typeof payload.acceptedTerms !== 'boolean' ||
+      typeof payload.acceptedEducation !== 'boolean' ||
+      typeof payload.issuedAt !== 'number'
+    ) {
+      return null;
+    }
+    if (Date.now() - payload.issuedAt > 1000 * 60 * 15) {
+      return null;
+    }
+    return {
+      provider: payload.provider,
+      intent: payload.intent,
+      next: sanitizeNextPath(payload.next),
+      acceptedTerms: payload.acceptedTerms,
+      acceptedEducation: payload.acceptedEducation,
+      issuedAt: payload.issuedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function redirectToAuthError(
+  res: Response,
+  origin: string,
+  intent: 'signup' | 'login',
+  next: string,
+  message: string,
+) {
+  const target = intent === 'signup' ? '/signup' : '/login';
+  const params = new URLSearchParams({
+    error: message,
+    next,
+  });
+  res.redirect(`${origin}${target}?${params.toString()}`);
+}
+
+function buildOAuthCallbackUrl(req: Request, provider: OAuthProvider) {
+  return `${getAuthPublicOrigin(req)}/api/auth/${provider}/callback`;
+}
+
+function getGoogleOAuthConfig() {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  if (!clientId || !clientSecret) return null;
+  return { clientId, clientSecret };
+}
+
+function getMicrosoftOAuthConfig() {
+  const clientId = process.env.MICROSOFT_CLIENT_ID?.trim();
+  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET?.trim();
+  const tenantId = process.env.MICROSOFT_TENANT_ID?.trim() || 'common';
+  if (!clientId || !clientSecret) return null;
+  return { clientId, clientSecret, tenantId };
+}
+
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
@@ -2858,6 +2975,221 @@ app.post('/api/waitlist', (req: Request, res: Response) => {
 
   console.log(`[waitlist] #${list.length} — ${email}`);
   res.json({ ok: true, duplicate: false, position: list.length });
+});
+
+app.get('/api/auth/:provider/start', (req: Request, res: Response) => {
+  const provider = req.params.provider as OAuthProvider;
+  const intent = req.query.intent === 'login' ? 'login' : 'signup';
+  const next = sanitizeNextPath(
+    typeof req.query.next === 'string'
+      ? req.query.next
+      : intent === 'signup'
+        ? '/connect/slack?next=%2Fplans'
+        : '/dashboard',
+    intent === 'signup' ? '/connect/slack?next=%2Fplans' : '/dashboard',
+  );
+  const acceptedTerms = req.query.acceptedTerms === '1' || req.query.acceptedTerms === 'true';
+  const acceptedEducation = req.query.acceptedEducation === '1' || req.query.acceptedEducation === 'true';
+  const origin = getAuthPublicOrigin(req);
+
+  if (intent === 'signup' && (!acceptedTerms || !acceptedEducation)) {
+    redirectToAuthError(res, origin, intent, next, 'Please accept the access terms before continuing.');
+    return;
+  }
+
+  const state = encodeOAuthState({
+    provider,
+    intent,
+    next,
+    acceptedTerms,
+    acceptedEducation,
+    issuedAt: Date.now(),
+  });
+
+  const callbackUrl = buildOAuthCallbackUrl(req, provider);
+  const authUrl = new URL(
+    provider === 'google'
+      ? 'https://accounts.google.com/o/oauth2/v2/auth'
+      : `https://login.microsoftonline.com/${getMicrosoftOAuthConfig()?.tenantId || 'common'}/oauth2/v2.0/authorize`,
+  );
+
+  if (provider === 'google') {
+    const config = getGoogleOAuthConfig();
+    if (!config) {
+      redirectToAuthError(res, origin, intent, next, 'Google sign-in is not configured yet.');
+      return;
+    }
+
+    authUrl.search = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: callbackUrl,
+      response_type: 'code',
+      scope: 'openid email profile',
+      state,
+      prompt: 'select_account',
+    }).toString();
+    res.redirect(authUrl.toString());
+    return;
+  }
+
+  if (provider === 'microsoft') {
+    const config = getMicrosoftOAuthConfig();
+    if (!config) {
+      redirectToAuthError(res, origin, intent, next, 'Microsoft sign-in is not configured yet.');
+      return;
+    }
+
+    authUrl.search = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: callbackUrl,
+      response_type: 'code',
+      response_mode: 'query',
+      scope: 'openid profile email User.Read',
+      state,
+      prompt: 'select_account',
+    }).toString();
+    res.redirect(authUrl.toString());
+    return;
+  }
+
+  res.status(404).json({ error: 'Unsupported auth provider' });
+});
+
+app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
+  const provider = req.params.provider as OAuthProvider;
+  const state = decodeOAuthState(typeof req.query.state === 'string' ? req.query.state : undefined);
+  const origin = getAuthPublicOrigin(req);
+  const fallbackIntent = req.query.intent === 'login' ? 'login' : 'signup';
+  const fallbackNext = sanitizeNextPath(typeof req.query.next === 'string' ? req.query.next : undefined);
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const providerError = typeof req.query.error === 'string' ? req.query.error : '';
+
+  if (providerError) {
+    redirectToAuthError(
+      res,
+      origin,
+      state?.intent || fallbackIntent,
+      state?.next || fallbackNext,
+      typeof req.query.error_description === 'string' ? req.query.error_description : 'Sign-in was cancelled.',
+    );
+    return;
+  }
+
+  if (!state || state.provider !== provider) {
+    redirectToAuthError(res, origin, fallbackIntent, fallbackNext, 'Auth session expired. Please try again.');
+    return;
+  }
+
+  if (!code) {
+    redirectToAuthError(res, origin, state.intent, state.next, 'No authorization code was returned.');
+    return;
+  }
+
+  try {
+    const callbackUrl = buildOAuthCallbackUrl(req, provider);
+    let email = '';
+    let name = '';
+
+    if (provider === 'google') {
+      const config = getGoogleOAuthConfig();
+      if (!config) throw new Error('Google sign-in is not configured yet.');
+
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+          redirect_uri: callbackUrl,
+          grant_type: 'authorization_code',
+        }),
+      });
+      const tokenPayload = await tokenResponse.json().catch(() => null) as Record<string, unknown> | null;
+      if (!tokenResponse.ok || typeof tokenPayload?.access_token !== 'string') {
+        throw new Error(typeof tokenPayload?.error_description === 'string' ? tokenPayload.error_description : 'Google token exchange failed.');
+      }
+
+      const userResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+        headers: {
+          Authorization: `Bearer ${tokenPayload.access_token}`,
+        },
+      });
+      const userPayload = await userResponse.json().catch(() => null) as Record<string, unknown> | null;
+      if (!userResponse.ok || typeof userPayload?.email !== 'string') {
+        throw new Error('Google profile lookup failed.');
+      }
+
+      email = String(userPayload.email).trim().toLowerCase();
+      name =
+        (typeof userPayload.name === 'string' && userPayload.name.trim()) ||
+        (typeof userPayload.given_name === 'string' && userPayload.given_name.trim()) ||
+        email.split('@')[0];
+    } else if (provider === 'microsoft') {
+      const config = getMicrosoftOAuthConfig();
+      if (!config) throw new Error('Microsoft sign-in is not configured yet.');
+
+      const tokenResponse = await fetch(`https://login.microsoftonline.com/${config.tenantId}/oauth2/v2.0/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+          redirect_uri: callbackUrl,
+          grant_type: 'authorization_code',
+          scope: 'openid profile email User.Read',
+        }),
+      });
+      const tokenPayload = await tokenResponse.json().catch(() => null) as Record<string, unknown> | null;
+      if (!tokenResponse.ok || typeof tokenPayload?.access_token !== 'string') {
+        throw new Error(typeof tokenPayload?.error_description === 'string' ? tokenPayload.error_description : 'Microsoft token exchange failed.');
+      }
+
+      const userResponse = await fetch('https://graph.microsoft.com/v1.0/me?$select=displayName,mail,userPrincipalName', {
+        headers: {
+          Authorization: `Bearer ${tokenPayload.access_token}`,
+        },
+      });
+      const userPayload = await userResponse.json().catch(() => null) as Record<string, unknown> | null;
+      const rawEmail =
+        (typeof userPayload?.mail === 'string' && userPayload.mail.trim()) ||
+        (typeof userPayload?.userPrincipalName === 'string' && userPayload.userPrincipalName.trim()) ||
+        '';
+      if (!userResponse.ok || !rawEmail) {
+        throw new Error('Microsoft profile lookup failed.');
+      }
+
+      email = rawEmail.toLowerCase();
+      name =
+        (typeof userPayload?.displayName === 'string' && userPayload.displayName.trim()) ||
+        email.split('@')[0];
+    } else {
+      res.status(404).json({ error: 'Unsupported auth provider' });
+      return;
+    }
+
+    const role = getAdminEmailAllowlist().has(normalizeEmail(email)) ? 'admin' : 'user';
+    const user = upsertAuthUser({
+      email,
+      name,
+      role,
+      method: provider,
+      acceptedTerms: state.acceptedTerms,
+      acceptedEducation: state.acceptedEducation,
+    });
+    const { token } = createAuthSession(user.id);
+    res.setHeader('Set-Cookie', buildAuthCookie(token));
+    res.redirect(`${origin}${state.next}`);
+  } catch (error) {
+    redirectToAuthError(
+      res,
+      origin,
+      state.intent,
+      state.next,
+      error instanceof Error ? error.message : 'Sign-in failed. Please try again.',
+    );
+  }
 });
 
 app.get('/api/auth/session', (req: Request, res: Response) => {

@@ -65,22 +65,24 @@ export function upsertAuthUser(input: {
   const email = normalizeEmail(input.email);
   const now = new Date().toISOString();
   const existingIndex = users.findIndex((item) => item.email === email);
+  const existing = existingIndex >= 0 ? users[existingIndex] : null;
+  const nextName = input.name.trim() || existing?.name || email.split('@')[0];
 
   const next: AuthUserRecord = existingIndex >= 0
     ? {
         ...users[existingIndex],
         email,
-        name: input.name.trim(),
+        name: nextName,
         role: input.role,
         method: input.method,
-        acceptedTerms: input.acceptedTerms,
-        acceptedEducation: input.acceptedEducation,
+        acceptedTerms: input.acceptedTerms || Boolean(existing?.acceptedTerms),
+        acceptedEducation: input.acceptedEducation || Boolean(existing?.acceptedEducation),
         updatedAt: now,
       }
     : {
         id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         email,
-        name: input.name.trim(),
+        name: nextName,
         role: input.role,
         method: input.method,
         acceptedTerms: input.acceptedTerms,

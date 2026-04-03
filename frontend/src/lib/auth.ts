@@ -172,3 +172,25 @@ export async function logoutBackendAuthSession() {
     clearAuthSession();
   }
 }
+
+export function beginOAuthFlow(
+  provider: Exclude<AuthMethod, 'email'>,
+  options: {
+    intent: 'signup' | 'login';
+    next: string;
+    acceptedTerms?: boolean;
+    acceptedEducation?: boolean;
+  },
+) {
+  const params = new URLSearchParams({
+    intent: options.intent,
+    next: options.next,
+  });
+  if (typeof options.acceptedTerms === 'boolean') {
+    params.set('acceptedTerms', options.acceptedTerms ? '1' : '0');
+  }
+  if (typeof options.acceptedEducation === 'boolean') {
+    params.set('acceptedEducation', options.acceptedEducation ? '1' : '0');
+  }
+  window.location.assign(`/api/auth/${provider}/start?${params.toString()}`);
+}

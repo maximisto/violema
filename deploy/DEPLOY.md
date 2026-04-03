@@ -36,6 +36,7 @@ PUBLIC_APP_URL=https://violema.com
 APP_BASE_URL=https://violema.com
 AUTH_PUBLIC_URL=https://violema.com
 AUTH_COOKIE_DOMAIN=violema.com
+AUTH_STATE_SECRET=replace_with_a_random_auth_state_secret
 OPENROUTER_SITE_URL=https://violema.com
 OPENROUTER_APP_NAME=VIOLEMA
 GOOGLE_CLIENT_ID=your_google_client_id

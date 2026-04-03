@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Eye, Globe, Lock, Mail, MonitorSmartphone, Slack } from 'lucide-react';
-import { isAdminEmail, persistAuthSessionToBackend, saveAuthSession, type AuthMethod } from '../lib/auth';
+import { beginOAuthFlow, isAdminEmail, persistAuthSessionToBackend, saveAuthSession, type AuthMethod } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
 
@@ -64,16 +64,18 @@ function useNextPath() {
 
 export default function Signup() {
   const navigate = useNavigate();
+  const location = useLocation();
   const nextPath = useNextPath();
-  const [method, setMethod] = useState<AuthMethod>('email');
+  const errorFromQuery = useMemo(() => new URLSearchParams(location.search).get('error'), [location.search]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedEducation, setAcceptedEducation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(errorFromQuery);
 
   const canContinue = name.trim().length > 1 && /\S+@\S+\.\S+/.test(email) && acceptedTerms && acceptedEducation;
+  const oauthNext = `/connect/slack?next=${encodeURIComponent(nextPath)}`;
 
   async function handleContinue() {
     if (!canContinue) return;
@@ -85,7 +87,7 @@ export default function Signup() {
       email: email.trim(),
       name: name.trim(),
       role: isAdminEmail(email) ? 'admin' : 'user',
-      method,
+      method: 'email' as const,
       acceptedTerms,
       acceptedEducation,
       createdAt: new Date().toISOString(),
@@ -100,6 +102,21 @@ export default function Signup() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleProviderAuth(provider: Exclude<AuthMethod, 'email'>) {
+    if (!acceptedTerms || !acceptedEducation) {
+      setErrorMessage('Accept the terms and access notice before continuing with Google or Microsoft.');
+      return;
+    }
+    setErrorMessage(null);
+    persistWorkspaceContext();
+    beginOAuthFlow(provider, {
+      intent: 'signup',
+      next: oauthNext,
+      acceptedTerms,
+      acceptedEducation,
+    });
   }
 
   return (
@@ -172,19 +189,15 @@ export default function Signup() {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setMethod(item.id)}
-                    className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
-                      method === item.id
-                        ? 'border-violet-500/40 bg-white text-slate-950 shadow-[0_0_0_1px_rgba(168,85,247,0.14)]'
-                        : 'border-navy-700/80 bg-white/95 hover:border-violet-700/40 hover:bg-white'
-                    }`}
+                    onClick={() => handleProviderAuth(item.id)}
+                    className="flex items-center gap-3 rounded-2xl border border-navy-700/80 bg-white/95 px-4 py-3 text-left transition-all hover:border-violet-700/40 hover:bg-white"
                   >
                     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-black/5">
                       {item.icon}
                     </div>
                     <div className="min-w-0">
-                      <p className={`text-sm font-semibold ${method === item.id ? 'text-slate-950' : 'text-slate-900'}`}>{item.label}</p>
-                      <p className={`mt-0.5 text-xs ${method === item.id ? 'text-slate-600' : 'text-slate-500'}`}>
+                      <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
                         {item.id === 'google' ? 'Fast for workspace users' : 'Preferred for enterprise sign-in'}
                       </p>
                     </div>
@@ -263,7 +276,7 @@ export default function Signup() {
               <p className="mt-3 text-center text-sm text-rose-300">{errorMessage}</p>
             ) : null}
             <p className="mt-3 text-center text-xs text-slate-500">
-              Access now creates a real session for this workspace. OAuth can layer in next without changing the funnel.
+              Access now creates a real session for this workspace, whether you continue with email, Google, or Microsoft.
             </p>
           </div>
         </div>
