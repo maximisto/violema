@@ -16,6 +16,12 @@ Optional overrides:
 sudo DOMAIN=violema.com APP_DIR=/var/www/nexus PM2_APP_NAME=violema-backend bash deploy.sh
 ```
 
+Legacy redirect:
+
+```bash
+sudo DOMAIN=violema.com LEGACY_DOMAIN=nexus.purpleorange.io APP_DIR=/var/www/nexus PM2_APP_NAME=violema-backend bash deploy.sh
+```
+
 4. Before rerunning if the backend stops on startup, create:
 
 ```bash
@@ -28,8 +34,15 @@ POSTMARK_FROM_EMAIL=demo@yourdomain.com
 SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
 PUBLIC_APP_URL=https://violema.com
 APP_BASE_URL=https://violema.com
+AUTH_PUBLIC_URL=https://violema.com
+AUTH_COOKIE_DOMAIN=violema.com
 OPENROUTER_SITE_URL=https://violema.com
 OPENROUTER_APP_NAME=VIOLEMA
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+MICROSOFT_CLIENT_ID=your_microsoft_client_id
+MICROSOFT_CLIENT_SECRET=your_microsoft_client_secret
+MICROSOFT_TENANT_ID=common
 PORT=3001
 NODE_ENV=production
 EOF
@@ -49,3 +62,6 @@ Notes:
 - The deploy script now bootstraps nginx over HTTP first, then switches to the full HTTPS config after Certbot succeeds.
 - The frontend is served from `frontend/dist` and `/api/*` is proxied to the Express backend on port `3001`.
 - `/api/health` now reports which real integrations are configured: Anthropic, Tavily, Postmark, and Slack.
+- Auth cookies can now be pinned to `violema.com` with `AUTH_COOKIE_DOMAIN=violema.com`, which is the right setting once DNS fully cuts over.
+- The production nginx template now supports redirecting the legacy host `nexus.purpleorange.io` to `violema.com` over HTTP with `LEGACY_DOMAIN=nexus.purpleorange.io`.
+- If you also want clean HTTPS redirects from the legacy host, keep or provision a separate certificate for `nexus.purpleorange.io` before adding an SSL redirect block for that host.

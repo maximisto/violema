@@ -267,11 +267,13 @@ function parseCookieValue(req: Request, cookieName: string) {
 
 function getAuthCookieOptions() {
   const secure = process.env.NODE_ENV === 'production';
+  const cookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim();
   return [
     `${AUTH_COOKIE_NAME}=`,
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
+    cookieDomain ? `Domain=${cookieDomain}` : '',
     secure ? 'Secure' : '',
     'Max-Age=0',
   ].filter(Boolean).join('; ');
@@ -279,11 +281,13 @@ function getAuthCookieOptions() {
 
 function buildAuthCookie(token: string) {
   const secure = process.env.NODE_ENV === 'production';
+  const cookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim();
   return [
     `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}`,
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
+    cookieDomain ? `Domain=${cookieDomain}` : '',
     secure ? 'Secure' : '',
     `Max-Age=${60 * 60 * 24 * 30}`,
   ].filter(Boolean).join('; ');

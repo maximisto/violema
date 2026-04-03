@@ -7,6 +7,7 @@
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-violema.com}"
+LEGACY_DOMAIN="${LEGACY_DOMAIN:-nexus.purpleorange.io}"
 APP_DIR="${APP_DIR:-/var/www/nexus}"
 REPO_URL="https://github.com/maximisto/test-repo.git"
 BRANCH="claude/build-ai-assistant-platform-BsdRr"
@@ -54,6 +55,7 @@ EOF
 render_production_nginx_config() {
   sed \
     -e "s|__APP_DOMAIN__|$DOMAIN|g" \
+    -e "s|__LEGACY_DOMAIN__|$LEGACY_DOMAIN|g" \
     -e "s|__APP_DIR__|$APP_DIR|g" \
     "$APP_DIR/deploy/nginx.conf" > "$NGINX_SITE"
 }
