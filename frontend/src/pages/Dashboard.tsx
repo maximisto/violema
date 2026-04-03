@@ -2688,7 +2688,7 @@ export default function Dashboard() {
               </div>
 
               <div className="panel-scroll flex-1 min-h-0 pb-3">
-              <div className="px-3 pt-3">
+              <div className="px-3 pt-3 sm:px-3.5">
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { label: 'Scheduled', value: taskSummary.scheduled, tone: 'violet' },
@@ -2712,7 +2712,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="px-3 pt-3">
+              <div className="px-3 pt-3 sm:px-3.5">
                 <div className="rounded-[1.4rem] border border-violet-500/15 bg-gradient-to-br from-violet-500/8 via-navy-900/70 to-navy-950/92 p-3.5 shadow-[0_16px_34px_rgba(2,6,23,0.16)]">
                   {selectedTask ? (
                     <>
@@ -3113,7 +3113,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="p-3 pt-0 space-y-2">
+              <div className="space-y-2 px-3 pt-0 sm:px-3.5">
                 {showTaskPanelEmptyState ? (
                   <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/25 px-4 py-5 text-center">
                     <p className="text-sm font-medium text-white">No active automations</p>

@@ -69,25 +69,25 @@ export default function AuthProviderButton({
     <button
       type="button"
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br ${style.halo} px-4 py-3.5 text-left transition-all duration-200 hover:-translate-y-0.5`}
+      className={`group relative overflow-hidden rounded-[1.35rem] border bg-gradient-to-br ${style.halo} px-3.5 py-3.5 text-left transition-all duration-200 hover:-translate-y-0.5 sm:px-4`}
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent opacity-80" />
       <div className={`absolute inset-x-8 bottom-0 h-px ${style.accent} opacity-75 transition-opacity duration-200 group-hover:opacity-100`} />
-      <div className="flex items-center gap-3">
-        <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border ${style.badge} shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]`}>
+      <div className="flex items-start gap-3 sm:items-center">
+        <div className={`mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[1.15rem] border ${style.badge} shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:mt-0 sm:h-11 sm:w-11`}>
           {icon}
         </div>
         <div className="min-w-0 flex-1">
-          <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${style.eyebrow}`}>
+          <p className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${style.eyebrow} sm:text-[10px]`}>
             {provider === 'google' ? 'Google workspace' : 'Microsoft identity'}
           </p>
           <p
-            className="mt-1 text-sm font-semibold tracking-[-0.01em] text-white"
+            className="mt-1 text-[0.95rem] font-semibold tracking-[-0.01em] text-white sm:text-sm"
             style={{ fontFamily: style.titleFont }}
           >
             {style.label}
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-slate-400">{note}</p>
+          <p className="mt-1 max-w-[26rem] text-[11px] leading-relaxed text-slate-400 sm:text-xs">{note}</p>
         </div>
       </div>
     </button>

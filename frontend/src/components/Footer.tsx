@@ -259,14 +259,12 @@ export default function Footer() {
               className="flex items-center gap-2.5 mb-4 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-lg"
               onClick={() => navigate('/')}
             >
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/[0.03] p-0.5 shadow-[0_12px_24px_rgba(2,6,23,0.18)] transition-all group-hover:shadow-glow-violet">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden transition-all group-hover:shadow-glow-violet">
                 <img src={VIOLEMA_MARK} alt="Violema" className="po-logo w-full h-full object-contain" />
               </div>
-              <div className="flex flex-col">
-                <span className="text-white font-bold text-sm leading-tight">VIOLEMA</span>
-                <span className="text-[9px] text-violet-400/60 leading-none font-medium tracking-widest uppercase">
-                  Your AI coworker
-                </span>
+              <div className="brand-lockup w-[9.4rem]">
+                <span className="brand-wordmark text-[0.95rem]">VIOLEMA</span>
+                <span className="brand-submark text-[8px]">Your AI coworker</span>
               </div>
             </button>
             <p className="text-slate-500 text-sm leading-relaxed mb-4">
@@ -303,7 +301,7 @@ export default function Footer() {
         {/* ── Bottom bar ───────────────────────────────────────────────── */}
         <div className="py-6 border-t border-navy-800 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/[0.03] p-px">
+            <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center overflow-hidden">
               <img src={VIOLEMA_MARK} alt="Violema" className="po-logo w-full h-full object-contain" />
             </div>
             <p className="text-slate-600 text-sm">

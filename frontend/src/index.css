@@ -292,6 +292,7 @@
   touch-action: pan-y;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
 }
 
 /* ── Brand lockup ─────────────────────────────────────────────────── */
