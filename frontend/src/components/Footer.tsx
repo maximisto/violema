@@ -302,7 +302,7 @@ export default function Footer() {
         <div className="py-6 border-t border-navy-800 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center overflow-hidden">
-              <img src={VIOLEMA_MARK} alt="Violema" className="po-logo w-full h-full object-contain" />
+              <img src="/po-logo.png" alt="Purple Orange LLC" className="po-logo w-full h-full object-contain" />
             </div>
             <p className="text-slate-600 text-sm">
               © {new Date().getFullYear()} Purple Orange LLC. All rights reserved.
