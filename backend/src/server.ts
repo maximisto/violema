@@ -5,6 +5,13 @@ import Anthropic from '@anthropic-ai/sdk';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import {
+  clearAuthSession as clearPersistedAuthSession,
+  createAuthSession,
+  getAuthUserByToken,
+  type AuthMethod as PersistedAuthMethod,
+  upsertAuthUser,
+} from './auth';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } from './integrations';
 import { createAutomation, deleteAutomation, getAutomationById, listAutomations, loadPersistedAutomations, triggerAutomationNow, updateAutomation } from './scheduler';
@@ -89,6 +96,7 @@ const ALLOWED_ORIGINS = [
   'https://nexus.purpleorange.io',
   'http://nexus.purpleorange.io',
 ];
+const AUTH_COOKIE_NAME = 'violema_session';
 
 function addTaskPanelStreamClient(workspaceId: string, res: Response) {
   const set = taskPanelStreamClients.get(workspaceId) || new Set<Response>();
@@ -243,6 +251,42 @@ function resolveWorkspaceContext(req: Request) {
     workspaceName: profile.name,
     workspace: profile,
   };
+}
+
+function parseCookieValue(req: Request, cookieName: string) {
+  const rawCookie = req.header('cookie');
+  if (!rawCookie) return null;
+  const pair = rawCookie
+    .split(';')
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(`${cookieName}=`));
+  if (!pair) return null;
+  const [, rawValue = ''] = pair.split('=');
+  return decodeURIComponent(rawValue);
+}
+
+function getAuthCookieOptions() {
+  const secure = process.env.NODE_ENV === 'production';
+  return [
+    `${AUTH_COOKIE_NAME}=`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    secure ? 'Secure' : '',
+    'Max-Age=0',
+  ].filter(Boolean).join('; ');
+}
+
+function buildAuthCookie(token: string) {
+  const secure = process.env.NODE_ENV === 'production';
+  return [
+    `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    secure ? 'Secure' : '',
+    `Max-Age=${60 * 60 * 24 * 30}`,
+  ].filter(Boolean).join('; ');
 }
 
 function getRequiredEnv(name: string): string {
@@ -2810,6 +2854,74 @@ app.post('/api/waitlist', (req: Request, res: Response) => {
 
   console.log(`[waitlist] #${list.length} — ${email}`);
   res.json({ ok: true, duplicate: false, position: list.length });
+});
+
+app.get('/api/auth/session', (req: Request, res: Response) => {
+  const token = parseCookieValue(req, AUTH_COOKIE_NAME);
+  if (!token) {
+    res.status(401).json({ error: 'No active session' });
+    return;
+  }
+
+  const record = getAuthUserByToken(token);
+  if (!record) {
+    res.setHeader('Set-Cookie', getAuthCookieOptions());
+    res.status(401).json({ error: 'Session expired' });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    user: record.user,
+  });
+});
+
+app.post('/api/auth/session', (req: Request, res: Response) => {
+  const body = (req.body || {}) as Record<string, unknown>;
+  const email = typeof body.email === 'string' ? body.email.trim() : '';
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const method = (
+    typeof body.method === 'string' && ['email', 'google', 'microsoft'].includes(body.method)
+      ? body.method
+      : 'email'
+  ) as PersistedAuthMethod;
+  const acceptedTerms = Boolean(body.acceptedTerms);
+  const acceptedEducation = Boolean(body.acceptedEducation);
+
+  if (!email || !/\S+@\S+\.\S+/.test(email)) {
+    res.status(400).json({ error: 'Valid email is required' });
+    return;
+  }
+
+  if (!name || name.length < 2) {
+    res.status(400).json({ error: 'Valid name is required' });
+    return;
+  }
+
+  const role = getAdminEmailAllowlist().has(normalizeEmail(email)) ? 'admin' : 'user';
+  const user = upsertAuthUser({
+    email,
+    name,
+    role,
+    method,
+    acceptedTerms,
+    acceptedEducation,
+  });
+  const { token } = createAuthSession(user.id);
+  res.setHeader('Set-Cookie', buildAuthCookie(token));
+  res.json({
+    ok: true,
+    user,
+  });
+});
+
+app.post('/api/auth/logout', (req: Request, res: Response) => {
+  const token = parseCookieValue(req, AUTH_COOKIE_NAME);
+  if (token) {
+    clearPersistedAuthSession(token);
+  }
+  res.setHeader('Set-Cookie', getAuthCookieOptions());
+  res.json({ ok: true });
 });
 
 app.get('/api/workspace', (req: Request, res: Response) => {

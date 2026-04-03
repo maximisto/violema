@@ -76,3 +76,99 @@ export function isAdminSession(session: AuthSession | null = getAuthSession()): 
   if (!session) return false;
   return session.role === 'admin' || isAdminEmail(session.email);
 }
+
+function normalizeSessionRole(email: string, role?: string): AccessRole {
+  if (role === 'admin' || isAdminEmail(email)) return 'admin';
+  if (role === 'tester') return 'tester';
+  if (role === 'investor') return 'investor';
+  return 'user';
+}
+
+function isAuthSessionShape(value: unknown): value is AuthSession {
+  if (!value || typeof value !== 'object') return false;
+  const session = value as Partial<AuthSession>;
+  return (
+    typeof session.email === 'string' &&
+    typeof session.name === 'string' &&
+    typeof session.role === 'string' &&
+    typeof session.method === 'string' &&
+    typeof session.acceptedTerms === 'boolean' &&
+    typeof session.acceptedEducation === 'boolean' &&
+    typeof session.createdAt === 'string'
+  );
+}
+
+function hydrateSession(value: Partial<AuthSession>): AuthSession | null {
+  if (!value.email || !value.name || !value.method || typeof value.acceptedTerms !== 'boolean' || typeof value.acceptedEducation !== 'boolean') {
+    return null;
+  }
+
+  return {
+    email: value.email,
+    name: value.name,
+    role: normalizeSessionRole(value.email, value.role),
+    method: value.method,
+    acceptedTerms: value.acceptedTerms,
+    acceptedEducation: value.acceptedEducation,
+    createdAt: value.createdAt || new Date().toISOString(),
+    slackWorkspace: value.slackWorkspace,
+    slackChannelId: value.slackChannelId,
+    slackDisplayTarget: value.slackDisplayTarget,
+    slackConnectedAt: value.slackConnectedAt,
+  };
+}
+
+export async function persistAuthSessionToBackend(session: AuthSession) {
+  const response = await fetch('/api/auth/session', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      email: session.email,
+      name: session.name,
+      method: session.method,
+      acceptedTerms: session.acceptedTerms,
+      acceptedEducation: session.acceptedEducation,
+    }),
+  });
+
+  const payload = await response.json().catch(() => null) as { error?: string; user?: Partial<AuthSession> } | null;
+  if (!response.ok || !payload?.user) {
+    throw new Error(payload?.error || 'Could not create auth session');
+  }
+
+  const nextSession = hydrateSession(payload.user);
+  if (!nextSession) {
+    throw new Error('Auth session response was incomplete');
+  }
+
+  saveAuthSession(nextSession);
+  return nextSession;
+}
+
+export async function fetchBackendAuthSession() {
+  const response = await fetch('/api/auth/session', {
+    credentials: 'same-origin',
+  });
+
+  if (response.status === 401) return null;
+  const payload = await response.json().catch(() => null) as { user?: Partial<AuthSession> } | null;
+  if (!response.ok || !payload?.user) return null;
+  const session = hydrateSession(payload.user);
+  if (!session) return null;
+  saveAuthSession(session);
+  return session;
+}
+
+export async function logoutBackendAuthSession() {
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+    });
+  } finally {
+    clearAuthSession();
+  }
+}

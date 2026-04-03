@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, KeyRound, Mail } from 'lucide-react';
-import { getAuthSession, isAdminEmail, saveAuthSession } from '../lib/auth';
+import { getAuthSession, isAdminEmail, persistAuthSessionToBackend, saveAuthSession } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
 
@@ -12,11 +12,15 @@ export default function Login() {
   const existing = getAuthSession();
   const [email, setEmail] = useState(existing?.email || '');
   const [name, setName] = useState(existing?.name || '');
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  function handleContinue() {
+  async function handleContinue() {
     if (!/\S+@\S+\.\S+/.test(email) || name.trim().length < 2) return;
+    setSubmitting(true);
+    setErrorMessage(null);
     persistWorkspaceContext();
-    saveAuthSession({
+    const session = {
       email: email.trim(),
       name: name.trim(),
       role: isAdminEmail(email) ? 'admin' : existing?.role || 'user',
@@ -24,8 +28,17 @@ export default function Login() {
       acceptedTerms: true,
       acceptedEducation: true,
       createdAt: existing?.createdAt || new Date().toISOString(),
-    });
-    navigate(next);
+    } as const;
+
+    try {
+      saveAuthSession(session);
+      await persistAuthSessionToBackend(session);
+      navigate(next);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Could not sign in');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -70,12 +83,16 @@ export default function Login() {
           <button
             type="button"
             onClick={handleContinue}
-            disabled={!/\S+@\S+\.\S+/.test(email) || name.trim().length < 2}
+            disabled={!/\S+@\S+\.\S+/.test(email) || name.trim().length < 2 || submitting}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-glow-violet transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Open workspace
+            {submitting ? 'Signing in…' : 'Open workspace'}
             <ArrowRight className="h-4 w-4" />
           </button>
+
+          {errorMessage ? (
+            <p className="mt-3 text-center text-sm text-rose-300">{errorMessage}</p>
+          ) : null}
 
           <p className="mt-4 text-center text-sm text-slate-500">
             New here? <Link to="/signup" className="text-violet-300 hover:text-violet-200">Create access first</Link>

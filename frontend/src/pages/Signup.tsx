@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Eye, Globe, Lock, Mail, MonitorSmartphone, Slack } from 'lucide-react';
-import { isAdminEmail, saveAuthSession, type AuthMethod } from '../lib/auth';
+import { isAdminEmail, persistAuthSessionToBackend, saveAuthSession, type AuthMethod } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
 
@@ -70,14 +70,18 @@ export default function Signup() {
   const [email, setEmail] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedEducation, setAcceptedEducation] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const canContinue = name.trim().length > 1 && /\S+@\S+\.\S+/.test(email) && acceptedTerms && acceptedEducation;
 
-  function handleContinue() {
+  async function handleContinue() {
     if (!canContinue) return;
 
+    setSubmitting(true);
+    setErrorMessage(null);
     persistWorkspaceContext();
-    saveAuthSession({
+    const session = {
       email: email.trim(),
       name: name.trim(),
       role: isAdminEmail(email) ? 'admin' : 'user',
@@ -85,9 +89,17 @@ export default function Signup() {
       acceptedTerms,
       acceptedEducation,
       createdAt: new Date().toISOString(),
-    });
+    } as const;
 
-    navigate(`/connect/slack?next=${encodeURIComponent(nextPath)}`);
+    try {
+      saveAuthSession(session);
+      await persistAuthSessionToBackend(session);
+      navigate(`/connect/slack?next=${encodeURIComponent(nextPath)}`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Could not create access');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -241,14 +253,17 @@ export default function Signup() {
             <button
               type="button"
               onClick={handleContinue}
-              disabled={!canContinue}
+              disabled={!canContinue || submitting}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-glow-violet transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Create account
+              {submitting ? 'Creating account…' : 'Create account'}
               <ArrowRight className="h-4 w-4" />
             </button>
+            {errorMessage ? (
+              <p className="mt-3 text-center text-sm text-rose-300">{errorMessage}</p>
+            ) : null}
             <p className="mt-3 text-center text-xs text-slate-500">
-              Access is stored on this device for now. Full account auth can layer in next without changing the funnel.
+              Access now creates a real session for this workspace. OAuth can layer in next without changing the funnel.
             </p>
           </div>
         </div>
