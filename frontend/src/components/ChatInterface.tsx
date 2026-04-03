@@ -933,8 +933,31 @@ export default function ChatInterface({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<Message[]>(messages);
+  const previousConversationIdRef = useRef(conversationId);
   const { snapshot } = useCreditSnapshot();
   messagesRef.current = messages;
+
+  useEffect(() => {
+    const previousConversationId = previousConversationIdRef.current;
+    if (previousConversationId === conversationId) return;
+
+    const isPromotingNewConversation =
+      previousConversationId === 'new' &&
+      conversationId !== 'new' &&
+      initialMessages.length > 0;
+
+    if (!isPromotingNewConversation && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsLoading(false);
+      setAgentStatus('idle');
+    }
+
+    setMessages(initialMessages);
+    setError(null);
+    setSelectedArtifact(null);
+    previousConversationIdRef.current = conversationId;
+  }, [conversationId, initialMessages]);
 
   useEffect(() => {
     if (isAtBottom) {

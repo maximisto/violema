@@ -2633,7 +2633,6 @@ export default function Dashboard() {
         <div className="flex flex-1 min-h-0">
           <div className="flex min-h-0 flex-1 min-w-0">
             <ChatInterface
-              key={activeConvoId}
               conversationId={activeConvoId}
               initialMessages={currentMessages}
               onMessagesChange={handleMessagesChange}
