@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
-const VIOLEMA_MARK = '/violema-mark.svg';
+const VIOLEMA_MARK = '/po-logo.png';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);

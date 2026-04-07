@@ -1,7 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
-const VIOLEMA_MARK = '/violema-mark.svg';
+const VIOLEMA_MARK = '/po-logo.png';
 
 type PublicHeaderProps = {
   backHref?: string;

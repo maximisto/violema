@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowRight, Sparkles, Check, Loader2 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 
-const VIOLEMA_MARK = '/violema-mark.svg';
+const VIOLEMA_MARK = '/po-logo.png';
 
 const LINKS = {
   Product: [

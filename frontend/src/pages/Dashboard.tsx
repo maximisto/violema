@@ -11,7 +11,7 @@ import { resolveWorkspaceContext } from '../lib/workspace';
 import { getAuthSession, hasSlackConnection, isAdminSession } from '../lib/auth';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
-const VIOLEMA_MARK = '/violema-mark.svg';
+const VIOLEMA_MARK = '/po-logo.png';
 const LEGACY_CONVOS_KEY = 'nexus_convos';
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
