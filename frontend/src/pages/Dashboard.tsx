@@ -286,6 +286,8 @@ interface AutomationEditorDraft {
   description: string;
   notify: string;
   condition: string;
+  authoringMode: 'guided' | 'describe';
+  workflowPrompt: string;
   steps: WorkflowBlockDraft[];
   executionPolicy: AutomationExecutionPolicyDraft;
   destinationType: 'slack' | 'email' | 'custom' | 'none';
@@ -546,6 +548,27 @@ function serializeWorkflowBlocks(blocks: WorkflowBlockDraft[]) {
   return blocks
     .map((block) => serializeWorkflowBlockToAction(block).trim())
     .filter(Boolean);
+}
+
+function buildWorkflowPromptFromBlocks(blocks: WorkflowBlockDraft[]) {
+  return serializeWorkflowBlocks(blocks).join('\n');
+}
+
+function buildWorkflowBlocksFromPrompt(prompt: string) {
+  const normalized = prompt
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const sentenceParts = line.includes('\n')
+        ? [line]
+        : line.split(/(?<=[.!?])\s+(?=[A-Z0-9])/g);
+      return sentenceParts.map((part) => part.trim()).filter(Boolean);
+    });
+
+  const uniqueParts = normalized.filter((part, index) => normalized.indexOf(part) === index);
+  const blocks = uniqueParts.map((part) => parseLegacyActionToWorkflowBlock(part));
+  return blocks.length > 0 ? blocks : [createWorkflowBlock('note', { objective: prompt.trim(), title: 'Workflow brief' })];
 }
 
 function workflowBlockHasContent(block: WorkflowBlockDraft) {
@@ -1471,8 +1494,11 @@ export default function Dashboard() {
     }
 
     const timeout = window.setTimeout(async () => {
-      const actionCount = automationEditor.steps.filter((item) => workflowBlockHasContent(item)).length;
-      const toolCallCount = automationEditor.steps.filter((item) => ['search', 'query', 'capture', 'deliver'].includes(item.kind)).length;
+      const estimateSteps = automationEditor.authoringMode === 'describe'
+        ? buildWorkflowBlocksFromPrompt(automationEditor.workflowPrompt)
+        : automationEditor.steps;
+      const actionCount = estimateSteps.filter((item) => workflowBlockHasContent(item)).length;
+      const toolCallCount = estimateSteps.filter((item) => ['search', 'query', 'capture', 'deliver'].includes(item.kind)).length;
       const estimate = await fetchCreditEstimate({
         taskKind: 'automation',
         modelTier: actionCount > 3 ? 'ops' : 'default',
@@ -1668,6 +1694,11 @@ export default function Dashboard() {
 
   const handleAutomationEdit = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
+    const nextSteps = Array.isArray(task.steps) && task.steps.length > 0
+      ? task.steps.map((step) => createWorkflowBlock(step.kind, step))
+      : Array.isArray(task.actions) && task.actions.length > 0
+        ? task.actions.map((action) => parseLegacyActionToWorkflowBlock(action))
+        : [createWorkflowBlock('summarize')];
     setAutomationEditorSection('setup');
     setAutomationEditor({
       mode: 'edit',
@@ -1677,11 +1708,9 @@ export default function Dashboard() {
       description: task.description || '',
       notify: task.notify || '',
       condition: task.condition || '',
-      steps: Array.isArray(task.steps) && task.steps.length > 0
-        ? task.steps.map((step) => createWorkflowBlock(step.kind, step))
-        : Array.isArray(task.actions) && task.actions.length > 0
-          ? task.actions.map((action) => parseLegacyActionToWorkflowBlock(action))
-          : [createWorkflowBlock('summarize')],
+      authoringMode: 'guided',
+      workflowPrompt: buildWorkflowPromptFromBlocks(nextSteps),
+      steps: nextSteps,
       executionPolicy: normalizeExecutionPolicy(task.executionPolicy),
       destinationType:
         task.notify?.startsWith('C') || task.notify?.startsWith('G') || task.notify?.startsWith('D') || task.notify?.startsWith('#')
@@ -1704,6 +1733,8 @@ export default function Dashboard() {
       description: '',
       notify: '',
       condition: '',
+      authoringMode: 'guided',
+      workflowPrompt: 'Query Stripe failed payments\nGenerate summary',
       steps: [
         createWorkflowBlock('query', { title: 'Query Stripe failed payments', objective: 'Stripe failed payments' }),
         createWorkflowBlock('summarize'),
@@ -1717,7 +1748,10 @@ export default function Dashboard() {
     if (!automationEditor) return;
     setActionBusy('save');
     try {
-      const steps = automationEditor.steps
+      const sourceSteps = automationEditor.authoringMode === 'describe'
+        ? buildWorkflowBlocksFromPrompt(automationEditor.workflowPrompt)
+        : automationEditor.steps;
+      const steps = sourceSteps
         .map((step) => ({
           ...step,
           title: step.title.trim(),
@@ -1907,7 +1941,10 @@ export default function Dashboard() {
   const lowCreditRunway = snapshot.projectedDaysLeft <= 7;
   const automationActionCount = useMemo(() => {
     if (!automationEditor) return 0;
-    return automationEditor.steps.filter((item) => workflowBlockHasContent(item)).length;
+    const sourceSteps = automationEditor.authoringMode === 'describe'
+      ? buildWorkflowBlocksFromPrompt(automationEditor.workflowPrompt)
+      : automationEditor.steps;
+    return sourceSteps.filter((item) => workflowBlockHasContent(item)).length;
   }, [automationEditor]);
   const hasAutomationSteps = automationActionCount > 0;
   const automationEditorPolicyMath = useMemo(
@@ -2077,6 +2114,11 @@ export default function Dashboard() {
 
   const duplicateSelectedAutomation = useCallback(() => {
     if (!selectedTask) return;
+    const nextSteps = Array.isArray(selectedTask.steps) && selectedTask.steps.length > 0
+      ? selectedTask.steps.map((step) => createWorkflowBlock(step.kind, step))
+      : Array.isArray(selectedTask.actions) && selectedTask.actions.length > 0
+        ? selectedTask.actions.map((action) => parseLegacyActionToWorkflowBlock(action))
+        : [createWorkflowBlock('summarize')];
     setAutomationEditorSection('setup');
     setAutomationEditor({
       mode: 'create',
@@ -2086,11 +2128,9 @@ export default function Dashboard() {
       description: selectedTask.description || '',
       notify: selectedTask.notify || '',
       condition: selectedTask.condition || '',
-      steps: Array.isArray(selectedTask.steps) && selectedTask.steps.length > 0
-        ? selectedTask.steps.map((step) => createWorkflowBlock(step.kind, step))
-        : Array.isArray(selectedTask.actions) && selectedTask.actions.length > 0
-          ? selectedTask.actions.map((action) => parseLegacyActionToWorkflowBlock(action))
-          : [createWorkflowBlock('summarize')],
+      authoringMode: 'guided',
+      workflowPrompt: buildWorkflowPromptFromBlocks(nextSteps),
+      steps: nextSteps,
       executionPolicy: normalizeExecutionPolicy(selectedTask.executionPolicy),
       destinationType:
         selectedTask.notify?.startsWith('C') || selectedTask.notify?.startsWith('G') || selectedTask.notify?.startsWith('D') || selectedTask.notify?.startsWith('#')
@@ -2733,7 +2773,7 @@ export default function Dashboard() {
             }`}
           >
             <CheckSquare className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">Tasks</span>
+            <span className="hidden lg:inline">Schedules</span>
           </button>
         </header>
 
@@ -2752,7 +2792,7 @@ export default function Dashboard() {
                 className="ui-button-ghost flex-1 justify-center py-2 text-[11px]"
               >
                 <CheckSquare className="h-3.5 w-3.5" />
-                Automations
+                Schedules
               </button>
             </div>
           </div>
@@ -2794,7 +2834,7 @@ export default function Dashboard() {
                   </span>
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.22em] text-slate-600">Workspace</p>
-                    <h3 className="text-sm font-semibold text-white">Automations</h3>
+                    <h3 className="text-sm font-semibold text-white">Schedules</h3>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -2846,7 +2886,7 @@ export default function Dashboard() {
                     <>
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Selected automation</p>
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Selected workflow</p>
                           <h4 className="mt-1 text-sm font-semibold leading-snug text-white">{selectedTask.title}</h4>
                         </div>
                         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${selectedTaskMeta?.chip ?? 'border-navy-700 bg-navy-900 text-slate-400'}`}>
@@ -2908,6 +2948,16 @@ export default function Dashboard() {
                         >
                           Agent setup
                         </button>
+                      </div>
+                      <div className="mt-3 rounded-xl border border-navy-700/60 bg-navy-950/45 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
+                          {taskPanelSection === 'runs' ? 'Schedule and tracking folder' : 'Multi-agent setup folder'}
+                        </p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                          {taskPanelSection === 'runs'
+                            ? 'Runs, outcomes, evidence, and delivery stay here.'
+                            : 'Policy, worker topology, lane activity, and handoffs live here.'}
+                        </p>
                       </div>
                       {taskPanelSection === 'agents' && (
                         <div className="mt-3 rounded-2xl border border-cyan-500/15 bg-cyan-500/6 p-3">
@@ -3319,10 +3369,10 @@ export default function Dashboard() {
                     </>
                   ) : taskItems.length > 0 ? (
                     <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-4">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Selected automation</p>
-                      <p className="mt-2 text-sm font-medium text-white">Choose an automation</p>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Selected workflow</p>
+                      <p className="mt-2 text-sm font-medium text-white">Choose a scheduled workflow</p>
                       <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-                        Pick one workflow from the list below to inspect its latest result, worker activity, and delivery state.
+                        Pick one schedule from the list below to inspect its tracking folder or agent setup folder.
                       </p>
                     </div>
                   ) : null}
@@ -3332,7 +3382,7 @@ export default function Dashboard() {
               <div className="space-y-2 px-3 pt-0 sm:px-3.5">
                 {showTaskPanelEmptyState ? (
                   <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/25 px-4 py-5 text-center">
-                    <p className="text-sm font-medium text-white">No active automations</p>
+                    <p className="text-sm font-medium text-white">No active schedules</p>
                     <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
                       {hasAutomationHistory
                         ? 'Deleted or completed workflow runs remain in task history, but only active automations appear in this panel.'
@@ -3605,6 +3655,44 @@ export default function Dashboard() {
               )}
 
               {automationEditorSection === 'workflow' && (
+                <>
+              <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/80">Workflow authoring</p>
+                <p className="mt-1 text-sm text-white">Use guided steps when you want precise control. Use a natural-language brief when you just want to describe the job and let Violema structure it.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAutomationEditor((current) => current ? {
+                      ...current,
+                      authoringMode: 'guided',
+                      steps: current.steps.length > 0 ? current.steps : buildWorkflowBlocksFromPrompt(current.workflowPrompt),
+                    } : current)}
+                    className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                      automationEditor.authoringMode === 'guided'
+                        ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
+                        : 'text-slate-300'
+                    }`}
+                  >
+                    Guided steps
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAutomationEditor((current) => current ? {
+                      ...current,
+                      authoringMode: 'describe',
+                      workflowPrompt: current.workflowPrompt.trim() || buildWorkflowPromptFromBlocks(current.steps),
+                    } : current)}
+                    className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                      automationEditor.authoringMode === 'describe'
+                        ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
+                        : 'text-slate-300'
+                    }`}
+                  >
+                    Describe it
+                  </button>
+                </div>
+              </div>
+              {automationEditor.authoringMode === 'guided' ? (
               <label className="block">
                 <span className="ui-section-label px-1">Workflow steps</span>
                 <div className="mt-1 flex flex-wrap gap-2 px-1">
@@ -3842,6 +3930,40 @@ export default function Dashboard() {
                 </div>
                 <p className="mt-1 px-1 text-[11px] text-slate-500">Build the workflow one step at a time, then reorder or trim as needed.</p>
               </label>
+              ) : (
+                <label className="block">
+                  <span className="ui-section-label px-1">Workflow brief</span>
+                  <div className="ui-input-shell mt-1">
+                    <textarea
+                      value={automationEditor.workflowPrompt}
+                      onChange={(event) => setAutomationEditor((current) => current ? { ...current, workflowPrompt: event.target.value } : current)}
+                      rows={8}
+                      className="w-full resize-none bg-transparent px-3 py-3 text-sm leading-6 text-slate-100 outline-none"
+                      placeholder={'Monitor Stripe failed payments every morning.\nIf there are any, summarize the issue patterns and send the result to Slack.\nKeep the report concise.'}
+                    />
+                  </div>
+                  <p className="mt-1 px-1 text-[11px] text-slate-500">
+                    Write one instruction per line, or describe the workflow in plain language. Violema will turn it into a runnable plan.
+                  </p>
+                  <div className="mt-3 rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Planner preview</p>
+                    <div className="mt-2 space-y-2">
+                      {buildWorkflowBlocksFromPrompt(automationEditor.workflowPrompt).slice(0, 5).map((step, index) => (
+                        <div key={`${step.id}-${index}`} className="rounded-xl border border-navy-700/70 bg-navy-950/45 px-3 py-2.5">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-[11px] font-medium text-white">{index + 1}. {step.title}</p>
+                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                              {step.kind}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{step.objective}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </label>
+              )}
+                </>
               )}
 
               {automationEditorSection === 'agents' && (
