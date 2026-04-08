@@ -12,6 +12,9 @@ export type CreditDirection = 'grant' | 'debit';
 export type ModelTier = 'micro' | 'default' | 'hard' | 'critical' | 'ops';
 export type IntelligenceBand = 'micro' | 'default' | 'hard' | 'critical';
 export type WorkerLaneType = 'core' | 'elastic';
+export type AutomationExecutionMode = 'recommended' | 'custom';
+export type AutomationOptimizationGoal = 'balanced' | 'cost_saver' | 'quality_first';
+export type AutomationReviewPolicy = 'lean' | 'standard' | 'strict';
 export type AgentRole =
   | 'nexus'
   | 'researcher'
@@ -148,6 +151,13 @@ export interface WorkerTopologySnapshot {
   bandByRole: Partial<Record<AgentRole, IntelligenceBand>>;
   workers: WorkerSnapshotCard[];
   summary: string;
+}
+
+export interface AutomationExecutionPolicy {
+  mode: AutomationExecutionMode;
+  optimizationGoal: AutomationOptimizationGoal;
+  reviewPolicy: AutomationReviewPolicy;
+  maxElasticLanes: number;
 }
 
 export type AutomationStepKind = 'search' | 'query' | 'summarize' | 'deliver' | 'capture' | 'analyze' | 'note';

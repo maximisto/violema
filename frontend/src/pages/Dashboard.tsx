@@ -53,6 +53,11 @@ const SCHEDULE_PRESETS = [
 ];
 
 type WorkflowBlockKind = 'search' | 'query' | 'capture' | 'analyze' | 'summarize' | 'deliver' | 'note';
+type ExecutionMode = 'recommended' | 'custom';
+type OptimizationGoal = 'balanced' | 'cost_saver' | 'quality_first';
+type ReviewPolicy = 'lean' | 'standard' | 'strict';
+type TaskPanelSection = 'runs' | 'agents';
+type AutomationEditorSection = 'setup' | 'workflow' | 'agents';
 
 interface WorkflowBlockDraft {
   id: string;
@@ -61,6 +66,13 @@ interface WorkflowBlockDraft {
   objective: string;
   inputs?: Record<string, unknown>;
   deliveryTarget?: { channel: 'slack' | 'email'; target: string } | null;
+}
+
+interface AutomationExecutionPolicyDraft {
+  mode: ExecutionMode;
+  optimizationGoal: OptimizationGoal;
+  reviewPolicy: ReviewPolicy;
+  maxElasticLanes: number;
 }
 
 const WORKFLOW_BLOCK_OPTIONS: Array<{ kind: WorkflowBlockKind; label: string; description: string }> = [
@@ -104,6 +116,13 @@ const ACTION_TEMPLATES: Array<{ label: string; block: WorkflowBlockDraft }> = [
   },
 ];
 
+const DEFAULT_EXECUTION_POLICY: AutomationExecutionPolicyDraft = {
+  mode: 'recommended',
+  optimizationGoal: 'balanced',
+  reviewPolicy: 'standard',
+  maxElasticLanes: 2,
+};
+
 type DashboardTaskStatus = 'scheduled' | 'complete' | 'alert';
 
 interface PlatformTaskRecord {
@@ -138,6 +157,7 @@ interface AutomationApiRecord {
   timezone?: string;
   actions: string[];
   steps?: WorkflowBlockDraft[];
+  execution_policy?: AutomationExecutionPolicyDraft;
   notify?: string;
   condition?: string;
   status: 'active' | 'paused';
@@ -166,6 +186,7 @@ interface DashboardTaskItem {
   condition?: string;
   actions?: string[];
   steps?: WorkflowBlockDraft[];
+  executionPolicy?: AutomationExecutionPolicyDraft;
   automationStatus?: 'active' | 'paused';
   timezone?: string;
   lastRunAt?: string;
@@ -266,6 +287,7 @@ interface AutomationEditorDraft {
   notify: string;
   condition: string;
   steps: WorkflowBlockDraft[];
+  executionPolicy: AutomationExecutionPolicyDraft;
   destinationType: 'slack' | 'email' | 'custom' | 'none';
 }
 
@@ -533,6 +555,87 @@ function workflowBlockHasContent(block: WorkflowBlockDraft) {
     return Boolean(block.title.trim() || block.objective.trim() || url);
   }
   return Boolean(block.title.trim() || block.objective.trim());
+}
+
+function normalizeExecutionPolicy(value: unknown): AutomationExecutionPolicyDraft {
+  if (!isRecord(value)) return { ...DEFAULT_EXECUTION_POLICY };
+  return {
+    mode: value.mode === 'custom' ? 'custom' : 'recommended',
+    optimizationGoal:
+      value.optimizationGoal === 'cost_saver' || value.optimizationGoal === 'quality_first'
+        ? value.optimizationGoal
+        : 'balanced',
+    reviewPolicy:
+      value.reviewPolicy === 'lean' || value.reviewPolicy === 'strict'
+        ? value.reviewPolicy
+        : 'standard',
+    maxElasticLanes:
+      typeof value.maxElasticLanes === 'number'
+        ? Math.max(0, Math.min(4, Math.trunc(value.maxElasticLanes)))
+        : DEFAULT_EXECUTION_POLICY.maxElasticLanes,
+  };
+}
+
+function countWorkflowToolCalls(steps: WorkflowBlockDraft[]) {
+  return steps.filter((step) => ['search', 'query', 'capture', 'deliver'].includes(step.kind)).length;
+}
+
+function estimateRecommendedElasticLanes(steps: WorkflowBlockDraft[]) {
+  const weightedStepCount = steps.reduce((total, step) => {
+    if (step.kind === 'analyze' || step.kind === 'capture') return total + 2;
+    return total + 1;
+  }, 0);
+  if (weightedStepCount >= 8) return 3;
+  if (weightedStepCount >= 5) return 2;
+  return 1;
+}
+
+function inferExecutionPolicyMath(policy: AutomationExecutionPolicyDraft, steps: WorkflowBlockDraft[]) {
+  const workflowSteps = steps.filter((step) => workflowBlockHasContent(step));
+  const stepCount = workflowSteps.length;
+  const toolCalls = countWorkflowToolCalls(workflowSteps);
+  const recommendedElasticLanes = estimateRecommendedElasticLanes(workflowSteps);
+  const activeElasticLanes = policy.mode === 'recommended'
+    ? recommendedElasticLanes
+    : Math.min(policy.maxElasticLanes, recommendedElasticLanes);
+  const reasoningLoad =
+    stepCount * 1.15 +
+    toolCalls * 0.85 +
+    (workflowSteps.some((step) => step.kind === 'analyze') ? 1.75 : 0) +
+    (workflowSteps.some((step) => step.kind === 'summarize') ? 0.9 : 0);
+  const estimatedBands =
+    policy.mode === 'recommended'
+      ? 'Auto'
+      : policy.optimizationGoal === 'cost_saver'
+        ? 'Bias lower'
+        : policy.optimizationGoal === 'quality_first'
+          ? 'Bias higher'
+          : 'Balanced';
+
+  return {
+    stepCount,
+    toolCalls,
+    reasoningLoad: reasoningLoad.toFixed(1),
+    recommendedElasticLanes,
+    activeElasticLanes,
+    estimatedBands,
+  };
+}
+
+function getOptimizationGoalLabel(value: OptimizationGoal) {
+  if (value === 'cost_saver') return 'Cost Saver';
+  if (value === 'quality_first') return 'Quality First';
+  return 'Balanced';
+}
+
+function getExecutionModeLabel(value: ExecutionMode) {
+  return value === 'custom' ? 'Custom policy' : 'System recommended';
+}
+
+function getReviewPolicyLabel(value: ReviewPolicy) {
+  if (value === 'lean') return 'Lean review';
+  if (value === 'strict') return 'Strict review';
+  return 'Standard review';
 }
 
 function getConversationSectionLabel(date: Date) {
@@ -1090,6 +1193,7 @@ export default function Dashboard() {
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
   const [taskPanelOpen, setTaskPanelOpen] = useState(false); // hidden by default on mobile feel
+  const [taskPanelSection, setTaskPanelSection] = useState<TaskPanelSection>('runs');
   const [selectedTaskId, setSelectedTaskId] = useState<string | number>('');
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
   const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
@@ -1105,6 +1209,7 @@ export default function Dashboard() {
   const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | 'delete' | 'grant' | null>(null);
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
+  const [automationEditorSection, setAutomationEditorSection] = useState<AutomationEditorSection>('setup');
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -1240,6 +1345,7 @@ export default function Dashboard() {
           latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
           latestStepExecutions: getTaskStepExecutions(task, latestRun),
           workerTopology: getTaskWorkerTopology(task, latestRun),
+          executionPolicy: normalizeExecutionPolicy(task?.metadata?.executionPolicy),
           failureReason: getTaskFailureReason(task, latestRun),
           taskUpdatedAt: task.updatedAt,
           actualCredits: latestRun?.actualCredits,
@@ -1276,6 +1382,9 @@ export default function Dashboard() {
           condition: automation.condition,
           actions: automation.actions,
           steps: automation.steps,
+          executionPolicy: normalizeExecutionPolicy(
+            automation.execution_policy || task?.metadata?.executionPolicy
+          ),
           automationStatus: automation.status,
           timezone: automation.timezone,
           lastRunAt: latestRun?.finishedAt || latestRun?.startedAt || automation.last_run_at,
@@ -1559,6 +1668,7 @@ export default function Dashboard() {
 
   const handleAutomationEdit = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
+    setAutomationEditorSection('setup');
     setAutomationEditor({
       mode: 'edit',
       id: task.automationId,
@@ -1572,6 +1682,7 @@ export default function Dashboard() {
         : Array.isArray(task.actions) && task.actions.length > 0
           ? task.actions.map((action) => parseLegacyActionToWorkflowBlock(action))
           : [createWorkflowBlock('summarize')],
+      executionPolicy: normalizeExecutionPolicy(task.executionPolicy),
       destinationType:
         task.notify?.startsWith('C') || task.notify?.startsWith('G') || task.notify?.startsWith('D') || task.notify?.startsWith('#')
           ? 'slack'
@@ -1584,6 +1695,7 @@ export default function Dashboard() {
   }, []);
 
   const handleAutomationCreate = useCallback(() => {
+    setAutomationEditorSection('setup');
     setAutomationEditor({
       mode: 'create',
       id: `draft-${Date.now()}`,
@@ -1596,6 +1708,7 @@ export default function Dashboard() {
         createWorkflowBlock('query', { title: 'Query Stripe failed payments', objective: 'Stripe failed payments' }),
         createWorkflowBlock('summarize'),
       ],
+      executionPolicy: { ...DEFAULT_EXECUTION_POLICY },
       destinationType: 'slack',
     });
   }, []);
@@ -1632,6 +1745,7 @@ export default function Dashboard() {
           condition: automationEditor.condition.trim() || null,
           steps,
           actions,
+          executionPolicy: automationEditor.executionPolicy,
         }),
       });
       if (!response.ok) throw new Error('Could not save automation');
@@ -1639,6 +1753,7 @@ export default function Dashboard() {
       await refreshAutomations();
       if (automationEditor.mode === 'create' && payload.item?.id) {
         setSelectedTaskId(payload.item.id);
+        setTaskPanelSection('runs');
       }
       setAutomationEditor(null);
       showNotice('success', `${automationEditor.mode === 'create' ? 'Created' : 'Updated'} "${automationEditor.name.trim() || 'automation'}"`);
@@ -1769,6 +1884,14 @@ export default function Dashboard() {
   const selectedTaskSummary = useMemo(() => formatSummaryPreview(selectedTask?.latestSummary, 360), [selectedTask?.latestSummary]);
   const selectedTaskEvidenceLinks = useMemo(() => extractEvidenceLinks(selectedTask?.latestArtifacts), [selectedTask?.latestArtifacts]);
   const selectedTaskStepExecutions = useMemo(() => selectedTask?.latestStepExecutions || [], [selectedTask?.latestStepExecutions]);
+  const selectedTaskExecutionPolicy = useMemo(
+    () => normalizeExecutionPolicy(selectedTask?.executionPolicy),
+    [selectedTask?.executionPolicy]
+  );
+  const selectedTaskPolicyMath = useMemo(
+    () => inferExecutionPolicyMath(selectedTaskExecutionPolicy, selectedTask?.steps || []),
+    [selectedTask?.steps, selectedTaskExecutionPolicy]
+  );
   const selectedTaskWorkerView = useMemo(() => summarizeWorkerLanes(selectedTask), [selectedTask]);
   const selectedTaskWorkerHistory = useMemo(() => buildWorkerActivationHistory(selectedTask), [selectedTask]);
   const selectedTaskRunEconomics = useMemo(() => {
@@ -1787,6 +1910,10 @@ export default function Dashboard() {
     return automationEditor.steps.filter((item) => workflowBlockHasContent(item)).length;
   }, [automationEditor]);
   const hasAutomationSteps = automationActionCount > 0;
+  const automationEditorPolicyMath = useMemo(
+    () => inferExecutionPolicyMath(automationEditor?.executionPolicy || DEFAULT_EXECUTION_POLICY, automationEditor?.steps || []),
+    [automationEditor]
+  );
 
   const updateConversationMeta = useCallback((id: string, updater: (conversation: Conversation) => Conversation) => {
     setConversations((prev) => prev.map((conversation) => (conversation.id === id ? updater(conversation) : conversation)));
@@ -1950,6 +2077,7 @@ export default function Dashboard() {
 
   const duplicateSelectedAutomation = useCallback(() => {
     if (!selectedTask) return;
+    setAutomationEditorSection('setup');
     setAutomationEditor({
       mode: 'create',
       id: `draft-${Date.now()}`,
@@ -1963,6 +2091,7 @@ export default function Dashboard() {
         : Array.isArray(selectedTask.actions) && selectedTask.actions.length > 0
           ? selectedTask.actions.map((action) => parseLegacyActionToWorkflowBlock(action))
           : [createWorkflowBlock('summarize')],
+      executionPolicy: normalizeExecutionPolicy(selectedTask.executionPolicy),
       destinationType:
         selectedTask.notify?.startsWith('C') || selectedTask.notify?.startsWith('G') || selectedTask.notify?.startsWith('D') || selectedTask.notify?.startsWith('#')
           ? 'slack'
@@ -2756,6 +2885,93 @@ export default function Dashboard() {
                           </span>
                         )}
                       </div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setTaskPanelSection('runs')}
+                          className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                            taskPanelSection === 'runs'
+                              ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
+                              : 'text-slate-300'
+                          }`}
+                        >
+                          Schedule and runs
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTaskPanelSection('agents')}
+                          className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                            taskPanelSection === 'agents'
+                              ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
+                              : 'text-slate-300'
+                          }`}
+                        >
+                          Agent setup
+                        </button>
+                      </div>
+                      {taskPanelSection === 'agents' && (
+                        <div className="mt-3 rounded-2xl border border-cyan-500/15 bg-cyan-500/6 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-300/80">Execution policy</p>
+                              <p className="mt-1 text-sm font-semibold text-white">
+                                {selectedTaskExecutionPolicy.mode === 'recommended' ? 'System recommended' : 'Custom policy'}
+                              </p>
+                              <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                                {selectedTaskExecutionPolicy.mode === 'recommended'
+                                  ? 'Violema chooses the leanest reliable setup from workflow complexity, tool count, and delivery risk.'
+                                  : 'This workflow uses an explicit cost and quality policy instead of pure system routing.'}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAutomationEditorSection('agents');
+                                void handleAutomationEdit(selectedTask);
+                              }}
+                              className="ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200"
+                            >
+                              Edit setup
+                            </button>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                              <p className="uppercase tracking-[0.18em] text-slate-600">Mode</p>
+                              <p className="mt-1 text-slate-100">{getExecutionModeLabel(selectedTaskExecutionPolicy.mode)}</p>
+                            </div>
+                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                              <p className="uppercase tracking-[0.18em] text-slate-600">Optimization</p>
+                              <p className="mt-1 text-slate-100">{getOptimizationGoalLabel(selectedTaskExecutionPolicy.optimizationGoal)}</p>
+                            </div>
+                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                              <p className="uppercase tracking-[0.18em] text-slate-600">Review</p>
+                              <p className="mt-1 text-slate-100">{getReviewPolicyLabel(selectedTaskExecutionPolicy.reviewPolicy)}</p>
+                            </div>
+                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                              <p className="uppercase tracking-[0.18em] text-slate-600">Elastic lanes</p>
+                              <p className="mt-1 text-slate-100">{selectedTaskPolicyMath.activeElasticLanes} active / {selectedTaskExecutionPolicy.maxElasticLanes} cap</p>
+                            </div>
+                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                              <p className="uppercase tracking-[0.18em] text-slate-600">Reasoning load</p>
+                              <p className="mt-1 text-slate-100">{selectedTaskPolicyMath.reasoningLoad}</p>
+                            </div>
+                          </div>
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                              <p className="uppercase tracking-[0.18em] text-slate-600">Tool calls</p>
+                              <p className="mt-1 text-slate-100">{selectedTaskPolicyMath.toolCalls}</p>
+                            </div>
+                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                              <p className="uppercase tracking-[0.18em] text-slate-600">Routing bias</p>
+                              <p className="mt-1 text-slate-100">{selectedTaskPolicyMath.estimatedBands}</p>
+                            </div>
+                          </div>
+                          <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
+                            Math: {selectedTaskPolicyMath.stepCount} workflow steps, {selectedTaskPolicyMath.toolCalls} tool calls, lane demand {selectedTaskPolicyMath.recommendedElasticLanes}. The active policy keeps heavier reasoning on stronger models only when the run actually justifies it.
+                          </p>
+                        </div>
+                      )}
+                      {taskPanelSection === 'agents' && (
                       <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -2843,62 +3059,9 @@ export default function Dashboard() {
                             </div>
                           ) : null}
                         </div>
-                      </div>
-                      <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Latest result</p>
-                            <p className="mt-1 text-[11px] text-slate-500">
-                              {selectedTask.lastRunAt
-                                ? `${selectedTaskOutcome.detail} Last run ${formatAutomationRunTime(selectedTask.lastRunAt)}.`
-                                : selectedTaskOutcome.detail}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500 xl:grid-cols-4">
-                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                            <p className="uppercase tracking-[0.18em] text-slate-600">Run cost</p>
-                            <p className="mt-1 text-slate-100">
-                              {selectedTaskRunEconomics.actualCredits > 0 ? `${formatCredits(selectedTaskRunEconomics.actualCredits)} cr` : '—'}
-                            </p>
-                            {selectedTaskRunEconomics.estimatedCredits ? (
-                              <p className="mt-1 text-[10px] text-slate-500">Est. {formatCredits(selectedTaskRunEconomics.estimatedCredits)} cr</p>
-                            ) : null}
-                          </div>
-                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                            <p className="uppercase tracking-[0.18em] text-slate-600">Tokens</p>
-                            <p className="mt-1 text-slate-100">{formatTokenCount(selectedTaskRunEconomics.totalTokens) || '—'}</p>
-                          </div>
-                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                            <p className="uppercase tracking-[0.18em] text-slate-600">Tool calls</p>
-                            <p className="mt-1 text-slate-100">{selectedTaskRunEconomics.totalToolCalls || '—'}</p>
-                          </div>
-                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                            <p className="uppercase tracking-[0.18em] text-slate-600">Step count</p>
-                            <p className="mt-1 text-slate-100">{selectedTaskStepExecutions.length || '—'}</p>
-                          </div>
-                        </div>
-                        {selectedTask.failureReason ? (
-                          <div className="mt-3 rounded-xl border border-red-500/18 bg-red-500/8 px-3 py-2.5 text-[11px] leading-relaxed text-red-200">
-                            {selectedTask.failureReason}
-                          </div>
-                        ) : null}
-                        {selectedTaskSummary ? (
-                          <p className="mt-3 text-[13px] leading-6 text-slate-100">
-                            {selectedTaskSummary}
-                          </p>
-                        ) : (
-                          <div className="mt-3 rounded-xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-2.5 text-[11px] leading-relaxed text-slate-500">
-                            {selectedTaskOutcome.label === 'Last run failed'
-                              ? 'The last run failed before it produced a concise summary. Check the workflow steps or delivery target and run it again.'
-                              : selectedTask.lastRunAt
-                                ? 'The latest run finished, but it did not store a summary preview yet.'
-                                : 'No run output yet. Start the automation manually or wait for the next scheduled run.'}
-                          </div>
-                        )}
                         {selectedTaskWorkerHistory.length > 0 ? (
                           <div className="mt-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Lane activation history</p>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Lane activity</p>
                             <div className="mt-2 space-y-2">
                               {selectedTaskWorkerHistory.map((event) => {
                                 const tone =
@@ -3016,6 +3179,61 @@ export default function Dashboard() {
                             ) : null}
                           </div>
                         ) : null}
+                      </div>
+                      )}
+                      {taskPanelSection === 'runs' && (
+                      <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Latest result</p>
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              {selectedTask.lastRunAt
+                                ? `${selectedTaskOutcome.detail} Last run ${formatAutomationRunTime(selectedTask.lastRunAt)}.`
+                                : selectedTaskOutcome.detail}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500 xl:grid-cols-4">
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Run cost</p>
+                            <p className="mt-1 text-slate-100">
+                              {selectedTaskRunEconomics.actualCredits > 0 ? `${formatCredits(selectedTaskRunEconomics.actualCredits)} cr` : '—'}
+                            </p>
+                            {selectedTaskRunEconomics.estimatedCredits ? (
+                              <p className="mt-1 text-[10px] text-slate-500">Est. {formatCredits(selectedTaskRunEconomics.estimatedCredits)} cr</p>
+                            ) : null}
+                          </div>
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Tokens</p>
+                            <p className="mt-1 text-slate-100">{formatTokenCount(selectedTaskRunEconomics.totalTokens) || '—'}</p>
+                          </div>
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Tool calls</p>
+                            <p className="mt-1 text-slate-100">{selectedTaskRunEconomics.totalToolCalls || '—'}</p>
+                          </div>
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Step count</p>
+                            <p className="mt-1 text-slate-100">{selectedTaskStepExecutions.length || '—'}</p>
+                          </div>
+                        </div>
+                        {selectedTask.failureReason ? (
+                          <div className="mt-3 rounded-xl border border-red-500/18 bg-red-500/8 px-3 py-2.5 text-[11px] leading-relaxed text-red-200">
+                            {selectedTask.failureReason}
+                          </div>
+                        ) : null}
+                        {selectedTaskSummary ? (
+                          <p className="mt-3 text-[13px] leading-6 text-slate-100">
+                            {selectedTaskSummary}
+                          </p>
+                        ) : (
+                          <div className="mt-3 rounded-xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-2.5 text-[11px] leading-relaxed text-slate-500">
+                            {selectedTaskOutcome.label === 'Last run failed'
+                              ? 'The last run failed before it produced a concise summary. Check the workflow steps or delivery target and run it again.'
+                              : selectedTask.lastRunAt
+                                ? 'The latest run finished, but it did not store a summary preview yet.'
+                                : 'No run output yet. Start the automation manually or wait for the next scheduled run.'}
+                          </div>
+                        )}
                         {selectedTaskEvidenceLinks.length > 0 ? (
                           <div className="mt-3">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Evidence</p>
@@ -3043,6 +3261,7 @@ export default function Dashboard() {
                           </div>
                         ) : null}
                       </div>
+                      )}
                       {selectedTask.description && (
                         <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
                           {selectedTask.description}
@@ -3246,6 +3465,29 @@ export default function Dashboard() {
                 <p className="mt-1 text-sm text-white">Set the cadence, stack the steps, pick the destination, and watch the credit pressure update.</p>
               </div>
 
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: 'setup' as const, label: 'Setup' },
+                  { id: 'workflow' as const, label: 'Workflow' },
+                  { id: 'agents' as const, label: 'Agent setup' },
+                ].map((section) => (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={() => setAutomationEditorSection(section.id)}
+                    className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                      automationEditorSection === section.id
+                        ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
+                        : 'text-slate-300'
+                    }`}
+                  >
+                    {section.label}
+                  </button>
+                ))}
+              </div>
+
+              {automationEditorSection === 'setup' && (
+                <>
               <label className="block">
                 <span className="ui-section-label px-1">Name</span>
                 <div className="ui-input-shell mt-1">
@@ -3258,7 +3500,7 @@ export default function Dashboard() {
                 </div>
               </label>
 
-              <label className="block">
+                <label className="block">
                 <span className="ui-section-label px-1">Schedule</span>
                 <div className="mt-1 flex flex-wrap gap-2 px-1">
                   {SCHEDULE_PRESETS.map((preset) => (
@@ -3287,7 +3529,7 @@ export default function Dashboard() {
                 <p className="mt-1 px-1 text-[11px] text-slate-500">Use plain language like “every hour”, “daily at 6pm”, or “every monday at 9am”.</p>
               </label>
 
-              <label className="block">
+                <label className="block">
                 <span className="ui-section-label px-1">Description</span>
                 <div className="ui-input-shell mt-1">
                   <textarea
@@ -3300,6 +3542,69 @@ export default function Dashboard() {
                 </div>
               </label>
 
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="ui-section-label px-1">Notify</span>
+                    <div className="mt-1 flex flex-wrap gap-2 px-1">
+                      {[
+                        { label: 'Slack', value: 'slack', placeholder: 'C0123456789' },
+                        { label: 'Email', value: 'email', placeholder: 'max@purpleorange.io' },
+                        { label: 'Custom', value: 'custom', placeholder: '' },
+                        { label: 'None', value: 'none', placeholder: '' },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setAutomationEditor((current) => {
+                            if (!current) return current;
+                            return {
+                              ...current,
+                              destinationType: option.value as AutomationEditorDraft['destinationType'],
+                              notify: option.value === 'none'
+                                ? ''
+                                : current.notify || option.placeholder,
+                            };
+                          })}
+                          className={`ui-pill px-2.5 py-1 text-[10px] normal-case tracking-normal ${
+                            automationEditor.destinationType === option.value
+                              ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
+                              : 'text-slate-300'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="ui-input-shell mt-1">
+                      <input
+                        value={automationEditor.notify}
+                        onChange={(event) => setAutomationEditor((current) => current ? { ...current, notify: event.target.value } : current)}
+                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                        placeholder="Slack channel ID (C...) or email"
+                        disabled={automationEditor.destinationType === 'none'}
+                      />
+                    </div>
+                    <p className="mt-1 px-1 text-[11px] text-slate-500">
+                      Slack is most reliable with a channel ID like <span className="font-mono text-slate-400">C0123456789</span>. Channel names like <span className="font-mono text-slate-400">#ops-alerts</span> need extra Slack scopes or alias mapping.
+                    </p>
+                  </label>
+
+                  <label className="block">
+                    <span className="ui-section-label px-1">Condition</span>
+                    <div className="ui-input-shell mt-1">
+                      <input
+                        value={automationEditor.condition}
+                        onChange={(event) => setAutomationEditor((current) => current ? { ...current, condition: event.target.value } : current)}
+                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                        placeholder="Only if failure count exceeds 3"
+                      />
+                    </div>
+                  </label>
+                </div>
+                </>
+              )}
+
+              {automationEditorSection === 'workflow' && (
               <label className="block">
                 <span className="ui-section-label px-1">Workflow steps</span>
                 <div className="mt-1 flex flex-wrap gap-2 px-1">
@@ -3537,32 +3842,35 @@ export default function Dashboard() {
                 </div>
                 <p className="mt-1 px-1 text-[11px] text-slate-500">Build the workflow one step at a time, then reorder or trim as needed.</p>
               </label>
+              )}
+
+              {automationEditorSection === 'agents' && (
+                <>
+              <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/6 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300/80">Agent setup</p>
+                <p className="mt-1 text-sm text-white">Separate the execution policy from the schedule. Use the system recommendation by default, or set a custom cost and review posture when you want tighter control.</p>
+              </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className="ui-section-label px-1">Notify</span>
-                  <div className="mt-1 flex flex-wrap gap-2 px-1">
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Execution mode</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
                     {[
-                      { label: 'Slack', value: 'slack', placeholder: 'C0123456789' },
-                      { label: 'Email', value: 'email', placeholder: 'max@purpleorange.io' },
-                      { label: 'Custom', value: 'custom', placeholder: '' },
-                      { label: 'None', value: 'none', placeholder: '' },
+                      { value: 'recommended' as const, label: 'System recommended' },
+                      { value: 'custom' as const, label: 'Custom policy' },
                     ].map((option) => (
                       <button
                         key={option.value}
                         type="button"
-                        onClick={() => setAutomationEditor((current) => {
-                          if (!current) return current;
-                          return {
-                            ...current,
-                            destinationType: option.value as AutomationEditorDraft['destinationType'],
-                            notify: option.value === 'none'
-                              ? ''
-                              : current.notify || option.placeholder,
-                          };
-                        })}
-                        className={`ui-pill px-2.5 py-1 text-[10px] normal-case tracking-normal ${
-                          automationEditor.destinationType === option.value
+                        onClick={() => setAutomationEditor((current) => current ? {
+                          ...current,
+                          executionPolicy: {
+                            ...current.executionPolicy,
+                            mode: option.value,
+                          },
+                        } : current)}
+                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                          automationEditor.executionPolicy.mode === option.value
                             ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
                             : 'text-slate-300'
                         }`}
@@ -3571,32 +3879,106 @@ export default function Dashboard() {
                       </button>
                     ))}
                   </div>
-                  <div className="ui-input-shell mt-1">
-                    <input
-                      value={automationEditor.notify}
-                      onChange={(event) => setAutomationEditor((current) => current ? { ...current, notify: event.target.value } : current)}
-                      className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                      placeholder="Slack channel ID (C...) or email"
-                      disabled={automationEditor.destinationType === 'none'}
-                    />
-                  </div>
-                  <p className="mt-1 px-1 text-[11px] text-slate-500">
-                    Slack is most reliable with a channel ID like <span className="font-mono text-slate-400">C0123456789</span>. Channel names like <span className="font-mono text-slate-400">#ops-alerts</span> need extra Slack scopes or alias mapping.
-                  </p>
-                </label>
+                </div>
 
-                <label className="block">
-                  <span className="ui-section-label px-1">Condition</span>
-                  <div className="ui-input-shell mt-1">
-                    <input
-                      value={automationEditor.condition}
-                      onChange={(event) => setAutomationEditor((current) => current ? { ...current, condition: event.target.value } : current)}
-                      className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                      placeholder="Only if failure count exceeds 3"
-                    />
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Optimization goal</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      { value: 'balanced' as const, label: 'Balanced' },
+                      { value: 'cost_saver' as const, label: 'Cost Saver' },
+                      { value: 'quality_first' as const, label: 'Quality First' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setAutomationEditor((current) => current ? {
+                          ...current,
+                          executionPolicy: {
+                            ...current.executionPolicy,
+                            mode: 'custom',
+                            optimizationGoal: option.value,
+                          },
+                        } : current)}
+                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                          automationEditor.executionPolicy.optimizationGoal === option.value
+                            ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
+                            : 'text-slate-300'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
-                </label>
+                </div>
+
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Review policy</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      { value: 'lean' as const, label: 'Lean' },
+                      { value: 'standard' as const, label: 'Standard' },
+                      { value: 'strict' as const, label: 'Strict' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setAutomationEditor((current) => current ? {
+                          ...current,
+                          executionPolicy: {
+                            ...current.executionPolicy,
+                            mode: 'custom',
+                            reviewPolicy: option.value,
+                          },
+                        } : current)}
+                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                          automationEditor.executionPolicy.reviewPolicy === option.value
+                            ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
+                            : 'text-slate-300'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Elastic lane cap</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[0, 1, 2, 3, 4].map((count) => (
+                      <button
+                        key={count}
+                        type="button"
+                        onClick={() => setAutomationEditor((current) => current ? {
+                          ...current,
+                          executionPolicy: {
+                            ...current.executionPolicy,
+                            mode: 'custom',
+                            maxElasticLanes: count,
+                          },
+                        } : current)}
+                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                          automationEditor.executionPolicy.maxElasticLanes === count
+                            ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
+                            : 'text-slate-300'
+                        }`}
+                      >
+                        {count}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
+
+              <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Why this setup</p>
+                <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+                  Math: {automationEditorPolicyMath.stepCount} workflow steps, {automationEditorPolicyMath.toolCalls} tool calls, lane demand {automationEditorPolicyMath.recommendedElasticLanes}. This keeps heavyweight reasoning on stronger models only when the run complexity justifies the extra spend.
+                </p>
+              </div>
+                </>
+              )}
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">

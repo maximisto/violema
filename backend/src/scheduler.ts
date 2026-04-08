@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import cron, { ScheduledTask } from 'node-cron';
-import type { PersistedAutomationStep } from './platform/types';
+import type { AutomationExecutionPolicy, PersistedAutomationStep } from './platform/types';
 
 export interface AutomationRecord {
   id: string;
@@ -13,6 +13,7 @@ export interface AutomationRecord {
   timezone?: string;
   actions: string[];
   steps?: PersistedAutomationStep[];
+  execution_policy?: AutomationExecutionPolicy;
   notify?: string;
   condition?: string;
   status: 'active' | 'paused';
@@ -381,6 +382,7 @@ export function createAutomation(
     timezone,
     actions: input.actions,
     steps: input.steps,
+    execution_policy: input.execution_policy,
     notify: input.notify,
     condition: input.condition,
     status: 'active',

@@ -19,6 +19,9 @@ import {
   addLedgerEntry,
   applyWorkerRuntimeActivity,
   type AgentRole,
+  type AutomationExecutionPolicy,
+  type AutomationOptimizationGoal,
+  type AutomationReviewPolicy,
   assertCanSpendCredits,
   calculateRuntimeCredits,
   type AutomationExecutionPlan,
@@ -1650,6 +1653,54 @@ function maxAutomationModelTier(left: ModelTier, right: ModelTier): ModelTier {
   return rank[right] > rank[left] ? right : left;
 }
 
+function normalizeAutomationExecutionPolicy(value: unknown): AutomationExecutionPolicy | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+
+  const record = value as Record<string, unknown>;
+  const mode = record.mode === 'custom' ? 'custom' : 'recommended';
+  const optimizationGoal =
+    record.optimizationGoal === 'cost_saver' || record.optimizationGoal === 'quality_first'
+      ? record.optimizationGoal
+      : 'balanced';
+  const reviewPolicy =
+    record.reviewPolicy === 'lean' || record.reviewPolicy === 'strict'
+      ? record.reviewPolicy
+      : 'standard';
+  const maxElasticLanes = typeof record.maxElasticLanes === 'number'
+    ? Math.max(0, Math.min(4, Math.trunc(record.maxElasticLanes)))
+    : 2;
+
+  return {
+    mode,
+    optimizationGoal,
+    reviewPolicy,
+    maxElasticLanes,
+  };
+}
+
+function getDefaultAutomationExecutionPolicy(): AutomationExecutionPolicy {
+  return {
+    mode: 'recommended',
+    optimizationGoal: 'balanced',
+    reviewPolicy: 'standard',
+    maxElasticLanes: 2,
+  };
+}
+
+function downgradeAutomationModelTier(modelTier: ModelTier): ModelTier {
+  if (modelTier === 'critical') return 'hard';
+  if (modelTier === 'hard' || modelTier === 'ops') return 'default';
+  if (modelTier === 'default') return 'micro';
+  return 'micro';
+}
+
+function upgradeAutomationModelTier(modelTier: ModelTier): ModelTier {
+  if (modelTier === 'micro') return 'default';
+  if (modelTier === 'default' || modelTier === 'ops') return 'hard';
+  if (modelTier === 'hard') return 'critical';
+  return 'critical';
+}
+
 function estimateAutomationStepCredits(
   kind: AutomationStepKind,
   modelTier: ModelTier,
@@ -2021,6 +2072,70 @@ function estimateAutomationToolCallCount(steps: AutomationStepDefinition[]) {
   return steps.filter((step) => step.toolName && step.toolName !== 'generate_text').length;
 }
 
+function applyAutomationExecutionPolicy(
+  rolePlan: AutomationRolePlan,
+  suggestedModelTier: ModelTier,
+  complexity: 'low' | 'medium' | 'high',
+  stepCount: number,
+  toolCalls: number,
+  policy: AutomationExecutionPolicy | undefined,
+) {
+  const normalizedPolicy = policy || getDefaultAutomationExecutionPolicy();
+  let nextModelTier = suggestedModelTier;
+  let nextSupportingRoles = [...rolePlan.supportingRoles];
+  let nextElasticLanes = [...(rolePlan.elasticLanes || [])];
+  const rationale: string[] = [];
+
+  if (normalizedPolicy.mode === 'custom') {
+    rationale.push('Custom execution policy overrides the default orchestration path.');
+
+    if (normalizedPolicy.optimizationGoal === 'cost_saver') {
+      nextModelTier = downgradeAutomationModelTier(nextModelTier);
+      nextSupportingRoles = nextSupportingRoles.filter((role) => role !== 'reviewer');
+      rationale.push('Cost Saver lowers model spend and trims unnecessary review overhead.');
+    } else if (normalizedPolicy.optimizationGoal === 'quality_first') {
+      nextModelTier = upgradeAutomationModelTier(nextModelTier);
+      if (!nextSupportingRoles.includes('reviewer')) nextSupportingRoles.push('reviewer');
+      rationale.push('Quality First increases reasoning depth and keeps review in the loop.');
+    } else {
+      rationale.push('Balanced keeps the default quality/cost routing.');
+    }
+
+    if (normalizedPolicy.reviewPolicy === 'strict') {
+      if (!nextSupportingRoles.includes('reviewer')) nextSupportingRoles.push('reviewer');
+      if (nextModelTier === 'micro') nextModelTier = 'default';
+      rationale.push('Strict review forces a reviewer handoff before final delivery.');
+    } else if (normalizedPolicy.reviewPolicy === 'lean') {
+      nextSupportingRoles = nextSupportingRoles.filter((role) => role !== 'reviewer');
+      rationale.push('Lean review removes reviewer passes unless the run already requires them.');
+    }
+  } else {
+    rationale.push(`System Recommended uses ${stepCount} steps, ${toolCalls} tool calls, and ${complexity} complexity to choose the leanest reliable setup.`);
+  }
+
+  const desiredElasticLanes = complexity === 'high' ? 3 : complexity === 'medium' ? 2 : 1;
+  const cappedElasticLaneCount = Math.max(
+    0,
+    Math.min(nextElasticLanes.length, normalizedPolicy.mode === 'custom' ? normalizedPolicy.maxElasticLanes : desiredElasticLanes),
+  );
+  nextElasticLanes = nextElasticLanes.slice(0, cappedElasticLaneCount);
+
+  if (nextElasticLanes.length === 0) {
+    rationale.push('No elastic lanes opened because the workflow can stay within the resident team.');
+  } else {
+    rationale.push(`Elastic lanes capped at ${nextElasticLanes.length} to keep token burn proportional to run difficulty.`);
+  }
+
+  return {
+    policy: normalizedPolicy,
+    primaryRole: rolePlan.primaryRole,
+    supportingRoles: [...new Set(nextSupportingRoles)],
+    elasticLanes: [...new Set(nextElasticLanes)],
+    suggestedModelTier: nextModelTier,
+    rationale: rationale.join(' '),
+  };
+}
+
 function estimateSuccessfulAutomationCredits(stepExecutions: AutomationStepExecution[]) {
   return stepExecutions.reduce((total, step) => {
     if (step.status === 'skipped' || step.status === 'planned') return total;
@@ -2151,6 +2266,7 @@ function buildAutomationExecutionPlan(automation: {
   description?: string;
   actions: string[];
   steps?: PersistedAutomationStep[];
+  execution_policy?: AutomationExecutionPolicy;
   notify?: string;
   condition?: string;
 }): AutomationExecutionPlan {
@@ -2159,28 +2275,40 @@ function buildAutomationExecutionPlan(automation: {
     : automation.actions.map((action, index) => createAutomationStepDefinition(automation, action, index));
   const canonicalSteps = canonicalizeAutomationPlanSteps(baseSteps);
   const steps = ensureAutomationDeliveryStep(automation, ensureAutomationSummaryStep(automation, canonicalSteps));
-  const rolePlan = deriveAutomationRolePlan(steps);
+  const baseRolePlan = deriveAutomationRolePlan(steps);
   const complexity = inferAutomationComplexityFromPlan(steps);
-  const suggestedModelTier = inferAutomationModelTierFromPlan(automation, steps);
+  const executionPolicy = normalizeAutomationExecutionPolicy(automation.execution_policy);
+  const baseSuggestedModelTier = inferAutomationModelTierFromPlan(automation, steps);
   const estimatedToolCalls = estimateAutomationToolCallCount(steps);
+  const policyPlan = applyAutomationExecutionPolicy(
+    baseRolePlan,
+    baseSuggestedModelTier,
+    complexity,
+    steps.length,
+    estimatedToolCalls,
+    executionPolicy,
+  );
   const topology = buildWorkerTopologySnapshot({
-    primaryRole: rolePlan.primaryRole,
-    supportingRoles: rolePlan.supportingRoles,
-    elasticLanes: rolePlan.elasticLanes,
-    modelTier: suggestedModelTier,
+    primaryRole: policyPlan.primaryRole,
+    supportingRoles: policyPlan.supportingRoles,
+    elasticLanes: policyPlan.elasticLanes,
+    modelTier: policyPlan.suggestedModelTier,
     complexity,
     taskKind: 'automation',
   });
 
   return {
-    ...rolePlan,
+    primaryRole: policyPlan.primaryRole,
+    supportingRoles: policyPlan.supportingRoles,
+    elasticLanes: policyPlan.elasticLanes,
+    rationale: policyPlan.rationale,
     primaryBand: topology.primaryBand,
-    suggestedModelTier,
+    suggestedModelTier: policyPlan.suggestedModelTier,
     complexity,
     estimatedToolCalls,
     estimatedCredits: estimateCreditCost({
       taskKind: 'automation',
-      modelTier: suggestedModelTier,
+      modelTier: policyPlan.suggestedModelTier,
       automationRuns: 1,
       toolCalls: estimatedToolCalls,
       complexity,
@@ -2238,6 +2366,7 @@ async function executeAutomationCore(
     description?: string;
     actions: string[];
     steps?: PersistedAutomationStep[];
+    execution_policy?: AutomationExecutionPolicy;
     notify?: string;
     condition?: string;
     timezone?: string;
@@ -2490,6 +2619,7 @@ async function runAutomation(automation: {
   description?: string;
   actions: string[];
   steps?: PersistedAutomationStep[];
+  execution_policy?: AutomationExecutionPolicy;
   notify?: string;
   condition?: string;
   timezone?: string;
@@ -2528,6 +2658,7 @@ async function runAutomation(automation: {
       notify: automation.notify || null,
       delegation: delegation.ownership,
       sourceSteps: automation.steps,
+      executionPolicy: automation.execution_policy,
       automationPlan: executionPlan,
       plannedSteps: executionPlan.steps,
       rolePlan: {
@@ -2560,6 +2691,7 @@ async function runAutomation(automation: {
       title: automation.name,
       delegation: delegation.ownership,
       sourceSteps: automation.steps,
+      executionPolicy: automation.execution_policy,
       automationPlan: executionPlan,
       plannedSteps: executionPlan.steps,
       stepExecutions: [],
@@ -2600,6 +2732,7 @@ async function runAutomation(automation: {
           title: automation.name,
           delegation: delegation.ownership,
           sourceSteps: automation.steps,
+          executionPolicy: automation.execution_policy,
           automationPlan: executionPlan,
           plannedSteps: executionPlan.steps,
           stepExecutions: progress.stepExecutions,
@@ -2627,6 +2760,7 @@ async function runAutomation(automation: {
           notify: automation.notify || null,
           delegation: delegation.ownership,
           sourceSteps: automation.steps,
+          executionPolicy: automation.execution_policy,
           latestSummary: progress.summaryText || undefined,
           latestArtifacts: progress.artifacts,
           latestStepExecutions: progress.stepExecutions,
@@ -2687,6 +2821,7 @@ async function runAutomation(automation: {
           tokenUsage: step.tokenUsage,
         })),
         sourceSteps: automation.steps,
+        executionPolicy: automation.execution_policy,
         automationPlan: execution.plan,
         plannedSteps: execution.plan.steps,
         actualToolCalls,
@@ -2710,6 +2845,7 @@ async function runAutomation(automation: {
         notify: deliveryTarget || null,
         delegation: delegation.ownership,
         sourceSteps: automation.steps,
+        executionPolicy: automation.execution_policy,
         latestSummary: summary,
         latestArtifacts: execution.artifacts,
         latestStepExecutions: execution.stepExecutions,
@@ -2777,6 +2913,7 @@ async function runAutomation(automation: {
         summary: failureSummary,
         plannedSteps: executionPlan.steps,
         stepExecutions: [],
+        executionPolicy: automation.execution_policy,
         rolePlan: {
           primaryRole: executionPlan.primaryRole,
           supportingRoles: executionPlan.supportingRoles,
@@ -2806,6 +2943,7 @@ async function runAutomation(automation: {
         notify: automation.notify || null,
         delegation: delegation.ownership,
         sourceSteps: automation.steps,
+        executionPolicy: automation.execution_policy,
         latestSummary: failureSummary,
         latestStepExecutions: [],
         automationPlan: executionPlan,
@@ -3658,6 +3796,7 @@ app.post('/api/automations', async (req: Request, res: Response) => {
     timezone?: string;
     actions?: unknown[];
     steps?: unknown[];
+    executionPolicy?: unknown;
     notify?: string | null;
     condition?: string | null;
   };
@@ -3685,6 +3824,7 @@ app.post('/api/automations', async (req: Request, res: Response) => {
       timezone: typeof body.timezone === 'string' ? body.timezone.trim() || undefined : undefined,
       actions: normalizedActions,
       steps: normalizedSteps.length > 0 ? normalizedSteps : undefined,
+      execution_policy: normalizeAutomationExecutionPolicy(body.executionPolicy),
       notify: typeof body.notify === 'string' ? body.notify.trim() || undefined : undefined,
       condition: typeof body.condition === 'string' ? body.condition.trim() || undefined : undefined,
     }, runAutomation);
@@ -3722,6 +3862,9 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
   if (typeof req.body.timezone === 'string') patch.timezone = req.body.timezone.trim();
   if (typeof req.body.notify === 'string') patch.notify = req.body.notify.trim();
   if (typeof req.body.condition === 'string') patch.condition = req.body.condition.trim();
+  if (typeof req.body.executionPolicy !== 'undefined') {
+    patch.execution_policy = normalizeAutomationExecutionPolicy(req.body.executionPolicy);
+  }
   if (Array.isArray(req.body.steps)) {
     const normalizedSteps = normalizePersistedAutomationSteps(req.body.steps);
     patch.steps = normalizedSteps;
