@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages/messages';
+import { getWorkspaceProviderToken, getWorkspaceSettings } from './settingsStore';
 
 type Provider = 'anthropic' | 'minimax' | 'openai' | 'openrouter' | 'mistral';
 type CanonicalTextProfile = 'micro' | 'default' | 'hard' | 'critical' | 'ops';
@@ -65,7 +66,7 @@ function resolveEmbeddingProfile(profile: EmbeddingProfile): CanonicalEmbeddingP
   return profile;
 }
 
-function getTextRoute(profile: TextProfile): ModelRoute {
+function getTextRoute(profile: TextProfile, workspaceId?: string): ModelRoute {
   const resolvedProfile = resolveTextProfile(profile);
   const defaults: Record<CanonicalTextProfile, ModelRoute> = {
     micro: {
@@ -138,11 +139,18 @@ function getTextRoute(profile: TextProfile): ModelRoute {
   };
 
   if (profile === resolvedProfile) {
-    return route;
+    const override = workspaceId ? getWorkspaceSettings(workspaceId)?.modelOverrides?.[resolvedProfile] : undefined;
+    return {
+      ...route,
+      provider: override?.provider || route.provider,
+      model: override?.model || route.model,
+      baseUrl: override?.baseUrl || route.baseUrl,
+      reasoningEffort: override?.reasoningEffort || route.reasoningEffort,
+    };
   }
 
   const legacyPrefix = `MODEL_${profile.toUpperCase()}`;
-  return {
+  const legacyRoute = {
     ...route,
     ...legacyOverrides[profile as LegacyTextProfile],
     provider: (env(`${legacyPrefix}_PROVIDER`) as Provider | undefined) || route.provider,
@@ -151,9 +159,17 @@ function getTextRoute(profile: TextProfile): ModelRoute {
     baseUrl: env(`${legacyPrefix}_BASE_URL`) || route.baseUrl,
     reasoningEffort: (env(`${legacyPrefix}_REASONING_EFFORT`) as ModelRoute['reasoningEffort'] | undefined) || route.reasoningEffort,
   };
+  const override = workspaceId ? getWorkspaceSettings(workspaceId)?.modelOverrides?.[resolvedProfile] : undefined;
+  return {
+    ...legacyRoute,
+    provider: override?.provider || legacyRoute.provider,
+    model: override?.model || legacyRoute.model,
+    baseUrl: override?.baseUrl || legacyRoute.baseUrl,
+    reasoningEffort: override?.reasoningEffort || legacyRoute.reasoningEffort,
+  };
 }
 
-function getEmbeddingRoute(profile: EmbeddingProfile): ModelRoute {
+function getEmbeddingRoute(profile: EmbeddingProfile, workspaceId?: string): ModelRoute {
   const resolvedProfile = resolveEmbeddingProfile(profile);
   const defaults: Record<CanonicalEmbeddingProfile, ModelRoute> = {
     memory_text: {
@@ -171,7 +187,7 @@ function getEmbeddingRoute(profile: EmbeddingProfile): ModelRoute {
   };
 
   const prefix = `MODEL_${resolvedProfile.toUpperCase()}`;
-  return {
+  const route = {
     ...defaults[resolvedProfile],
     provider: (env(`${prefix}_PROVIDER`) as Provider | undefined) || defaults[resolvedProfile].provider,
     model: env(`${prefix}_MODEL`) || defaults[resolvedProfile].model,
@@ -179,10 +195,24 @@ function getEmbeddingRoute(profile: EmbeddingProfile): ModelRoute {
     baseUrl: env(`${prefix}_BASE_URL`) || defaults[resolvedProfile].baseUrl,
     reasoningEffort: (env(`${prefix}_REASONING_EFFORT`) as ModelRoute['reasoningEffort'] | undefined) || defaults[resolvedProfile].reasoningEffort,
   };
+  const override = workspaceId ? getWorkspaceSettings(workspaceId)?.modelOverrides?.[resolvedProfile] : undefined;
+  return {
+    ...route,
+    provider: override?.provider || route.provider,
+    model: override?.model || route.model,
+    baseUrl: override?.baseUrl || route.baseUrl,
+    reasoningEffort: override?.reasoningEffort || route.reasoningEffort,
+  };
 }
 
-function getAnthropicCompatibleClient(profile: TextProfile) {
-  const route = getTextRoute(profile);
+function resolveProviderApiKey(route: ModelRoute, workspaceId?: string): string {
+  const workspaceToken = workspaceId ? getWorkspaceProviderToken(workspaceId, route.provider) : undefined;
+  if (workspaceToken) return workspaceToken;
+  return requireEnv(route.apiKeyEnv);
+}
+
+function getAnthropicCompatibleClient(profile: TextProfile, workspaceId?: string) {
+  const route = getTextRoute(profile, workspaceId);
   if (route.provider !== 'anthropic' && route.provider !== 'minimax') {
     throw new Error(`${profile} profile must use an Anthropic-compatible provider.`);
   }
@@ -190,49 +220,49 @@ function getAnthropicCompatibleClient(profile: TextProfile) {
   return {
     route,
     client: new Anthropic({
-      apiKey: requireEnv(route.apiKeyEnv),
+      apiKey: resolveProviderApiKey(route, workspaceId),
       baseURL: route.baseUrl,
     }),
   };
 }
 
-export function getChatModelConfig(profile: TextProfile = 'default') {
-  return getTextRoute(profile);
+export function getChatModelConfig(profile: TextProfile = 'default', workspaceId?: string) {
+  return getTextRoute(profile, workspaceId);
 }
 
-export function getUtilityModelConfig() {
-  return getTextRoute('micro');
+export function getUtilityModelConfig(workspaceId?: string) {
+  return getTextRoute('micro', workspaceId);
 }
 
-export function getMicroModelConfig() {
-  return getTextRoute('micro');
+export function getMicroModelConfig(workspaceId?: string) {
+  return getTextRoute('micro', workspaceId);
 }
 
-export function getMemoryEmbeddingConfig() {
-  return getEmbeddingRoute('memory_text');
+export function getMemoryEmbeddingConfig(workspaceId?: string) {
+  return getEmbeddingRoute('memory_text', workspaceId);
 }
 
-export function getCodeEmbeddingConfig() {
-  return getEmbeddingRoute('memory_code');
+export function getCodeEmbeddingConfig(workspaceId?: string) {
+  return getEmbeddingRoute('memory_code', workspaceId);
 }
 
-export function getModelRoutingStatus() {
-  const micro = getTextRoute('micro');
-  const defaultRoute = getTextRoute('default');
-  const hard = getTextRoute('hard');
-  const critical = getTextRoute('critical');
-  const ops = getTextRoute('ops');
-  const memoryText = getEmbeddingRoute('memory_text');
-  const memoryCode = getEmbeddingRoute('memory_code');
+export function getModelRoutingStatus(workspaceId?: string) {
+  const micro = getTextRoute('micro', workspaceId);
+  const defaultRoute = getTextRoute('default', workspaceId);
+  const hard = getTextRoute('hard', workspaceId);
+  const critical = getTextRoute('critical', workspaceId);
+  const ops = getTextRoute('ops', workspaceId);
+  const memoryText = getEmbeddingRoute('memory_text', workspaceId);
+  const memoryCode = getEmbeddingRoute('memory_code', workspaceId);
 
   return {
-    micro: { provider: micro.provider, model: micro.model, configured: Boolean(env(micro.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(micro.provider) },
-    default: { provider: defaultRoute.provider, model: defaultRoute.model, configured: Boolean(env(defaultRoute.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(defaultRoute.provider) },
-    hard: { provider: hard.provider, model: hard.model, configured: Boolean(env(hard.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(hard.provider) },
-    critical: { provider: critical.provider, model: critical.model, configured: Boolean(env(critical.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(critical.provider) },
-    ops: { provider: ops.provider, model: ops.model, configured: Boolean(env(ops.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(ops.provider) },
-    memory_text: { provider: memoryText.provider, model: memoryText.model, configured: Boolean(env(memoryText.apiKeyEnv)), tool_loop_compatible: false },
-    memory_code: { provider: memoryCode.provider, model: memoryCode.model, configured: Boolean(env(memoryCode.apiKeyEnv)), tool_loop_compatible: false },
+    micro: { provider: micro.provider, model: micro.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, micro.provider) || env(micro.apiKeyEnv) : env(micro.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(micro.provider) },
+    default: { provider: defaultRoute.provider, model: defaultRoute.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, defaultRoute.provider) || env(defaultRoute.apiKeyEnv) : env(defaultRoute.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(defaultRoute.provider) },
+    hard: { provider: hard.provider, model: hard.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, hard.provider) || env(hard.apiKeyEnv) : env(hard.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(hard.provider) },
+    critical: { provider: critical.provider, model: critical.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, critical.provider) || env(critical.apiKeyEnv) : env(critical.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(critical.provider) },
+    ops: { provider: ops.provider, model: ops.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, ops.provider) || env(ops.apiKeyEnv) : env(ops.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(ops.provider) },
+    memory_text: { provider: memoryText.provider, model: memoryText.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, memoryText.provider) || env(memoryText.apiKeyEnv) : env(memoryText.apiKeyEnv)), tool_loop_compatible: false },
+    memory_code: { provider: memoryCode.provider, model: memoryCode.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, memoryCode.provider) || env(memoryCode.apiKeyEnv) : env(memoryCode.apiKeyEnv)), tool_loop_compatible: false },
   };
 }
 
@@ -248,10 +278,10 @@ function anthropicTextFromResponse(response: { content: Array<{ type: string; te
   return parts.join('\n\n').trim();
 }
 
-async function generateWithOpenAI(route: ModelRoute, system: string, messages: MessageParam[], maxTokens: number): Promise<TextGenerationResult> {
+async function generateWithOpenAI(route: ModelRoute, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string): Promise<TextGenerationResult> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${requireEnv(route.apiKeyEnv)}`,
+    Authorization: `Bearer ${resolveProviderApiKey(route, workspaceId)}`,
   };
 
   if (route.provider === 'openrouter') {
@@ -302,13 +332,13 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
   };
 }
 
-async function generateWithAnthropicLike(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number): Promise<TextGenerationResult> {
+async function generateWithAnthropicLike(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string): Promise<TextGenerationResult> {
   const resolvedProfile = resolveTextProfile(profile);
   if (resolvedProfile !== 'default' && resolvedProfile !== 'critical' && resolvedProfile !== 'ops') {
     throw new Error(`Unsupported Anthropic-compatible profile: ${profile}`);
   }
 
-  const { client, route } = getAnthropicCompatibleClient(profile);
+  const { client, route } = getAnthropicCompatibleClient(profile, workspaceId);
   const response = await client.messages.create({
     model: route.model,
     max_tokens: maxTokens,
@@ -332,29 +362,29 @@ async function generateWithAnthropicLike(profile: TextProfile, system: string, m
   };
 }
 
-export async function generateTextDetailed(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number): Promise<TextGenerationResult> {
-  const route = getTextRoute(profile);
+export async function generateTextDetailed(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string): Promise<TextGenerationResult> {
+  const route = getTextRoute(profile, workspaceId);
 
   if (route.provider === 'openai' || route.provider === 'openrouter') {
-    return generateWithOpenAI(route, system, messages, maxTokens);
+    return generateWithOpenAI(route, system, messages, maxTokens, workspaceId);
   }
 
   if (route.provider === 'anthropic' || route.provider === 'minimax') {
-    return generateWithAnthropicLike(profile, system, messages, maxTokens);
+    return generateWithAnthropicLike(profile, system, messages, maxTokens, workspaceId);
   }
 
   throw new Error(`Unsupported text provider for ${profile}: ${route.provider}`);
 }
 
-export async function generateText(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number) {
-  const result = await generateTextDetailed(profile, system, messages, maxTokens);
+export async function generateText(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string) {
+  const result = await generateTextDetailed(profile, system, messages, maxTokens, workspaceId);
   return result.text;
 }
 
-export function getChatClient(profile: TextProfile = 'default') {
-  const requestedRoute = getTextRoute(profile);
+export function getChatClient(profile: TextProfile = 'default', workspaceId?: string) {
+  const requestedRoute = getTextRoute(profile, workspaceId);
   if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
-    const resolved = getAnthropicCompatibleClient(profile);
+    const resolved = getAnthropicCompatibleClient(profile, workspaceId);
     return {
       ...resolved,
       requestedRoute,
@@ -407,8 +437,9 @@ function heuristicRoute(messages: Array<{ role: string; content: string }>): Rou
   return { profile: 'default', reason: needsTools ? 'tool_using_default' : 'general_default', risk: 'low', needsTools };
 }
 
-export async function routeChatProfile(messages: Array<{ role: string; content: string }>): Promise<RoutingDecision> {
-  const microConfigured = Boolean(env(getTextRoute('micro').apiKeyEnv));
+export async function routeChatProfile(messages: Array<{ role: string; content: string }>, workspaceId?: string): Promise<RoutingDecision> {
+  const microRoute = getTextRoute('micro', workspaceId);
+  const microConfigured = Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, microRoute.provider) || env(microRoute.apiKeyEnv) : env(microRoute.apiKeyEnv));
   const promptMessages = messages
     .slice(-8)
     .map((message) => ({
@@ -432,7 +463,8 @@ export async function routeChatProfile(messages: Array<{ role: string; content: 
           instructions: 'Choose the cheapest model that can reliably complete the task. Use ops for long-running or operational workloads, critical for high-stakes work, hard for complex reasoning or coding, default for normal tool-using chat, micro for short low-risk text tasks.',
         }),
       }],
-      120
+      120,
+      workspaceId,
     );
 
     const parsed = JSON.parse(response) as Partial<RoutingDecision>;
@@ -457,13 +489,13 @@ export async function routeChatProfile(messages: Array<{ role: string; content: 
   return heuristicRoute(messages);
 }
 
-export async function createMemoryEmbeddings(input: string | string[]) {
-  const route = getEmbeddingRoute('memory');
+export async function createMemoryEmbeddings(input: string | string[], workspaceId?: string) {
+  const route = getEmbeddingRoute('memory', workspaceId);
   const response = await fetch(`${route.baseUrl}/embeddings`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${requireEnv(route.apiKeyEnv)}`,
+      Authorization: `Bearer ${resolveProviderApiKey(route, workspaceId)}`,
     },
     body: JSON.stringify({
       model: route.model,

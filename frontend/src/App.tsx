@@ -11,6 +11,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import IntegrationsPage from './pages/IntegrationsPage';
 import SlackSetup from './pages/SlackSetup';
 import AgentStudio from './pages/AgentStudio';
+import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/settings/billing" element={<Navigate to="/plans" replace />} />
         <Route path="/connect/slack" element={<ProtectedRoute><SlackSetup /></ProtectedRoute>} />
         <Route path="/integrations" element={<IntegrationsPage />} />
+        <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/dashboard/agents" element={<ProtectedRoute><AgentStudio /></ProtectedRoute>} />
         <Route path="/faq" element={<FAQ />} />

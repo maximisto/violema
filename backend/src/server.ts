@@ -76,6 +76,7 @@ import {
   routeChatProfile,
   type TextProfile,
 } from './models';
+import { getWorkspaceSettingsView, upsertWorkspaceSettings } from './settingsStore';
 
 dotenv.config();
 
@@ -1331,7 +1332,7 @@ async function executeConversationTask(input: {
 
   ensureWorkspaceCredits(workspaceId);
   const routingDecision = modelProfile === 'auto'
-    ? await routeChatProfile(messages)
+    ? await routeChatProfile(messages, workspaceId)
     : null;
   const resolvedProfile: TextProfile = routingDecision?.profile || (modelProfile === 'auto' ? 'default' : modelProfile);
   const canonicalModelTier = normalizeModelTier(resolvedProfile);
@@ -1354,8 +1355,8 @@ async function executeConversationTask(input: {
     requiresHumanReview: normalizeAutonomyMode(autonomyMode) === 'supervised',
   });
   const modelTier = delegation.plan.suggestedModelTier;
-  const { client, executingRoute } = getChatClient(resolvedProfile);
-  const requestedRoute = getChatModelConfig(resolvedProfile);
+  const { client, executingRoute } = getChatClient(resolvedProfile, workspaceId);
+  const requestedRoute = getChatModelConfig(resolvedProfile, workspaceId);
   const task = createTask({
     workspaceId,
     title: messages[0]?.content?.slice(0, 72) || 'Violema task',
@@ -2484,6 +2485,7 @@ async function executeAutomationCore(
           'You are an internal VIOLEMA analyst. Produce a compact, decision-ready analysis based only on the supplied evidence. Be concrete and avoid filler.',
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           500,
+          DEFAULT_WORKSPACE_ID,
           ),
         );
         const markdown = analysisResult.text;
@@ -2509,6 +2511,7 @@ async function executeAutomationCore(
           'You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. Be concrete, skim-friendly, and avoid filler.',
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           900,
+          DEFAULT_WORKSPACE_ID,
           ),
         );
         summaryText = summaryResult.text;
@@ -2591,6 +2594,7 @@ async function executeAutomationCore(
       'Summarize the completed automation run in concise markdown. Lead with the highest-value outcome, then note any failure or delivery issue briefly.',
       [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
       600,
+      DEFAULT_WORKSPACE_ID,
       ),
     );
     summaryText = fallbackSummaryResult.text;
@@ -3023,6 +3027,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
  * instead of naively slicing the user message.
  */
 app.post('/api/title', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   const { messages } = req.body as { messages: ChatMessage[] };
   if (!messages || messages.length < 1) {
     res.json({ title: 'New conversation' });
@@ -3038,10 +3043,11 @@ app.post('/api/title', async (req: Request, res: Response) => {
       'utility',
       'Return ONLY a conversation title: 3-6 words, no quotes, no ending punctuation. Nothing else.',
       [{ role: 'user', content: `Title this AI coworker conversation:\n${excerpt}` }],
-      20
+      20,
+      workspaceId,
     )).trim().slice(0, 60) || 'New conversation';
 
-    res.json({ title, model: getUtilityModelConfig().model });
+    res.json({ title, model: getUtilityModelConfig(workspaceId).model });
   } catch {
     const fallback = messages[0]?.content?.slice(0, 45) || 'New conversation';
     res.json({ title: fallback });
@@ -3053,6 +3059,7 @@ app.post('/api/title', async (req: Request, res: Response) => {
  * Produces a 1-sentence summary for sidebar preview.
  */
 app.post('/api/summarize', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   const { messages } = req.body as { messages: ChatMessage[] };
   if (!messages || messages.length < 2) {
     res.json({ summary: '' });
@@ -3068,13 +3075,77 @@ app.post('/api/summarize', async (req: Request, res: Response) => {
       'utility',
       'Return ONE short sentence (max 12 words) summarising the outcome of this conversation. No quotes.',
       [{ role: 'user', content: text }],
-      40
+      40,
+      workspaceId,
     );
 
-    res.json({ summary, model: getUtilityModelConfig().model });
+    res.json({ summary, model: getUtilityModelConfig(workspaceId).model });
   } catch {
     res.json({ summary: '' });
   }
+});
+
+app.get('/api/settings', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json({
+    workspaceId,
+    settings: getWorkspaceSettingsView(workspaceId),
+    modelRouting: getModelRoutingStatus(workspaceId),
+  });
+});
+
+app.patch('/api/settings', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const body = (req.body || {}) as {
+    providerTokens?: Record<string, string | null>;
+    modelOverrides?: Record<string, { provider?: string; model?: string; baseUrl?: string; reasoningEffort?: string } | null>;
+  };
+
+  const allowedProviders = new Set(['anthropic', 'openai', 'openrouter', 'mistral', 'minimax']);
+  const allowedProfiles = new Set(['micro', 'default', 'hard', 'critical', 'ops', 'memory_text', 'memory_code']);
+  const allowedReasoning = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+
+  const providerTokens = body.providerTokens
+    ? Object.fromEntries(
+        Object.entries(body.providerTokens)
+          .filter(([provider]) => allowedProviders.has(provider))
+          .map(([provider, token]) => [provider, typeof token === 'string' ? token.trim() : null]),
+      )
+    : undefined;
+
+  const modelOverrides = body.modelOverrides
+    ? Object.fromEntries(
+        Object.entries(body.modelOverrides)
+          .filter(([profile]) => allowedProfiles.has(profile))
+          .map(([profile, override]) => {
+            if (!override) return [profile, null];
+            const provider = typeof override.provider === 'string' && allowedProviders.has(override.provider)
+              ? override.provider
+              : undefined;
+            const reasoningEffort = typeof override.reasoningEffort === 'string' && allowedReasoning.has(override.reasoningEffort)
+              ? override.reasoningEffort as 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+              : undefined;
+            return [profile, {
+              provider,
+              model: typeof override.model === 'string' ? override.model.trim() : undefined,
+              baseUrl: typeof override.baseUrl === 'string' ? override.baseUrl.trim() : undefined,
+              reasoningEffort,
+            }];
+          }),
+      )
+    : undefined;
+
+  const settings = upsertWorkspaceSettings({
+    workspaceId,
+    providerTokens,
+    modelOverrides,
+  });
+
+  res.json({
+    workspaceId,
+    settings,
+    modelRouting: getModelRoutingStatus(workspaceId),
+  });
 });
 
 // ── Waitlist ──────────────────────────────────────────────────────────────────

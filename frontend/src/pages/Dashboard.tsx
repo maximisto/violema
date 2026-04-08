@@ -2680,7 +2680,7 @@ export default function Dashboard() {
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
-                  onClick={() => {/* settings panel placeholder */}}
+                  onClick={() => navigate('/settings')}
                   className="flex items-center justify-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-400 transition-colors hover:border-violet-700 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                 >
                   <Settings className="h-3.5 w-3.5" />
