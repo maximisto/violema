@@ -56,7 +56,6 @@ type WorkflowBlockKind = 'search' | 'query' | 'capture' | 'analyze' | 'summarize
 type ExecutionMode = 'recommended' | 'custom';
 type OptimizationGoal = 'balanced' | 'cost_saver' | 'quality_first';
 type ReviewPolicy = 'lean' | 'standard' | 'strict';
-type TaskPanelSection = 'runs' | 'agents';
 type AutomationEditorSection = 'setup' | 'workflow' | 'agents';
 
 interface WorkflowBlockDraft {
@@ -270,16 +269,6 @@ interface DashboardWorkerTopology {
   primaryBand: string;
   workers: DashboardWorkerCard[];
   summary?: string;
-}
-
-interface DashboardWorkerActivationEvent {
-  id: string;
-  label: string;
-  role: string;
-  laneType: 'core' | 'elastic';
-  detail: string;
-  timeLabel: string;
-  status: 'running' | 'succeeded' | 'failed' | 'planned';
 }
 
 interface AutomationEditorDraft {
@@ -1036,16 +1025,6 @@ function getTaskRunOutcome(task?: DashboardTaskItem) {
   };
 }
 
-function getWorkerLaneTone(status: DashboardWorkerCard['status'], laneType: DashboardWorkerCard['laneType']) {
-  if (status === 'standby') {
-    return 'border-navy-700/70 bg-navy-950/30 text-slate-400';
-  }
-  if (laneType === 'elastic') {
-    return 'border-cyan-500/16 bg-cyan-500/8 text-cyan-100';
-  }
-  return 'border-violet-500/16 bg-violet-500/8 text-violet-100';
-}
-
 function summarizeWorkerLanes(task?: DashboardTaskItem) {
   if (!task) {
     return { manager: null as DashboardWorkerCard | null, core: [] as DashboardWorkerCard[], elastic: [] as DashboardWorkerCard[], totalActiveLanes: 0, summary: '' };
@@ -1066,58 +1045,6 @@ function summarizeWorkerLanes(task?: DashboardTaskItem) {
 
   return { manager: null as DashboardWorkerCard | null, core: [] as DashboardWorkerCard[], elastic: [] as DashboardWorkerCard[], totalActiveLanes: 0, summary: '' };
 }
-
-function buildWorkerActivationHistory(task?: DashboardTaskItem): DashboardWorkerActivationEvent[] {
-  if (!task) return [];
-
-  const workerMap = new Map((task.workerTopology?.workers || []).map((worker) => [worker.assignedRole, worker]));
-  const timeline: Array<DashboardWorkerActivationEvent & { sortValue: number }> = [];
-  const kickoffAt = task.lastRunAt || task.taskUpdatedAt;
-
-  if (task.workerTopology?.primaryRole) {
-    const manager = task.workerTopology.workers.find((worker) => worker.role === 'nexus');
-    timeline.push({
-      id: `manager-${task.id}`,
-      label: manager?.label || 'Violema Manager',
-      role: task.workerTopology.primaryRole,
-      laneType: manager?.laneType || 'core',
-      detail: task.runStatus === 'running'
-        ? 'Opened the run plan and is actively routing specialist work.'
-        : 'Opened the run plan and assigned the resident team for execution.',
-      timeLabel: kickoffAt ? formatRelativeTimeFromIso(kickoffAt) : 'just now',
-      status: task.runStatus === 'failed' ? 'failed' : task.runStatus === 'running' ? 'running' : 'succeeded',
-      sortValue: kickoffAt ? Date.parse(kickoffAt) : Number.POSITIVE_INFINITY,
-    });
-  }
-
-  (task.latestStepExecutions || []).forEach((step, index) => {
-    const worker = workerMap.get(step.assignedRole);
-    const timestamp = step.startedAt || step.finishedAt || task.lastRunAt || task.taskUpdatedAt;
-    timeline.push({
-      id: `${step.stepId}-${index}`,
-      label: worker?.label || step.assignedRole,
-      role: step.assignedRole,
-      laneType: worker?.laneType || 'core',
-      detail: step.error || step.summary || `${step.title} · ${step.kind}`,
-      timeLabel: timestamp ? formatRelativeTimeFromIso(timestamp) : `Step ${index + 1}`,
-      status:
-        step.status === 'failed'
-          ? 'failed'
-          : step.status === 'running'
-            ? 'running'
-            : step.status === 'planned'
-              ? 'planned'
-              : 'succeeded',
-      sortValue: timestamp ? Date.parse(timestamp) : Number.POSITIVE_INFINITY - index,
-    });
-  });
-
-  return timeline
-    .sort((left, right) => left.sortValue - right.sortValue)
-    .slice(0, 8)
-    .map(({ sortValue: _sortValue, ...item }) => item);
-}
-
 function inferConversationTags(conversation: Conversation) {
   if (conversation.tags?.length) return conversation.tags.slice(0, 2);
 
@@ -1220,7 +1147,6 @@ export default function Dashboard() {
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
   const [taskPanelOpen, setTaskPanelOpen] = useState(false); // hidden by default on mobile feel
-  const [taskPanelSection, setTaskPanelSection] = useState<TaskPanelSection>('runs');
   const [selectedTaskId, setSelectedTaskId] = useState<string | number>('');
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
   const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
@@ -1795,7 +1721,6 @@ export default function Dashboard() {
       await refreshAutomations();
       if (automationEditor.mode === 'create' && payload.item?.id) {
         setSelectedTaskId(payload.item.id);
-        setTaskPanelSection('runs');
       }
       setAutomationEditor(null);
       showNotice('success', `${automationEditor.mode === 'create' ? 'Created' : 'Updated'} "${automationEditor.name.trim() || 'automation'}"`);
@@ -1805,31 +1730,6 @@ export default function Dashboard() {
       setActionBusy(null);
     }
   }, [automationEditor, refreshAutomations, showNotice]);
-
-  const handleExecutionPolicyPatch = useCallback(async (
-    task: DashboardTaskItem | undefined,
-    updater: (current: AutomationExecutionPolicyDraft) => AutomationExecutionPolicyDraft,
-  ) => {
-    if (!task?.automationId) return;
-    setActionBusy('save');
-    try {
-      const nextPolicy = updater(normalizeExecutionPolicy(task.executionPolicy));
-      const response = await fetch(`/api/automations/${task.automationId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          executionPolicy: nextPolicy,
-        }),
-      });
-      if (!response.ok) throw new Error('Could not update agent setup');
-      await refreshAutomations();
-      showNotice('success', 'Updated agent setup.');
-    } catch {
-      showNotice('error', 'Could not update agent setup');
-    } finally {
-      setActionBusy(null);
-    }
-  }, [refreshAutomations, showNotice]);
 
   const handleMessagesChange = useCallback(
     (messages: Message[]) => {
@@ -1970,7 +1870,6 @@ export default function Dashboard() {
     [selectedTaskExecutionPolicy, selectedTaskWorkflowSteps]
   );
   const selectedTaskWorkerView = useMemo(() => summarizeWorkerLanes(selectedTask), [selectedTask]);
-  const selectedTaskWorkerHistory = useMemo(() => buildWorkerActivationHistory(selectedTask), [selectedTask]);
   const selectedTaskRunEconomics = useMemo(() => {
     const steps = selectedTask?.latestStepExecutions || [];
     const actualCredits = typeof selectedTask?.actualCredits === 'number'
@@ -3032,410 +2931,44 @@ export default function Dashboard() {
                           </button>
                         </div>
                       </div>
-                      <div className="mt-3 flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setTaskPanelSection('runs')}
-                          className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
-                            taskPanelSection === 'runs'
-                              ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
-                              : 'text-slate-300'
-                          }`}
-                        >
-                          Schedule and runs
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setTaskPanelSection('agents')}
-                          className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
-                            taskPanelSection === 'agents'
-                              ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
-                              : 'text-slate-300'
-                          }`}
-                        >
-                          Quick agent view
-                        </button>
-                      </div>
-                      <div className="mt-3 rounded-xl border border-navy-700/60 bg-navy-950/45 px-3 py-2.5">
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
-                          {taskPanelSection === 'runs' ? 'Schedule and tracking folder' : 'Quick agent view'}
-                        </p>
-                        <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-                          {taskPanelSection === 'runs'
-                            ? 'Runs, outcomes, evidence, and delivery stay here.'
-                            : 'Use this for a fast read. The full multi-agent room now lives in Agent Studio.'}
-                        </p>
-                      </div>
-                      {taskPanelSection === 'agents' && (
-                        <div className="mt-3 rounded-2xl border border-cyan-500/15 bg-cyan-500/6 p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-300/80">Execution policy</p>
-                              <p className="mt-1 text-sm font-semibold text-white">
-                                {selectedTaskExecutionPolicy.mode === 'recommended' ? 'System recommended' : 'Custom policy'}
-                              </p>
-                              <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-                                {selectedTaskExecutionPolicy.mode === 'recommended'
-                                  ? 'Violema chooses the leanest reliable setup from workflow complexity, tool count, and delivery risk.'
-                                  : 'This workflow uses an explicit cost and quality policy instead of pure system routing.'}
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setAutomationEditorSection('agents');
-                                void handleAutomationEdit(selectedTask);
-                              }}
-                              className="ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200"
-                            >
-                              Edit setup
-                            </button>
-                          </div>
-                          <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
-                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                              <p className="uppercase tracking-[0.18em] text-slate-600">Mode</p>
-                              <p className="mt-1 text-slate-100">{getExecutionModeLabel(selectedTaskExecutionPolicy.mode)}</p>
-                            </div>
-                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                              <p className="uppercase tracking-[0.18em] text-slate-600">Optimization</p>
-                              <p className="mt-1 text-slate-100">{getOptimizationGoalLabel(selectedTaskExecutionPolicy.optimizationGoal)}</p>
-                            </div>
-                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                              <p className="uppercase tracking-[0.18em] text-slate-600">Review</p>
-                              <p className="mt-1 text-slate-100">{getReviewPolicyLabel(selectedTaskExecutionPolicy.reviewPolicy)}</p>
-                            </div>
-                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                              <p className="uppercase tracking-[0.18em] text-slate-600">Elastic lanes</p>
-                              <p className="mt-1 text-slate-100">{selectedTaskPolicyMath.activeElasticLanes} active / {selectedTaskExecutionPolicy.maxElasticLanes} cap</p>
-                            </div>
-                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                              <p className="uppercase tracking-[0.18em] text-slate-600">Reasoning load</p>
-                              <p className="mt-1 text-slate-100">{selectedTaskPolicyMath.reasoningLoad}</p>
-                            </div>
-                          </div>
-                          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
-                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                              <p className="uppercase tracking-[0.18em] text-slate-600">Tool calls</p>
-                              <p className="mt-1 text-slate-100">{selectedTaskPolicyMath.toolCalls}</p>
-                            </div>
-                            <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
-                              <p className="uppercase tracking-[0.18em] text-slate-600">Routing bias</p>
-                              <p className="mt-1 text-slate-100">{selectedTaskPolicyMath.estimatedBands}</p>
-                            </div>
-                          </div>
-                          <div className="mt-3 space-y-3">
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Quick controls</p>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {[
-                                  { value: 'recommended' as const, label: 'System recommended' },
-                                  { value: 'custom' as const, label: 'Custom policy' },
-                                ].map((option) => (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={() => { void handleExecutionPolicyPatch(selectedTask, (current) => ({ ...current, mode: option.value })); }}
-                                    disabled={actionBusy === 'save'}
-                                    className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
-                                      selectedTaskExecutionPolicy.mode === option.value
-                                        ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
-                                        : 'text-slate-300'
-                                    } disabled:opacity-60`}
-                                  >
-                                    {option.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                            {selectedTaskExecutionPolicy.mode === 'custom' && (
-                              <>
-                                <div>
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Optimization</p>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {[
-                                      { value: 'balanced' as const, label: 'Balanced' },
-                                      { value: 'cost_saver' as const, label: 'Cost Saver' },
-                                      { value: 'quality_first' as const, label: 'Quality First' },
-                                    ].map((option) => (
-                                      <button
-                                        key={option.value}
-                                        type="button"
-                                        onClick={() => { void handleExecutionPolicyPatch(selectedTask, (current) => ({ ...current, mode: 'custom', optimizationGoal: option.value })); }}
-                                        disabled={actionBusy === 'save'}
-                                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
-                                          selectedTaskExecutionPolicy.optimizationGoal === option.value
-                                            ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
-                                            : 'text-slate-300'
-                                        } disabled:opacity-60`}
-                                      >
-                                        {option.label}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Review</p>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {[
-                                      { value: 'lean' as const, label: 'Lean' },
-                                      { value: 'standard' as const, label: 'Standard' },
-                                      { value: 'strict' as const, label: 'Strict' },
-                                    ].map((option) => (
-                                      <button
-                                        key={option.value}
-                                        type="button"
-                                        onClick={() => { void handleExecutionPolicyPatch(selectedTask, (current) => ({ ...current, mode: 'custom', reviewPolicy: option.value })); }}
-                                        disabled={actionBusy === 'save'}
-                                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
-                                          selectedTaskExecutionPolicy.reviewPolicy === option.value
-                                            ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
-                                            : 'text-slate-300'
-                                        } disabled:opacity-60`}
-                                      >
-                                        {option.label}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Elastic lane cap</p>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {[0, 1, 2, 3, 4].map((count) => (
-                                      <button
-                                        key={count}
-                                        type="button"
-                                        onClick={() => { void handleExecutionPolicyPatch(selectedTask, (current) => ({ ...current, mode: 'custom', maxElasticLanes: count })); }}
-                                        disabled={actionBusy === 'save'}
-                                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
-                                          selectedTaskExecutionPolicy.maxElasticLanes === count
-                                            ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
-                                            : 'text-slate-300'
-                                        } disabled:opacity-60`}
-                                      >
-                                        {count}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                          <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
-                            Math: {selectedTaskPolicyMath.stepCount} workflow steps, {selectedTaskPolicyMath.toolCalls} tool calls, lane demand {selectedTaskPolicyMath.recommendedElasticLanes}. The active policy keeps heavier reasoning on stronger models only when the run actually justifies it.
-                          </p>
-                        </div>
-                      )}
-                      {taskPanelSection === 'agents' && (
                       <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Worker view</p>
-                            <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-                              {selectedTaskWorkerView.summary || (
-                                selectedTaskWorkerView.manager
-                                  ? 'The manager owns orchestration. Core workers stay resident and elastic lanes open only when the run needs more depth or throughput.'
-                                  : 'Worker topology appears here once the run captures orchestrated assignments.'
-                              )}
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Agent policy snapshot</p>
+                            <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                              Keep the schedule panel simple. Use Agent Studio for the full worker map, performance tracking, and optimization loop.
                             </p>
                           </div>
-                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                            {selectedTaskWorkerView.totalActiveLanes} active lanes
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/dashboard/agents?automation=${selectedTask.automationId || selectedTask.id}`)}
+                            className="ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200"
+                          >
+                            Open Agent Studio
+                          </button>
                         </div>
-                        <div className="mt-3 space-y-2">
-                          {selectedTaskWorkerView.manager ? (
-                            <div className={`rounded-xl border px-3 py-2.5 ${getWorkerLaneTone(selectedTaskWorkerView.manager.status, selectedTaskWorkerView.manager.laneType)}`}>
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="text-[11px] font-medium text-inherit">{selectedTaskWorkerView.manager.label}</p>
-                                  <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                                    {selectedTaskWorkerView.manager.assignedRole} · {selectedTaskWorkerView.manager.band} band
-                                  </p>
-                                </div>
-                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
-                                  {selectedTaskWorkerView.manager.status}
-                                </span>
-                              </div>
-                              <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{selectedTaskWorkerView.manager.reason}</p>
-                              <p className="mt-1 text-[10px] text-slate-500">{selectedTaskWorkerView.manager.modelLabel}</p>
-                            </div>
-                          ) : null}
-                          {selectedTaskWorkerView.core.length > 0 ? (
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Core team</p>
-                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                {selectedTaskWorkerView.core.map((lane) => (
-                                <div key={lane.role} className={`rounded-xl border px-3 py-2.5 ${getWorkerLaneTone(lane.status, lane.laneType)}`}>
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="min-w-0">
-                                      <p className="truncate text-[11px] font-medium text-inherit">{lane.label}</p>
-                                      <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                                        {lane.assignedRole} · {lane.band} band
-                                      </p>
-                                    </div>
-                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
-                                      {lane.status}
-                                    </span>
-                                  </div>
-                                  <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{lane.summary}</p>
-                                  <p className="mt-1 text-[10px] text-slate-500">{lane.modelLabel}</p>
-                                </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null}
-                          {selectedTaskWorkerView.elastic.length > 0 ? (
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Elastic lanes</p>
-                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                {selectedTaskWorkerView.elastic.map((lane) => (
-                                  <div key={lane.role} className={`rounded-xl border px-3 py-2.5 ${getWorkerLaneTone(lane.status, lane.laneType)}`}>
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <p className="truncate text-[11px] font-medium text-inherit">{lane.label}</p>
-                                        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                                          {lane.assignedRole} · {lane.band} band
-                                        </p>
-                                      </div>
-                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
-                                        {lane.status}
-                                      </span>
-                                    </div>
-                                    <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{lane.reason}</p>
-                                    <p className="mt-1 text-[10px] text-slate-500">{lane.modelLabel}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : !selectedTaskWorkerView.manager ? (
-                            <div className="rounded-xl border border-dashed border-navy-700/70 bg-navy-950/25 px-3 py-2.5 text-[11px] leading-relaxed text-slate-500">
-                              This run has not recorded worker topology yet. It will appear once the workflow stores manager, core, and elastic-lane assignments.
-                            </div>
-                          ) : null}
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Mode</p>
+                            <p className="mt-1 text-slate-100">{getExecutionModeLabel(selectedTaskExecutionPolicy.mode)}</p>
+                          </div>
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Preset bias</p>
+                            <p className="mt-1 text-slate-100">{getOptimizationGoalLabel(selectedTaskExecutionPolicy.optimizationGoal)}</p>
+                          </div>
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Review</p>
+                            <p className="mt-1 text-slate-100">{getReviewPolicyLabel(selectedTaskExecutionPolicy.reviewPolicy)}</p>
+                          </div>
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Lane demand</p>
+                            <p className="mt-1 text-slate-100">{selectedTaskPolicyMath.recommendedElasticLanes} recommended</p>
+                          </div>
                         </div>
-                        {selectedTaskWorkerHistory.length > 0 ? (
-                          <div className="mt-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Lane activity</p>
-                            <div className="mt-2 space-y-2">
-                              {selectedTaskWorkerHistory.map((event) => {
-                                const tone =
-                                  event.status === 'failed'
-                                    ? 'border-red-500/16 bg-red-500/8 text-red-200'
-                                    : event.status === 'running'
-                                      ? event.laneType === 'elastic'
-                                        ? 'border-cyan-500/16 bg-cyan-500/8 text-cyan-100'
-                                        : 'border-violet-500/16 bg-violet-500/8 text-violet-100'
-                                      : event.status === 'planned'
-                                        ? 'border-amber-500/16 bg-amber-500/8 text-amber-100'
-                                        : 'border-navy-700/60 bg-navy-950/42 text-slate-200';
-
-                                return (
-                                  <div key={event.id} className={`rounded-xl border px-3 py-2.5 ${tone}`}>
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <p className="truncate text-[11px] font-medium text-inherit">{event.label}</p>
-                                        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                                          {event.role} · {event.laneType === 'elastic' ? 'elastic lane' : 'resident specialist'}
-                                        </p>
-                                      </div>
-                                      <div className="text-right">
-                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
-                                          {event.status}
-                                        </span>
-                                        <p className="mt-1 text-[10px] text-slate-500">{event.timeLabel}</p>
-                                      </div>
-                                    </div>
-                                    <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{event.detail}</p>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : null}
-                        {selectedTaskStepExecutions.length > 0 ? (
-                          <div className="mt-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Step handoffs</p>
-                            <div className="mt-2 space-y-2">
-                              {selectedTaskStepExecutions.slice(0, 4).map((step, index) => {
-                                const tone =
-                                  step.status === 'failed'
-                                    ? 'border-red-500/16 bg-red-500/8 text-red-200'
-                                    : step.status === 'skipped'
-                                      ? 'border-amber-500/16 bg-amber-500/8 text-amber-200'
-                                      : 'border-navy-700/60 bg-navy-950/42 text-slate-200';
-
-                                return (
-                                  <div key={step.stepId} className={`rounded-xl border px-3 py-2.5 ${tone}`}>
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <p className="truncate text-[11px] font-medium text-inherit">
-                                          {index + 1}. {step.title}
-                                        </p>
-                                        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                                          {step.assignedRole} · {step.kind}
-                                        </p>
-                                      </div>
-                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
-                                        {step.status}
-                                      </span>
-                                    </div>
-                                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-slate-500">
-                                      {step.modelTier ? (
-                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
-                                          {step.modelTier}
-                                        </span>
-                                      ) : null}
-                                      {typeof step.actualCredits === 'number' ? (
-                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
-                                          {formatCredits(step.actualCredits)} cr
-                                        </span>
-                                      ) : null}
-                                      {step.tokenUsage?.totalTokens ? (
-                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
-                                          {formatTokenCount(step.tokenUsage.totalTokens)}
-                                        </span>
-                                      ) : null}
-                                      {step.toolCalls ? (
-                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
-                                          {step.toolCalls} tool {step.toolCalls === 1 ? 'call' : 'calls'}
-                                        </span>
-                                      ) : null}
-                                      {step.durationMs ? (
-                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
-                                          {formatCompactDuration(step.durationMs)}
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                    {step.summary ? (
-                                      <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{step.summary}</p>
-                                    ) : null}
-                                    {formatStepOutputPreview(step) && formatStepOutputPreview(step) !== step.summary ? (
-                                      <div className="mt-2 rounded-lg border border-white/6 bg-white/4 px-2.5 py-2 text-[11px] leading-relaxed text-slate-300">
-                                        {formatStepOutputPreview(step)}
-                                      </div>
-                                    ) : null}
-                                    {step.error ? (
-                                      <p className="mt-2 text-[11px] leading-relaxed text-red-200">{step.error}</p>
-                                    ) : null}
-                                    {step.charge ? (
-                                      <p className="mt-2 text-[10px] text-slate-500">
-                                        {step.charge.rationale.join(' · ')}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            {selectedTaskStepExecutions.length > 4 ? (
-                              <p className="mt-2 text-[10px] text-slate-600">
-                                Showing the latest 4 handoffs. The worker view above keeps the full lane picture readable.
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : null}
+                        <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
+                          {selectedTaskWorkerView.summary || `Math: ${selectedTaskPolicyMath.stepCount} workflow steps, ${selectedTaskPolicyMath.toolCalls} tool calls, reasoning load ${selectedTaskPolicyMath.reasoningLoad}.`}
+                        </p>
                       </div>
-                      )}
-                      {taskPanelSection === 'runs' && (
                       <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -3565,7 +3098,6 @@ export default function Dashboard() {
                           ) : null}
                         </div>
                       </div>
-                      )}
                       {selectedTask.description && (
                         <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
                           {selectedTask.description}

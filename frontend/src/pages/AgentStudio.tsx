@@ -142,6 +142,38 @@ const DEFAULT_EXECUTION_POLICY: AutomationExecutionPolicyDraft = {
   maxElasticLanes: 2,
 };
 
+const POLICY_PRESETS: Array<{
+  id: string;
+  label: string;
+  summary: string;
+  policy: AutomationExecutionPolicyDraft;
+}> = [
+  {
+    id: 'recommended',
+    label: 'System recommended',
+    summary: 'Best default. Lets Violema route heavy reasoning only when the run justifies it.',
+    policy: { mode: 'recommended', optimizationGoal: 'balanced', reviewPolicy: 'standard', maxElasticLanes: 2 },
+  },
+  {
+    id: 'lean_ops',
+    label: 'Lean ops',
+    summary: 'Prefer cheaper lanes for operational work, recurring research, and tool-heavy flows.',
+    policy: { mode: 'custom', optimizationGoal: 'cost_saver', reviewPolicy: 'lean', maxElasticLanes: 1 },
+  },
+  {
+    id: 'balanced',
+    label: 'Balanced',
+    summary: 'Good middle ground when the workflow needs some parallelism without over-spending.',
+    policy: { mode: 'custom', optimizationGoal: 'balanced', reviewPolicy: 'standard', maxElasticLanes: 2 },
+  },
+  {
+    id: 'high_assurance',
+    label: 'High assurance',
+    summary: 'Spend more when correctness matters. Better for sensitive reporting and higher-risk outputs.',
+    policy: { mode: 'custom', optimizationGoal: 'quality_first', reviewPolicy: 'strict', maxElasticLanes: 3 },
+  },
+];
+
 const WORKER_DEFINITIONS: Array<{
   role: string;
   label: string;
@@ -1182,6 +1214,54 @@ export default function AgentStudio() {
                       <p className="mt-2 text-sm leading-relaxed text-slate-400">
                         Most users should leave this on system recommendation. Custom policy exists for the workflows where cost, latency, or assurance matter enough to justify tuning.
                       </p>
+
+                      <div className="mt-4">
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Starting presets</p>
+                        <div className="mt-3 space-y-3">
+                          {POLICY_PRESETS.map((preset) => {
+                            const isActive =
+                              preset.policy.mode === selectedPolicy.mode &&
+                              preset.policy.optimizationGoal === selectedPolicy.optimizationGoal &&
+                              preset.policy.reviewPolicy === selectedPolicy.reviewPolicy &&
+                              preset.policy.maxElasticLanes === selectedPolicy.maxElasticLanes;
+
+                            return (
+                              <button
+                                key={preset.id}
+                                type="button"
+                                disabled={actionBusy}
+                                onClick={() => void patchExecutionPolicy(preset.policy)}
+                                className={`w-full rounded-2xl border p-3 text-left transition-colors ${
+                                  isActive
+                                    ? 'border-violet-500/30 bg-violet-500/10'
+                                    : 'border-navy-700/70 bg-navy-950/42 hover:border-violet-500/18 hover:bg-navy-900/60'
+                                } disabled:opacity-60`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{preset.label}</p>
+                                    <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{preset.summary}</p>
+                                  </div>
+                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                                    isActive
+                                      ? 'border-violet-500/20 bg-violet-500/10 text-violet-200'
+                                      : 'border-navy-700 bg-navy-900 text-slate-400'
+                                  }`}>
+                                    {preset.policy.mode === 'recommended' ? 'Auto' : 'Custom'}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="mt-5 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Advanced overrides</p>
+                        <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+                          Start from a preset unless you have a real reason to override the routing math manually.
+                        </p>
+                      </div>
 
                       <div className="mt-4 space-y-4">
                         <div>
