@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Plus, MessageSquare, Settings, ChevronRight, Zap, LogOut,
   X, CheckSquare, Clock, AlertCircle, Sparkles, PanelLeftClose, PanelLeftOpen, Trash2,
-  Eye, Shield, Search, CreditCard, ArrowUpRight, Pin, Archive, RotateCcw, ChevronUp, ChevronDown,
+  Eye, Shield, Search, CreditCard, ArrowUpRight, Pin, Archive, RotateCcw, ChevronUp, ChevronDown, Bot,
 } from 'lucide-react';
 import ChatInterface from '../components/ChatInterface';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
@@ -1966,8 +1966,8 @@ export default function Dashboard() {
     [selectedTask?.executionPolicy]
   );
   const selectedTaskPolicyMath = useMemo(
-    () => inferExecutionPolicyMath(selectedTaskExecutionPolicy, selectedTask?.steps || []),
-    [selectedTask?.steps, selectedTaskExecutionPolicy]
+    () => inferExecutionPolicyMath(selectedTaskExecutionPolicy, selectedTaskWorkflowSteps),
+    [selectedTaskExecutionPolicy, selectedTaskWorkflowSteps]
   );
   const selectedTaskWorkerView = useMemo(() => summarizeWorkerLanes(selectedTask), [selectedTask]);
   const selectedTaskWorkerHistory = useMemo(() => buildWorkerActivationHistory(selectedTask), [selectedTask]);
@@ -2092,6 +2092,32 @@ export default function Dashboard() {
       setSelectedTaskId('');
     }
   }, [selectedTask, selectedTaskId, taskItems]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const automationId = params.get('automation');
+    const panel = params.get('panel');
+    const editTarget = params.get('edit');
+
+    if (panel === 'schedules') {
+      setTaskPanelOpen(true);
+    }
+
+    if (automationId) {
+      const match = taskItems.find((task) => task.automationId === automationId || String(task.id) === automationId);
+      if (match) {
+        setSelectedTaskId(match.id);
+      }
+    }
+
+    if (editTarget === 'workflow' && automationId && !automationEditor) {
+      const match = taskItems.find((task) => task.automationId === automationId || String(task.id) === automationId);
+      if (match) {
+        setAutomationEditorSection('workflow');
+        void handleAutomationEdit(match);
+      }
+    }
+  }, [automationEditor, handleAutomationEdit, location.search, taskItems]);
 
   const ModeSelector = ({ compact = false }: { compact?: boolean }) => (
     <div className={`ui-input-shell flex items-center gap-1 p-1 ${compact ? 'w-full' : ''}`}>
@@ -2825,6 +2851,13 @@ export default function Dashboard() {
             <CheckSquare className="w-3.5 h-3.5" />
             <span className="hidden lg:inline">Schedules</span>
           </button>
+          <button
+            onClick={() => navigate('/dashboard/agents')}
+            className="hidden sm:flex items-center gap-1.5 rounded-full border border-navy-700 bg-navy-800/80 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:border-cyan-500/30 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+          >
+            <Bot className="w-3.5 h-3.5" />
+            <span className="hidden lg:inline">Agent Studio</span>
+          </button>
         </header>
 
         {isMobileSidebar && (
@@ -2843,6 +2876,13 @@ export default function Dashboard() {
               >
                 <CheckSquare className="h-3.5 w-3.5" />
                 Schedules
+              </button>
+              <button
+                onClick={() => navigate('/dashboard/agents')}
+                className="ui-button-ghost flex-1 justify-center py-2 text-[11px]"
+              >
+                <Bot className="h-3.5 w-3.5" />
+                Agent Studio
               </button>
             </div>
           </div>
@@ -2975,6 +3015,23 @@ export default function Dashboard() {
                           </span>
                         )}
                       </div>
+                      <div className="mt-3 rounded-xl border border-cyan-500/15 bg-cyan-500/6 px-3 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-300/80">Agent management moved</p>
+                            <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                              Scheduling stays here. The full worker system now has its own room so users can tune policy, inspect performance, and compare agent configurations without digging through the schedule drawer.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/dashboard/agents?automation=${selectedTask.automationId || selectedTask.id}`)}
+                            className="ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200"
+                          >
+                            Open Agent Studio
+                          </button>
+                        </div>
+                      </div>
                       <div className="mt-3 flex items-center gap-2">
                         <button
                           type="button"
@@ -2996,17 +3053,17 @@ export default function Dashboard() {
                               : 'text-slate-300'
                           }`}
                         >
-                          Agent setup
+                          Quick agent view
                         </button>
                       </div>
                       <div className="mt-3 rounded-xl border border-navy-700/60 bg-navy-950/45 px-3 py-2.5">
                         <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">
-                          {taskPanelSection === 'runs' ? 'Schedule and tracking folder' : 'Multi-agent setup folder'}
+                          {taskPanelSection === 'runs' ? 'Schedule and tracking folder' : 'Quick agent view'}
                         </p>
                         <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
                           {taskPanelSection === 'runs'
                             ? 'Runs, outcomes, evidence, and delivery stay here.'
-                            : 'Policy, worker topology, lane activity, and handoffs live here.'}
+                            : 'Use this for a fast read. The full multi-agent room now lives in Agent Studio.'}
                         </p>
                       </div>
                       {taskPanelSection === 'agents' && (

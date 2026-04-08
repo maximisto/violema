@@ -10,6 +10,7 @@ import Billing from './pages/Billing';
 import ProtectedRoute from './components/ProtectedRoute';
 import IntegrationsPage from './pages/IntegrationsPage';
 import SlackSetup from './pages/SlackSetup';
+import AgentStudio from './pages/AgentStudio';
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/connect/slack" element={<ProtectedRoute><SlackSetup /></ProtectedRoute>} />
         <Route path="/integrations" element={<IntegrationsPage />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/dashboard/agents" element={<ProtectedRoute><AgentStudio /></ProtectedRoute>} />
         <Route path="/faq" element={<FAQ />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
