@@ -181,6 +181,7 @@ interface DashboardTaskItem {
   workflowPrompt?: string;
   source: 'sample' | 'live';
   modelTier?: string;
+  modelSource?: string;
   agentRole?: string;
   runStatus?: string;
   automationId?: string;
@@ -222,6 +223,7 @@ interface DashboardTaskStepExecution {
   startedAt?: string;
   finishedAt?: string;
   modelTier?: string;
+  modelSource?: string;
   actualCredits?: number;
   toolCalls?: number;
   artifactCount?: number;
@@ -710,6 +712,15 @@ function getTaskMetadataArtifacts(task?: PlatformTaskRecord, run?: PlatformTaskR
   return readArtifacts(task?.metadata?.latestArtifacts);
 }
 
+function getTaskModelSource(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
+  return (
+    readString(run?.metadata?.modelSourceLabel) ||
+    readString(run?.metadata?.modelSource) ||
+    readString(task?.metadata?.modelSourceLabel) ||
+    readString(task?.metadata?.modelSource)
+  );
+}
+
 function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
   if (!Array.isArray(value)) return [];
 
@@ -732,6 +743,7 @@ function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
       startedAt: readString(item.startedAt),
       finishedAt: readString(item.finishedAt),
       modelTier: readString(item.modelTier),
+      modelSource: readString(item.modelSourceLabel) || readString(item.modelSource),
       actualCredits: typeof item.actualCredits === 'number' ? item.actualCredits : undefined,
       toolCalls: typeof item.toolCalls === 'number' ? item.toolCalls : undefined,
       artifactCount: typeof item.artifactCount === 'number' ? item.artifactCount : undefined,
@@ -880,6 +892,7 @@ function applyTaskRunSnapshot(item: DashboardTaskItem, task?: PlatformTaskRecord
     taskRunId: run?.id || item.taskRunId,
     status,
     modelTier: run?.modelTier || item.modelTier,
+    modelSource: getTaskModelSource(task, run) || item.modelSource,
     agentRole: run?.agentRole || item.agentRole,
     runStatus: run?.status || item.runStatus,
     lastRunAt: run?.finishedAt || run?.startedAt || item.lastRunAt,
@@ -1291,6 +1304,7 @@ export default function Dashboard() {
           description: task.description,
           source: 'live' as const,
           modelTier: latestRun?.modelTier,
+          modelSource: getTaskModelSource(task, latestRun),
           agentRole: latestRun?.agentRole,
           runStatus: latestRun?.status,
           lastRunAt: latestRun?.finishedAt || latestRun?.startedAt,
@@ -1329,6 +1343,7 @@ export default function Dashboard() {
           workflowPrompt: automation.workflow_prompt,
           source: 'live' as const,
           modelTier: latestRun?.modelTier,
+          modelSource: getTaskModelSource(task, latestRun),
           agentRole: latestRun?.agentRole,
           runStatus: latestRun?.status,
           automationId: automation.id,
@@ -2913,6 +2928,11 @@ export default function Dashboard() {
                             {selectedTask.modelTier}
                           </span>
                         )}
+                        {selectedTask.modelSource && (
+                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                            {selectedTask.modelSource}
+                          </span>
+                        )}
                       </div>
                       <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
                         <div className="flex items-start justify-between gap-3">
@@ -2984,6 +3004,10 @@ export default function Dashboard() {
                           <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5">
                             <p className="uppercase tracking-[0.18em] text-slate-600">Step count</p>
                             <p className="mt-1 text-slate-100">{selectedTaskStepExecutions.length || '—'}</p>
+                          </div>
+                          <div className="rounded-xl border border-navy-700/60 bg-navy-950/45 px-2.5 py-2.5 xl:col-span-2">
+                            <p className="uppercase tracking-[0.18em] text-slate-600">Model source</p>
+                            <p className="mt-1 text-slate-100">{selectedTask.modelSource || '—'}</p>
                           </div>
                         </div>
                         {selectedTask.failureReason ? (

@@ -197,6 +197,8 @@ export interface AutomationStepExecution {
   title: string;
   assignedRole: AgentRole;
   modelTier?: ModelTier;
+  modelSource?: 'server_default' | 'workspace_override' | 'workspace_token';
+  modelSourceLabel?: string;
   status: AutomationStepStatus;
   startedAt?: string;
   finishedAt?: string;

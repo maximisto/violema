@@ -71,12 +71,14 @@ import {
   getChatClient,
   getChatModelConfig,
   getMicroModelConfig,
+  getModelSource,
+  getModelSourceLabel,
   getModelRoutingStatus,
   getUtilityModelConfig,
   routeChatProfile,
   type TextProfile,
 } from './models';
-import { getWorkspaceSettingsView, upsertWorkspaceSettings } from './settingsStore';
+import { getWorkspaceProviderToken, getWorkspaceSettingsView, upsertWorkspaceSettings } from './settingsStore';
 
 dotenv.config();
 
@@ -317,6 +319,116 @@ function getAuthPublicOrigin(req: Request) {
   const forwardedProto = (req.header('x-forwarded-proto') || req.protocol || 'http').split(',')[0]?.trim() || 'http';
   const forwardedHost = (req.header('x-forwarded-host') || req.header('host') || 'localhost:3001').split(',')[0]?.trim() || 'localhost:3001';
   return `${forwardedProto}://${forwardedHost}`;
+}
+
+function getProviderEnvToken(provider: 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax') {
+  if (provider === 'anthropic') return process.env.ANTHROPIC_API_KEY?.trim();
+  if (provider === 'openai') return process.env.OPENAI_API_KEY?.trim();
+  if (provider === 'openrouter') return process.env.OPENROUTER_API_KEY?.trim();
+  if (provider === 'mistral') return process.env.MISTRAL_API_KEY?.trim();
+  return process.env.MINIMAX_API_KEY?.trim() || process.env.ANTHROPIC_API_KEY?.trim();
+}
+
+async function testProviderConnection(input: {
+  workspaceId: string;
+  provider: 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax';
+  tokenOverride?: string;
+}) {
+  const token = input.tokenOverride?.trim() || getWorkspaceProviderToken(input.workspaceId, input.provider) || getProviderEnvToken(input.provider);
+  if (!token) {
+    throw new Error(`No token available for ${input.provider}.`);
+  }
+
+  if (input.provider === 'anthropic' || input.provider === 'minimax') {
+    if (input.provider === 'minimax' && !process.env.MINIMAX_BASE_URL?.trim()) {
+      return {
+        ok: true,
+        provider: input.provider,
+        mode: 'saved' as const,
+        detail: 'Token accepted. Direct MiniMax ping is not configured yet, so save succeeded but the connection was not actively verified.',
+      };
+    }
+
+    const client = new Anthropic({
+      apiKey: token,
+      baseURL: input.provider === 'minimax'
+        ? process.env.MINIMAX_BASE_URL?.trim()
+        : process.env.ANTHROPIC_BASE_URL?.trim() || undefined,
+    });
+    const response = await client.messages.create({
+      model: input.provider === 'minimax'
+        ? process.env.MODEL_OPS_MODEL?.trim() || 'minimax/minimax-m2.7'
+        : process.env.MODEL_DEFAULT_MODEL?.trim() || 'claude-sonnet-4-20250514',
+      max_tokens: 8,
+      system: 'Return only the word OK.',
+      messages: [{ role: 'user', content: 'ping' }],
+    });
+    return {
+      ok: true,
+      provider: input.provider,
+      mode: 'verified' as const,
+      detail: `Verified with model ${response.model || (input.provider === 'minimax' ? 'minimax/minimax-m2.7' : 'claude-sonnet-4-20250514')}.`,
+    };
+  }
+
+  if (input.provider === 'openai') {
+    const response = await fetch(`${process.env.OPENAI_BASE_URL?.trim() || 'https://api.openai.com/v1'}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        model: process.env.MODEL_MICRO_MODEL?.trim() || 'gpt-5.4-nano',
+        max_completion_tokens: 8,
+        messages: [
+          { role: 'system', content: 'Return only the word OK.' },
+          { role: 'user', content: 'ping' },
+        ],
+      }),
+    });
+    const data = await response.json() as { error?: { message?: string } };
+    if (!response.ok) throw new Error(data.error?.message || 'OpenAI test failed');
+    return { ok: true, provider: input.provider, mode: 'verified' as const, detail: `Verified with ${process.env.MODEL_MICRO_MODEL?.trim() || 'gpt-5.4-nano'}.` };
+  }
+
+  if (input.provider === 'openrouter') {
+    const response = await fetch(`${process.env.OPENROUTER_BASE_URL?.trim() || 'https://openrouter.ai/api/v1'}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        'HTTP-Referer': process.env.OPENROUTER_SITE_URL?.trim() || 'https://violema.com',
+        'X-Title': process.env.OPENROUTER_APP_NAME?.trim() || 'VIOLEMA',
+      },
+      body: JSON.stringify({
+        model: process.env.MODEL_OPS_MODEL?.trim() || 'minimax/minimax-m2.7',
+        max_completion_tokens: 8,
+        messages: [
+          { role: 'system', content: 'Return only the word OK.' },
+          { role: 'user', content: 'ping' },
+        ],
+      }),
+    });
+    const data = await response.json() as { error?: { message?: string } };
+    if (!response.ok) throw new Error(data.error?.message || 'OpenRouter test failed');
+    return { ok: true, provider: input.provider, mode: 'verified' as const, detail: `Verified with ${process.env.MODEL_OPS_MODEL?.trim() || 'minimax/minimax-m2.7'}.` };
+  }
+
+  const response = await fetch(`${process.env.MISTRAL_BASE_URL?.trim() || 'https://api.mistral.ai/v1'}/embeddings`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      model: process.env.MODEL_MEMORY_TEXT_MODEL?.trim() || 'mistral-embed',
+      input: 'ping',
+    }),
+  });
+  const data = await response.json() as { message?: string };
+  if (!response.ok) throw new Error(data.message || 'Mistral test failed');
+  return { ok: true, provider: input.provider, mode: 'verified' as const, detail: `Verified with ${process.env.MODEL_MEMORY_TEXT_MODEL?.trim() || 'mistral-embed'}.` };
 }
 
 function sanitizeNextPath(value: string | undefined, fallback = '/dashboard') {
@@ -1287,6 +1399,7 @@ interface ChatExecutionResult {
   taskRunId: string;
   resolvedProfile: TextProfile;
   selectedModel: string;
+  modelSource: 'server_default' | 'workspace_override' | 'workspace_token';
   outputText: string;
   toolCallsExecuted: number;
 }
@@ -1357,6 +1470,7 @@ async function executeConversationTask(input: {
   const modelTier = delegation.plan.suggestedModelTier;
   const { client, executingRoute } = getChatClient(resolvedProfile, workspaceId);
   const requestedRoute = getChatModelConfig(resolvedProfile, workspaceId);
+  const modelSource = getModelSource(resolvedProfile, workspaceId);
   const task = createTask({
     workspaceId,
     title: messages[0]?.content?.slice(0, 72) || 'Violema task',
@@ -1370,6 +1484,8 @@ async function executeConversationTask(input: {
     metadata: {
       selectedProfile: resolvedProfile,
       model: requestedRoute.model,
+      modelSource,
+      modelSourceLabel: getModelSourceLabel(modelSource),
       delegation: delegation.ownership,
     },
   });
@@ -1388,7 +1504,13 @@ async function executeConversationTask(input: {
     modelTier,
     estimatedCredits: estimatedCost.estimatedCredits,
     delegationPlan: delegation.plan,
-    metadata: { requestedProfile: modelProfile, title: task.title, delegation: delegation.ownership },
+    metadata: {
+      requestedProfile: modelProfile,
+      title: task.title,
+      delegation: delegation.ownership,
+      modelSource,
+      modelSourceLabel: getModelSourceLabel(modelSource),
+    },
   });
   const anthropicMessages: Anthropic.MessageParam[] = messages.map((message) => ({
     role: message.role,
@@ -1400,6 +1522,8 @@ async function executeConversationTask(input: {
     requested_profile: modelProfile,
     selected_profile: resolvedProfile,
     selected_model: requestedRoute.model,
+    selected_model_source: modelSource,
+    selected_model_source_label: getModelSourceLabel(modelSource),
     reason: routingDecision?.reason || 'explicit_profile',
     risk: routingDecision?.risk || 'low',
     needs_tools: routingDecision?.needsTools ?? true,
@@ -1449,6 +1573,7 @@ async function executeConversationTask(input: {
     taskRunId: taskRun.id,
     resolvedProfile,
     selectedModel: requestedRoute.model,
+    modelSource,
     outputText: textParts.join('').trim(),
     toolCallsExecuted,
   };
@@ -2405,12 +2530,15 @@ async function executeAutomationCore(
   };
 
   for (const step of plan.steps) {
+    const stepModelSource = getModelSource(step.modelTier || plan.suggestedModelTier, DEFAULT_WORKSPACE_ID);
     const stepExecution: AutomationStepExecution = {
       stepId: step.id,
       kind: step.kind,
       title: step.title,
       assignedRole: step.assignedRole,
       modelTier: step.modelTier,
+      modelSource: stepModelSource,
+      modelSourceLabel: getModelSourceLabel(stepModelSource),
       estimatedCredits: step.estimatedCredits,
       status: 'running',
       startedAt: new Date().toISOString(),
@@ -2631,6 +2759,7 @@ async function runAutomation(automation: {
   ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
   const executionPlan = buildAutomationExecutionPlan(automation);
   const modelTier = executionPlan.suggestedModelTier;
+  const runModelSource = getModelSource(modelTier, DEFAULT_WORKSPACE_ID);
   const complexity = executionPlan.complexity;
   const toolCallCount = executionPlan.estimatedToolCalls;
   const executionRole = executionPlan.primaryRole;
@@ -2661,6 +2790,8 @@ async function runAutomation(automation: {
       automationId: automation.id,
       notify: automation.notify || null,
       delegation: delegation.ownership,
+      modelSource: runModelSource,
+      modelSourceLabel: getModelSourceLabel(runModelSource),
       sourceSteps: automation.steps,
       executionPolicy: automation.execution_policy,
       automationPlan: executionPlan,
@@ -2694,6 +2825,8 @@ async function runAutomation(automation: {
       automationId: automation.id,
       title: automation.name,
       delegation: delegation.ownership,
+      modelSource: runModelSource,
+      modelSourceLabel: getModelSourceLabel(runModelSource),
       sourceSteps: automation.steps,
       executionPolicy: automation.execution_policy,
       automationPlan: executionPlan,
@@ -2735,6 +2868,8 @@ async function runAutomation(automation: {
           automationId: automation.id,
           title: automation.name,
           delegation: delegation.ownership,
+          modelSource: runModelSource,
+          modelSourceLabel: getModelSourceLabel(runModelSource),
           sourceSteps: automation.steps,
           executionPolicy: automation.execution_policy,
           automationPlan: executionPlan,
@@ -2763,6 +2898,8 @@ async function runAutomation(automation: {
           automationId: automation.id,
           notify: automation.notify || null,
           delegation: delegation.ownership,
+          modelSource: runModelSource,
+          modelSourceLabel: getModelSourceLabel(runModelSource),
           sourceSteps: automation.steps,
           executionPolicy: automation.execution_policy,
           latestSummary: progress.summaryText || undefined,
@@ -2813,6 +2950,8 @@ async function runAutomation(automation: {
       metadata: {
         automationId: automation.id,
         summary,
+        modelSource: runModelSource,
+        modelSourceLabel: getModelSourceLabel(runModelSource),
         artifacts: execution.artifacts,
         stepErrors: execution.stepErrors,
         stepExecutions: execution.stepExecutions,
@@ -2848,6 +2987,8 @@ async function runAutomation(automation: {
         automationId: automation.id,
         notify: deliveryTarget || null,
         delegation: delegation.ownership,
+        modelSource: runModelSource,
+        modelSourceLabel: getModelSourceLabel(runModelSource),
         sourceSteps: automation.steps,
         executionPolicy: automation.execution_policy,
         latestSummary: summary,
@@ -2915,6 +3056,8 @@ async function runAutomation(automation: {
       metadata: {
         automationId: automation.id,
         summary: failureSummary,
+        modelSource: runModelSource,
+        modelSourceLabel: getModelSourceLabel(runModelSource),
         plannedSteps: executionPlan.steps,
         stepExecutions: [],
         executionPolicy: automation.execution_policy,
@@ -2946,6 +3089,8 @@ async function runAutomation(automation: {
         automationId: automation.id,
         notify: automation.notify || null,
         delegation: delegation.ownership,
+        modelSource: runModelSource,
+        modelSourceLabel: getModelSourceLabel(runModelSource),
         sourceSteps: automation.steps,
         executionPolicy: automation.execution_policy,
         latestSummary: failureSummary,
@@ -3146,6 +3291,31 @@ app.patch('/api/settings', (req: Request, res: Response) => {
     settings,
     modelRouting: getModelRoutingStatus(workspaceId),
   });
+});
+
+app.post('/api/settings/test-provider', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const body = (req.body || {}) as { provider?: string; token?: string };
+  const provider = body.provider;
+  if (provider !== 'anthropic' && provider !== 'openai' && provider !== 'openrouter' && provider !== 'mistral' && provider !== 'minimax') {
+    res.status(400).json({ error: 'Unsupported provider' });
+    return;
+  }
+
+  try {
+    const result = await testProviderConnection({
+      workspaceId,
+      provider,
+      tokenOverride: typeof body.token === 'string' ? body.token : undefined,
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      provider,
+      detail: error instanceof Error ? error.message : 'Provider test failed',
+    });
+  }
 });
 
 // ── Waitlist ──────────────────────────────────────────────────────────────────

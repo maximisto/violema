@@ -18,6 +18,8 @@ interface ModelRoute {
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 }
 
+export type ModelSource = 'server_default' | 'workspace_override' | 'workspace_token';
+
 export interface RoutingDecision {
   profile: CanonicalTextProfile;
   reason: string;
@@ -61,12 +63,7 @@ function resolveTextProfile(profile: TextProfile): CanonicalTextProfile {
   }
 }
 
-function resolveEmbeddingProfile(profile: EmbeddingProfile): CanonicalEmbeddingProfile {
-  if (profile === 'memory') return 'memory_text';
-  return profile;
-}
-
-function getTextRoute(profile: TextProfile, workspaceId?: string): ModelRoute {
+function getTextRouteDefault(profile: TextProfile): ModelRoute {
   const resolvedProfile = resolveTextProfile(profile);
   const defaults: Record<CanonicalTextProfile, ModelRoute> = {
     micro: {
@@ -138,19 +135,10 @@ function getTextRoute(profile: TextProfile, workspaceId?: string): ModelRoute {
     reasoningEffort: (env(`${prefix}_REASONING_EFFORT`) as ModelRoute['reasoningEffort'] | undefined) || defaults[resolvedProfile].reasoningEffort,
   };
 
-  if (profile === resolvedProfile) {
-    const override = workspaceId ? getWorkspaceSettings(workspaceId)?.modelOverrides?.[resolvedProfile] : undefined;
-    return {
-      ...route,
-      provider: override?.provider || route.provider,
-      model: override?.model || route.model,
-      baseUrl: override?.baseUrl || route.baseUrl,
-      reasoningEffort: override?.reasoningEffort || route.reasoningEffort,
-    };
-  }
+  if (profile === resolvedProfile) return route;
 
   const legacyPrefix = `MODEL_${profile.toUpperCase()}`;
-  const legacyRoute = {
+  return {
     ...route,
     ...legacyOverrides[profile as LegacyTextProfile],
     provider: (env(`${legacyPrefix}_PROVIDER`) as Provider | undefined) || route.provider,
@@ -159,13 +147,23 @@ function getTextRoute(profile: TextProfile, workspaceId?: string): ModelRoute {
     baseUrl: env(`${legacyPrefix}_BASE_URL`) || route.baseUrl,
     reasoningEffort: (env(`${legacyPrefix}_REASONING_EFFORT`) as ModelRoute['reasoningEffort'] | undefined) || route.reasoningEffort,
   };
+}
+
+function resolveEmbeddingProfile(profile: EmbeddingProfile): CanonicalEmbeddingProfile {
+  if (profile === 'memory') return 'memory_text';
+  return profile;
+}
+
+function getTextRoute(profile: TextProfile, workspaceId?: string): ModelRoute {
+  const resolvedProfile = resolveTextProfile(profile);
+  const route = getTextRouteDefault(profile);
   const override = workspaceId ? getWorkspaceSettings(workspaceId)?.modelOverrides?.[resolvedProfile] : undefined;
   return {
-    ...legacyRoute,
-    provider: override?.provider || legacyRoute.provider,
-    model: override?.model || legacyRoute.model,
-    baseUrl: override?.baseUrl || legacyRoute.baseUrl,
-    reasoningEffort: override?.reasoningEffort || legacyRoute.reasoningEffort,
+    ...route,
+    provider: override?.provider || route.provider,
+    model: override?.model || route.model,
+    baseUrl: override?.baseUrl || route.baseUrl,
+    reasoningEffort: override?.reasoningEffort || route.reasoningEffort,
   };
 }
 
@@ -203,6 +201,32 @@ function getEmbeddingRoute(profile: EmbeddingProfile, workspaceId?: string): Mod
     baseUrl: override?.baseUrl || route.baseUrl,
     reasoningEffort: override?.reasoningEffort || route.reasoningEffort,
   };
+}
+
+export function getModelSource(profile: TextProfile, workspaceId?: string): ModelSource {
+  const route = getTextRoute(profile, workspaceId);
+  const defaultRoute = getTextRouteDefault(profile);
+  const workspaceSettings = workspaceId ? getWorkspaceSettings(workspaceId) : null;
+  const resolvedProfile = resolveTextProfile(profile);
+  const hasWorkspaceToken = Boolean(workspaceId && getWorkspaceProviderToken(workspaceId, route.provider));
+  const hasModelOverride = Boolean(workspaceSettings?.modelOverrides?.[resolvedProfile]);
+
+  if (hasWorkspaceToken) return 'workspace_token';
+  if (hasModelOverride && (
+    route.provider !== defaultRoute.provider ||
+    route.model !== defaultRoute.model ||
+    route.baseUrl !== defaultRoute.baseUrl ||
+    route.reasoningEffort !== defaultRoute.reasoningEffort
+  )) {
+    return 'workspace_override';
+  }
+  return 'server_default';
+}
+
+export function getModelSourceLabel(source: ModelSource): string {
+  if (source === 'workspace_token') return 'Workspace token';
+  if (source === 'workspace_override') return 'Workspace override';
+  return 'Server default';
 }
 
 function resolveProviderApiKey(route: ModelRoute, workspaceId?: string): string {

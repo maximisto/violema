@@ -10,6 +10,10 @@ export interface Message {
   isStreaming?: boolean;
   isThinking?: boolean;
   reaction?: 'positive' | 'negative' | null;
+  modelTier?: string;
+  modelName?: string;
+  modelSource?: string;
+  routingReason?: string;
 }
 
 export interface ToolCall {
@@ -35,7 +39,7 @@ export interface Conversation {
 }
 
 export interface SSEEvent {
-  type: 'text' | 'tool_start' | 'tool_input' | 'tool_result' | 'thinking_start' | 'thinking' | 'done' | 'error';
+  type: 'text' | 'tool_start' | 'tool_input' | 'tool_result' | 'thinking_start' | 'thinking' | 'done' | 'error' | 'routing';
   content?: string;
   tool_name?: string;
   tool_id?: string;
@@ -45,4 +49,9 @@ export interface SSEEvent {
   started_at?: number;
   elapsed_ms?: number;
   confidence?: number;
+  selected_profile?: string;
+  selected_model?: string;
+  selected_model_source?: string;
+  selected_model_source_label?: string;
+  reason?: string;
 }

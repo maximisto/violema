@@ -30,6 +30,12 @@ interface SettingsPayload {
   modelRouting: Record<string, { provider: string; model: string; configured: boolean; tool_loop_compatible: boolean }>;
 }
 
+interface ProviderTestState {
+  tone: 'success' | 'error' | 'idle';
+  message?: string;
+  testing?: boolean;
+}
+
 const PROVIDER_COPY: Record<Provider, { label: string; help: string }> = {
   anthropic: { label: 'Anthropic', help: 'Used for the default and critical reasoning lanes by default.' },
   openai: { label: 'OpenAI', help: 'Used for micro and hard reasoning lanes by default.' },
@@ -74,6 +80,13 @@ export default function SettingsPage() {
     minimax: false,
   });
   const [modelOverrides, setModelOverrides] = useState<Partial<Record<Profile, ModelOverride>>>({});
+  const [providerTests, setProviderTests] = useState<Record<Provider, ProviderTestState>>({
+    anthropic: { tone: 'idle' },
+    openai: { tone: 'idle' },
+    openrouter: { tone: 'idle' },
+    mistral: { tone: 'idle' },
+    minimax: { tone: 'idle' },
+  });
 
   async function loadSettings(silent = false) {
     if (!silent) setLoading(true);
@@ -195,6 +208,43 @@ export default function SettingsPage() {
     });
   }
 
+  async function handleProviderTest(provider: Provider) {
+    setProviderTests((current) => ({
+      ...current,
+      [provider]: { tone: 'idle', testing: true, message: 'Testing…' },
+    }));
+
+    try {
+      const response = await fetch('/api/settings/test-provider', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Workspace-Id': workspace.workspaceId,
+          'X-Workspace-Name': workspace.workspaceName,
+        },
+        body: JSON.stringify({
+          workspaceId: workspace.workspaceId,
+          workspaceName: workspace.workspaceName,
+          provider,
+          token: providerInputs[provider].trim() || undefined,
+        }),
+      });
+
+      const payload = await response.json() as { ok?: boolean; detail?: string };
+      if (!response.ok) throw new Error(payload.detail || 'Provider test failed');
+
+      setProviderTests((current) => ({
+        ...current,
+        [provider]: { tone: 'success', message: payload.detail || 'Provider looks good.' },
+      }));
+    } catch (error) {
+      setProviderTests((current) => ({
+        ...current,
+        [provider]: { tone: 'error', message: error instanceof Error ? error.message : 'Provider test failed.' },
+      }));
+    }
+  }
+
   return (
     <div className="min-h-screen bg-navy-950 text-white">
       {notice ? (
@@ -298,15 +348,36 @@ export default function SettingsPage() {
                               placeholder={`Paste a ${PROVIDER_COPY[provider].label} token`}
                             />
                           </div>
-                          <label className="flex items-center gap-2 text-[11px] text-slate-400">
-                            <input
-                              type="checkbox"
-                              checked={providerClears[provider]}
-                              onChange={(event) => setProviderClears((current) => ({ ...current, [provider]: event.target.checked }))}
-                              className="rounded border-navy-700 bg-navy-950 text-violet-400 focus:ring-violet-500"
-                            />
-                            Clear workspace override and fall back to the server token
-                          </label>
+                          <div className="flex items-center justify-between gap-3">
+                            <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                              <input
+                                type="checkbox"
+                                checked={providerClears[provider]}
+                                onChange={(event) => setProviderClears((current) => ({ ...current, [provider]: event.target.checked }))}
+                                className="rounded border-navy-700 bg-navy-950 text-violet-400 focus:ring-violet-500"
+                              />
+                              Clear workspace override and fall back to the server token
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => void handleProviderTest(provider)}
+                              disabled={providerClears[provider] || providerTests[provider].testing}
+                              className="ui-pill shrink-0 px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200 disabled:opacity-50"
+                            >
+                              {providerTests[provider].testing ? 'Testing…' : 'Test'}
+                            </button>
+                          </div>
+                          {providerTests[provider].message ? (
+                            <div className={`rounded-xl border px-3 py-2 text-[11px] ${
+                              providerTests[provider].tone === 'success'
+                                ? 'border-green-500/18 bg-green-500/8 text-green-200'
+                                : providerTests[provider].tone === 'error'
+                                  ? 'border-red-500/18 bg-red-500/8 text-red-200'
+                                  : 'border-navy-700/70 bg-navy-950/35 text-slate-400'
+                            }`}>
+                              {providerTests[provider].message}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     );

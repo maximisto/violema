@@ -92,6 +92,7 @@ interface DashboardTaskStepExecution {
   startedAt?: string;
   finishedAt?: string;
   modelTier?: string;
+  modelSource?: string;
   actualCredits?: number;
   toolCalls?: number;
   durationMs?: number;
@@ -514,6 +515,7 @@ function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
         startedAt: readString(item.startedAt),
         finishedAt: readString(item.finishedAt),
         modelTier: readString(item.modelTier),
+        modelSource: readString(item.modelSourceLabel) || readString(item.modelSource),
         actualCredits: typeof item.actualCredits === 'number' ? item.actualCredits : undefined,
         toolCalls: typeof item.toolCalls === 'number' ? item.toolCalls : undefined,
         durationMs: typeof item.durationMs === 'number' ? item.durationMs : undefined,
@@ -573,6 +575,15 @@ function readWorkerTopology(value: unknown): DashboardWorkerTopology | undefined
 
 function getTaskAutomationId(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
   return readString(run?.metadata?.automationId) || readString(task?.metadata?.automationId);
+}
+
+function getTaskModelSource(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
+  return (
+    readString(run?.metadata?.modelSourceLabel) ||
+    readString(run?.metadata?.modelSource) ||
+    readString(task?.metadata?.modelSourceLabel) ||
+    readString(task?.metadata?.modelSource)
+  );
 }
 
 function getStatusTone(status: string) {
@@ -1647,6 +1658,9 @@ export default function AgentStudio() {
                                 {run.modelTier || 'auto'}
                               </span>
                             </div>
+                            {getTaskModelSource(selectedRow.task, run) ? (
+                              <p className="mt-2 text-[11px] text-slate-400">{getTaskModelSource(selectedRow.task, run)}</p>
+                            ) : null}
                             <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
                               <div>
                                 <p className="text-slate-500">Credits</p>
@@ -1698,6 +1712,9 @@ export default function AgentStudio() {
                             <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
                               {step.modelTier ? (
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.modelTier}</span>
+                              ) : null}
+                              {step.modelSource ? (
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.modelSource}</span>
                               ) : null}
                               {typeof step.actualCredits === 'number' ? (
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCredits(step.actualCredits)} cr</span>

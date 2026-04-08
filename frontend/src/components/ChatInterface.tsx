@@ -814,7 +814,6 @@ function MessageBubble({
         {/* Header */}
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold text-violet-100">Violema</span>
-          {!message.isStreaming && <ModelBadge />}
           <span className="text-xs text-slate-600">
             {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
@@ -878,6 +877,26 @@ function MessageBubble({
           />
         )}
 
+        {(message.modelTier || message.modelName || message.modelSource) && (
+          <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-500">
+            {message.modelTier ? (
+              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                {message.modelTier}
+              </span>
+            ) : null}
+            {message.modelName ? (
+              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                {message.modelName}
+              </span>
+            ) : null}
+            {message.modelSource ? (
+              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200">
+                {message.modelSource}
+              </span>
+            ) : null}
+          </div>
+        )}
+
         {/* Loading state */}
         {message.isStreaming && !message.content && !message.thinking && !message.toolCalls?.length && (
           <div className="flex items-center gap-1.5 py-2">
@@ -901,15 +920,6 @@ interface ChatInterfaceProps {
   initialMessages?: Message[];
   onMessagesChange?: (messages: Message[]) => void;
   autonomyMode?: AutonomyMode;
-}
-
-// Model tier badge shown on assistant messages
-function ModelBadge() {
-  return (
-    <span className="model-badge-opus" title="Powered by claude-opus-4-6">
-      opus-4
-    </span>
-  );
 }
 
 export default function ChatInterface({
@@ -1120,6 +1130,14 @@ export default function ChatInterface({
             if (event.type === 'thinking_start') {
               setAgentStatus('thinking');
               updateMessage(assistantId, (m) => ({ ...m, isThinking: true, thinking: m.thinking ?? '' }));
+            } else if (event.type === 'routing') {
+              updateMessage(assistantId, (m) => ({
+                ...m,
+                modelTier: event.selected_profile || m.modelTier,
+                modelName: event.selected_model || m.modelName,
+                modelSource: event.selected_model_source_label || event.selected_model_source || m.modelSource,
+                routingReason: event.reason || m.routingReason,
+              }));
             } else if (event.type === 'thinking' && event.content) {
               updateMessage(assistantId, (m) => ({
                 ...m,
