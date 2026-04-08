@@ -8,6 +8,8 @@ export interface AutomationRecord {
   version?: 2;
   name: string;
   description?: string;
+  authoring_mode?: 'guided' | 'describe';
+  workflow_prompt?: string;
   schedule: string;
   cron_expression: string;
   timezone?: string;
@@ -377,6 +379,8 @@ export function createAutomation(
     version: input.steps?.length ? 2 : undefined,
     name: input.name,
     description: input.description,
+    authoring_mode: input.authoring_mode,
+    workflow_prompt: input.workflow_prompt,
     schedule: input.schedule,
     cron_expression: cronExpression,
     timezone,

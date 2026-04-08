@@ -153,6 +153,8 @@ interface AutomationApiRecord {
   id: string;
   name: string;
   description?: string;
+  authoring_mode?: 'guided' | 'describe';
+  workflow_prompt?: string;
   schedule: string;
   timezone?: string;
   actions: string[];
@@ -176,6 +178,8 @@ interface DashboardTaskItem {
   time: string;
   icon: typeof Clock;
   description?: string;
+  authoringMode?: 'guided' | 'describe';
+  workflowPrompt?: string;
   source: 'sample' | 'live';
   modelTier?: string;
   agentRole?: string;
@@ -1395,6 +1399,8 @@ export default function Dashboard() {
           time: automation.next_run_at ? `Next ${formatAutomationRunTime(automation.next_run_at)}` : automation.schedule,
           icon: status === 'alert' ? AlertCircle : mapTaskIcon(status),
           description: automation.description || task?.description,
+          authoringMode: automation.authoring_mode,
+          workflowPrompt: automation.workflow_prompt,
           source: 'live' as const,
           modelTier: latestRun?.modelTier,
           agentRole: latestRun?.agentRole,
@@ -1708,8 +1714,8 @@ export default function Dashboard() {
       description: task.description || '',
       notify: task.notify || '',
       condition: task.condition || '',
-      authoringMode: 'guided',
-      workflowPrompt: buildWorkflowPromptFromBlocks(nextSteps),
+      authoringMode: task.authoringMode === 'describe' ? 'describe' : 'guided',
+      workflowPrompt: task.workflowPrompt || buildWorkflowPromptFromBlocks(nextSteps),
       steps: nextSteps,
       executionPolicy: normalizeExecutionPolicy(task.executionPolicy),
       destinationType:
@@ -1775,6 +1781,8 @@ export default function Dashboard() {
           schedule: automationEditor.schedule.trim(),
           timezone: getLocalTimeZone(),
           description: automationEditor.description.trim() || null,
+          authoringMode: automationEditor.authoringMode,
+          workflowPrompt: automationEditor.workflowPrompt.trim() || null,
           notify: automationEditor.notify.trim() || null,
           condition: automationEditor.condition.trim() || null,
           steps,
@@ -1797,6 +1805,31 @@ export default function Dashboard() {
       setActionBusy(null);
     }
   }, [automationEditor, refreshAutomations, showNotice]);
+
+  const handleExecutionPolicyPatch = useCallback(async (
+    task: DashboardTaskItem | undefined,
+    updater: (current: AutomationExecutionPolicyDraft) => AutomationExecutionPolicyDraft,
+  ) => {
+    if (!task?.automationId) return;
+    setActionBusy('save');
+    try {
+      const nextPolicy = updater(normalizeExecutionPolicy(task.executionPolicy));
+      const response = await fetch(`/api/automations/${task.automationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          executionPolicy: nextPolicy,
+        }),
+      });
+      if (!response.ok) throw new Error('Could not update agent setup');
+      await refreshAutomations();
+      showNotice('success', 'Updated agent setup.');
+    } catch {
+      showNotice('error', 'Could not update agent setup');
+    } finally {
+      setActionBusy(null);
+    }
+  }, [refreshAutomations, showNotice]);
 
   const handleMessagesChange = useCallback(
     (messages: Message[]) => {
@@ -1918,6 +1951,16 @@ export default function Dashboard() {
   const selectedTaskSummary = useMemo(() => formatSummaryPreview(selectedTask?.latestSummary, 360), [selectedTask?.latestSummary]);
   const selectedTaskEvidenceLinks = useMemo(() => extractEvidenceLinks(selectedTask?.latestArtifacts), [selectedTask?.latestArtifacts]);
   const selectedTaskStepExecutions = useMemo(() => selectedTask?.latestStepExecutions || [], [selectedTask?.latestStepExecutions]);
+  const selectedTaskWorkflowSteps = useMemo(() => {
+    if (!selectedTask) return [];
+    if (Array.isArray(selectedTask.steps) && selectedTask.steps.length > 0) {
+      return selectedTask.steps.map((step) => createWorkflowBlock(step.kind, step));
+    }
+    if (Array.isArray(selectedTask.actions) && selectedTask.actions.length > 0) {
+      return selectedTask.actions.map((action) => parseLegacyActionToWorkflowBlock(action));
+    }
+    return [];
+  }, [selectedTask]);
   const selectedTaskExecutionPolicy = useMemo(
     () => normalizeExecutionPolicy(selectedTask?.executionPolicy),
     [selectedTask?.executionPolicy]
@@ -1938,6 +1981,13 @@ export default function Dashboard() {
     const totalToolCalls = steps.reduce((total, step) => total + Math.max(0, step.toolCalls || 0), 0);
     return { actualCredits, estimatedCredits, totalTokens, totalToolCalls };
   }, [selectedTask]);
+  const selectedTaskWorkflowPreview = useMemo(() => {
+    if (!selectedTask) return [];
+    if (selectedTask.authoringMode === 'describe' && selectedTask.workflowPrompt) {
+      return buildWorkflowBlocksFromPrompt(selectedTask.workflowPrompt).slice(0, 4);
+    }
+    return selectedTaskWorkflowSteps.slice(0, 4);
+  }, [selectedTask, selectedTaskWorkflowSteps]);
   const lowCreditRunway = snapshot.projectedDaysLeft <= 7;
   const automationActionCount = useMemo(() => {
     if (!automationEditor) return 0;
@@ -2128,8 +2178,8 @@ export default function Dashboard() {
       description: selectedTask.description || '',
       notify: selectedTask.notify || '',
       condition: selectedTask.condition || '',
-      authoringMode: 'guided',
-      workflowPrompt: buildWorkflowPromptFromBlocks(nextSteps),
+      authoringMode: selectedTask.authoringMode === 'describe' ? 'describe' : 'guided',
+      workflowPrompt: selectedTask.workflowPrompt || buildWorkflowPromptFromBlocks(nextSteps),
       steps: nextSteps,
       executionPolicy: normalizeExecutionPolicy(selectedTask.executionPolicy),
       destinationType:
@@ -3016,6 +3066,103 @@ export default function Dashboard() {
                               <p className="mt-1 text-slate-100">{selectedTaskPolicyMath.estimatedBands}</p>
                             </div>
                           </div>
+                          <div className="mt-3 space-y-3">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Quick controls</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {[
+                                  { value: 'recommended' as const, label: 'System recommended' },
+                                  { value: 'custom' as const, label: 'Custom policy' },
+                                ].map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => { void handleExecutionPolicyPatch(selectedTask, (current) => ({ ...current, mode: option.value })); }}
+                                    disabled={actionBusy === 'save'}
+                                    className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                                      selectedTaskExecutionPolicy.mode === option.value
+                                        ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
+                                        : 'text-slate-300'
+                                    } disabled:opacity-60`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            {selectedTaskExecutionPolicy.mode === 'custom' && (
+                              <>
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Optimization</p>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {[
+                                      { value: 'balanced' as const, label: 'Balanced' },
+                                      { value: 'cost_saver' as const, label: 'Cost Saver' },
+                                      { value: 'quality_first' as const, label: 'Quality First' },
+                                    ].map((option) => (
+                                      <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => { void handleExecutionPolicyPatch(selectedTask, (current) => ({ ...current, mode: 'custom', optimizationGoal: option.value })); }}
+                                        disabled={actionBusy === 'save'}
+                                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                                          selectedTaskExecutionPolicy.optimizationGoal === option.value
+                                            ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
+                                            : 'text-slate-300'
+                                        } disabled:opacity-60`}
+                                      >
+                                        {option.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Review</p>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {[
+                                      { value: 'lean' as const, label: 'Lean' },
+                                      { value: 'standard' as const, label: 'Standard' },
+                                      { value: 'strict' as const, label: 'Strict' },
+                                    ].map((option) => (
+                                      <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => { void handleExecutionPolicyPatch(selectedTask, (current) => ({ ...current, mode: 'custom', reviewPolicy: option.value })); }}
+                                        disabled={actionBusy === 'save'}
+                                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                                          selectedTaskExecutionPolicy.reviewPolicy === option.value
+                                            ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
+                                            : 'text-slate-300'
+                                        } disabled:opacity-60`}
+                                      >
+                                        {option.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Elastic lane cap</p>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {[0, 1, 2, 3, 4].map((count) => (
+                                      <button
+                                        key={count}
+                                        type="button"
+                                        onClick={() => { void handleExecutionPolicyPatch(selectedTask, (current) => ({ ...current, mode: 'custom', maxElasticLanes: count })); }}
+                                        disabled={actionBusy === 'save'}
+                                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                                          selectedTaskExecutionPolicy.maxElasticLanes === count
+                                            ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
+                                            : 'text-slate-300'
+                                        } disabled:opacity-60`}
+                                      >
+                                        {count}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
                           <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
                             Math: {selectedTaskPolicyMath.stepCount} workflow steps, {selectedTaskPolicyMath.toolCalls} tool calls, lane demand {selectedTaskPolicyMath.recommendedElasticLanes}. The active policy keeps heavier reasoning on stronger models only when the run actually justifies it.
                           </p>
@@ -3310,6 +3457,56 @@ export default function Dashboard() {
                             No evidence links were attached to the latest run.
                           </div>
                         ) : null}
+                        <div className="mt-3 rounded-xl border border-violet-500/12 bg-violet-500/6 px-3 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-violet-300/80">Workflow design</p>
+                              <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                                {selectedTask.authoringMode === 'describe'
+                                  ? 'This workflow is written as a plain-language brief and translated into runnable steps.'
+                                  : 'This workflow is defined as explicit steps you can inspect and reorder.'}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAutomationEditorSection('workflow');
+                                void handleAutomationEdit(selectedTask);
+                              }}
+                              className="ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal text-violet-200"
+                            >
+                              Edit workflow
+                            </button>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-500">
+                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                              {selectedTask.authoringMode === 'describe' ? 'Natural-language brief' : 'Guided steps'}
+                            </span>
+                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                              {selectedTaskWorkflowPreview.length} visible steps
+                            </span>
+                          </div>
+                          {selectedTask.authoringMode === 'describe' && selectedTask.workflowPrompt ? (
+                            <div className="mt-3 rounded-lg border border-white/6 bg-white/4 px-2.5 py-2 text-[11px] leading-relaxed text-slate-300">
+                              {selectedTask.workflowPrompt}
+                            </div>
+                          ) : null}
+                          {selectedTaskWorkflowPreview.length > 0 ? (
+                            <div className="mt-3 space-y-2">
+                              {selectedTaskWorkflowPreview.map((step, index) => (
+                                <div key={`${step.id}-${index}`} className="rounded-lg border border-navy-700/70 bg-navy-950/45 px-3 py-2.5">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-[11px] font-medium text-white">{index + 1}. {step.title}</p>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-[10px] text-slate-300">
+                                      {step.kind}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{step.objective}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                       )}
                       {selectedTask.description && (
@@ -3333,11 +3530,14 @@ export default function Dashboard() {
                           {actionBusy === 'pause' ? 'Saving…' : selectedTask.automationStatus === 'paused' ? 'Resume' : 'Pause'}
                         </button>
                         <button
-                          onClick={() => { void handleAutomationEdit(selectedTask); }}
+                          onClick={() => {
+                            setAutomationEditorSection('setup');
+                            void handleAutomationEdit(selectedTask);
+                          }}
                           disabled={selectedTask.source !== 'live' || actionBusy !== null}
                           className="flex-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          Edit
+                          Edit schedule
                         </button>
                       </div>
                       {selectedTask.source === 'live' && (
