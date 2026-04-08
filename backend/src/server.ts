@@ -3687,9 +3687,47 @@ app.post('/api/auth/session', (req: Request, res: Response) => {
     method,
     acceptedTerms,
     acceptedEducation,
+    slackWorkspace: typeof body.slackWorkspace === 'string' ? body.slackWorkspace.trim() || undefined : undefined,
+    slackChannelId: typeof body.slackChannelId === 'string' ? body.slackChannelId.trim() || undefined : undefined,
+    slackDisplayTarget: typeof body.slackDisplayTarget === 'string' ? body.slackDisplayTarget.trim() || undefined : undefined,
+    slackConnectedAt: typeof body.slackConnectedAt === 'string' ? body.slackConnectedAt : undefined,
   });
   const { token } = createAuthSession(user.id);
   res.setHeader('Set-Cookie', buildAuthCookie(token));
+  res.json({
+    ok: true,
+    user,
+  });
+});
+
+app.patch('/api/auth/session', (req: Request, res: Response) => {
+  const token = parseCookieValue(req, AUTH_COOKIE_NAME);
+  if (!token) {
+    res.status(401).json({ error: 'No active session' });
+    return;
+  }
+
+  const record = getAuthUserByToken(token);
+  if (!record) {
+    res.setHeader('Set-Cookie', getAuthCookieOptions());
+    res.status(401).json({ error: 'Session expired' });
+    return;
+  }
+
+  const body = (req.body || {}) as Record<string, unknown>;
+  const user = upsertAuthUser({
+    email: record.user.email,
+    name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : record.user.name,
+    role: record.user.role,
+    method: record.user.method,
+    acceptedTerms: typeof body.acceptedTerms === 'boolean' ? body.acceptedTerms : record.user.acceptedTerms,
+    acceptedEducation: typeof body.acceptedEducation === 'boolean' ? body.acceptedEducation : record.user.acceptedEducation,
+    slackWorkspace: typeof body.slackWorkspace === 'string' ? body.slackWorkspace.trim() || undefined : record.user.slackWorkspace,
+    slackChannelId: typeof body.slackChannelId === 'string' ? body.slackChannelId.trim() || undefined : record.user.slackChannelId,
+    slackDisplayTarget: typeof body.slackDisplayTarget === 'string' ? body.slackDisplayTarget.trim() || undefined : record.user.slackDisplayTarget,
+    slackConnectedAt: typeof body.slackConnectedAt === 'string' ? body.slackConnectedAt : record.user.slackConnectedAt,
+  });
+
   res.json({
     ok: true,
     user,

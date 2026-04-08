@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, Copy, ExternalLink, MessageSquare, Slack } from 'lucide-react';
 import PublicHeader from '../components/PublicHeader';
-import { getAuthSession, saveAuthSession } from '../lib/auth';
+import { getAuthSession, updateBackendAuthSession } from '../lib/auth';
 
 function getNextPath(search: string) {
   const params = new URLSearchParams(search);
@@ -19,21 +19,29 @@ export default function SlackSetup() {
   const [channelId, setChannelId] = useState(session?.slackChannelId || '');
   const [displayTarget, setDisplayTarget] = useState(session?.slackDisplayTarget || '');
   const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const canContinue = workspace.trim().length > 1 && /^([CGD])[A-Z0-9]{8,}$/.test(channelId.trim());
 
-  function handleSave() {
+  async function handleSave() {
     if (!session || !canContinue) return;
 
-    saveAuthSession({
-      ...session,
-      slackWorkspace: workspace.trim(),
-      slackChannelId: channelId.trim(),
-      slackDisplayTarget: displayTarget.trim() || channelId.trim(),
-      slackConnectedAt: new Date().toISOString(),
-    });
-
-    navigate(nextPath);
+    setSaving(true);
+    setErrorMessage(null);
+    try {
+      await updateBackendAuthSession({
+        slackWorkspace: workspace.trim(),
+        slackChannelId: channelId.trim(),
+        slackDisplayTarget: displayTarget.trim() || channelId.trim(),
+        slackConnectedAt: new Date().toISOString(),
+      });
+      navigate(nextPath);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Could not save Slack setup');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleCopy(value: string) {
@@ -169,16 +177,20 @@ export default function SlackSetup() {
 
             <button
               type="button"
-              onClick={handleSave}
-              disabled={!canContinue || !session}
+              onClick={() => void handleSave()}
+              disabled={!canContinue || !session || saving}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-glow-violet transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Save Slack setup
+              {saving ? 'Saving…' : 'Save Slack setup'}
               <ArrowRight className="h-4 w-4" />
             </button>
 
+            {errorMessage ? (
+              <p className="mt-3 text-center text-sm text-rose-300">{errorMessage}</p>
+            ) : null}
+
             <p className="mt-3 text-center text-xs text-slate-500">
-              This stores the Slack target on this device for now. We can move it into real workspace settings once auth is wired properly.
+              This now saves to your real account session, not just device-local state.
             </p>
           </div>
         </div>

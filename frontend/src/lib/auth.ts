@@ -131,6 +131,10 @@ export async function persistAuthSessionToBackend(session: AuthSession) {
       method: session.method,
       acceptedTerms: session.acceptedTerms,
       acceptedEducation: session.acceptedEducation,
+      slackWorkspace: session.slackWorkspace,
+      slackChannelId: session.slackChannelId,
+      slackDisplayTarget: session.slackDisplayTarget,
+      slackConnectedAt: session.slackConnectedAt,
     }),
   });
 
@@ -153,11 +157,43 @@ export async function fetchBackendAuthSession() {
     credentials: 'same-origin',
   });
 
-  if (response.status === 401) return null;
+  if (response.status === 401) {
+    clearAuthSession();
+    return null;
+  }
   const payload = await response.json().catch(() => null) as { user?: Partial<AuthSession> } | null;
   if (!response.ok || !payload?.user) return null;
   const session = hydrateSession(payload.user);
   if (!session) return null;
+  saveAuthSession(session);
+  return session;
+}
+
+export async function updateBackendAuthSession(patch: Partial<AuthSession>) {
+  const response = await fetch('/api/auth/session', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify(patch),
+  });
+
+  if (response.status === 401) {
+    clearAuthSession();
+    throw new Error('Session expired');
+  }
+
+  const payload = await response.json().catch(() => null) as { error?: string; user?: Partial<AuthSession> } | null;
+  if (!response.ok || !payload?.user) {
+    throw new Error(payload?.error || 'Could not update auth session');
+  }
+
+  const session = hydrateSession(payload.user);
+  if (!session) {
+    throw new Error('Updated auth session response was incomplete');
+  }
+
   saveAuthSession(session);
   return session;
 }

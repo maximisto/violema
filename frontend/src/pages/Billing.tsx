@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, CreditCard, Layers3, MessageSquare, Shield, Sparkles, Users } from 'lucide-react';
 import { TOP_UP_OPTIONS, createBillingCheckout, formatCredits, useCreditSnapshot } from '../lib/credits';
-import { getAuthSession, hasAcceptedAccess, hasSlackConnection } from '../lib/auth';
+import { fetchBackendAuthSession, getAuthSession } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
 
@@ -41,7 +41,7 @@ const PLANS = [
 export default function Billing() {
   const location = useLocation();
   const navigate = useNavigate();
-  const session = getAuthSession();
+  const [session, setSession] = useState(() => getAuthSession());
   const { snapshot, refresh } = useCreditSnapshot();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [hoveredPlanId, setHoveredPlanId] = useState<'starter' | 'pro' | 'team' | null>(null);
@@ -50,9 +50,14 @@ export default function Billing() {
   const requestedPlan = search.get('plan');
   const checkoutState = search.get('checkout');
   const sessionId = search.get('session_id');
+  const hasAccess = Boolean(session?.acceptedTerms && session?.acceptedEducation);
+  const slackReady = Boolean(session?.slackWorkspace && session?.slackChannelId);
 
   useEffect(() => {
     persistWorkspaceContext();
+    void fetchBackendAuthSession().then((next) => {
+      if (next) setSession(next);
+    }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -61,7 +66,7 @@ export default function Billing() {
   }, [checkoutState, refresh]);
 
   async function handleSubscription(planId: 'starter' | 'pro' | 'team') {
-    if (!hasAcceptedAccess()) {
+    if (!hasAccess) {
       navigate(`/signup?next=${encodeURIComponent(`/plans?plan=${planId}`)}`);
       return;
     }
@@ -78,7 +83,7 @@ export default function Billing() {
   }
 
   async function handleTopUp(offerId: 'topup_500' | 'topup_1500' | 'topup_5000') {
-    if (!hasAcceptedAccess()) {
+    if (!hasAccess) {
       navigate(`/signup?next=${encodeURIComponent('/plans?section=topups')}`);
       return;
     }
@@ -97,11 +102,11 @@ export default function Billing() {
   return (
     <div className="min-h-screen bg-hero-gradient">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
-      <PublicHeader
+        <PublicHeader
         backHref="/"
         backLabel="Home"
-        actionHref={hasAcceptedAccess() ? '/dashboard' : '/signup?next=%2Fplans'}
-        actionLabel={hasAcceptedAccess() ? 'Open workspace' : 'Create access'}
+        actionHref={hasAccess ? '/dashboard' : '/signup?next=%2Fplans'}
+        actionLabel={hasAccess ? 'Open workspace' : 'Create access'}
       />
       <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="rounded-[2rem] border border-navy-700/60 bg-navy-950/40 px-5 py-6 shadow-[0_24px_80px_rgba(3,8,24,0.3)] sm:px-7 lg:px-8">
@@ -136,7 +141,7 @@ export default function Billing() {
                   <p className="mt-1 text-sm text-slate-500">{session?.email || 'Finish access setup to unlock checkout'}</p>
                 </div>
                 <div className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
-                  {hasAcceptedAccess() ? 'Ready' : 'Setup required'}
+                  {hasAccess ? 'Ready' : 'Setup required'}
                 </div>
               </div>
 
@@ -163,7 +168,7 @@ export default function Billing() {
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Slack setup</p>
                       <p className="mt-2 text-sm text-slate-400">
-                        {hasSlackConnection()
+                        {slackReady
                           ? 'Slack destination saved for this workspace.'
                           : 'Save one Slack channel ID before you turn on automations.'}
                       </p>
@@ -173,7 +178,7 @@ export default function Billing() {
                       onClick={() => navigate(`/connect/slack?next=${encodeURIComponent('/plans')}`)}
                       className="ui-button-ghost px-3 py-2 text-xs"
                     >
-                      {hasSlackConnection() ? 'Edit' : 'Connect'}
+                      {slackReady ? 'Edit' : 'Connect'}
                     </button>
                   </div>
                 </div>

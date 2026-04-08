@@ -13,6 +13,10 @@ export interface AuthUserRecord {
   method: AuthMethod;
   acceptedTerms: boolean;
   acceptedEducation: boolean;
+  slackWorkspace?: string;
+  slackChannelId?: string;
+  slackDisplayTarget?: string;
+  slackConnectedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -60,6 +64,10 @@ export function upsertAuthUser(input: {
   method: AuthMethod;
   acceptedTerms: boolean;
   acceptedEducation: boolean;
+  slackWorkspace?: string;
+  slackChannelId?: string;
+  slackDisplayTarget?: string;
+  slackConnectedAt?: string;
 }) {
   const users = readUsers();
   const email = normalizeEmail(input.email);
@@ -77,6 +85,10 @@ export function upsertAuthUser(input: {
         method: input.method,
         acceptedTerms: input.acceptedTerms || Boolean(existing?.acceptedTerms),
         acceptedEducation: input.acceptedEducation || Boolean(existing?.acceptedEducation),
+        slackWorkspace: input.slackWorkspace ?? existing?.slackWorkspace,
+        slackChannelId: input.slackChannelId ?? existing?.slackChannelId,
+        slackDisplayTarget: input.slackDisplayTarget ?? existing?.slackDisplayTarget,
+        slackConnectedAt: input.slackConnectedAt ?? existing?.slackConnectedAt,
         updatedAt: now,
       }
     : {
@@ -87,6 +99,10 @@ export function upsertAuthUser(input: {
         method: input.method,
         acceptedTerms: input.acceptedTerms,
         acceptedEducation: input.acceptedEducation,
+        slackWorkspace: input.slackWorkspace,
+        slackChannelId: input.slackChannelId,
+        slackDisplayTarget: input.slackDisplayTarget,
+        slackConnectedAt: input.slackConnectedAt,
         createdAt: now,
         updatedAt: now,
       };
