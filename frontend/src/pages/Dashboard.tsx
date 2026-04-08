@@ -2914,29 +2914,12 @@ export default function Dashboard() {
                           </span>
                         )}
                       </div>
-                      <div className="mt-3 rounded-xl border border-cyan-500/15 bg-cyan-500/6 px-3 py-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-300/80">Agent management moved</p>
-                            <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-                              Scheduling stays here. The full worker system now has its own room so users can tune policy, inspect performance, and compare agent configurations without digging through the schedule drawer.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/dashboard/agents?automation=${selectedTask.automationId || selectedTask.id}`)}
-                            className="ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200"
-                          >
-                            Open Agent Studio
-                          </button>
-                        </div>
-                      </div>
                       <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/42 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Agent policy snapshot</p>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-300/80">Agent policy</p>
                             <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-                              Keep the schedule panel simple. Use Agent Studio for the full worker map, performance tracking, and optimization loop.
+                              Workflow lives here. The full worker system lives in Agent Studio, where you can compare presets, inspect performance, and tune routing without burying it under schedule tracking.
                             </p>
                           </div>
                           <button
@@ -3301,7 +3284,7 @@ export default function Dashboard() {
             <div className="panel-scroll flex-1 space-y-4 px-5 py-5 pb-8">
               <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/80">Builder</p>
-                <p className="mt-1 text-sm text-white">Set the cadence, stack the steps, pick the destination, and watch the credit pressure update.</p>
+                <p className="mt-1 text-sm text-white">Set the cadence, design the workflow here, and keep agent policy in Agent Studio.</p>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -3447,7 +3430,7 @@ export default function Dashboard() {
                 <>
               <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/80">Workflow authoring</p>
-                <p className="mt-1 text-sm text-white">Use guided steps when you want precise control. Use a natural-language brief when you just want to describe the job and let Violema structure it.</p>
+                <p className="mt-1 text-sm text-white">Use guided steps when you want precise control. Use a natural-language brief when you want speed. Keep the workflow here and tune the worker system in Agent Studio.</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -3759,7 +3742,7 @@ export default function Dashboard() {
                 <>
               <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/6 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300/80">Agent setup</p>
-                <p className="mt-1 text-sm text-white">Separate the execution policy from the schedule. Use the system recommendation by default, or set a custom cost and review posture when you want tighter control.</p>
+                <p className="mt-1 text-sm text-white">This is the lightweight policy view. Use the system recommendation by default. Go to Agent Studio for the full worker map, performance trends, and preset comparison.</p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -3923,6 +3906,29 @@ export default function Dashboard() {
             </div>
 
             <div className="border-t border-navy-800/80 px-5 py-4">
+              <div className="mb-3 rounded-2xl border border-white/6 bg-white/[0.03] px-3 py-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Control split</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                      Workflow lives here. Agent policy, preset comparison, and worker tuning live in Agent Studio.
+                    </p>
+                  </div>
+                  {automationEditor.mode === 'edit' ? (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/dashboard/agents?automation=${automationEditor.id}`)}
+                      className="ui-pill shrink-0 px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200"
+                    >
+                      Open Agent Studio
+                    </button>
+                  ) : (
+                    <span className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-slate-600">
+                      Create first, tune after
+                    </span>
+                  )}
+                </div>
+              </div>
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
                   onClick={() => setAutomationEditor(null)}

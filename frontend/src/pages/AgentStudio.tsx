@@ -442,6 +442,56 @@ function inferExecutionPolicyMath(policy: AutomationExecutionPolicyDraft, steps:
   };
 }
 
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function estimatePolicySpendIndex(policy: AutomationExecutionPolicyDraft, steps: WorkflowBlockDraft[]) {
+  const math = inferExecutionPolicyMath(policy, steps);
+  let score =
+    math.stepCount * 7 +
+    math.toolCalls * 11 +
+    Number(math.reasoningLoad) * 4 +
+    math.activeElasticLanes * 9;
+
+  if (policy.mode === 'recommended') score += 6;
+  if (policy.optimizationGoal === 'cost_saver') score -= 16;
+  if (policy.optimizationGoal === 'quality_first') score += 14;
+  if (policy.reviewPolicy === 'lean') score -= 8;
+  if (policy.reviewPolicy === 'strict') score += 12;
+
+  return clampNumber(Math.round(score), 15, 95);
+}
+
+function estimatePolicyAssuranceIndex(policy: AutomationExecutionPolicyDraft, steps: WorkflowBlockDraft[]) {
+  const math = inferExecutionPolicyMath(policy, steps);
+  let score =
+    math.stepCount * 5 +
+    Number(math.reasoningLoad) * 6 +
+    math.activeElasticLanes * 7;
+
+  if (policy.mode === 'recommended') score += 8;
+  if (policy.optimizationGoal === 'cost_saver') score -= 12;
+  if (policy.optimizationGoal === 'quality_first') score += 18;
+  if (policy.reviewPolicy === 'lean') score -= 10;
+  if (policy.reviewPolicy === 'strict') score += 16;
+
+  return clampNumber(Math.round(score), 20, 98);
+}
+
+function estimatePolicyFitIndex(policy: AutomationExecutionPolicyDraft, steps: WorkflowBlockDraft[]) {
+  const math = inferExecutionPolicyMath(policy, steps);
+  let score = 74 - Math.abs(math.activeElasticLanes - math.recommendedElasticLanes) * 12;
+
+  if (policy.optimizationGoal === 'cost_saver' && math.toolCalls >= 2) score += 8;
+  if (policy.optimizationGoal === 'quality_first' && steps.some((step) => step.kind === 'analyze' || step.kind === 'summarize')) score += 10;
+  if (policy.reviewPolicy === 'strict' && steps.some((step) => step.kind === 'analyze')) score += 6;
+  if (policy.reviewPolicy === 'strict' && math.stepCount <= 2 && math.toolCalls <= 1) score -= 8;
+  if (policy.reviewPolicy === 'lean' && steps.some((step) => step.kind === 'deliver')) score += 5;
+
+  return clampNumber(Math.round(score), 25, 96);
+}
+
 function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -743,6 +793,66 @@ export default function AgentStudio() {
     [selectedPolicy, selectedRow]
   );
 
+  const workflowBenchmarks = useMemo(() => {
+    const maxAverageCredits = Math.max(...rows.map((row) => row.averageCredits || 0), 1);
+    const selectedId = selectedRow?.automation.id;
+    const ordered = rows.slice().sort((a, b) => {
+      if (a.automation.id === selectedId) return -1;
+      if (b.automation.id === selectedId) return 1;
+      return b.successRate - a.successRate || a.averageCredits - b.averageCredits;
+    });
+
+    return ordered.slice(0, 6).map((row) => ({
+      id: row.automation.id,
+      name: row.automation.name,
+      successRate: Math.round(row.successRate * 100),
+      costWidth: `${Math.max(8, ((row.averageCredits || 0) / maxAverageCredits) * 100)}%`,
+      averageCredits: row.averageCredits,
+      lastStatus: row.latestRun?.status || row.automation.last_run_status || row.automation.status,
+      stepCount: row.workflowSteps.length,
+      isSelected: row.automation.id === selectedId,
+    }));
+  }, [rows, selectedRow]);
+
+  const selectedRunTrend = useMemo(() => {
+    if (!selectedRow) return [];
+    const recentRuns = selectedRow.runs.slice(0, 6).reverse();
+    const maxCredits = Math.max(...recentRuns.map((run) => run.actualCredits || 0), 1);
+
+    return recentRuns.map((run, index) => ({
+      id: run.id,
+      label: recentRuns.length === 1 ? 'Latest' : `Run ${index + 1}`,
+      credits: run.actualCredits || 0,
+      height: `${Math.max(18, ((run.actualCredits || 0) / maxCredits) * 100)}%`,
+      status: run.status,
+      statusTone: getStatusTone(run.status),
+      duration: formatCompactDuration(
+        Number.isNaN(Date.parse(run.startedAt || '')) || Number.isNaN(Date.parse(run.finishedAt || ''))
+          ? undefined
+          : Math.max(0, Date.parse(run.finishedAt || '') - Date.parse(run.startedAt || ''))
+      ),
+    }));
+  }, [selectedRow]);
+
+  const presetComparisons = useMemo(() => {
+    const steps = selectedRow?.workflowSteps || [];
+    return POLICY_PRESETS.map((preset) => {
+      const math = inferExecutionPolicyMath(preset.policy, steps);
+      return {
+        ...preset,
+        math,
+        spendIndex: estimatePolicySpendIndex(preset.policy, steps),
+        assuranceIndex: estimatePolicyAssuranceIndex(preset.policy, steps),
+        fitIndex: estimatePolicyFitIndex(preset.policy, steps),
+        isActive:
+          preset.policy.mode === selectedPolicy.mode &&
+          preset.policy.optimizationGoal === selectedPolicy.optimizationGoal &&
+          preset.policy.reviewPolicy === selectedPolicy.reviewPolicy &&
+          preset.policy.maxElasticLanes === selectedPolicy.maxElasticLanes,
+      };
+    });
+  }, [selectedPolicy, selectedRow]);
+
   const rolePerformance = useMemo(() => {
     const stats = new Map<string, { steps: number; failures: number; credits: number; tokens: number }>();
     (selectedRow?.runs || []).forEach((run) => {
@@ -1021,6 +1131,114 @@ export default function AgentStudio() {
                   </div>
                 </div>
 
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr),minmax(22rem,0.95fr)]">
+                  <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                    <div className="flex items-center gap-2">
+                      <Gauge className="h-4 w-4 text-cyan-300" />
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow benchmarks</p>
+                        <h3 className="text-sm font-semibold text-white">How this schedule compares</h3>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                      Success and spend should be legible at a glance. This keeps Agent Studio grounded in outcome quality, not just worker-theater.
+                    </p>
+                    <div className="mt-4 space-y-3">
+                      {workflowBenchmarks.map((row) => (
+                        <button
+                          key={row.id}
+                          type="button"
+                          onClick={() => setSelectedAutomationId(row.id)}
+                          className={`w-full rounded-2xl border p-3 text-left transition-colors ${
+                            row.isSelected
+                              ? 'border-violet-500/25 bg-violet-500/8'
+                              : 'border-navy-700/70 bg-navy-950/40 hover:border-violet-500/18 hover:bg-navy-900/55'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-white">{row.name}</p>
+                              <p className="mt-1 text-[11px] text-slate-500">{row.stepCount} steps</p>
+                            </div>
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(row.lastStatus)}`}>
+                              {row.lastStatus}
+                            </span>
+                          </div>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            <div>
+                              <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                                <span>Success</span>
+                                <span>{row.successRate}%</span>
+                              </div>
+                              <div className="mt-1 h-2 rounded-full bg-navy-950/70">
+                                <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-300" style={{ width: `${Math.max(10, row.successRate)}%` }} />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                                <span>Spend</span>
+                                <span>{row.averageCredits ? `${formatCredits(row.averageCredits)} cr` : '—'}</span>
+                              </div>
+                              <div className="mt-1 h-2 rounded-full bg-navy-950/70">
+                                <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-violet-400" style={{ width: row.costWidth }} />
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                    <div className="flex items-center gap-2">
+                      <Clock3 className="h-4 w-4 text-amber-300" />
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Run curve</p>
+                        <h3 className="text-sm font-semibold text-white">Recent cost and outcome trend</h3>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                      The last few runs should tell you whether this workflow is getting cleaner, cheaper, or noisier.
+                    </p>
+                    {selectedRunTrend.length > 0 ? (
+                      <>
+                        <div className="mt-4 flex h-36 items-end gap-2">
+                          {selectedRunTrend.map((run) => (
+                            <div key={run.id} className="flex min-w-0 flex-1 flex-col items-center">
+                              <div className="flex h-28 w-full items-end">
+                                <div
+                                  className={`w-full rounded-t-2xl border border-white/8 bg-gradient-to-t ${
+                                    run.status === 'failed'
+                                      ? 'from-red-500/20 to-red-400/65'
+                                      : run.status === 'succeeded'
+                                        ? 'from-emerald-500/18 to-cyan-400/70'
+                                        : 'from-violet-500/16 to-violet-400/65'
+                                  }`}
+                                  style={{ height: run.height }}
+                                />
+                              </div>
+                              <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-slate-500">{run.label}</p>
+                              <p className="mt-1 text-[11px] text-white">{run.credits ? `${formatCredits(run.credits)} cr` : '—'}</p>
+                              <p className="text-[10px] text-slate-500">{run.duration}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                          {selectedRunTrend.map((run) => (
+                            <span key={`${run.id}-pill`} className={`rounded-full border px-2 py-0.5 font-medium ${run.statusTone}`}>
+                              {run.label}: {run.status}
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-4 rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                        No completed runs yet. Once this workflow runs, the trend will show whether the policy is buying real outcomes or just extra spend.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr),minmax(20rem,0.8fr)]">
                   <div className="space-y-6">
                     <div className="rounded-[1.8rem] border border-cyan-500/15 bg-gradient-to-br from-cyan-500/8 via-navy-900/72 to-navy-950/90 p-5">
@@ -1216,43 +1434,69 @@ export default function AgentStudio() {
                       </p>
 
                       <div className="mt-4">
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Starting presets</p>
-                        <div className="mt-3 space-y-3">
-                          {POLICY_PRESETS.map((preset) => {
-                            const isActive =
-                              preset.policy.mode === selectedPolicy.mode &&
-                              preset.policy.optimizationGoal === selectedPolicy.optimizationGoal &&
-                              preset.policy.reviewPolicy === selectedPolicy.reviewPolicy &&
-                              preset.policy.maxElasticLanes === selectedPolicy.maxElasticLanes;
-
-                            return (
-                              <button
-                                key={preset.id}
-                                type="button"
-                                disabled={actionBusy}
-                                onClick={() => void patchExecutionPolicy(preset.policy)}
-                                className={`w-full rounded-2xl border p-3 text-left transition-colors ${
-                                  isActive
-                                    ? 'border-violet-500/30 bg-violet-500/10'
-                                    : 'border-navy-700/70 bg-navy-950/42 hover:border-violet-500/18 hover:bg-navy-900/60'
-                                } disabled:opacity-60`}
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-medium text-white">{preset.label}</p>
-                                    <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{preset.summary}</p>
-                                  </div>
-                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                                    isActive
-                                      ? 'border-violet-500/20 bg-violet-500/10 text-violet-200'
-                                      : 'border-navy-700 bg-navy-900 text-slate-400'
-                                  }`}>
-                                    {preset.policy.mode === 'recommended' ? 'Auto' : 'Custom'}
-                                  </span>
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Preset comparison</p>
+                        <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+                          Compare cost pressure, assurance, and fit before you apply anything. The goal is better outcomes with less unnecessary reasoning spend.
+                        </p>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          {presetComparisons.map((preset) => (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              disabled={actionBusy}
+                              onClick={() => void patchExecutionPolicy(preset.policy)}
+                              className={`w-full rounded-2xl border p-3 text-left transition-colors ${
+                                preset.isActive
+                                  ? 'border-violet-500/30 bg-violet-500/10'
+                                  : 'border-navy-700/70 bg-navy-950/42 hover:border-violet-500/18 hover:bg-navy-900/60'
+                              } disabled:opacity-60`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-white">{preset.label}</p>
+                                  <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{preset.summary}</p>
                                 </div>
-                              </button>
-                            );
-                          })}
+                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                                  preset.isActive
+                                    ? 'border-violet-500/20 bg-violet-500/10 text-violet-200'
+                                    : 'border-navy-700 bg-navy-900 text-slate-400'
+                                }`}>
+                                  {preset.policy.mode === 'recommended' ? 'Auto' : 'Custom'}
+                                </span>
+                              </div>
+                              <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
+                                <div>
+                                  <p className="text-slate-500">Lanes</p>
+                                  <p className="mt-1 text-white">{preset.math.activeElasticLanes}</p>
+                                </div>
+                                <div>
+                                  <p className="text-slate-500">Review</p>
+                                  <p className="mt-1 text-white">{preset.policy.reviewPolicy}</p>
+                                </div>
+                                <div>
+                                  <p className="text-slate-500">Bias</p>
+                                  <p className="mt-1 text-white">{preset.math.estimatedBands}</p>
+                                </div>
+                              </div>
+                              <div className="mt-3 space-y-2">
+                                {[
+                                  { label: 'Spend', value: preset.spendIndex, color: 'from-amber-300 to-violet-400' },
+                                  { label: 'Assurance', value: preset.assuranceIndex, color: 'from-cyan-300 to-emerald-400' },
+                                  { label: 'Fit', value: preset.fitIndex, color: 'from-violet-300 to-fuchsia-400' },
+                                ].map((metric) => (
+                                  <div key={metric.label}>
+                                    <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                                      <span>{metric.label}</span>
+                                      <span>{metric.value}</span>
+                                    </div>
+                                    <div className="mt-1 h-1.5 rounded-full bg-navy-950/70">
+                                      <div className={`h-full rounded-full bg-gradient-to-r ${metric.color}`} style={{ width: `${metric.value}%` }} />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </button>
+                          ))}
                         </div>
                       </div>
 
