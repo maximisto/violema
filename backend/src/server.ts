@@ -66,10 +66,13 @@ import {
   fulfillStripeWebhookEvent,
 } from './platform';
 import {
+  createMemoryEmbeddings,
   generateText,
   generateTextDetailed,
   getChatClient,
   getChatModelConfig,
+  getCodeEmbeddingConfig,
+  getMemoryEmbeddingConfig,
   getMicroModelConfig,
   getModelSource,
   getModelSourceLabel,
@@ -429,6 +432,40 @@ async function testProviderConnection(input: {
   const data = await response.json() as { message?: string };
   if (!response.ok) throw new Error(data.message || 'Mistral test failed');
   return { ok: true, provider: input.provider, mode: 'verified' as const, detail: `Verified with ${process.env.MODEL_MEMORY_TEXT_MODEL?.trim() || 'mistral-embed'}.` };
+}
+
+async function testModelProfileConnection(input: {
+  workspaceId: string;
+  profile: 'micro' | 'default' | 'hard' | 'critical' | 'ops' | 'memory_text' | 'memory_code';
+}) {
+  if (input.profile === 'memory_text' || input.profile === 'memory_code') {
+    const route = input.profile === 'memory_text'
+      ? getMemoryEmbeddingConfig(input.workspaceId)
+      : getCodeEmbeddingConfig(input.workspaceId);
+    await createMemoryEmbeddings(['violema settings route test'], input.workspaceId);
+    return {
+      ok: true,
+      profile: input.profile,
+      detail: `Verified embedding route with ${route.model}.`,
+    };
+  }
+
+  const route = getChatModelConfig(input.profile, input.workspaceId);
+  const result = await generateTextDetailed(
+    input.profile,
+    'Reply with exactly OK.',
+    [{ role: 'user', content: 'Return OK.' }],
+    20,
+    input.workspaceId,
+  );
+
+  if (!result.text.trim()) throw new Error('Route responded without text.');
+
+  return {
+    ok: true,
+    profile: input.profile,
+    detail: `Verified ${input.profile} with ${route.model}.`,
+  };
 }
 
 function sanitizeNextPath(value: string | undefined, fallback = '/dashboard') {
@@ -3314,6 +3351,35 @@ app.post('/api/settings/test-provider', async (req: Request, res: Response) => {
       ok: false,
       provider,
       detail: error instanceof Error ? error.message : 'Provider test failed',
+    });
+  }
+});
+
+app.post('/api/settings/test-profile', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const body = (req.body || {}) as { profile?: string };
+  const profile = body.profile;
+  if (
+    profile !== 'micro' &&
+    profile !== 'default' &&
+    profile !== 'hard' &&
+    profile !== 'critical' &&
+    profile !== 'ops' &&
+    profile !== 'memory_text' &&
+    profile !== 'memory_code'
+  ) {
+    res.status(400).json({ error: 'Unsupported profile' });
+    return;
+  }
+
+  try {
+    const result = await testModelProfileConnection({ workspaceId, profile });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      profile,
+      detail: error instanceof Error ? error.message : 'Profile test failed.',
     });
   }
 });

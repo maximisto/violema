@@ -19,6 +19,7 @@ interface ModelRoute {
 }
 
 export type ModelSource = 'server_default' | 'workspace_override' | 'workspace_token';
+type ResolvedProfile = CanonicalTextProfile | CanonicalEmbeddingProfile;
 
 export interface RoutingDecision {
   profile: CanonicalTextProfile;
@@ -203,11 +204,35 @@ function getEmbeddingRoute(profile: EmbeddingProfile, workspaceId?: string): Mod
   };
 }
 
+function getEmbeddingRouteDefault(profile: EmbeddingProfile): ModelRoute {
+  return getEmbeddingRoute(profile);
+}
+
 export function getModelSource(profile: TextProfile, workspaceId?: string): ModelSource {
   const route = getTextRoute(profile, workspaceId);
   const defaultRoute = getTextRouteDefault(profile);
   const workspaceSettings = workspaceId ? getWorkspaceSettings(workspaceId) : null;
   const resolvedProfile = resolveTextProfile(profile);
+  const hasWorkspaceToken = Boolean(workspaceId && getWorkspaceProviderToken(workspaceId, route.provider));
+  const hasModelOverride = Boolean(workspaceSettings?.modelOverrides?.[resolvedProfile]);
+
+  if (hasWorkspaceToken) return 'workspace_token';
+  if (hasModelOverride && (
+    route.provider !== defaultRoute.provider ||
+    route.model !== defaultRoute.model ||
+    route.baseUrl !== defaultRoute.baseUrl ||
+    route.reasoningEffort !== defaultRoute.reasoningEffort
+  )) {
+    return 'workspace_override';
+  }
+  return 'server_default';
+}
+
+function getEmbeddingSource(profile: EmbeddingProfile, workspaceId?: string): ModelSource {
+  const route = getEmbeddingRoute(profile, workspaceId);
+  const defaultRoute = getEmbeddingRouteDefault(profile);
+  const workspaceSettings = workspaceId ? getWorkspaceSettings(workspaceId) : null;
+  const resolvedProfile = resolveEmbeddingProfile(profile);
   const hasWorkspaceToken = Boolean(workspaceId && getWorkspaceProviderToken(workspaceId, route.provider));
   const hasModelOverride = Boolean(workspaceSettings?.modelOverrides?.[resolvedProfile]);
 
@@ -279,14 +304,30 @@ export function getModelRoutingStatus(workspaceId?: string) {
   const memoryText = getEmbeddingRoute('memory_text', workspaceId);
   const memoryCode = getEmbeddingRoute('memory_code', workspaceId);
 
+  const buildStatus = (
+    profile: ResolvedProfile,
+    route: ModelRoute,
+    toolLoopCompatible: boolean,
+    source: ModelSource,
+  ) => ({
+    provider: route.provider,
+    model: route.model,
+    configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, route.provider) || env(route.apiKeyEnv) : env(route.apiKeyEnv)),
+    tool_loop_compatible: toolLoopCompatible,
+    source,
+    source_label: getModelSourceLabel(source),
+    base_url: route.baseUrl,
+    reasoning_effort: route.reasoningEffort,
+  });
+
   return {
-    micro: { provider: micro.provider, model: micro.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, micro.provider) || env(micro.apiKeyEnv) : env(micro.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(micro.provider) },
-    default: { provider: defaultRoute.provider, model: defaultRoute.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, defaultRoute.provider) || env(defaultRoute.apiKeyEnv) : env(defaultRoute.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(defaultRoute.provider) },
-    hard: { provider: hard.provider, model: hard.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, hard.provider) || env(hard.apiKeyEnv) : env(hard.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(hard.provider) },
-    critical: { provider: critical.provider, model: critical.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, critical.provider) || env(critical.apiKeyEnv) : env(critical.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(critical.provider) },
-    ops: { provider: ops.provider, model: ops.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, ops.provider) || env(ops.apiKeyEnv) : env(ops.apiKeyEnv)), tool_loop_compatible: isToolLoopCompatible(ops.provider) },
-    memory_text: { provider: memoryText.provider, model: memoryText.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, memoryText.provider) || env(memoryText.apiKeyEnv) : env(memoryText.apiKeyEnv)), tool_loop_compatible: false },
-    memory_code: { provider: memoryCode.provider, model: memoryCode.model, configured: Boolean(workspaceId ? getWorkspaceProviderToken(workspaceId, memoryCode.provider) || env(memoryCode.apiKeyEnv) : env(memoryCode.apiKeyEnv)), tool_loop_compatible: false },
+    micro: buildStatus('micro', micro, isToolLoopCompatible(micro.provider), getModelSource('micro', workspaceId)),
+    default: buildStatus('default', defaultRoute, isToolLoopCompatible(defaultRoute.provider), getModelSource('default', workspaceId)),
+    hard: buildStatus('hard', hard, isToolLoopCompatible(hard.provider), getModelSource('hard', workspaceId)),
+    critical: buildStatus('critical', critical, isToolLoopCompatible(critical.provider), getModelSource('critical', workspaceId)),
+    ops: buildStatus('ops', ops, isToolLoopCompatible(ops.provider), getModelSource('ops', workspaceId)),
+    memory_text: buildStatus('memory_text', memoryText, false, getEmbeddingSource('memory_text', workspaceId)),
+    memory_code: buildStatus('memory_code', memoryCode, false, getEmbeddingSource('memory_code', workspaceId)),
   };
 }
 

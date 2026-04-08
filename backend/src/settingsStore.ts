@@ -29,12 +29,26 @@ export interface WorkspaceSettingsRecord {
 export interface WorkspaceSettingsView {
   workspaceId: string;
   updatedAt?: string;
-  providers: Record<Provider, { configured: boolean; maskedToken?: string }>;
+  providers: Record<Provider, {
+    configured: boolean;
+    maskedToken?: string;
+    workspaceConfigured: boolean;
+    serverConfigured: boolean;
+    activeSource: 'workspace_token' | 'server_token' | 'none';
+    activeSourceLabel: string;
+  }>;
   modelOverrides: Partial<Record<TextProfile | EmbeddingProfile, WorkspaceModelOverride>>;
 }
 
 const SETTINGS_FILE = path.join(process.cwd(), 'workspace-settings.json');
 const PROVIDERS: Provider[] = ['anthropic', 'openai', 'openrouter', 'mistral', 'minimax'];
+const PROVIDER_ENV_KEYS: Record<Provider, string[]> = {
+  anthropic: ['ANTHROPIC_API_KEY'],
+  openai: ['OPENAI_API_KEY'],
+  openrouter: ['OPENROUTER_API_KEY'],
+  mistral: ['MISTRAL_API_KEY'],
+  minimax: ['MINIMAX_API_KEY', 'ANTHROPIC_API_KEY'],
+};
 
 function readStore(): WorkspaceSettingsRecord[] {
   try {
@@ -103,7 +117,22 @@ export function getWorkspaceSettingsView(workspaceId: string): WorkspaceSettings
       PROVIDERS.map((provider) => {
         const token = record?.providerTokens?.[provider];
         const decrypted = token ? decryptSecret(token) : undefined;
-        return [provider, { configured: Boolean(token), maskedToken: maskToken(decrypted) }];
+        const workspaceConfigured = Boolean(token);
+        const serverConfigured = PROVIDER_ENV_KEYS[provider].some((key) => Boolean(process.env[key]?.trim()));
+        const activeSource = workspaceConfigured ? 'workspace_token' : serverConfigured ? 'server_token' : 'none';
+        return [provider, {
+          configured: workspaceConfigured,
+          maskedToken: maskToken(decrypted),
+          workspaceConfigured,
+          serverConfigured,
+          activeSource,
+          activeSourceLabel:
+            activeSource === 'workspace_token'
+              ? 'Workspace token'
+              : activeSource === 'server_token'
+                ? 'Server token'
+                : 'Not configured',
+        }];
       }),
     ) as WorkspaceSettingsView['providers'],
     modelOverrides: record?.modelOverrides || {},

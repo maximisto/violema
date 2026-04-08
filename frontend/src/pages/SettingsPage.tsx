@@ -10,6 +10,10 @@ type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 interface ProviderStatus {
   configured: boolean;
   maskedToken?: string;
+  workspaceConfigured?: boolean;
+  serverConfigured?: boolean;
+  activeSource?: 'workspace_token' | 'server_token' | 'none';
+  activeSourceLabel?: string;
 }
 
 interface ModelOverride {
@@ -27,10 +31,25 @@ interface SettingsPayload {
     providers: Record<Provider, ProviderStatus>;
     modelOverrides: Partial<Record<Profile, ModelOverride>>;
   };
-  modelRouting: Record<string, { provider: string; model: string; configured: boolean; tool_loop_compatible: boolean }>;
+  modelRouting: Record<string, {
+    provider: string;
+    model: string;
+    configured: boolean;
+    tool_loop_compatible: boolean;
+    source?: 'server_default' | 'workspace_override' | 'workspace_token';
+    source_label?: string;
+    base_url?: string;
+    reasoning_effort?: ReasoningEffort;
+  }>;
 }
 
 interface ProviderTestState {
+  tone: 'success' | 'error' | 'idle';
+  message?: string;
+  testing?: boolean;
+}
+
+interface ProfileTestState {
   tone: 'success' | 'error' | 'idle';
   message?: string;
   testing?: boolean;
@@ -87,6 +106,15 @@ export default function SettingsPage() {
     mistral: { tone: 'idle' },
     minimax: { tone: 'idle' },
   });
+  const [profileTests, setProfileTests] = useState<Record<Profile, ProfileTestState>>({
+    micro: { tone: 'idle' },
+    default: { tone: 'idle' },
+    hard: { tone: 'idle' },
+    critical: { tone: 'idle' },
+    ops: { tone: 'idle' },
+    memory_text: { tone: 'idle' },
+    memory_code: { tone: 'idle' },
+  });
 
   async function loadSettings(silent = false) {
     if (!silent) setLoading(true);
@@ -114,6 +142,22 @@ export default function SettingsPage() {
         openrouter: '',
         mistral: '',
         minimax: '',
+      });
+      setProviderTests({
+        anthropic: { tone: 'idle' },
+        openai: { tone: 'idle' },
+        openrouter: { tone: 'idle' },
+        mistral: { tone: 'idle' },
+        minimax: { tone: 'idle' },
+      });
+      setProfileTests({
+        micro: { tone: 'idle' },
+        default: { tone: 'idle' },
+        hard: { tone: 'idle' },
+        critical: { tone: 'idle' },
+        ops: { tone: 'idle' },
+        memory_text: { tone: 'idle' },
+        memory_code: { tone: 'idle' },
       });
     } catch (error) {
       setNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not load settings.' });
@@ -245,6 +289,42 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleProfileTest(profile: Profile) {
+    setProfileTests((current) => ({
+      ...current,
+      [profile]: { tone: 'idle', testing: true, message: 'Testing route…' },
+    }));
+
+    try {
+      const response = await fetch('/api/settings/test-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Workspace-Id': workspace.workspaceId,
+          'X-Workspace-Name': workspace.workspaceName,
+        },
+        body: JSON.stringify({
+          workspaceId: workspace.workspaceId,
+          workspaceName: workspace.workspaceName,
+          profile,
+        }),
+      });
+
+      const payload = await response.json() as { ok?: boolean; detail?: string };
+      if (!response.ok) throw new Error(payload.detail || 'Profile test failed');
+
+      setProfileTests((current) => ({
+        ...current,
+        [profile]: { tone: 'success', message: payload.detail || 'Route looks good.' },
+      }));
+    } catch (error) {
+      setProfileTests((current) => ({
+        ...current,
+        [profile]: { tone: 'error', message: error instanceof Error ? error.message : 'Profile test failed.' },
+      }));
+    }
+  }
+
   return (
     <div className="min-h-screen bg-navy-950 text-white">
       {notice ? (
@@ -331,12 +411,31 @@ export default function SettingsPage() {
                             <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{PROVIDER_COPY[provider].help}</p>
                           </div>
                           <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                            status.configured
+                            status.activeSource === 'workspace_token'
+                              ? 'border-cyan-500/18 bg-cyan-500/8 text-cyan-200'
+                              : status.activeSource === 'server_token'
+                                ? 'border-violet-500/18 bg-violet-500/8 text-violet-200'
+                                : status.configured
                               ? 'border-green-500/18 bg-green-500/8 text-green-200'
                               : 'border-navy-700 bg-navy-900 text-slate-400'
                           }`}>
-                            {status.configured ? status.maskedToken || 'Configured' : 'Using server default'}
+                            {status.activeSourceLabel || (status.configured ? status.maskedToken || 'Configured' : 'Using server default')}
                           </span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                            Active: {status.activeSourceLabel || 'Not configured'}
+                          </span>
+                          {status.workspaceConfigured ? (
+                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                              Workspace token {status.maskedToken || 'saved'}
+                            </span>
+                          ) : null}
+                          {status.serverConfigured ? (
+                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                              Server token available
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-3 space-y-2">
                           <div className="ui-input-shell">
@@ -417,6 +516,23 @@ export default function SettingsPage() {
                         </div>
                         <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2.5 text-[11px] text-slate-400">
                           Live now: <span className="font-medium text-slate-200">{live?.provider || '—'}</span> · <span className="font-medium text-slate-200">{live?.model || '—'}</span>
+                          <span className="text-slate-500"> · </span>
+                          <span className="font-medium text-slate-200">{live?.source_label || 'Unknown source'}</span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                            {live?.tool_loop_compatible ? 'Tool loop ready' : 'Embedding lane'}
+                          </span>
+                          {live?.reasoning_effort ? (
+                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                              Reasoning: {live.reasoning_effort}
+                            </span>
+                          ) : null}
+                          {live?.base_url ? (
+                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                              Custom base URL
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-3 space-y-2">
                           <div className="ui-input-shell">
@@ -461,6 +577,27 @@ export default function SettingsPage() {
                               </select>
                             </div>
                           </div>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void handleProfileTest(profile.id)}
+                              disabled={profileTests[profile.id].testing}
+                              className="ui-pill shrink-0 px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200 disabled:opacity-50"
+                            >
+                              {profileTests[profile.id].testing ? 'Testing route…' : 'Test lane'}
+                            </button>
+                          </div>
+                          {profileTests[profile.id].message ? (
+                            <div className={`rounded-xl border px-3 py-2 text-[11px] ${
+                              profileTests[profile.id].tone === 'success'
+                                ? 'border-green-500/18 bg-green-500/8 text-green-200'
+                                : profileTests[profile.id].tone === 'error'
+                                  ? 'border-red-500/18 bg-red-500/8 text-red-200'
+                                  : 'border-navy-700/70 bg-navy-950/35 text-slate-400'
+                            }`}>
+                              {profileTests[profile.id].message}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     );
