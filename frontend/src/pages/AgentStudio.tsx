@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
+  Activity,
   ArrowLeft,
   ArrowUpRight,
+  BarChart3,
   Bot,
   Brain,
+  CheckCircle2,
   ChevronRight,
   Clock3,
   Cpu,
+  Flame,
   Gauge,
+  Layers3,
+  LineChart,
   Orbit,
+  Radar,
   RotateCcw,
   Sparkles,
+  Target,
   Workflow,
 } from 'lucide-react';
 import { formatCredits } from '../lib/credits';
@@ -21,6 +29,7 @@ type WorkflowBlockKind = 'search' | 'query' | 'capture' | 'analyze' | 'summarize
 type ExecutionMode = 'recommended' | 'custom';
 type OptimizationGoal = 'balanced' | 'cost_saver' | 'quality_first';
 type ReviewPolicy = 'lean' | 'standard' | 'strict';
+type StudioRoom = 'live' | 'optimize' | 'replay';
 
 interface WorkflowBlockDraft {
   id: string;
@@ -609,6 +618,11 @@ function getReviewPolicyLabel(value: ReviewPolicy) {
   return 'Standard review';
 }
 
+function formatSignedDelta(value: number) {
+  if (value === 0) return 'No change';
+  return `${value > 0 ? '+' : ''}${value}`;
+}
+
 function deriveFallbackWorkerTopology(steps: WorkflowBlockDraft[], policy: AutomationExecutionPolicyDraft): DashboardWorkerTopology {
   const math = inferExecutionPolicyMath(policy, steps);
   const activeRoles = new Set<string>(['nexus', 'operator']);
@@ -650,10 +664,12 @@ export default function AgentStudio() {
   const navigate = useNavigate();
   const location = useLocation();
   const workspace = useMemo(() => resolveWorkspaceContext(), []);
+  const [activeRoom, setActiveRoom] = useState<StudioRoom>('live');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<AgentStudioRow[]>([]);
   const [selectedAutomationId, setSelectedAutomationId] = useState<string>('');
+  const [previewPresetId, setPreviewPresetId] = useState<string>('recommended');
   const [actionBusy, setActionBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
 
@@ -864,6 +880,60 @@ export default function AgentStudio() {
     });
   }, [selectedPolicy, selectedRow]);
 
+  const activePresetId = useMemo(() => {
+    const match = POLICY_PRESETS.find((preset) =>
+      preset.policy.mode === selectedPolicy.mode &&
+      preset.policy.optimizationGoal === selectedPolicy.optimizationGoal &&
+      preset.policy.reviewPolicy === selectedPolicy.reviewPolicy &&
+      preset.policy.maxElasticLanes === selectedPolicy.maxElasticLanes
+    );
+    return match?.id || 'custom_live';
+  }, [selectedPolicy]);
+
+  useEffect(() => {
+    setPreviewPresetId(activePresetId === 'custom_live' ? 'recommended' : activePresetId);
+  }, [activePresetId, selectedRow?.automation.id]);
+
+  const previewPreset = useMemo(
+    () => POLICY_PRESETS.find((preset) => preset.id === previewPresetId) || POLICY_PRESETS[0],
+    [previewPresetId]
+  );
+
+  const previewMath = useMemo(
+    () => inferExecutionPolicyMath(previewPreset.policy, selectedRow?.workflowSteps || []),
+    [previewPreset, selectedRow]
+  );
+
+  const previewSpendIndex = useMemo(
+    () => estimatePolicySpendIndex(previewPreset.policy, selectedRow?.workflowSteps || []),
+    [previewPreset, selectedRow]
+  );
+
+  const previewAssuranceIndex = useMemo(
+    () => estimatePolicyAssuranceIndex(previewPreset.policy, selectedRow?.workflowSteps || []),
+    [previewPreset, selectedRow]
+  );
+
+  const previewFitIndex = useMemo(
+    () => estimatePolicyFitIndex(previewPreset.policy, selectedRow?.workflowSteps || []),
+    [previewPreset, selectedRow]
+  );
+
+  const currentSpendIndex = useMemo(
+    () => estimatePolicySpendIndex(selectedPolicy, selectedRow?.workflowSteps || []),
+    [selectedPolicy, selectedRow]
+  );
+
+  const currentAssuranceIndex = useMemo(
+    () => estimatePolicyAssuranceIndex(selectedPolicy, selectedRow?.workflowSteps || []),
+    [selectedPolicy, selectedRow]
+  );
+
+  const currentFitIndex = useMemo(
+    () => estimatePolicyFitIndex(selectedPolicy, selectedRow?.workflowSteps || []),
+    [selectedPolicy, selectedRow]
+  );
+
   const rolePerformance = useMemo(() => {
     const stats = new Map<string, { steps: number; failures: number; credits: number; tokens: number }>();
     (selectedRow?.runs || []).forEach((run) => {
@@ -932,6 +1002,137 @@ export default function AgentStudio() {
       elasticCoverage: rows.length ? runsWithElastic / rows.length : 0,
     };
   }, [rows]);
+
+  const liveRun = useMemo(
+    () => selectedRow?.runs.find((run) => run.status === 'running') || selectedRow?.latestRun,
+    [selectedRow]
+  );
+
+  const liveActivationTrail = useMemo(() => {
+    const trail = (selectedRow?.stepExecutions || []).slice(0, 8).map((step, index, source) => ({
+      id: step.stepId,
+      title: step.title,
+      role: step.assignedRole,
+      status: step.status,
+      summary: step.error || formatSummaryPreview(step.summary, 120) || 'Step executed without a stored summary.',
+      modelSource: step.modelSource,
+      connector:
+        index < source.length - 1
+          ? `${step.assignedRole} -> ${source[index + 1].assignedRole}`
+          : 'Final handoff',
+    }));
+
+    if (trail.length > 0) return trail;
+
+    return (selectedTopology.workers || [])
+      .filter((worker) => worker.status === 'active')
+      .slice(0, 4)
+      .map((worker, index, source) => ({
+        id: `${worker.role}-${index}`,
+        title: worker.label,
+        role: worker.assignedRole,
+        status: worker.status,
+        summary: worker.reason,
+        modelSource: worker.modelLabel,
+        connector: index < source.length - 1 ? `${worker.assignedRole} -> ${source[index + 1].assignedRole}` : 'Standing by',
+      }));
+  }, [selectedRow, selectedTopology]);
+
+  const workerMapNodes = useMemo(() => {
+    const layout: Record<string, string> = {
+      researcher: 'left-[6%] top-[14%]',
+      analyst: 'right-[8%] top-[12%]',
+      reviewer: 'right-[4%] top-[46%]',
+      operator: 'left-[8%] top-[48%]',
+      engineer: 'left-[18%] bottom-[10%]',
+      writer: 'left-[44%] bottom-[4%]',
+      scheduler: 'right-[28%] bottom-[7%]',
+      messenger: 'right-[6%] bottom-[19%]',
+      monitor: 'left-[42%] top-[8%]',
+    };
+
+    return selectedTopology.workers
+      .filter((worker) => worker.role !== 'nexus')
+      .map((worker) => ({
+        ...worker,
+        positionClass: layout[worker.role] || 'left-[8%] top-[8%]',
+      }));
+  }, [selectedTopology]);
+
+  const frontierPoints = useMemo(
+    () =>
+      presetComparisons.map((preset) => ({
+        ...preset,
+        x: preset.spendIndex,
+        y: preset.assuranceIndex,
+        size: 16 + Math.round(preset.fitIndex / 7),
+      })),
+    [presetComparisons]
+  );
+
+  const replayTimeline = useMemo(() => {
+    const latest = selectedRow?.runs[0];
+    const runSteps = readStepExecutions(latest?.metadata?.stepExecutions);
+    const fallback = selectedRow?.stepExecutions || [];
+    const source = runSteps.length > 0 ? runSteps : fallback;
+    return source.map((step, index) => ({
+      ...step,
+      marker: index + 1,
+      duration: formatCompactDuration(step.durationMs),
+      tokens: formatTokenCount(step.tokenUsage?.totalTokens),
+    }));
+  }, [selectedRow]);
+
+  const replayInsights = useMemo(() => {
+    const insights: Array<{ title: string; body: string; tone: string }> = [];
+    const topCostStep = replayTimeline
+      .filter((step) => typeof step.actualCredits === 'number')
+      .sort((a, b) => (b.actualCredits || 0) - (a.actualCredits || 0))[0];
+    const failedStep = replayTimeline.find((step) => step.status === 'failed');
+
+    if (topCostStep) {
+      insights.push({
+        title: 'Highest spend step',
+        body: `${topCostStep.title} consumed ${formatCredits(topCostStep.actualCredits || 0)} credits on ${topCostStep.assignedRole}. This is the first place to route down-market if quality allows.`,
+        tone: 'border-amber-500/18 bg-amber-500/8 text-amber-100',
+      });
+    }
+
+    if (failedStep) {
+      insights.push({
+        title: 'Failure choke point',
+        body: `${failedStep.title} failed on ${failedStep.assignedRole}. Tighten review or move this class of work to a stronger lane before changing the whole topology.`,
+        tone: 'border-red-500/18 bg-red-500/8 text-red-100',
+      });
+    }
+
+    if (!failedStep && replayTimeline.length > 0) {
+      insights.push({
+        title: 'Stable recent execution',
+        body: 'Recent handoffs completed without a visible failure. Optimize for spend or speed now rather than adding more review pressure.',
+        tone: 'border-emerald-500/18 bg-emerald-500/8 text-emerald-100',
+      });
+    }
+
+    if (selectedMath.toolCalls >= 2 && selectedPolicy.optimizationGoal !== 'cost_saver') {
+      insights.push({
+        title: 'Tool-heavy workflow',
+        body: 'This run leans on tools. Leaner presets should preserve outcome quality while cutting token burn on orchestration steps.',
+        tone: 'border-cyan-500/18 bg-cyan-500/8 text-cyan-100',
+      });
+    }
+
+    return insights.slice(0, 3);
+  }, [replayTimeline, selectedMath.toolCalls, selectedPolicy.optimizationGoal]);
+
+  const roleHeatmap = useMemo(() => {
+    const maxSteps = Math.max(...rolePerformance.map((role) => role.steps), 1);
+    return rolePerformance.map((role) => ({
+      ...role,
+      activityWidth: `${Math.max(12, (role.steps / maxSteps) * 100)}%`,
+      failureRate: role.steps ? Math.round((role.failures / role.steps) * 100) : 0,
+    }));
+  }, [rolePerformance]);
 
   const patchExecutionPolicy = useCallback(async (next: AutomationExecutionPolicyDraft) => {
     if (!selectedRow) return;
@@ -1094,12 +1295,12 @@ export default function AgentStudio() {
             {selectedRow ? (
               <>
                 <div className="rounded-[2rem] border border-navy-800/80 bg-gradient-to-br from-navy-900/84 via-navy-900/56 to-navy-950/92 p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0">
                       <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300/80">Agent system for this workflow</p>
                       <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">{selectedRow.automation.name}</h2>
                       <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
-                        Separate the worker system from schedule tracking. Tune routing here, then jump back to the dashboard only when you want to inspect runs and delivery.
+                        Agent Studio is now split into Live, Optimize, and Replay so users can understand the system instantly: what is running, what to change, and what actually worked.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -1124,355 +1325,297 @@ export default function AgentStudio() {
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow shape</p>
+                      <p className="mt-1 text-sm font-medium text-white">{selectedRow.automation.authoring_mode === 'describe' ? 'Natural-language brief' : 'Guided steps'}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{selectedRow.workflowSteps.length} workflow blocks</p>
+                    </div>
+                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Current policy</p>
+                      <p className="mt-1 text-sm font-medium text-white">
+                        {activePresetId === 'custom_live' ? 'Custom live policy' : POLICY_PRESETS.find((preset) => preset.id === activePresetId)?.label || 'System recommended'}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">{getReviewPolicyLabel(selectedPolicy.reviewPolicy)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Next run</p>
                       <p className="mt-1 text-sm font-medium text-white">{formatAutomationRunTime(selectedRow.automation.next_run_at)}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{liveRun?.status === 'running' ? 'Live run in progress' : 'Standing by'}</p>
                     </div>
                     <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Last outcome</p>
-                      <p className="mt-1 text-sm font-medium text-white">{selectedRow.latestRun?.status || selectedRow.automation.last_run_status || 'Pending'}</p>
-                    </div>
-                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Average run cost</p>
-                      <p className="mt-1 text-sm font-medium text-white">{selectedRow.averageCredits ? `${formatCredits(selectedRow.averageCredits)} cr` : '—'}</p>
-                    </div>
-                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Success rate</p>
-                      <p className="mt-1 text-sm font-medium text-white">{Math.round(selectedRow.successRate * 100)}%</p>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Result health</p>
+                      <p className="mt-1 text-sm font-medium text-white">{Math.round(selectedRow.successRate * 100)}% success</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{selectedRow.averageCredits ? `${formatCredits(selectedRow.averageCredits)} cr average spend` : 'No completed runs yet'}</p>
                     </div>
                   </div>
-                </div>
 
-                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr),minmax(22rem,0.95fr)]">
-                  <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                    <div className="flex items-center gap-2">
-                      <Gauge className="h-4 w-4 text-cyan-300" />
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow benchmarks</p>
-                        <h3 className="text-sm font-semibold text-white">How this schedule compares</h3>
-                      </div>
-                    </div>
-                    <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                      Success and spend should be legible at a glance. This keeps Agent Studio grounded in outcome quality, not just worker-theater.
-                    </p>
-                    <div className="mt-4 space-y-3">
-                      {workflowBenchmarks.map((row) => (
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {[
+                      { id: 'live' as const, label: 'Live', summary: 'Operating picture, active lanes, current handoffs', icon: Activity },
+                      { id: 'optimize' as const, label: 'Optimize', summary: 'Preset sandbox, routing math, policy changes', icon: Target },
+                      { id: 'replay' as const, label: 'Replay', summary: 'Run timeline, role heatmap, outcome review', icon: LineChart },
+                    ].map((room) => {
+                      const Icon = room.icon;
+                      const active = activeRoom === room.id;
+                      return (
                         <button
-                          key={row.id}
+                          key={room.id}
                           type="button"
-                          onClick={() => setSelectedAutomationId(row.id)}
-                          className={`w-full rounded-2xl border p-3 text-left transition-colors ${
-                            row.isSelected
-                              ? 'border-violet-500/25 bg-violet-500/8'
-                              : 'border-navy-700/70 bg-navy-950/40 hover:border-violet-500/18 hover:bg-navy-900/55'
+                          onClick={() => setActiveRoom(room.id)}
+                          className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                            active
+                              ? 'border-violet-500/28 bg-violet-500/10 shadow-[0_18px_48px_rgba(76,29,149,0.16)]'
+                              : 'border-navy-700/70 bg-navy-950/36 hover:border-violet-500/20 hover:bg-navy-900/55'
                           }`}
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-white">{row.name}</p>
-                              <p className="mt-1 text-[11px] text-slate-500">{row.stepCount} steps</p>
-                            </div>
-                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(row.lastStatus)}`}>
-                              {row.lastStatus}
-                            </span>
+                          <div className="flex items-center gap-2">
+                            <Icon className={`h-4 w-4 ${active ? 'text-violet-200' : 'text-slate-400'}`} />
+                            <p className="text-sm font-medium text-white">{room.label}</p>
                           </div>
-                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                            <div>
-                              <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                                <span>Success</span>
-                                <span>{row.successRate}%</span>
-                              </div>
-                              <div className="mt-1 h-2 rounded-full bg-navy-950/70">
-                                <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-300" style={{ width: `${Math.max(10, row.successRate)}%` }} />
-                              </div>
-                            </div>
-                            <div>
-                              <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                                <span>Spend</span>
-                                <span>{row.averageCredits ? `${formatCredits(row.averageCredits)} cr` : '—'}</span>
-                              </div>
-                              <div className="mt-1 h-2 rounded-full bg-navy-950/70">
-                                <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-violet-400" style={{ width: row.costWidth }} />
-                              </div>
-                            </div>
-                          </div>
+                          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{room.summary}</p>
                         </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                    <div className="flex items-center gap-2">
-                      <Clock3 className="h-4 w-4 text-amber-300" />
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Run curve</p>
-                        <h3 className="text-sm font-semibold text-white">Recent cost and outcome trend</h3>
-                      </div>
-                    </div>
-                    <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                      The last few runs should tell you whether this workflow is getting cleaner, cheaper, or noisier.
-                    </p>
-                    {selectedRunTrend.length > 0 ? (
-                      <>
-                        <div className="mt-4 flex h-36 items-end gap-2">
-                          {selectedRunTrend.map((run) => (
-                            <div key={run.id} className="flex min-w-0 flex-1 flex-col items-center">
-                              <div className="flex h-28 w-full items-end">
-                                <div
-                                  className={`w-full rounded-t-2xl border border-white/8 bg-gradient-to-t ${
-                                    run.status === 'failed'
-                                      ? 'from-red-500/20 to-red-400/65'
-                                      : run.status === 'succeeded'
-                                        ? 'from-emerald-500/18 to-cyan-400/70'
-                                        : 'from-violet-500/16 to-violet-400/65'
-                                  }`}
-                                  style={{ height: run.height }}
-                                />
-                              </div>
-                              <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-slate-500">{run.label}</p>
-                              <p className="mt-1 text-[11px] text-white">{run.credits ? `${formatCredits(run.credits)} cr` : '—'}</p>
-                              <p className="text-[10px] text-slate-500">{run.duration}</p>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
-                          {selectedRunTrend.map((run) => (
-                            <span key={`${run.id}-pill`} className={`rounded-full border px-2 py-0.5 font-medium ${run.statusTone}`}>
-                              {run.label}: {run.status}
-                            </span>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="mt-4 rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
-                        No completed runs yet. Once this workflow runs, the trend will show whether the policy is buying real outcomes or just extra spend.
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
 
-                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr),minmax(20rem,0.8fr)]">
-                  <div className="space-y-6">
-                    <div className="rounded-[1.8rem] border border-cyan-500/15 bg-gradient-to-br from-cyan-500/8 via-navy-900/72 to-navy-950/90 p-5">
-                      <div className="flex items-center gap-2">
-                        <Bot className="h-4 w-4 text-cyan-300" />
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-300/80">Interactive system map</p>
-                          <h3 className="text-sm font-semibold text-white">Worker architecture</h3>
+                {activeRoom === 'live' ? (
+                  <>
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr),minmax(22rem,0.85fr)]">
+                      <div className="rounded-[1.9rem] border border-cyan-500/15 bg-gradient-to-br from-cyan-500/8 via-navy-900/72 to-navy-950/92 p-5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <Layers3 className="h-4 w-4 text-cyan-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-300/80">Live system map</p>
+                              <h3 className="text-sm font-semibold text-white">Manager and worker lanes</h3>
+                            </div>
+                          </div>
+                          <span className="rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-300">
+                            {liveRun?.status === 'running' ? 'Live now' : 'Preview from latest run'}
+                          </span>
                         </div>
-                      </div>
-                      <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                        This is the dedicated room for agent management. It shows the manager, resident specialists, and elastic lanes without burying them under scheduling controls.
-                      </p>
-
-                      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,0.95fr),minmax(0,1.05fr)]">
-                        <div className="rounded-[1.6rem] border border-violet-500/16 bg-violet-500/6 p-4">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-violet-300/80">Manager</p>
-                          {selectedTopology.workers
-                            .filter((worker) => worker.role === 'nexus')
-                            .map((worker) => (
-                              <div key={worker.role} className="mt-3 rounded-2xl border border-violet-500/18 bg-navy-950/45 p-4">
+                        <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                          One manager in the center, resident specialists around it, and elastic lanes appearing only when the workflow math or live execution justify them.
+                        </p>
+                        <div className="relative mt-5 h-[30rem] overflow-hidden rounded-[1.8rem] border border-white/6 bg-[radial-gradient(circle_at_center,rgba(45,212,191,0.10),transparent_28%),linear-gradient(180deg,rgba(15,23,42,0.74),rgba(2,6,23,0.96))]">
+                          <div className="absolute inset-[14%] rounded-full border border-violet-500/10" />
+                          <div className="absolute inset-[25%] rounded-full border border-cyan-500/10" />
+                          <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.30),rgba(8,47,73,0.04))] blur-2xl" />
+                          <div className="absolute left-1/2 top-1/2 z-10 w-[12rem] -translate-x-1/2 -translate-y-1/2 rounded-[1.6rem] border border-violet-400/24 bg-navy-950/82 p-4 shadow-[0_24px_80px_rgba(76,29,149,0.28)]">
+                            {selectedTopology.workers.filter((worker) => worker.role === 'nexus').map((worker) => (
+                              <div key={worker.role}>
                                 <div className="flex items-center justify-between gap-3">
                                   <div>
-                                    <p className="text-sm font-semibold text-white">{worker.label}</p>
-                                    <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-slate-500">{worker.modelLabel}</p>
+                                    <p className="text-[10px] uppercase tracking-[0.16em] text-violet-300/80">Manager</p>
+                                    <p className="mt-1 text-sm font-semibold text-white">{worker.label}</p>
                                   </div>
                                   <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${worker.status === 'active' ? 'border-violet-500/20 bg-violet-500/10 text-violet-200' : 'border-navy-700 bg-navy-900 text-slate-400'}`}>
                                     {worker.status}
                                   </span>
                                 </div>
-                                <p className="mt-3 text-sm leading-relaxed text-slate-300">{worker.reason}</p>
+                                <p className="mt-3 text-[12px] leading-relaxed text-slate-300">{worker.reason}</p>
+                                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{selectedTopology.primaryBand} band</span>
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{worker.modelLabel}</span>
+                                </div>
                               </div>
                             ))}
-                        </div>
-
-                        <div className="space-y-4">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Cpu className="h-4 w-4 text-violet-300" />
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Six specialists</p>
+                          </div>
+                          {workerMapNodes.map((worker) => (
+                            <div
+                              key={worker.role}
+                              className={`absolute z-[5] w-[10.5rem] rounded-[1.2rem] border p-3 shadow-[0_14px_40px_rgba(2,6,23,0.28)] ${worker.positionClass} ${
+                                worker.status === 'active'
+                                  ? worker.laneType === 'elastic'
+                                    ? 'border-cyan-500/25 bg-cyan-500/10'
+                                    : 'border-violet-500/25 bg-violet-500/10'
+                                  : 'border-navy-700/70 bg-navy-950/72'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-white">{worker.label}</p>
+                                  <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">{worker.band} band</p>
+                                </div>
+                                <span className={`mt-0.5 inline-flex h-2.5 w-2.5 rounded-full ${worker.status === 'active' ? 'animate-pulse bg-emerald-300' : 'bg-slate-600'}`} />
+                              </div>
+                              <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{truncateText(worker.reason, 84)}</p>
                             </div>
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                              {selectedTopology.workers
-                                .filter((worker) => worker.laneType === 'core' && worker.role !== 'nexus')
-                                .map((worker) => (
-                                  <div key={worker.role} className={`rounded-2xl border p-3 ${worker.status === 'active' ? 'border-violet-500/18 bg-violet-500/8' : 'border-navy-700/70 bg-navy-950/42'}`}>
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div>
-                                        <p className="text-sm font-medium text-white">{worker.label}</p>
-                                        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">{worker.band} band</p>
-                                      </div>
-                                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${worker.status === 'active' ? 'border-violet-500/20 bg-violet-500/10 text-violet-200' : 'border-navy-700 bg-navy-900 text-slate-400'}`}>
-                                        {worker.status}
-                                      </span>
-                                    </div>
-                                    <p className="mt-3 text-[12px] leading-relaxed text-slate-400">{worker.summary}</p>
-                                  </div>
-                                ))}
+                          ))}
+                        </div>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Active specialists</p>
+                            <p className="mt-1 text-lg font-semibold text-white">{selectedTopology.workers.filter((worker) => worker.laneType === 'core' && worker.status === 'active').length}</p>
+                          </div>
+                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Elastic lanes open</p>
+                            <p className="mt-1 text-lg font-semibold text-white">{selectedTopology.workers.filter((worker) => worker.laneType === 'elastic' && worker.status === 'active').length}</p>
+                          </div>
+                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Optimization bias</p>
+                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.estimatedBands}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-emerald-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Live pulse</p>
+                              <h3 className="text-sm font-semibold text-white">What the system is doing now</h3>
                             </div>
                           </div>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Status</p>
+                              <p className="mt-1 text-sm font-medium text-white">{liveRun?.status || selectedRow.automation.last_run_status || 'Standby'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Model source</p>
+                              <p className="mt-1 text-sm font-medium text-white">{getTaskModelSource(selectedRow.task, liveRun) || 'Server default'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Current cost</p>
+                              <p className="mt-1 text-sm font-medium text-white">{typeof liveRun?.actualCredits === 'number' ? `${formatCredits(liveRun.actualCredits)} cr` : '—'}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Elapsed</p>
+                              <p className="mt-1 text-sm font-medium text-white">
+                                {liveRun
+                                  ? formatCompactDuration(Number.isNaN(Date.parse(liveRun.startedAt || '')) ? undefined : Math.max(0, Date.now() - Date.parse(liveRun.startedAt || '')))
+                                  : '—'}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="mt-4 text-sm leading-relaxed text-slate-400">{selectedTopology.summary || 'The manager is routing work based on workflow complexity, tool count, and review pressure.'}</p>
+                        </div>
 
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Orbit className="h-4 w-4 text-cyan-300" />
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Four elastic lanes</p>
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Workflow className="h-4 w-4 text-cyan-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Live handoffs</p>
+                              <h3 className="text-sm font-semibold text-white">Activation trail</h3>
                             </div>
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                              {selectedTopology.workers
-                                .filter((worker) => worker.laneType === 'elastic')
-                                .map((worker) => (
-                                  <div key={worker.role} className={`rounded-2xl border p-3 ${worker.status === 'active' ? 'border-cyan-500/18 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/42'}`}>
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div>
-                                        <p className="text-sm font-medium text-white">{worker.label}</p>
-                                        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">{worker.modelLabel}</p>
-                                      </div>
-                                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${worker.status === 'active' ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-200' : 'border-navy-700 bg-navy-900 text-slate-400'}`}>
-                                        {worker.status}
-                                      </span>
+                          </div>
+                          <div className="mt-4 space-y-3">
+                            {liveActivationTrail.map((item, index) => (
+                              <div key={item.id} className="flex gap-3">
+                                <div className="flex flex-col items-center">
+                                  <div className={`mt-1 h-3 w-3 rounded-full ${index === 0 ? 'bg-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.6)]' : 'bg-violet-300'}`} />
+                                  {index < liveActivationTrail.length - 1 ? <div className="mt-2 h-full w-px bg-gradient-to-b from-cyan-400/50 to-transparent" /> : null}
+                                </div>
+                                <div className="flex-1 rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-medium text-white">{item.title}</p>
+                                      <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500">{item.connector}</p>
                                     </div>
-                                    <p className="mt-3 text-[12px] leading-relaxed text-slate-400">{worker.reason}</p>
+                                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(item.status)}`}>
+                                      {item.status}
+                                    </span>
                                   </div>
-                                ))}
-                            </div>
+                                  <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.summary}</p>
+                                  {item.modelSource ? <p className="mt-2 text-[11px] text-slate-500">{item.modelSource}</p> : null}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="grid gap-6 lg:grid-cols-2">
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr),minmax(0,1.08fr)]">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
-                          <Gauge className="h-4 w-4 text-amber-300" />
+                          <Cpu className="h-4 w-4 text-violet-300" />
                           <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Why this configuration</p>
-                            <h3 className="text-sm font-semibold text-white">Routing math</h3>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Lane roster</p>
+                            <h3 className="text-sm font-semibold text-white">Who is resident vs elastic</h3>
                           </div>
                         </div>
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow steps</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.stepCount}</p>
-                          </div>
-                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Tool calls</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.toolCalls}</p>
-                          </div>
-                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Reasoning load</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.reasoningLoad}</p>
-                          </div>
-                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Recommended elastic lanes</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.recommendedElasticLanes}</p>
-                          </div>
+                        <div className="mt-4 space-y-3">
+                          {(['core', 'elastic'] as const).map((laneType) => (
+                            <div key={laneType}>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{laneType === 'core' ? 'Resident specialists' : 'Elastic lanes'}</p>
+                              <div className="mt-2 space-y-2">
+                                {selectedTopology.workers.filter((worker) => worker.laneType === laneType && worker.role !== 'nexus').map((worker) => (
+                                  <div key={worker.role} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <p className="text-sm font-medium text-white">{worker.label}</p>
+                                        <p className="mt-1 text-[11px] text-slate-500">{worker.modelLabel}</p>
+                                      </div>
+                                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${worker.status === 'active' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-navy-700 bg-navy-900 text-slate-400'}`}>
+                                        {worker.status}
+                                      </span>
+                                    </div>
+                                    <p className="mt-2 text-[12px] leading-relaxed text-slate-400">{worker.reason}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        <p className="mt-4 text-sm leading-relaxed text-slate-400">
-                          The system should keep harder reasoning on stronger models only when the workflow complexity and failure risk justify it. Everything else should stay cheap, fast, and operational.
-                        </p>
                       </div>
 
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
-                          <Sparkles className="h-4 w-4 text-cyan-300" />
+                          <Sparkles className="h-4 w-4 text-violet-300" />
                           <div>
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Optimization loop</p>
                             <h3 className="text-sm font-semibold text-white">What to change next</h3>
                           </div>
                         </div>
                         <div className="mt-4 space-y-3">
-                          {optimizationRecommendations.map((recommendation) => (
-                            <div key={recommendation.title} className="rounded-2xl border border-cyan-500/14 bg-cyan-500/6 p-3">
-                              <p className="text-sm font-medium text-white">{recommendation.title}</p>
-                              <p className="mt-2 text-sm leading-relaxed text-slate-400">{recommendation.body}</p>
+                          {optimizationRecommendations.map((item) => (
+                            <div key={item.title} className="rounded-2xl border border-violet-500/14 bg-violet-500/6 p-4">
+                              <p className="text-sm font-medium text-white">{item.title}</p>
+                              <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.body}</p>
                             </div>
                           ))}
                         </div>
                       </div>
                     </div>
+                  </>
+                ) : null}
 
-                    <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                      <div className="flex items-center gap-2">
-                        <Brain className="h-4 w-4 text-violet-300" />
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Role performance</p>
-                          <h3 className="text-sm font-semibold text-white">Which workers are actually doing the work</h3>
-                        </div>
-                      </div>
-                      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                        {rolePerformance.length > 0 ? rolePerformance.map((role) => (
-                          <div key={role.role} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-sm font-medium text-white">{role.role}</p>
-                              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                                {role.steps} steps
-                              </span>
-                            </div>
-                            <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
-                              <div>
-                                <p className="text-slate-500">Failures</p>
-                                <p className="mt-1 text-white">{role.failures}</p>
-                              </div>
-                              <div>
-                                <p className="text-slate-500">Credits</p>
-                                <p className="mt-1 text-white">{formatCredits(role.credits)}</p>
-                              </div>
-                              <div>
-                                <p className="text-slate-500">Tokens</p>
-                                <p className="mt-1 text-white">{formatTokenCount(role.tokens)}</p>
-                              </div>
-                            </div>
+                {activeRoom === 'optimize' ? (
+                  <>
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr),minmax(22rem,0.95fr)]">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
+                          <Target className="h-4 w-4 text-cyan-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Preset sandbox</p>
+                            <h3 className="text-sm font-semibold text-white">Preview before you apply</h3>
                           </div>
-                        )) : (
-                          <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
-                            No recorded worker performance yet. Run the workflow once and the loop will start to fill in.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div className="rounded-[1.8rem] border border-violet-500/15 bg-gradient-to-b from-violet-500/8 via-navy-900/70 to-navy-950/92 p-5">
-                      <div className="flex items-center gap-2">
-                        <Bot className="h-4 w-4 text-violet-300" />
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-violet-300/80">Controls</p>
-                          <h3 className="text-sm font-semibold text-white">Execution policy</h3>
                         </div>
-                      </div>
-                      <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                        Most users should leave this on system recommendation. Custom policy exists for the workflows where cost, latency, or assurance matter enough to justify tuning.
-                      </p>
-
-                      <div className="mt-4">
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Preset comparison</p>
-                        <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-                          Compare cost pressure, assurance, and fit before you apply anything. The goal is better outcomes with less unnecessary reasoning spend.
+                        <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                          Compare presets against this workflow first. The goal is to make cost-quality tradeoffs obvious before you commit the system to a new posture.
                         </p>
-                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div className="mt-4 grid gap-3 md:grid-cols-2">
                           {presetComparisons.map((preset) => (
                             <button
                               key={preset.id}
                               type="button"
-                              disabled={actionBusy}
-                              onClick={() => void patchExecutionPolicy(preset.policy)}
-                              className={`w-full rounded-2xl border p-3 text-left transition-colors ${
-                                preset.isActive
-                                  ? 'border-violet-500/30 bg-violet-500/10'
-                                  : 'border-navy-700/70 bg-navy-950/42 hover:border-violet-500/18 hover:bg-navy-900/60'
-                              } disabled:opacity-60`}
+                              onClick={() => setPreviewPresetId(preset.id)}
+                              className={`rounded-[1.5rem] border p-4 text-left transition-all ${
+                                previewPreset.id === preset.id
+                                  ? 'border-violet-500/30 bg-violet-500/10 shadow-[0_18px_44px_rgba(76,29,149,0.16)]'
+                                  : 'border-navy-700/70 bg-navy-950/42 hover:border-violet-500/20 hover:bg-navy-900/55'
+                              }`}
                             >
                               <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-medium text-white">{preset.label}</p>
-                                  <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{preset.summary}</p>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-white">{preset.label}</p>
+                                  <p className="mt-2 text-[12px] leading-relaxed text-slate-400">{preset.summary}</p>
                                 </div>
-                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                                  preset.isActive
-                                    ? 'border-violet-500/20 bg-violet-500/10 text-violet-200'
-                                    : 'border-navy-700 bg-navy-900 text-slate-400'
-                                }`}>
-                                  {preset.policy.mode === 'recommended' ? 'Auto' : 'Custom'}
+                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${preset.isActive ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-navy-700 bg-navy-900 text-slate-400'}`}>
+                                  {preset.isActive ? 'Live' : 'Preview'}
                                 </span>
                               </div>
                               <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
@@ -1511,235 +1654,439 @@ export default function AgentStudio() {
                         </div>
                       </div>
 
-                      <div className="mt-5 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Advanced overrides</p>
-                        <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-                          Start from a preset unless you have a real reason to override the routing math manually.
+                      <div className="space-y-6">
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <BarChart3 className="h-4 w-4 text-amber-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Preset preview</p>
+                              <h3 className="text-sm font-semibold text-white">What changes if you switch</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Preview preset</p>
+                              <p className="mt-1 text-sm font-medium text-white">{previewPreset.label}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Active preset</p>
+                              <p className="mt-1 text-sm font-medium text-white">{activePresetId === 'custom_live' ? 'Custom live policy' : POLICY_PRESETS.find((preset) => preset.id === activePresetId)?.label || 'System recommended'}</p>
+                            </div>
+                          </div>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                            {[
+                              { label: 'Spend', current: currentSpendIndex, next: previewSpendIndex },
+                              { label: 'Assurance', current: currentAssuranceIndex, next: previewAssuranceIndex },
+                              { label: 'Fit', current: currentFitIndex, next: previewFitIndex },
+                            ].map((metric) => (
+                              <div key={metric.label} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{metric.label}</p>
+                                <p className="mt-1 text-lg font-semibold text-white">{metric.next}</p>
+                                <p className={`mt-1 text-[11px] ${metric.next === metric.current ? 'text-slate-500' : metric.next > metric.current ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                  {formatSignedDelta(metric.next - metric.current)} vs live
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <button
+                              type="button"
+                              disabled={actionBusy || previewPreset.id === activePresetId}
+                              onClick={() => void patchExecutionPolicy(previewPreset.policy)}
+                              className="rounded-xl border border-violet-500/24 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-100 transition-colors hover:bg-violet-500/14 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {previewPreset.id === activePresetId ? 'Already applied' : `Apply ${previewPreset.label}`}
+                            </button>
+                            <p className="text-[11px] leading-relaxed text-slate-500">Use presets first. Only drop into advanced overrides if you have a real reason to outsmart the system math.</p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Radar className="h-4 w-4 text-cyan-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Cost-quality frontier</p>
+                              <h3 className="text-sm font-semibold text-white">See the tradeoff, don’t guess it</h3>
+                            </div>
+                          </div>
+                          <div className="relative mt-4 h-72 rounded-[1.6rem] border border-white/6 bg-[linear-gradient(180deg,rgba(15,23,42,0.72),rgba(2,6,23,0.96))]">
+                            <div className="absolute inset-x-4 bottom-4 top-4">
+                              <div className="absolute inset-0 rounded-[1.2rem] border border-dashed border-white/8" />
+                              <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-white/6" />
+                              <div className="absolute left-1/2 inset-y-0 border-l border-dashed border-white/6" />
+                              {frontierPoints.map((point) => (
+                                <button
+                                  key={point.id}
+                                  type="button"
+                                  onClick={() => setPreviewPresetId(point.id)}
+                                  className={`absolute -translate-x-1/2 translate-y-1/2 rounded-full border text-[10px] font-medium text-white transition-transform hover:scale-105 ${
+                                    point.id === previewPreset.id
+                                      ? 'border-violet-200 bg-violet-500/80 shadow-[0_0_30px_rgba(139,92,246,0.45)]'
+                                      : point.isActive
+                                        ? 'border-emerald-200 bg-emerald-500/70'
+                                        : 'border-cyan-200 bg-cyan-500/70'
+                                  }`}
+                                  style={{ left: `${point.x}%`, bottom: `${point.y}%`, width: `${point.size}px`, height: `${point.size}px` }}
+                                  aria-label={point.label}
+                                />
+                              ))}
+                              <div className="absolute -bottom-2 left-0 text-[10px] uppercase tracking-[0.16em] text-slate-500">Lower spend</div>
+                              <div className="absolute -bottom-2 right-0 text-[10px] uppercase tracking-[0.16em] text-slate-500">Higher spend</div>
+                              <div className="absolute left-0 top-0 text-[10px] uppercase tracking-[0.16em] text-slate-500">Higher assurance</div>
+                              <div className="absolute left-0 bottom-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">Lower assurance</div>
+                            </div>
+                          </div>
+                          <div className="mt-4 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                            {frontierPoints.map((point) => (
+                              <span key={`${point.id}-legend`} className={`rounded-full border px-2 py-0.5 ${
+                                point.id === previewPreset.id
+                                  ? 'border-violet-500/20 bg-violet-500/10 text-violet-200'
+                                  : point.isActive
+                                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                                    : 'border-navy-700 bg-navy-900 text-slate-300'
+                              }`}>
+                                {point.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr),minmax(0,1.05fr)]">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
+                          <Gauge className="h-4 w-4 text-amber-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow fingerprint</p>
+                            <h3 className="text-sm font-semibold text-white">Why the system recommends what it does</h3>
+                          </div>
+                        </div>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow steps</p>
+                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.stepCount}</p>
+                          </div>
+                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Tool calls</p>
+                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.toolCalls}</p>
+                          </div>
+                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Reasoning load</p>
+                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.reasoningLoad}</p>
+                          </div>
+                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Recommended lanes</p>
+                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.recommendedElasticLanes}</p>
+                          </div>
+                        </div>
+                        <p className="mt-4 text-sm leading-relaxed text-slate-400">
+                          Harder reasoning should only climb to stronger lanes when workflow complexity and failure risk justify it. Everything else should stay cheap, fast, and operational.
                         </p>
-                      </div>
-
-                      <div className="mt-4 space-y-4">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Mode</p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {[
-                              { value: 'recommended' as const, label: 'System recommended' },
-                              { value: 'custom' as const, label: 'Custom policy' },
-                            ].map((option) => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                disabled={actionBusy}
-                                onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: option.value })}
-                                className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${
-                                  selectedPolicy.mode === option.value
-                                    ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
-                                    : 'text-slate-300'
-                                } disabled:opacity-60`}
-                              >
-                                {option.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Optimization goal</p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {[
-                              { value: 'balanced' as const, label: 'Balanced' },
-                              { value: 'cost_saver' as const, label: 'Cost Saver' },
-                              { value: 'quality_first' as const, label: 'Quality First' },
-                            ].map((option) => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                disabled={actionBusy}
-                                onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', optimizationGoal: option.value })}
-                                className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${
-                                  selectedPolicy.optimizationGoal === option.value
-                                    ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
-                                    : 'text-slate-300'
-                                } disabled:opacity-60`}
-                              >
-                                {option.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Review policy</p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {[
-                              { value: 'lean' as const, label: 'Lean' },
-                              { value: 'standard' as const, label: 'Standard' },
-                              { value: 'strict' as const, label: 'Strict' },
-                            ].map((option) => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                disabled={actionBusy}
-                                onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', reviewPolicy: option.value })}
-                                className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${
-                                  selectedPolicy.reviewPolicy === option.value
-                                    ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
-                                    : 'text-slate-300'
-                                } disabled:opacity-60`}
-                              >
-                                {option.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Elastic lane cap</p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {[0, 1, 2, 3, 4].map((count) => (
-                              <button
-                                key={count}
-                                type="button"
-                                disabled={actionBusy}
-                                onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', maxElasticLanes: count })}
-                                className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${
-                                  selectedPolicy.maxElasticLanes === count
-                                    ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
-                                    : 'text-slate-300'
-                                } disabled:opacity-60`}
-                              >
-                                {count}
-                              </button>
-                            ))}
-                          </div>
+                        <div className="mt-4 space-y-3">
+                          {optimizationRecommendations.map((item) => (
+                            <div key={item.title} className="rounded-2xl border border-violet-500/14 bg-violet-500/6 p-4">
+                              <p className="text-sm font-medium text-white">{item.title}</p>
+                              <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.body}</p>
+                            </div>
+                          ))}
                         </div>
                       </div>
 
-                      <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Policy snapshot</p>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
+                          <Brain className="h-4 w-4 text-violet-300" />
                           <div>
-                            <p className="text-sm text-slate-400">Mode</p>
-                            <p className="mt-1 text-sm font-medium text-white">{getExecutionModeLabel(selectedPolicy.mode)}</p>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Advanced overrides</p>
+                            <h3 className="text-sm font-semibold text-white">Use only when the preset isn’t enough</h3>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Mode</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {[{ value: 'recommended' as const, label: 'System recommended' }, { value: 'custom' as const, label: 'Custom policy' }].map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: option.value })}
+                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedPolicy.mode === option.value ? 'border-violet-500/30 bg-violet-500/12 text-violet-200' : 'text-slate-300'} disabled:opacity-60`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                           <div>
-                            <p className="text-sm text-slate-400">Optimization</p>
-                            <p className="mt-1 text-sm font-medium text-white">{getOptimizationGoalLabel(selectedPolicy.optimizationGoal)}</p>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Optimization goal</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {[{ value: 'balanced' as const, label: 'Balanced' }, { value: 'cost_saver' as const, label: 'Cost Saver' }, { value: 'quality_first' as const, label: 'Quality First' }].map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', optimizationGoal: option.value })}
+                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedPolicy.optimizationGoal === option.value ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'} disabled:opacity-60`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                           <div>
-                            <p className="text-sm text-slate-400">Review</p>
-                            <p className="mt-1 text-sm font-medium text-white">{getReviewPolicyLabel(selectedPolicy.reviewPolicy)}</p>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Review policy</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {[{ value: 'lean' as const, label: 'Lean' }, { value: 'standard' as const, label: 'Standard' }, { value: 'strict' as const, label: 'Strict' }].map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', reviewPolicy: option.value })}
+                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedPolicy.reviewPolicy === option.value ? 'border-violet-500/30 bg-violet-500/12 text-violet-200' : 'text-slate-300'} disabled:opacity-60`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                           <div>
-                            <p className="text-sm text-slate-400">Active lanes</p>
-                            <p className="mt-1 text-sm font-medium text-white">{selectedMath.activeElasticLanes} / {selectedPolicy.maxElasticLanes}</p>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Elastic lane cap</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {[0, 1, 2, 3, 4].map((count) => (
+                                <button
+                                  key={count}
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', maxElasticLanes: count })}
+                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedPolicy.maxElasticLanes === count ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'} disabled:opacity-60`}
+                                >
+                                  {count}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Policy snapshot</p>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                              <div>
+                                <p className="text-sm text-slate-400">Mode</p>
+                                <p className="mt-1 text-sm font-medium text-white">{getExecutionModeLabel(selectedPolicy.mode)}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-slate-400">Optimization</p>
+                                <p className="mt-1 text-sm font-medium text-white">{getOptimizationGoalLabel(selectedPolicy.optimizationGoal)}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-slate-400">Review</p>
+                                <p className="mt-1 text-sm font-medium text-white">{getReviewPolicyLabel(selectedPolicy.reviewPolicy)}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-slate-400">Active lanes</p>
+                                <p className="mt-1 text-sm font-medium text-white">{selectedMath.activeElasticLanes} / {selectedPolicy.maxElasticLanes}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+
+                {activeRoom === 'replay' ? (
+                  <>
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr),minmax(22rem,0.92fr)]">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
+                          <LineChart className="h-4 w-4 text-cyan-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Run replay</p>
+                            <h3 className="text-sm font-semibold text-white">Step-by-step timeline</h3>
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-4">
+                          {replayTimeline.length > 0 ? replayTimeline.map((step, index) => (
+                            <div key={step.stepId} className="flex gap-3">
+                              <div className="flex flex-col items-center">
+                                <div className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold ${step.status === 'failed' ? 'border-red-500/25 bg-red-500/10 text-red-200' : step.status === 'succeeded' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : 'border-violet-500/25 bg-violet-500/10 text-violet-200'}`}>
+                                  {step.marker}
+                                </div>
+                                {index < replayTimeline.length - 1 ? <div className="mt-2 h-full w-px bg-gradient-to-b from-violet-400/50 to-transparent" /> : null}
+                              </div>
+                              <div className="flex-1 rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium text-white">{step.title}</p>
+                                    <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500">{step.assignedRole} · {step.kind}</p>
+                                  </div>
+                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(step.status)}`}>
+                                    {step.status}
+                                  </span>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                                  {step.modelTier ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.modelTier}</span> : null}
+                                  {step.modelSource ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.modelSource}</span> : null}
+                                  {typeof step.actualCredits === 'number' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCredits(step.actualCredits)} cr</span> : null}
+                                  {step.toolCalls ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.toolCalls} tools</span> : null}
+                                  {step.tokenUsage?.totalTokens ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.tokens}</span> : null}
+                                  {step.duration && step.duration !== '—' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.duration}</span> : null}
+                                </div>
+                                {step.summary || step.error ? <p className="mt-3 text-sm leading-relaxed text-slate-400">{step.error || formatSummaryPreview(step.summary, 180)}</p> : null}
+                              </div>
+                            </div>
+                          )) : (
+                            <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                              No step history yet. Once the workflow runs, replay will show the full handoff story instead of burying it in the schedule drawer.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Clock3 className="h-4 w-4 text-amber-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Run curve</p>
+                              <h3 className="text-sm font-semibold text-white">Recent cost and outcome trend</h3>
+                            </div>
+                          </div>
+                          {selectedRunTrend.length > 0 ? (
+                            <>
+                              <div className="mt-4 flex h-36 items-end gap-2">
+                                {selectedRunTrend.map((run) => (
+                                  <div key={run.id} className="flex min-w-0 flex-1 flex-col items-center">
+                                    <div className="flex h-28 w-full items-end">
+                                      <div className={`w-full rounded-t-2xl border border-white/8 bg-gradient-to-t ${run.status === 'failed' ? 'from-red-500/20 to-red-400/65' : run.status === 'succeeded' ? 'from-emerald-500/18 to-cyan-400/70' : 'from-violet-500/16 to-violet-400/65'}`} style={{ height: run.height }} />
+                                    </div>
+                                    <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-slate-500">{run.label}</p>
+                                    <p className="mt-1 text-[11px] text-white">{run.credits ? `${formatCredits(run.credits)} cr` : '—'}</p>
+                                    <p className="text-[10px] text-slate-500">{run.duration}</p>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                                {selectedRunTrend.map((run) => (
+                                  <span key={`${run.id}-pill`} className={`rounded-full border px-2 py-0.5 font-medium ${run.statusTone}`}>
+                                    {run.label}: {run.status}
+                                  </span>
+                                ))}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="mt-4 rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                              No completed runs yet. Once this workflow runs, the trend will show whether the policy is buying real outcomes or just extra spend.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Flame className="h-4 w-4 text-violet-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Replay findings</p>
+                              <h3 className="text-sm font-semibold text-white">What this run teaches</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-3">
+                            {replayInsights.map((item) => (
+                              <div key={item.title} className={`rounded-2xl border p-4 ${item.tone}`}>
+                                <p className="text-sm font-medium text-white">{item.title}</p>
+                                <p className="mt-2 text-sm leading-relaxed text-slate-200/90">{item.body}</p>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                      <div className="flex items-center gap-2">
-                        <Clock3 className="h-4 w-4 text-amber-300" />
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Recent runs</p>
-                          <h3 className="text-sm font-semibold text-white">What actually happened</h3>
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr),minmax(0,1.08fr)]">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
+                          <Brain className="h-4 w-4 text-violet-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Role heatmap</p>
+                            <h3 className="text-sm font-semibold text-white">Which specialists are earning their keep</h3>
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {roleHeatmap.length > 0 ? roleHeatmap.map((role) => (
+                            <div key={role.role} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium capitalize text-white">{role.role}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">{role.steps} handoffs · {formatCredits(role.credits)} cr</p>
+                                </div>
+                                <div className="text-right text-[11px] text-slate-400">
+                                  <p>{role.failureRate}% fail rate</p>
+                                  <p className="mt-1">{formatTokenCount(role.tokens)} tokens</p>
+                                </div>
+                              </div>
+                              <div className="mt-3 h-2 rounded-full bg-navy-950/70">
+                                <div className="h-full rounded-full bg-gradient-to-r from-violet-400 to-cyan-300" style={{ width: role.activityWidth }} />
+                              </div>
+                            </div>
+                          )) : (
+                            <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                              No role performance data yet.
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="mt-4 space-y-3">
-                        {selectedRow.runs.slice(0, 5).map((run) => (
-                          <div key={run.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-medium text-white">{run.status}</p>
-                                <p className="mt-1 text-[11px] text-slate-500">{formatRelativeTimeFromIso(run.finishedAt || run.startedAt)}</p>
-                              </div>
-                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(run.status)}`}>
-                                {run.modelTier || 'auto'}
-                              </span>
-                            </div>
-                            {getTaskModelSource(selectedRow.task, run) ? (
-                              <p className="mt-2 text-[11px] text-slate-400">{getTaskModelSource(selectedRow.task, run)}</p>
-                            ) : null}
-                            <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
-                              <div>
-                                <p className="text-slate-500">Credits</p>
-                                <p className="mt-1 text-white">{typeof run.actualCredits === 'number' ? formatCredits(run.actualCredits) : '—'}</p>
-                              </div>
-                              <div>
-                                <p className="text-slate-500">Duration</p>
-                                <p className="mt-1 text-white">{formatCompactDuration(
-                                  Number.isNaN(Date.parse(run.startedAt || '')) || Number.isNaN(Date.parse(run.finishedAt || ''))
-                                    ? undefined
-                                    : Math.max(0, Date.parse(run.finishedAt || '') - Date.parse(run.startedAt || ''))
-                                )}</p>
-                              </div>
-                              <div>
-                                <p className="text-slate-500">Role</p>
-                                <p className="mt-1 text-white">{run.agentRole || 'manager'}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                        {selectedRow.runs.length === 0 && (
-                          <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
-                            No runs recorded yet.
-                          </div>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                      <div className="flex items-center gap-2">
-                        <Workflow className="h-4 w-4 text-cyan-300" />
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Recent handoffs</p>
-                          <h3 className="text-sm font-semibold text-white">Latest step activity</h3>
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow benchmarks</p>
+                            <h3 className="text-sm font-semibold text-white">How this workflow compares</h3>
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {workflowBenchmarks.map((row) => (
+                            <button
+                              key={row.id}
+                              type="button"
+                              onClick={() => setSelectedAutomationId(row.id)}
+                              className={`w-full rounded-2xl border p-3 text-left transition-colors ${row.isSelected ? 'border-violet-500/25 bg-violet-500/8' : 'border-navy-700/70 bg-navy-950/40 hover:border-violet-500/18 hover:bg-navy-900/55'}`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-white">{row.name}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">{row.stepCount} steps</p>
+                                </div>
+                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(row.lastStatus)}`}>
+                                  {row.lastStatus}
+                                </span>
+                              </div>
+                              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                <div>
+                                  <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                                    <span>Success</span>
+                                    <span>{row.successRate}%</span>
+                                  </div>
+                                  <div className="mt-1 h-2 rounded-full bg-navy-950/70">
+                                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-300" style={{ width: `${Math.max(10, row.successRate)}%` }} />
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                                    <span>Spend</span>
+                                    <span>{row.averageCredits ? `${formatCredits(row.averageCredits)} cr` : '—'}</span>
+                                  </div>
+                                  <div className="mt-1 h-2 rounded-full bg-navy-950/70">
+                                    <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-violet-400" style={{ width: row.costWidth }} />
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
                         </div>
                       </div>
-                      <div className="mt-4 space-y-3">
-                        {selectedRow.stepExecutions.slice(0, 6).map((step, index) => (
-                          <div key={step.stepId} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-medium text-white">{index + 1}. {step.title}</p>
-                                <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500">{step.assignedRole} · {step.kind}</p>
-                              </div>
-                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(step.status)}`}>
-                                {step.status}
-                              </span>
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
-                              {step.modelTier ? (
-                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.modelTier}</span>
-                              ) : null}
-                              {step.modelSource ? (
-                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.modelSource}</span>
-                              ) : null}
-                              {typeof step.actualCredits === 'number' ? (
-                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCredits(step.actualCredits)} cr</span>
-                              ) : null}
-                              {step.toolCalls ? (
-                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.toolCalls} tools</span>
-                              ) : null}
-                              {step.tokenUsage?.totalTokens ? (
-                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatTokenCount(step.tokenUsage.totalTokens)} tokens</span>
-                              ) : null}
-                            </div>
-                            {step.summary || step.error ? (
-                              <p className="mt-3 text-sm leading-relaxed text-slate-400">{step.error || formatSummaryPreview(step.summary, 140)}</p>
-                            ) : null}
-                          </div>
-                        ))}
-                        {selectedRow.stepExecutions.length === 0 && (
-                          <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
-                            No step history yet. Once the workflow runs, handoffs will appear here instead of being buried in the schedule drawer.
-                          </div>
-                        )}
-                      </div>
                     </div>
-                  </div>
-                </div>
+                  </>
+                ) : null}
               </>
             ) : (
               <div className="rounded-[1.8rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-5 py-12 text-center">
