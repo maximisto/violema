@@ -30,6 +30,7 @@ type ExecutionMode = 'recommended' | 'custom';
 type OptimizationGoal = 'balanced' | 'cost_saver' | 'quality_first';
 type ReviewPolicy = 'lean' | 'standard' | 'strict';
 type StudioRoom = 'live' | 'optimize' | 'replay';
+type ScenarioPresetId = 'baseline' | 'rush' | 'deep_research' | 'monitoring' | 'high_stakes';
 
 interface WorkflowBlockDraft {
   id: string;
@@ -271,6 +272,56 @@ const WORKER_DEFINITIONS: Array<{
     preferredBand: 'micro',
     modelLabel: 'Low-cost memory routing',
     summary: 'Opens for watch conditions, context compaction, and background support.',
+  },
+];
+
+const SCENARIO_PRESETS: Array<{
+  id: ScenarioPresetId;
+  label: string;
+  summary: string;
+  stepMultiplier: number;
+  toolMultiplier: number;
+  reasoningDelta: number;
+}> = [
+  {
+    id: 'baseline',
+    label: 'Current workflow',
+    summary: 'Use the workflow exactly as saved right now.',
+    stepMultiplier: 1,
+    toolMultiplier: 1,
+    reasoningDelta: 0,
+  },
+  {
+    id: 'rush',
+    label: 'Rush mode',
+    summary: 'Shorter turnaround and lighter review pressure.',
+    stepMultiplier: 0.85,
+    toolMultiplier: 0.85,
+    reasoningDelta: -1.1,
+  },
+  {
+    id: 'deep_research',
+    label: 'Deep research',
+    summary: 'More search, more synthesis, more reasoning weight.',
+    stepMultiplier: 1.25,
+    toolMultiplier: 1.35,
+    reasoningDelta: 1.8,
+  },
+  {
+    id: 'monitoring',
+    label: 'Watch loop',
+    summary: 'Frequent checks, light reasoning, heavier tool usage.',
+    stepMultiplier: 1.1,
+    toolMultiplier: 1.45,
+    reasoningDelta: -0.6,
+  },
+  {
+    id: 'high_stakes',
+    label: 'High stakes',
+    summary: 'Higher review pressure and more expensive fallback tolerance.',
+    stepMultiplier: 1.15,
+    toolMultiplier: 1,
+    reasoningDelta: 2.2,
   },
 ];
 
@@ -623,6 +674,26 @@ function formatSignedDelta(value: number) {
   return `${value > 0 ? '+' : ''}${value}`;
 }
 
+function getScenarioPreset(id: ScenarioPresetId) {
+  return SCENARIO_PRESETS.find((scenario) => scenario.id === id) || SCENARIO_PRESETS[0];
+}
+
+function simulateScenarioMath(
+  base: ReturnType<typeof inferExecutionPolicyMath>,
+  scenario: (typeof SCENARIO_PRESETS)[number]
+) {
+  const stepCount = Math.max(1, Math.round(base.stepCount * scenario.stepMultiplier));
+  const toolCalls = Math.max(0, Math.round(base.toolCalls * scenario.toolMultiplier));
+  const reasoningLoad = Math.max(0.5, Number(base.reasoningLoad) + scenario.reasoningDelta);
+  const recommendedElasticLanes = stepCount >= 8 || reasoningLoad >= 8 ? 3 : stepCount >= 5 || toolCalls >= 3 ? 2 : 1;
+  return {
+    stepCount,
+    toolCalls,
+    reasoningLoad: reasoningLoad.toFixed(1),
+    recommendedElasticLanes,
+  };
+}
+
 function deriveFallbackWorkerTopology(steps: WorkflowBlockDraft[], policy: AutomationExecutionPolicyDraft): DashboardWorkerTopology {
   const math = inferExecutionPolicyMath(policy, steps);
   const activeRoles = new Set<string>(['nexus', 'operator']);
@@ -665,6 +736,8 @@ export default function AgentStudio() {
   const location = useLocation();
   const workspace = useMemo(() => resolveWorkspaceContext(), []);
   const [activeRoom, setActiveRoom] = useState<StudioRoom>('live');
+  const [selectedWorkerRole, setSelectedWorkerRole] = useState<string>('nexus');
+  const [selectedScenarioId, setSelectedScenarioId] = useState<ScenarioPresetId>('baseline');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<AgentStudioRow[]>([]);
@@ -894,9 +967,19 @@ export default function AgentStudio() {
     setPreviewPresetId(activePresetId === 'custom_live' ? 'recommended' : activePresetId);
   }, [activePresetId, selectedRow?.automation.id]);
 
+  useEffect(() => {
+    setSelectedWorkerRole('nexus');
+    setSelectedScenarioId('baseline');
+  }, [selectedRow?.automation.id]);
+
   const previewPreset = useMemo(
     () => POLICY_PRESETS.find((preset) => preset.id === previewPresetId) || POLICY_PRESETS[0],
     [previewPresetId]
+  );
+
+  const selectedScenario = useMemo(
+    () => getScenarioPreset(selectedScenarioId),
+    [selectedScenarioId]
   );
 
   const previewMath = useMemo(
@@ -1133,6 +1216,84 @@ export default function AgentStudio() {
       failureRate: role.steps ? Math.round((role.failures / role.steps) * 100) : 0,
     }));
   }, [rolePerformance]);
+
+  const selectedWorkerDetail = useMemo(() => {
+    const worker =
+      selectedTopology.workers.find((item) => item.role === selectedWorkerRole || item.assignedRole === selectedWorkerRole)
+      || selectedTopology.workers.find((item) => item.role === 'nexus');
+    const performance = roleHeatmap.find((item) => item.role === (worker?.assignedRole || worker?.role));
+    const recentSteps = (selectedRow?.stepExecutions || [])
+      .filter((step) => step.assignedRole === (worker?.assignedRole || worker?.role))
+      .slice(0, 3);
+    return { worker, performance, recentSteps };
+  }, [roleHeatmap, selectedRow, selectedTopology, selectedWorkerRole]);
+
+  const scenarioComparisons = useMemo(() => {
+    const simulated = simulateScenarioMath(selectedMath, selectedScenario);
+    return presetComparisons.map((preset) => {
+      const spend = clampNumber(
+        Math.round(preset.spendIndex + (simulated.toolCalls - selectedMath.toolCalls) * 6 + (simulated.stepCount - selectedMath.stepCount) * 2),
+        10,
+        99
+      );
+      const assurance = clampNumber(
+        Math.round(preset.assuranceIndex + (Number(simulated.reasoningLoad) - Number(selectedMath.reasoningLoad)) * 5),
+        15,
+        99
+      );
+      const fit = clampNumber(
+        Math.round(preset.fitIndex - Math.abs(simulated.recommendedElasticLanes - preset.math.activeElasticLanes) * 10 + (selectedScenario.id === 'baseline' ? 0 : 4)),
+        10,
+        99
+      );
+      return { ...preset, scenarioSpend: spend, scenarioAssurance: assurance, scenarioFit: fit, simulated };
+    });
+  }, [presetComparisons, selectedMath, selectedScenario]);
+
+  const learnedPresetLeaderboard = useMemo(() => {
+    const scored = rows.map((row) => {
+      const policy = normalizeExecutionPolicy(row.automation.execution_policy);
+      const presetMatch = POLICY_PRESETS.find((preset) =>
+        preset.policy.mode === policy.mode &&
+        preset.policy.optimizationGoal === policy.optimizationGoal &&
+        preset.policy.reviewPolicy === policy.reviewPolicy &&
+        preset.policy.maxElasticLanes === policy.maxElasticLanes
+      );
+      const score = Math.round(row.successRate * 70 + Math.max(0, 30 - row.averageCredits / 4));
+      return {
+        workflowId: row.automation.id,
+        workflowName: row.automation.name,
+        presetId: presetMatch?.id || 'custom_live',
+        presetLabel: presetMatch?.label || 'Custom live policy',
+        score,
+        successRate: Math.round(row.successRate * 100),
+        averageCredits: row.averageCredits,
+        averageDurationMs: row.averageDurationMs,
+      };
+    });
+
+    const aggregate = new Map<string, { label: string; workflows: number; score: number; success: number; credits: number }>();
+    scored.forEach((item) => {
+      const current = aggregate.get(item.presetId) || { label: item.presetLabel, workflows: 0, score: 0, success: 0, credits: 0 };
+      current.workflows += 1;
+      current.score += item.score;
+      current.success += item.successRate;
+      current.credits += item.averageCredits;
+      aggregate.set(item.presetId, current);
+    });
+
+    return Array.from(aggregate.entries())
+      .map(([presetId, value]) => ({
+        presetId,
+        label: value.label,
+        workflowCount: value.workflows,
+        averageScore: Math.round(value.score / value.workflows),
+        averageSuccess: Math.round(value.success / value.workflows),
+        averageCredits: value.workflows ? value.credits / value.workflows : 0,
+      }))
+      .sort((a, b) => b.averageScore - a.averageScore)
+      .slice(0, 4);
+  }, [rows]);
 
   const patchExecutionPolicy = useCallback(async (next: AutomationExecutionPolicyDraft) => {
     if (!selectedRow) return;
@@ -1401,7 +1562,13 @@ export default function AgentStudio() {
                           <div className="absolute inset-[14%] rounded-full border border-violet-500/10" />
                           <div className="absolute inset-[25%] rounded-full border border-cyan-500/10" />
                           <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.30),rgba(8,47,73,0.04))] blur-2xl" />
-                          <div className="absolute left-1/2 top-1/2 z-10 w-[12rem] -translate-x-1/2 -translate-y-1/2 rounded-[1.6rem] border border-violet-400/24 bg-navy-950/82 p-4 shadow-[0_24px_80px_rgba(76,29,149,0.28)]">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedWorkerRole('nexus')}
+                            className={`absolute left-1/2 top-1/2 z-10 w-[12rem] -translate-x-1/2 -translate-y-1/2 rounded-[1.6rem] border bg-navy-950/82 p-4 text-left shadow-[0_24px_80px_rgba(76,29,149,0.28)] transition-colors ${
+                              selectedWorkerDetail.worker?.role === 'nexus' ? 'border-violet-300/34' : 'border-violet-400/24'
+                            }`}
+                          >
                             {selectedTopology.workers.filter((worker) => worker.role === 'nexus').map((worker) => (
                               <div key={worker.role}>
                                 <div className="flex items-center justify-between gap-3">
@@ -1420,17 +1587,19 @@ export default function AgentStudio() {
                                 </div>
                               </div>
                             ))}
-                          </div>
+                          </button>
                           {workerMapNodes.map((worker) => (
-                            <div
+                            <button
+                              type="button"
                               key={worker.role}
+                              onClick={() => setSelectedWorkerRole(worker.role)}
                               className={`absolute z-[5] w-[10.5rem] rounded-[1.2rem] border p-3 shadow-[0_14px_40px_rgba(2,6,23,0.28)] ${worker.positionClass} ${
                                 worker.status === 'active'
                                   ? worker.laneType === 'elastic'
                                     ? 'border-cyan-500/25 bg-cyan-500/10'
                                     : 'border-violet-500/25 bg-violet-500/10'
                                   : 'border-navy-700/70 bg-navy-950/72'
-                              }`}
+                              } ${selectedWorkerDetail.worker?.role === worker.role ? 'ring-2 ring-violet-400/45' : ''}`}
                             >
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
@@ -1440,7 +1609,7 @@ export default function AgentStudio() {
                                 <span className={`mt-0.5 inline-flex h-2.5 w-2.5 rounded-full ${worker.status === 'active' ? 'animate-pulse bg-emerald-300' : 'bg-slate-600'}`} />
                               </div>
                               <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{truncateText(worker.reason, 84)}</p>
-                            </div>
+                            </button>
                           ))}
                         </div>
                         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -1460,6 +1629,63 @@ export default function AgentStudio() {
                       </div>
 
                       <div className="space-y-6">
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Bot className="h-4 w-4 text-violet-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Selected worker</p>
+                              <h3 className="text-sm font-semibold text-white">Node inspector</h3>
+                            </div>
+                          </div>
+                          {selectedWorkerDetail.worker ? (
+                            <>
+                              <div className="mt-4 flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-white">{selectedWorkerDetail.worker.label}</p>
+                                  <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500">{selectedWorkerDetail.worker.modelLabel}</p>
+                                </div>
+                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${selectedWorkerDetail.worker.status === 'active' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-navy-700 bg-navy-900 text-slate-400'}`}>
+                                  {selectedWorkerDetail.worker.status}
+                                </span>
+                              </div>
+                              <p className="mt-3 text-sm leading-relaxed text-slate-400">{selectedWorkerDetail.worker.reason}</p>
+                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Steps handled</p>
+                                  <p className="mt-1 text-lg font-semibold text-white">{selectedWorkerDetail.performance?.steps || 0}</p>
+                                </div>
+                                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Failure rate</p>
+                                  <p className="mt-1 text-lg font-semibold text-white">{selectedWorkerDetail.performance?.failureRate || 0}%</p>
+                                </div>
+                                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Credits</p>
+                                  <p className="mt-1 text-lg font-semibold text-white">{formatCredits(selectedWorkerDetail.performance?.credits || 0)}</p>
+                                </div>
+                                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Tokens</p>
+                                  <p className="mt-1 text-lg font-semibold text-white">{formatTokenCount(selectedWorkerDetail.performance?.tokens || 0)}</p>
+                                </div>
+                              </div>
+                              <div className="mt-4">
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Recent work</p>
+                                <div className="mt-2 space-y-2">
+                                  {selectedWorkerDetail.recentSteps.length > 0 ? selectedWorkerDetail.recentSteps.map((step) => (
+                                    <div key={step.stepId} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                      <p className="text-sm font-medium text-white">{step.title}</p>
+                                      <p className="mt-1 text-[11px] text-slate-500">{step.modelSource || step.modelTier || 'Auto route'}</p>
+                                    </div>
+                                  )) : (
+                                    <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-3 text-sm text-slate-500">
+                                      No recent step history for this worker yet.
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
                             <Activity className="h-4 w-4 text-emerald-300" />
@@ -1585,6 +1811,61 @@ export default function AgentStudio() {
 
                 {activeRoom === 'optimize' ? (
                   <>
+                    <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-cyan-300" />
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Scenario simulator</p>
+                          <h3 className="text-sm font-semibold text-white">Stress-test the policy before you change it</h3>
+                        </div>
+                      </div>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                        Simulate the same workflow under different operating conditions. This gives users a reason for the configuration, not just a list of knobs.
+                      </p>
+                      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.95fr),minmax(0,1.05fr)]">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {SCENARIO_PRESETS.map((scenario) => (
+                            <button
+                              key={scenario.id}
+                              type="button"
+                              onClick={() => setSelectedScenarioId(scenario.id)}
+                              className={`rounded-2xl border p-4 text-left transition-all ${
+                                selectedScenario.id === scenario.id
+                                  ? 'border-cyan-500/28 bg-cyan-500/10 shadow-[0_18px_44px_rgba(8,145,178,0.16)]'
+                                  : 'border-navy-700/70 bg-navy-950/42 hover:border-cyan-500/18 hover:bg-navy-900/55'
+                              }`}
+                            >
+                              <p className="text-sm font-semibold text-white">{scenario.label}</p>
+                              <p className="mt-2 text-[12px] leading-relaxed text-slate-400">{scenario.summary}</p>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="rounded-[1.6rem] border border-white/6 bg-white/[0.03] p-4">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Scenario steps</p>
+                              <p className="mt-1 text-lg font-semibold text-white">{scenarioComparisons[0]?.simulated.stepCount || selectedMath.stepCount}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Scenario tools</p>
+                              <p className="mt-1 text-lg font-semibold text-white">{scenarioComparisons[0]?.simulated.toolCalls || selectedMath.toolCalls}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Reasoning load</p>
+                              <p className="mt-1 text-lg font-semibold text-white">{scenarioComparisons[0]?.simulated.reasoningLoad || selectedMath.reasoningLoad}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Suggested lanes</p>
+                              <p className="mt-1 text-lg font-semibold text-white">{scenarioComparisons[0]?.simulated.recommendedElasticLanes || selectedMath.recommendedElasticLanes}</p>
+                            </div>
+                          </div>
+                          <p className="mt-4 text-sm leading-relaxed text-slate-400">
+                            {selectedScenario.summary}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr),minmax(22rem,0.95fr)]">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
@@ -1598,7 +1879,7 @@ export default function AgentStudio() {
                           Compare presets against this workflow first. The goal is to make cost-quality tradeoffs obvious before you commit the system to a new posture.
                         </p>
                         <div className="mt-4 grid gap-3 md:grid-cols-2">
-                          {presetComparisons.map((preset) => (
+                          {scenarioComparisons.map((preset) => (
                             <button
                               key={preset.id}
                               type="button"
@@ -1634,9 +1915,9 @@ export default function AgentStudio() {
                               </div>
                               <div className="mt-3 space-y-2">
                                 {[
-                                  { label: 'Spend', value: preset.spendIndex, color: 'from-amber-300 to-violet-400' },
-                                  { label: 'Assurance', value: preset.assuranceIndex, color: 'from-cyan-300 to-emerald-400' },
-                                  { label: 'Fit', value: preset.fitIndex, color: 'from-violet-300 to-fuchsia-400' },
+                                  { label: 'Spend', value: preset.scenarioSpend, color: 'from-amber-300 to-violet-400' },
+                                  { label: 'Assurance', value: preset.scenarioAssurance, color: 'from-cyan-300 to-emerald-400' },
+                                  { label: 'Fit', value: preset.scenarioFit, color: 'from-violet-300 to-fuchsia-400' },
                                 ].map((metric) => (
                                   <div key={metric.label}>
                                     <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
@@ -1888,6 +2169,50 @@ export default function AgentStudio() {
                               </div>
                             </div>
                           </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">What Violema is learning</p>
+                            <h3 className="text-sm font-semibold text-white">Preset leaderboard from live workflows</h3>
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {learnedPresetLeaderboard.map((item, index) => (
+                            <div key={item.presetId} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-white">{index + 1}. {item.label}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">{item.workflowCount} workflows using this posture</p>
+                                </div>
+                                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
+                                  Score {item.averageScore}
+                                </span>
+                              </div>
+                              <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+                                <div>
+                                  <p className="text-slate-500">Success</p>
+                                  <p className="mt-1 text-white">{item.averageSuccess}%</p>
+                                </div>
+                                <div>
+                                  <p className="text-slate-500">Spend</p>
+                                  <p className="mt-1 text-white">{item.averageCredits ? `${formatCredits(item.averageCredits)} cr` : '—'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-slate-500">Position</p>
+                                  <p className="mt-1 text-white">{index === 0 ? 'Best current fit' : 'Observed alternative'}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          {learnedPresetLeaderboard.length === 0 ? (
+                            <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                              Not enough live workflow history yet to rank presets.
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </div>
