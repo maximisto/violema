@@ -32,6 +32,11 @@ type ReviewPolicy = 'lean' | 'standard' | 'strict';
 type StudioRoom = 'live' | 'optimize' | 'replay';
 type ScenarioPresetId = 'baseline' | 'rush' | 'deep_research' | 'monitoring' | 'high_stakes';
 
+interface PersistedScenarioExperiment {
+  scenarioId: ScenarioPresetId;
+  previewPresetId: string;
+}
+
 interface WorkflowBlockDraft {
   id: string;
   kind: WorkflowBlockKind;
@@ -324,6 +329,8 @@ const SCENARIO_PRESETS: Array<{
     reasoningDelta: 2.2,
   },
 ];
+
+const AGENT_STUDIO_EXPERIMENTS_KEY = 'violema_agent_studio_experiments_v1';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -678,6 +685,27 @@ function getScenarioPreset(id: ScenarioPresetId) {
   return SCENARIO_PRESETS.find((scenario) => scenario.id === id) || SCENARIO_PRESETS[0];
 }
 
+function readStoredExperiments() {
+  if (typeof window === 'undefined') return {} as Record<string, PersistedScenarioExperiment>;
+  try {
+    const raw = window.localStorage.getItem(AGENT_STUDIO_EXPERIMENTS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, PersistedScenarioExperiment>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredExperiments(value: Record<string, PersistedScenarioExperiment>) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(AGENT_STUDIO_EXPERIMENTS_KEY, JSON.stringify(value));
+  } catch {
+    // Ignore localStorage write failures in private browsing or constrained environments.
+  }
+}
+
 function simulateScenarioMath(
   base: ReturnType<typeof inferExecutionPolicyMath>,
   scenario: (typeof SCENARIO_PRESETS)[number]
@@ -691,6 +719,43 @@ function simulateScenarioMath(
     toolCalls,
     reasoningLoad: reasoningLoad.toFixed(1),
     recommendedElasticLanes,
+  };
+}
+
+function classifyWorkflowArchetype(steps: WorkflowBlockDraft[]) {
+  const kinds = new Set(steps.filter((step) => workflowBlockHasContent(step)).map((step) => step.kind));
+  if (kinds.has('deliver') && (kinds.has('search') || kinds.has('query'))) {
+    return {
+      id: 'briefing',
+      label: 'Briefing and delivery',
+      summary: 'Research-heavy workflows that need a polished output and a final delivery step.',
+    };
+  }
+  if (kinds.has('search') || kinds.has('query')) {
+    return {
+      id: 'research',
+      label: 'Research and monitoring',
+      summary: 'Source gathering, scanning, and current-state intelligence work.',
+    };
+  }
+  if (kinds.has('capture') || kinds.has('analyze')) {
+    return {
+      id: 'analysis',
+      label: 'Analysis and diagnosis',
+      summary: 'Workflows that turn findings into decisions, comparisons, or technical diagnosis.',
+    };
+  }
+  if (kinds.has('deliver')) {
+    return {
+      id: 'ops',
+      label: 'Ops and follow-through',
+      summary: 'Operational loops focused on delivery, alerts, and recurring follow-through.',
+    };
+  }
+  return {
+    id: 'general',
+    label: 'General execution',
+    summary: 'Mixed workflow with a blend of reasoning, coordination, and output generation.',
   };
 }
 
@@ -878,6 +943,11 @@ export default function AgentStudio() {
     [rows, selectedAutomationId]
   );
 
+  const experimentStorageKey = useMemo(
+    () => `${workspace.workspaceId}:${selectedRow?.automation.id || 'default'}`,
+    [selectedRow?.automation.id, workspace.workspaceId]
+  );
+
   const selectedPolicy = useMemo(
     () => normalizeExecutionPolicy(selectedRow?.automation.execution_policy),
     [selectedRow]
@@ -969,8 +1039,22 @@ export default function AgentStudio() {
 
   useEffect(() => {
     setSelectedWorkerRole('nexus');
-    setSelectedScenarioId('baseline');
-  }, [selectedRow?.automation.id]);
+    const saved = readStoredExperiments()[experimentStorageKey];
+    setSelectedScenarioId(saved?.scenarioId || 'baseline');
+    if (saved?.previewPresetId && POLICY_PRESETS.some((preset) => preset.id === saved.previewPresetId)) {
+      setPreviewPresetId(saved.previewPresetId);
+    }
+  }, [experimentStorageKey, selectedRow?.automation.id]);
+
+  useEffect(() => {
+    if (!selectedRow?.automation.id) return;
+    const current = readStoredExperiments();
+    current[experimentStorageKey] = {
+      scenarioId: selectedScenarioId,
+      previewPresetId,
+    };
+    writeStoredExperiments(current);
+  }, [experimentStorageKey, previewPresetId, selectedRow?.automation.id, selectedScenarioId]);
 
   const previewPreset = useMemo(
     () => POLICY_PRESETS.find((preset) => preset.id === previewPresetId) || POLICY_PRESETS[0],
@@ -980,26 +1064,6 @@ export default function AgentStudio() {
   const selectedScenario = useMemo(
     () => getScenarioPreset(selectedScenarioId),
     [selectedScenarioId]
-  );
-
-  const previewMath = useMemo(
-    () => inferExecutionPolicyMath(previewPreset.policy, selectedRow?.workflowSteps || []),
-    [previewPreset, selectedRow]
-  );
-
-  const previewSpendIndex = useMemo(
-    () => estimatePolicySpendIndex(previewPreset.policy, selectedRow?.workflowSteps || []),
-    [previewPreset, selectedRow]
-  );
-
-  const previewAssuranceIndex = useMemo(
-    () => estimatePolicyAssuranceIndex(previewPreset.policy, selectedRow?.workflowSteps || []),
-    [previewPreset, selectedRow]
-  );
-
-  const previewFitIndex = useMemo(
-    () => estimatePolicyFitIndex(previewPreset.policy, selectedRow?.workflowSteps || []),
-    [previewPreset, selectedRow]
   );
 
   const currentSpendIndex = useMemo(
@@ -1228,6 +1292,11 @@ export default function AgentStudio() {
     return { worker, performance, recentSteps };
   }, [roleHeatmap, selectedRow, selectedTopology, selectedWorkerRole]);
 
+  const selectedArchetype = useMemo(
+    () => classifyWorkflowArchetype(selectedRow?.workflowSteps || []),
+    [selectedRow]
+  );
+
   const scenarioComparisons = useMemo(() => {
     const simulated = simulateScenarioMath(selectedMath, selectedScenario);
     return presetComparisons.map((preset) => {
@@ -1250,9 +1319,15 @@ export default function AgentStudio() {
     });
   }, [presetComparisons, selectedMath, selectedScenario]);
 
+  const previewScenarioComparison = useMemo(
+    () => scenarioComparisons.find((preset) => preset.id === previewPreset.id) || scenarioComparisons[0],
+    [previewPreset.id, scenarioComparisons]
+  );
+
   const learnedPresetLeaderboard = useMemo(() => {
     const scored = rows.map((row) => {
       const policy = normalizeExecutionPolicy(row.automation.execution_policy);
+      const archetype = classifyWorkflowArchetype(row.workflowSteps);
       const presetMatch = POLICY_PRESETS.find((preset) =>
         preset.policy.mode === policy.mode &&
         preset.policy.optimizationGoal === policy.optimizationGoal &&
@@ -1263,6 +1338,8 @@ export default function AgentStudio() {
       return {
         workflowId: row.automation.id,
         workflowName: row.automation.name,
+        archetypeId: archetype.id,
+        archetypeLabel: archetype.label,
         presetId: presetMatch?.id || 'custom_live',
         presetLabel: presetMatch?.label || 'Custom live policy',
         score,
@@ -1270,7 +1347,7 @@ export default function AgentStudio() {
         averageCredits: row.averageCredits,
         averageDurationMs: row.averageDurationMs,
       };
-    });
+    }).filter((item) => item.archetypeId === selectedArchetype.id);
 
     const aggregate = new Map<string, { label: string; workflows: number; score: number; success: number; credits: number }>();
     scored.forEach((item) => {
@@ -1293,7 +1370,7 @@ export default function AgentStudio() {
       }))
       .sort((a, b) => b.averageScore - a.averageScore)
       .slice(0, 4);
-  }, [rows]);
+  }, [rows, selectedArchetype.id]);
 
   const patchExecutionPolicy = useCallback(async (next: AutomationExecutionPolicyDraft) => {
     if (!selectedRow) return;
@@ -1313,6 +1390,38 @@ export default function AgentStudio() {
       setActionBusy(false);
     }
   }, [loadData, selectedRow]);
+
+  const handleRouteCheaper = useCallback(() => {
+    const nextLaneCap =
+      selectedWorkerDetail.worker?.laneType === 'elastic'
+        ? Math.max(1, Math.min(selectedPolicy.maxElasticLanes, selectedMath.recommendedElasticLanes))
+        : selectedPolicy.maxElasticLanes;
+    void patchExecutionPolicy({
+      ...selectedPolicy,
+      mode: 'custom',
+      optimizationGoal: 'cost_saver',
+      reviewPolicy: selectedPolicy.reviewPolicy === 'strict' ? 'standard' : selectedPolicy.reviewPolicy,
+      maxElasticLanes: nextLaneCap,
+    });
+  }, [patchExecutionPolicy, selectedMath.recommendedElasticLanes, selectedPolicy, selectedWorkerDetail.worker?.laneType]);
+
+  const handleIncreaseReview = useCallback(() => {
+    void patchExecutionPolicy({
+      ...selectedPolicy,
+      mode: 'custom',
+      reviewPolicy: 'strict',
+      optimizationGoal: selectedPolicy.optimizationGoal === 'cost_saver' ? 'balanced' : selectedPolicy.optimizationGoal,
+    });
+  }, [patchExecutionPolicy, selectedPolicy]);
+
+  const handlePromoteLane = useCallback(() => {
+    void patchExecutionPolicy({
+      ...selectedPolicy,
+      mode: 'custom',
+      optimizationGoal: 'quality_first',
+      maxElasticLanes: Math.min(4, Math.max(selectedPolicy.maxElasticLanes, selectedMath.recommendedElasticLanes) + 1),
+    });
+  }, [patchExecutionPolicy, selectedMath.recommendedElasticLanes, selectedPolicy]);
 
   return (
     <div className="min-h-screen bg-navy-950 text-white">
@@ -1682,6 +1791,38 @@ export default function AgentStudio() {
                                   )}
                                 </div>
                               </div>
+                              <div className="mt-4">
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Steer this role</p>
+                                <div className="mt-2 grid gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={actionBusy}
+                                    onClick={handleRouteCheaper}
+                                    className="rounded-2xl border border-cyan-500/18 bg-cyan-500/8 px-4 py-3 text-left transition-colors hover:bg-cyan-500/12 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <p className="text-sm font-medium text-white">Route this role cheaper</p>
+                                    <p className="mt-1 text-[12px] leading-relaxed text-slate-400">Bias the workflow toward lower-cost lanes and trim excess elastic capacity where the math allows it.</p>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={actionBusy}
+                                    onClick={handleIncreaseReview}
+                                    className="rounded-2xl border border-violet-500/18 bg-violet-500/8 px-4 py-3 text-left transition-colors hover:bg-violet-500/12 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <p className="text-sm font-medium text-white">Increase review here</p>
+                                    <p className="mt-1 text-[12px] leading-relaxed text-slate-400">Raise review pressure when this role is touching higher-risk reasoning, outputs, or decision steps.</p>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={actionBusy}
+                                    onClick={handlePromoteLane}
+                                    className="rounded-2xl border border-amber-500/18 bg-amber-500/8 px-4 py-3 text-left transition-colors hover:bg-amber-500/12 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <p className="text-sm font-medium text-white">Promote this lane</p>
+                                    <p className="mt-1 text-[12px] leading-relaxed text-slate-400">Give the workflow more headroom when this role should stay active longer or escalate into stronger reasoning.</p>
+                                  </button>
+                                </div>
+                              </div>
                             </>
                           ) : null}
                         </div>
@@ -1841,6 +1982,15 @@ export default function AgentStudio() {
                           ))}
                         </div>
                         <div className="rounded-[1.6rem] border border-white/6 bg-white/[0.03] p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Saved experiment</p>
+                              <p className="mt-1 text-sm font-medium text-white">{selectedScenario.label}</p>
+                            </div>
+                            <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-200">
+                              {previewPreset.label}
+                            </span>
+                          </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
                               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Scenario steps</p>
@@ -1861,6 +2011,9 @@ export default function AgentStudio() {
                           </div>
                           <p className="mt-4 text-sm leading-relaxed text-slate-400">
                             {selectedScenario.summary}
+                          </p>
+                          <p className="mt-2 text-[12px] leading-relaxed text-slate-500">
+                            This scenario is remembered per workflow, so when you come back to this automation the same test setup is waiting for you.
                           </p>
                         </div>
                       </div>
@@ -1956,9 +2109,9 @@ export default function AgentStudio() {
                           </div>
                           <div className="mt-4 grid gap-3 sm:grid-cols-3">
                             {[
-                              { label: 'Spend', current: currentSpendIndex, next: previewSpendIndex },
-                              { label: 'Assurance', current: currentAssuranceIndex, next: previewAssuranceIndex },
-                              { label: 'Fit', current: currentFitIndex, next: previewFitIndex },
+                              { label: 'Spend', current: currentSpendIndex, next: previewScenarioComparison?.scenarioSpend ?? currentSpendIndex },
+                              { label: 'Assurance', current: currentAssuranceIndex, next: previewScenarioComparison?.scenarioAssurance ?? currentAssuranceIndex },
+                              { label: 'Fit', current: currentFitIndex, next: previewScenarioComparison?.scenarioFit ?? currentFitIndex },
                             ].map((metric) => (
                               <div key={metric.label} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
                                 <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{metric.label}</p>
@@ -2177,9 +2330,12 @@ export default function AgentStudio() {
                           <CheckCircle2 className="h-4 w-4 text-emerald-300" />
                           <div>
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">What Violema is learning</p>
-                            <h3 className="text-sm font-semibold text-white">Preset leaderboard from live workflows</h3>
+                            <h3 className="text-sm font-semibold text-white">Best presets for {selectedArchetype.label.toLowerCase()}</h3>
                           </div>
                         </div>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                          {selectedArchetype.summary}
+                        </p>
                         <div className="mt-4 space-y-3">
                           {learnedPresetLeaderboard.map((item, index) => (
                             <div key={item.presetId} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
@@ -2210,7 +2366,7 @@ export default function AgentStudio() {
                           ))}
                           {learnedPresetLeaderboard.length === 0 ? (
                             <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
-                              Not enough live workflow history yet to rank presets.
+                              Not enough live history yet to rank presets for this workflow class.
                             </div>
                           ) : null}
                         </div>
