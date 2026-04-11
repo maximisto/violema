@@ -42,6 +42,7 @@ interface StudioExperimentRecord {
 
 interface StudioRoleDirective {
   mode: 'cheaper' | 'review' | 'promote';
+  phases?: WorkflowBlockKind[];
   updatedAt: string;
 }
 
@@ -124,6 +125,7 @@ interface DashboardTaskStepExecution {
   finishedAt?: string;
   modelTier?: string;
   directiveMode?: 'cheaper' | 'review' | 'promote';
+  directivePhases?: WorkflowBlockKind[];
   modelSource?: string;
   actualCredits?: number;
   toolCalls?: number;
@@ -151,6 +153,17 @@ interface DashboardWorkerTopology {
   primaryBand: string;
   workers: DashboardWorkerCard[];
   summary?: string;
+}
+
+interface RunExperimentAttribution {
+  experimentId?: string;
+  experimentCreatedAt?: string;
+  experimentNotes?: string;
+  matchedSavedExperiment?: boolean;
+  scenarioId?: string;
+  scenarioLabel?: string;
+  previewPresetId?: string;
+  previewPresetLabel?: string;
 }
 
 interface AgentStudioRow {
@@ -345,6 +358,16 @@ const SCENARIO_PRESETS: Array<{
     toolMultiplier: 1,
     reasoningDelta: 2.2,
   },
+];
+
+const DIRECTIVE_PHASE_OPTIONS: Array<{ value: 'all' | WorkflowBlockKind; label: string }> = [
+  { value: 'all', label: 'All phases' },
+  { value: 'search', label: 'Search' },
+  { value: 'query', label: 'Query' },
+  { value: 'capture', label: 'Capture' },
+  { value: 'analyze', label: 'Analyze' },
+  { value: 'summarize', label: 'Summarize' },
+  { value: 'deliver', label: 'Deliver' },
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -598,6 +621,7 @@ function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
         finishedAt: readString(item.finishedAt),
         modelTier: readString(item.modelTier),
         directiveMode: item.directiveMode === 'cheaper' || item.directiveMode === 'review' || item.directiveMode === 'promote' ? item.directiveMode : undefined,
+        directivePhases: normalizeDirectivePhases(item.directivePhases),
         modelSource: readString(item.modelSourceLabel) || readString(item.modelSource),
         actualCredits: typeof item.actualCredits === 'number' ? item.actualCredits : undefined,
         toolCalls: typeof item.toolCalls === 'number' ? item.toolCalls : undefined,
@@ -715,6 +739,44 @@ function getPresetLabelFromId(id?: string) {
   return POLICY_PRESETS.find((preset) => preset.id === id)?.label || id;
 }
 
+function normalizeDirectivePhases(value: unknown): WorkflowBlockKind[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const phases = value
+    .filter((phase): phase is WorkflowBlockKind => (
+      phase === 'search' ||
+      phase === 'query' ||
+      phase === 'capture' ||
+      phase === 'analyze' ||
+      phase === 'summarize' ||
+      phase === 'deliver' ||
+      phase === 'note'
+    ));
+  return phases.length > 0 ? [...new Set(phases)] : undefined;
+}
+
+function formatDirectivePhaseScope(phases?: WorkflowBlockKind[]) {
+  if (!phases || phases.length === 0) return 'All phases';
+  if (phases.length === 1) return `${phases[0][0].toUpperCase()}${phases[0].slice(1)} only`;
+  return phases.map((phase) => `${phase[0].toUpperCase()}${phase.slice(1)}`).join(' + ');
+}
+
+function getRunExperimentAttribution(run?: PlatformTaskRunRecord): RunExperimentAttribution {
+  const raw = isRecord(run?.metadata?.experimentAttribution) ? run?.metadata?.experimentAttribution : undefined;
+  const fallbackStudioState = getRunStudioState(run);
+  const scenarioId = readString(raw?.scenarioId) || fallbackStudioState.selectedScenarioId || 'baseline';
+  const previewPresetId = readString(raw?.previewPresetId) || fallbackStudioState.previewPresetId || 'recommended';
+  return {
+    experimentId: readString(raw?.experimentId),
+    experimentCreatedAt: readString(raw?.experimentCreatedAt),
+    experimentNotes: readString(raw?.experimentNotes),
+    matchedSavedExperiment: raw?.matchedSavedExperiment === true,
+    scenarioId,
+    scenarioLabel: readString(raw?.scenarioLabel) || getScenarioLabelFromId(scenarioId),
+    previewPresetId,
+    previewPresetLabel: readString(raw?.previewPresetLabel) || getPresetLabelFromId(previewPresetId),
+  };
+}
+
 function buildRadarPolygon(values: number[], radius: number, cx: number, cy: number) {
   return values
     .map((value, index) => {
@@ -803,17 +865,14 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
     : undefined;
 
   const roleDirectives = isRecord(value.roleDirectives)
-    ? Object.fromEntries(
-        Object.entries(value.roleDirectives)
-          .map(([role, directive]) => {
-            if (!isRecord(directive)) return null;
-            if (directive.mode !== 'cheaper' && directive.mode !== 'review' && directive.mode !== 'promote') return null;
-            const updatedAt = readString(directive.updatedAt);
-            if (!updatedAt) return null;
-            return [role, { mode: directive.mode, updatedAt }] satisfies [string, StudioRoleDirective];
-          })
-          .filter((entry): entry is [string, StudioRoleDirective] => Boolean(entry))
-      )
+    ? Object.entries(value.roleDirectives).reduce<Record<string, StudioRoleDirective>>((acc, [role, directive]) => {
+        if (!isRecord(directive)) return acc;
+        if (directive.mode !== 'cheaper' && directive.mode !== 'review' && directive.mode !== 'promote') return acc;
+        const updatedAt = readString(directive.updatedAt);
+        if (!updatedAt) return acc;
+        acc[role] = { mode: directive.mode, phases: normalizeDirectivePhases(directive.phases), updatedAt };
+        return acc;
+      }, {})
     : undefined;
 
   return {
@@ -868,6 +927,8 @@ export default function AgentStudio() {
   const [activeRoom, setActiveRoom] = useState<StudioRoom>('live');
   const [selectedWorkerRole, setSelectedWorkerRole] = useState<string>('nexus');
   const [selectedScenarioId, setSelectedScenarioId] = useState<ScenarioPresetId>('baseline');
+  const [selectedDirectivePhase, setSelectedDirectivePhase] = useState<'all' | WorkflowBlockKind>('all');
+  const [selectedComparisonExperimentId, setSelectedComparisonExperimentId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<AgentStudioRow[]>([]);
@@ -1106,6 +1167,7 @@ export default function AgentStudio() {
 
   useEffect(() => {
     setSelectedWorkerRole('nexus');
+    setSelectedDirectivePhase('all');
     setSelectedScenarioId(
       selectedStudioState.selectedScenarioId && SCENARIO_PRESETS.some((scenario) => scenario.id === selectedStudioState.selectedScenarioId)
         ? selectedStudioState.selectedScenarioId as ScenarioPresetId
@@ -1130,11 +1192,20 @@ export default function AgentStudio() {
     if (!selectedRow) return null;
     const completedRuns = selectedRow.runs.filter((run) => run.status === 'succeeded' || run.status === 'failed');
     const current = completedRuns[0];
-    const previous = completedRuns[1];
     if (!current) return null;
 
-    const currentStudio = getRunStudioState(current);
-    const previousStudio = getRunStudioState(previous);
+    const selectedExperiment = (selectedStudioState.experimentHistory || []).find((experiment) => experiment.id === selectedComparisonExperimentId);
+    const matchesExperiment = (run: PlatformTaskRunRecord, experiment: StudioExperimentRecord) => {
+      const attribution = getRunExperimentAttribution(run);
+      if (attribution.experimentId) return attribution.experimentId === experiment.id;
+      return attribution.scenarioId === experiment.scenarioId && attribution.previewPresetId === experiment.previewPresetId;
+    };
+
+    const previous = selectedExperiment
+      ? completedRuns.find((run) => run.id !== current.id && matchesExperiment(run, selectedExperiment)) || completedRuns[1]
+      : completedRuns[1];
+    const currentAttribution = getRunExperimentAttribution(current);
+    const previousAttribution = previous ? getRunExperimentAttribution(previous) : undefined;
     const currentDuration = Number.isNaN(Date.parse(current.startedAt || '')) || Number.isNaN(Date.parse(current.finishedAt || ''))
       ? undefined
       : Math.max(0, Date.parse(current.finishedAt || '') - Date.parse(current.startedAt || ''));
@@ -1143,24 +1214,30 @@ export default function AgentStudio() {
       : Math.max(0, Date.parse(previous.finishedAt || '') - Date.parse(previous.startedAt || ''));
 
     return {
+      comparisonMode: selectedExperiment ? 'saved_experiment' : 'previous_run',
+      comparisonLabel: selectedExperiment
+        ? selectedExperiment.notes || `${getScenarioLabelFromId(selectedExperiment.scenarioId)} · ${getPresetLabelFromId(selectedExperiment.previewPresetId)}`
+        : 'Previous run',
       current: {
         id: current.id,
         status: current.status,
         credits: current.actualCredits || 0,
         durationMs: currentDuration,
-        scenarioLabel: getScenarioLabelFromId(currentStudio.selectedScenarioId || selectedStudioState.selectedScenarioId || 'baseline'),
-        presetLabel: getPresetLabelFromId(currentStudio.previewPresetId || selectedStudioState.previewPresetId || activePresetId),
+        scenarioLabel: currentAttribution.scenarioLabel || getScenarioLabelFromId(selectedStudioState.selectedScenarioId || 'baseline'),
+        presetLabel: currentAttribution.previewPresetLabel || getPresetLabelFromId(selectedStudioState.previewPresetId || activePresetId),
+        experimentLabel: currentAttribution.experimentNotes,
       },
       previous: previous ? {
         id: previous.id,
         status: previous.status,
         credits: previous.actualCredits || 0,
         durationMs: previousDuration,
-        scenarioLabel: getScenarioLabelFromId(previousStudio.selectedScenarioId || 'baseline'),
-        presetLabel: getPresetLabelFromId(previousStudio.previewPresetId || 'recommended'),
+        scenarioLabel: previousAttribution?.scenarioLabel || getScenarioLabelFromId('baseline'),
+        presetLabel: previousAttribution?.previewPresetLabel || getPresetLabelFromId('recommended'),
+        experimentLabel: previousAttribution?.experimentNotes,
       } : null,
     };
-  }, [activePresetId, selectedRow, selectedStudioState.previewPresetId, selectedStudioState.selectedScenarioId]);
+  }, [activePresetId, selectedComparisonExperimentId, selectedRow, selectedStudioState.experimentHistory, selectedStudioState.previewPresetId, selectedStudioState.selectedScenarioId]);
 
   const currentSpendIndex = useMemo(
     () => estimatePolicySpendIndex(selectedPolicy, selectedRow?.workflowSteps || []),
@@ -1440,6 +1517,29 @@ export default function AgentStudio() {
     [selectedStudioState.experimentHistory]
   );
 
+
+  const experimentRunMatches = useMemo(() => {
+    const matches = new Map<string, PlatformTaskRunRecord | undefined>();
+    if (!selectedRow) return matches;
+    const completedRuns = selectedRow.runs.filter((run) => run.status === 'succeeded' || run.status === 'failed');
+    for (const experiment of experimentHistory) {
+      const matchingRun = completedRuns.find((run) => {
+        const attribution = getRunExperimentAttribution(run);
+        if (attribution.experimentId) return attribution.experimentId === experiment.id;
+        return attribution.scenarioId === experiment.scenarioId && attribution.previewPresetId === experiment.previewPresetId;
+      });
+      matches.set(experiment.id, matchingRun);
+    }
+    return matches;
+  }, [experimentHistory, selectedRow]);
+
+  useEffect(() => {
+    setSelectedComparisonExperimentId((current) => {
+      if (current && experimentHistory.some((experiment) => experiment.id === current)) return current;
+      return experimentHistory[0]?.id || '';
+    });
+  }, [experimentHistory, selectedRow?.automation.id]);
+
   const policyDiffRows = useMemo(
     () => [
       {
@@ -1493,8 +1593,9 @@ export default function AgentStudio() {
         preset.policy.maxElasticLanes === policy.maxElasticLanes
       );
       const automationStudio = normalizeStudioState(row.automation.studio_state);
-      const latestRunStudio = getRunStudioState(row.latestRun);
-      const scenarioId = latestRunStudio.selectedScenarioId || automationStudio.selectedScenarioId || 'baseline';
+      const latestAttribution = getRunExperimentAttribution(row.latestRun);
+      const scenarioId = latestAttribution.scenarioId || automationStudio.selectedScenarioId || 'baseline';
+      const presetId = latestAttribution.previewPresetId || presetMatch?.id || 'custom_live';
       const score = Math.round(row.successRate * 70 + Math.max(0, 30 - row.averageCredits / 4));
       return {
         workflowId: row.automation.id,
@@ -1502,9 +1603,9 @@ export default function AgentStudio() {
         archetypeId: archetype.id,
         archetypeLabel: archetype.label,
         scenarioId,
-        scenarioLabel: getScenarioLabelFromId(scenarioId),
-        presetId: presetMatch?.id || 'custom_live',
-        presetLabel: presetMatch?.label || 'Custom live policy',
+        scenarioLabel: latestAttribution.scenarioLabel || getScenarioLabelFromId(scenarioId),
+        presetId,
+        presetLabel: latestAttribution.previewPresetLabel || presetMatch?.label || 'Custom live policy',
         score,
         successRate: Math.round(row.successRate * 100),
         averageCredits: row.averageCredits,
@@ -1619,6 +1720,7 @@ export default function AgentStudio() {
       maxElasticLanes: nextLaneCap,
     };
     const role = selectedWorkerDetail.worker?.role;
+    const directivePhases = selectedDirectivePhase === 'all' ? undefined : [selectedDirectivePhase];
     void patchAutomationConfig({
       executionPolicy: nextPolicy,
       studioState: {
@@ -1626,12 +1728,12 @@ export default function AgentStudio() {
         roleDirectives: role
           ? {
               ...(selectedStudioState.roleDirectives || {}),
-              [role]: { mode: 'cheaper', updatedAt: new Date().toISOString() },
+              [role]: { mode: 'cheaper', phases: directivePhases, updatedAt: new Date().toISOString() },
             }
           : selectedStudioState.roleDirectives,
       },
-    }, { successMessage: 'Shifted this role toward cheaper routing.' });
-  }, [patchAutomationConfig, selectedMath.recommendedElasticLanes, selectedPolicy, selectedStudioState, selectedWorkerDetail.worker?.laneType, selectedWorkerDetail.worker?.role]);
+    }, { successMessage: `Shifted this role toward cheaper routing for ${formatDirectivePhaseScope(directivePhases)}.` });
+  }, [patchAutomationConfig, selectedDirectivePhase, selectedMath.recommendedElasticLanes, selectedPolicy, selectedStudioState, selectedWorkerDetail.worker?.laneType, selectedWorkerDetail.worker?.role]);
 
   const handleIncreaseReview = useCallback(() => {
     const nextPolicy: AutomationExecutionPolicyDraft = {
@@ -1641,6 +1743,7 @@ export default function AgentStudio() {
       optimizationGoal: selectedPolicy.optimizationGoal === 'cost_saver' ? 'balanced' : selectedPolicy.optimizationGoal,
     };
     const role = selectedWorkerDetail.worker?.role;
+    const directivePhases = selectedDirectivePhase === 'all' ? undefined : [selectedDirectivePhase];
     void patchAutomationConfig({
       executionPolicy: nextPolicy,
       studioState: {
@@ -1648,12 +1751,12 @@ export default function AgentStudio() {
         roleDirectives: role
           ? {
               ...(selectedStudioState.roleDirectives || {}),
-              [role]: { mode: 'review', updatedAt: new Date().toISOString() },
+              [role]: { mode: 'review', phases: directivePhases, updatedAt: new Date().toISOString() },
             }
           : selectedStudioState.roleDirectives,
       },
-    }, { successMessage: 'Raised review pressure for this workflow.' });
-  }, [patchAutomationConfig, selectedPolicy, selectedStudioState, selectedWorkerDetail.worker?.role]);
+    }, { successMessage: `Raised review pressure for ${formatDirectivePhaseScope(directivePhases)}.` });
+  }, [patchAutomationConfig, selectedDirectivePhase, selectedPolicy, selectedStudioState, selectedWorkerDetail.worker?.role]);
 
   const handlePromoteLane = useCallback(() => {
     const nextPolicy: AutomationExecutionPolicyDraft = {
@@ -1663,6 +1766,7 @@ export default function AgentStudio() {
       maxElasticLanes: Math.min(4, Math.max(selectedPolicy.maxElasticLanes, selectedMath.recommendedElasticLanes) + 1),
     };
     const role = selectedWorkerDetail.worker?.role;
+    const directivePhases = selectedDirectivePhase === 'all' ? undefined : [selectedDirectivePhase];
     void patchAutomationConfig({
       executionPolicy: nextPolicy,
       studioState: {
@@ -1670,12 +1774,12 @@ export default function AgentStudio() {
         roleDirectives: role
           ? {
               ...(selectedStudioState.roleDirectives || {}),
-              [role]: { mode: 'promote', updatedAt: new Date().toISOString() },
+              [role]: { mode: 'promote', phases: directivePhases, updatedAt: new Date().toISOString() },
             }
           : selectedStudioState.roleDirectives,
       },
-    }, { successMessage: 'Promoted this lane for stronger routing.' });
-  }, [patchAutomationConfig, selectedMath.recommendedElasticLanes, selectedPolicy, selectedStudioState, selectedWorkerDetail.worker?.role]);
+    }, { successMessage: `Promoted this lane for ${formatDirectivePhaseScope(directivePhases)}.` });
+  }, [patchAutomationConfig, selectedDirectivePhase, selectedMath.recommendedElasticLanes, selectedPolicy, selectedStudioState, selectedWorkerDetail.worker?.role]);
 
   const handleSaveExperiment = useCallback(() => {
     const nextHistory = [
@@ -1704,7 +1808,14 @@ export default function AgentStudio() {
     if (POLICY_PRESETS.some((preset) => preset.id === experiment.previewPresetId)) {
       setPreviewPresetId(experiment.previewPresetId);
     }
+    setSelectedComparisonExperimentId(experiment.id);
     setNotice({ tone: 'success', message: 'Restored saved experiment.' });
+  }, []);
+
+  const handleCompareExperiment = useCallback((experiment: StudioExperimentRecord) => {
+    setSelectedComparisonExperimentId(experiment.id);
+    setActiveRoom('replay');
+    setNotice({ tone: 'success', message: 'Loaded this experiment into the comparison lab.' });
   }, []);
 
   return (
@@ -2079,7 +2190,7 @@ export default function AgentStudio() {
                                         ? 'Escalate review'
                                         : 'Promote stronger lane'}
                                   </p>
-                                  <p className="mt-1 text-[12px] text-slate-400">Set {formatRelativeTimeFromIso(selectedRoleDirective.updatedAt)} for this workflow.</p>
+                                  <p className="mt-1 text-[12px] text-slate-400">Set {formatRelativeTimeFromIso(selectedRoleDirective.updatedAt)} for {formatDirectivePhaseScope(selectedRoleDirective.phases)}.</p>
                                 </div>
                               ) : null}
                               <div className="mt-4">
@@ -2098,8 +2209,23 @@ export default function AgentStudio() {
                                 </div>
                               </div>
                               <div className="mt-4">
-                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Steer this role</p>
-                                <div className="mt-2 grid gap-2">
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Steer this role</p>
+                                  <span className="text-[11px] text-slate-500">Scope: {formatDirectivePhaseScope(selectedDirectivePhase === 'all' ? undefined : [selectedDirectivePhase])}</span>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {DIRECTIVE_PHASE_OPTIONS.map((option) => (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={() => setSelectedDirectivePhase(option.value)}
+                                      className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedDirectivePhase === option.value ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
+                                    >
+                                      {option.label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="mt-3 grid gap-2">
                                   <button
                                     type="button"
                                     disabled={actionBusy}
@@ -2792,25 +2918,50 @@ export default function AgentStudio() {
                           </div>
                         </div>
                         <div className="mt-4 space-y-3">
-                          {experimentHistory.length > 0 ? experimentHistory.map((experiment) => (
-                            <button
-                              key={experiment.id}
-                              type="button"
-                              onClick={() => handleRestoreExperiment(experiment)}
-                              className="w-full rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4 text-left transition-colors hover:border-cyan-500/18 hover:bg-navy-900/55"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-medium text-white">{getScenarioPreset(experiment.scenarioId as ScenarioPresetId).label}</p>
-                                  <p className="mt-1 text-[11px] text-slate-500">{POLICY_PRESETS.find((preset) => preset.id === experiment.previewPresetId)?.label || experiment.previewPresetId}</p>
+                          {experimentHistory.length > 0 ? experimentHistory.map((experiment) => {
+                            const matchedRun = experimentRunMatches.get(experiment.id);
+                            const matchedAttribution = matchedRun ? getRunExperimentAttribution(matchedRun) : undefined;
+                            return (
+                              <div
+                                key={experiment.id}
+                                className={`rounded-2xl border p-4 transition-colors ${selectedComparisonExperimentId === experiment.id ? 'border-cyan-500/22 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/45'}`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{getScenarioPreset(experiment.scenarioId as ScenarioPresetId).label}</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">{POLICY_PRESETS.find((preset) => preset.id === experiment.previewPresetId)?.label || experiment.previewPresetId}</p>
+                                  </div>
+                                  <span className="rounded-full border border-navy-700 bg-navy-900 px-2 py-0.5 text-[10px] text-slate-300">
+                                    {formatRelativeTimeFromIso(experiment.createdAt)}
+                                  </span>
                                 </div>
-                                <span className="rounded-full border border-navy-700 bg-navy-900 px-2 py-0.5 text-[10px] text-slate-300">
-                                  {formatRelativeTimeFromIso(experiment.createdAt)}
-                                </span>
+                                {experiment.notes ? <p className="mt-2 text-[12px] leading-relaxed text-slate-400">{experiment.notes}</p> : null}
+                                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                    {matchedRun ? `${matchedAttribution?.previewPresetLabel || 'Observed'} observed` : 'No attributed run yet'}
+                                  </span>
+                                  {matchedRun ? <span className={`rounded-full border px-2 py-0.5 font-medium ${getStatusTone(matchedRun.status)}`}>{matchedRun.status}</span> : null}
+                                  {matchedRun && typeof matchedRun.actualCredits === 'number' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCredits(matchedRun.actualCredits)} cr</span> : null}
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCompareExperiment(experiment)}
+                                    className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedComparisonExperimentId === experiment.id ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
+                                  >
+                                    Compare this experiment
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRestoreExperiment(experiment)}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                  >
+                                    Restore setup
+                                  </button>
+                                </div>
                               </div>
-                              {experiment.notes ? <p className="mt-2 text-[12px] leading-relaxed text-slate-400">{experiment.notes}</p> : null}
-                            </button>
-                          )) : (
+                            );
+                          }) : (
                             <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
                               Save a few strong simulations here so you can compare and restore them later.
                             </div>
@@ -2854,7 +3005,7 @@ export default function AgentStudio() {
                                 <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
                                   {step.modelTier ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.modelTier}</span> : null}
                                   {step.modelSource ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.modelSource}</span> : null}
-                                  {step.directiveMode ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200">{step.directiveMode === 'cheaper' ? 'Cheaper bias' : step.directiveMode === 'review' ? 'Review bias' : 'Promoted lane'}</span> : null}
+                                  {step.directiveMode ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200">{`${step.directiveMode === 'cheaper' ? 'Cheaper bias' : step.directiveMode === 'review' ? 'Review bias' : 'Promoted lane'}${step.directivePhases?.length ? ` · ${formatDirectivePhaseScope(step.directivePhases)}` : ''}`}</span> : null}
                                   {typeof step.actualCredits === 'number' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCredits(step.actualCredits)} cr</span> : null}
                                   {step.toolCalls ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.toolCalls} tools</span> : null}
                                   {step.tokenUsage?.totalTokens ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.tokens}</span> : null}
@@ -2877,7 +3028,7 @@ export default function AgentStudio() {
                             <Layers3 className="h-4 w-4 text-cyan-300" />
                             <div>
                               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Run comparison lab</p>
-                              <h3 className="text-sm font-semibold text-white">Latest vs previous operating setup</h3>
+                              <h3 className="text-sm font-semibold text-white">{runComparison?.comparisonMode === 'saved_experiment' ? 'Latest run vs saved experiment' : 'Latest vs previous operating setup'}</h3>
                             </div>
                           </div>
                           {runComparison ? (
@@ -2887,6 +3038,7 @@ export default function AgentStudio() {
                                   <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/80">Latest run</p>
                                   <p className="mt-2 text-sm font-semibold text-white">{runComparison.current.presetLabel}</p>
                                   <p className="mt-1 text-[12px] text-slate-300">{runComparison.current.scenarioLabel}</p>
+                                  {runComparison.current.experimentLabel ? <p className="mt-1 text-[11px] text-cyan-200/85">{runComparison.current.experimentLabel}</p> : null}
                                   <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-200">
                                     <span className={`rounded-full border px-2 py-0.5 font-medium ${getStatusTone(runComparison.current.status)}`}>{runComparison.current.status}</span>
                                     <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{formatCredits(runComparison.current.credits)} cr</span>
@@ -2894,16 +3046,17 @@ export default function AgentStudio() {
                                   </div>
                                 </div>
                                 <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-                                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Previous run</p>
+                                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{runComparison?.comparisonMode === 'saved_experiment' ? 'Saved experiment' : 'Previous run'}</p>
                                   {runComparison.previous ? (<>
                                     <p className="mt-2 text-sm font-semibold text-white">{runComparison.previous.presetLabel}</p>
                                     <p className="mt-1 text-[12px] text-slate-400">{runComparison.previous.scenarioLabel}</p>
+                                    <p className="mt-1 text-[11px] text-cyan-200/75">{runComparison.previous.experimentLabel || runComparison.comparisonLabel}</p>
                                     <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
                                       <span className={`rounded-full border px-2 py-0.5 font-medium ${getStatusTone(runComparison.previous.status)}`}>{runComparison.previous.status}</span>
                                       <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCredits(runComparison.previous.credits)} cr</span>
                                       <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCompactDuration(runComparison.previous.durationMs)}</span>
                                     </div>
-                                  </>) : <p className="mt-2 text-sm text-slate-500">No previous completed run yet.</p>}
+                                  </>) : <p className="mt-2 text-sm text-slate-500">No comparable run yet for this setup.</p>}
                                 </div>
                               </div>
                               {runComparison.previous ? (

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import cron, { ScheduledTask } from 'node-cron';
-import type { AutomationExecutionPolicy, PersistedAutomationStep } from './platform/types';
+import type { AutomationExecutionPolicy, AutomationStepKind, PersistedAutomationStep } from './platform/types';
 
 export interface AutomationStudioExperimentRecord {
   id: string;
@@ -13,6 +13,7 @@ export interface AutomationStudioExperimentRecord {
 
 export interface AutomationRoleDirective {
   mode: 'cheaper' | 'review' | 'promote';
+  phases?: AutomationStepKind[];
   updatedAt: string;
 }
 

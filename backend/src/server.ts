@@ -1884,21 +1884,31 @@ function normalizeAutomationStudioState(value: unknown): AutomationStudioState |
     : undefined;
 
   const roleDirectives = isObjectRecord(value.roleDirectives)
-    ? Object.fromEntries(
-        Object.entries(value.roleDirectives)
-          .map(([role, directive]) => {
-            if (!isObjectRecord(directive)) return null;
-            const mode = directive.mode === 'cheaper' || directive.mode === 'review' || directive.mode === 'promote'
-              ? directive.mode
-              : undefined;
-            const updatedAt = typeof directive.updatedAt === 'string' && directive.updatedAt.trim()
-              ? directive.updatedAt.trim()
-              : undefined;
-            if (!role.trim() || !mode || !updatedAt) return null;
-            return [role.trim(), { mode, updatedAt }];
-          })
-          .filter((entry): entry is [string, { mode: 'cheaper' | 'review' | 'promote'; updatedAt: string }] => Boolean(entry))
-      )
+    ? Object.entries(value.roleDirectives).reduce<Record<string, { mode: 'cheaper' | 'review' | 'promote'; updatedAt: string; phases?: AutomationStepKind[] }>>((acc, [role, directive]) => {
+        if (!isObjectRecord(directive)) return acc;
+        const mode = directive.mode === 'cheaper' || directive.mode === 'review' || directive.mode === 'promote'
+          ? directive.mode
+          : undefined;
+        const updatedAt = typeof directive.updatedAt === 'string' && directive.updatedAt.trim()
+          ? directive.updatedAt.trim()
+          : undefined;
+        const phases = Array.isArray(directive.phases)
+          ? directive.phases
+              .filter((phase): phase is AutomationStepKind => (
+                phase === 'search' ||
+                phase === 'query' ||
+                phase === 'capture' ||
+                phase === 'analyze' ||
+                phase === 'summarize' ||
+                phase === 'deliver' ||
+                phase === 'note'
+              ))
+              .slice(0, 6)
+          : undefined;
+        if (!role.trim() || !mode || !updatedAt) return acc;
+        acc[role.trim()] = { mode, updatedAt, phases: phases?.length ? phases : undefined };
+        return acc;
+      }, {})
     : undefined;
 
   if (!selectedScenarioId && !previewPresetId && !experimentHistory?.length && !roleDirectives) {
@@ -2327,10 +2337,12 @@ function retuneAutomationStepDefinition(
   step: AutomationStepDefinition,
   modelTier: ModelTier,
   directiveMode?: 'cheaper' | 'review' | 'promote',
+  directivePhases?: AutomationStepKind[],
 ): AutomationStepDefinition {
   return {
     ...step,
     directiveMode,
+    directivePhases,
     modelTier,
     estimatedCredits: estimateAutomationStepCredits(step.kind, modelTier, inferAutomationStepEstimateOptions({ ...step, modelTier })),
   };
@@ -2367,33 +2379,41 @@ function applyAutomationStudioDirectives(
   let suggestedModelTier = policyPlan.suggestedModelTier;
 
   for (const [role, directive] of Object.entries(studioState.roleDirectives)) {
-    const affectedSteps = nextSteps.filter((step) => step.assignedRole === role);
+    const scopedPhases = directive.phases?.length ? [...new Set(directive.phases)] : undefined;
+    const affectedSteps = nextSteps.filter((step) => (
+      step.assignedRole === role &&
+      (!scopedPhases || scopedPhases.includes(step.kind))
+    ));
     if (affectedSteps.length === 0) continue;
 
     if (directive.mode === 'cheaper') {
       for (const step of affectedSteps) {
         const nextTier = downgradeAutomationModelTier(step.modelTier || suggestedModelTier);
-        Object.assign(step, retuneAutomationStepDefinition(step, nextTier, directive.mode));
+        Object.assign(step, retuneAutomationStepDefinition(step, nextTier, directive.mode, scopedPhases));
       }
-      appliedDirectives.push(`${role} is being routed down-market for lower spend.`);
+      appliedDirectives.push(scopedPhases?.length
+        ? `${role} is being routed down-market for ${scopedPhases.join(', ')} steps.`
+        : `${role} is being routed down-market for lower spend.`);
     }
 
     if (directive.mode === 'review') {
       for (const step of affectedSteps) {
         const nextTier = upgradeAutomationModelTier(step.modelTier || suggestedModelTier);
-        Object.assign(step, retuneAutomationStepDefinition(step, nextTier, directive.mode));
+        Object.assign(step, retuneAutomationStepDefinition(step, nextTier, directive.mode, scopedPhases));
       }
       if (!supportingRoles.includes('reviewer') && policyPlan.primaryRole !== 'reviewer') {
         supportingRoles.push('reviewer');
       }
       suggestedModelTier = upgradeAutomationModelTier(suggestedModelTier);
-      appliedDirectives.push(`${role} now carries a stricter review bias.`);
+      appliedDirectives.push(scopedPhases?.length
+        ? `${role} now carries a stricter review bias for ${scopedPhases.join(', ')} steps.`
+        : `${role} now carries a stricter review bias.`);
     }
 
     if (directive.mode === 'promote') {
       for (const step of affectedSteps) {
         const nextTier = upgradeAutomationModelTier(step.modelTier || suggestedModelTier);
-        Object.assign(step, retuneAutomationStepDefinition(step, nextTier, directive.mode));
+        Object.assign(step, retuneAutomationStepDefinition(step, nextTier, directive.mode, scopedPhases));
       }
       suggestedModelTier = upgradeAutomationModelTier(suggestedModelTier);
       if (isElasticLane(role as AgentRole)) {
@@ -2403,7 +2423,9 @@ function applyAutomationStudioDirectives(
       } else if (role !== policyPlan.primaryRole && !supportingRoles.includes(role as AgentRole)) {
         supportingRoles.push(role as AgentRole);
       }
-      appliedDirectives.push(`${role} is being promoted into a stronger lane for this workflow.`);
+      appliedDirectives.push(scopedPhases?.length
+        ? `${role} is being promoted into a stronger lane for ${scopedPhases.join(', ')} steps.`
+        : `${role} is being promoted into a stronger lane for this workflow.`);
     }
   }
 
@@ -2611,6 +2633,77 @@ function ensureAutomationDeliveryStep(
   ] as AutomationStepDefinition[];
 }
 
+function getAutomationScenarioLabel(id?: string) {
+  switch (id) {
+    case 'rush':
+      return 'Rush mode';
+    case 'deep_research':
+      return 'Deep research';
+    case 'monitoring':
+      return 'Watch loop';
+    case 'high_stakes':
+      return 'High stakes';
+    default:
+      return 'Current workflow';
+  }
+}
+
+function getAutomationPresetLabel(id?: string) {
+  switch (id) {
+    case 'lean_ops':
+      return 'Lean ops';
+    case 'balanced':
+      return 'Balanced';
+    case 'high_assurance':
+      return 'High assurance';
+    case 'recommended':
+    default:
+      return 'System recommended';
+  }
+}
+
+function buildAutomationExperimentAttribution(studioState?: AutomationStudioState) {
+  const scenarioId = studioState?.selectedScenarioId || 'baseline';
+  const previewPresetId = studioState?.previewPresetId || 'recommended';
+  const matchedExperiment = (studioState?.experimentHistory || [])
+    .filter((experiment) => experiment.scenarioId === scenarioId && experiment.previewPresetId === previewPresetId)
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))[0];
+
+  return {
+    scenarioId,
+    scenarioLabel: getAutomationScenarioLabel(scenarioId),
+    previewPresetId,
+    previewPresetLabel: getAutomationPresetLabel(previewPresetId),
+    experimentId: matchedExperiment?.id,
+    experimentCreatedAt: matchedExperiment?.createdAt,
+    experimentNotes: matchedExperiment?.notes,
+    matchedSavedExperiment: Boolean(matchedExperiment),
+  };
+}
+
+function buildAutomationScenarioTelemetry(
+  studioState: AutomationStudioState | undefined,
+  executionPlan: AutomationExecutionPlan,
+  experimentAttribution: ReturnType<typeof buildAutomationExperimentAttribution>,
+) {
+  return {
+    scenarioId: experimentAttribution.scenarioId,
+    scenarioLabel: experimentAttribution.scenarioLabel,
+    previewPresetId: experimentAttribution.previewPresetId,
+    previewPresetLabel: experimentAttribution.previewPresetLabel,
+    matchedSavedExperiment: experimentAttribution.matchedSavedExperiment,
+    experimentId: experimentAttribution.experimentId,
+    workflowStepCount: executionPlan.steps.length,
+    estimatedToolCalls: executionPlan.estimatedToolCalls,
+    complexity: executionPlan.complexity,
+    directedRoles: Object.entries(studioState?.roleDirectives || {}).map(([role, directive]) => ({
+      role,
+      mode: directive.mode,
+      phases: directive.phases || [],
+    })),
+  };
+}
+
 function buildAutomationExecutionPlan(automation: {
   id: string;
   name: string;
@@ -2764,6 +2857,7 @@ async function executeAutomationCore(
       title: step.title,
       assignedRole: step.assignedRole,
       directiveMode: step.directiveMode,
+      directivePhases: step.directivePhases,
       modelTier: step.modelTier,
       modelSource: stepModelSource,
       modelSourceLabel: getModelSourceLabel(stepModelSource),
@@ -2987,6 +3081,8 @@ async function runAutomation(automation: {
 }) {
   ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
   const executionPlan = buildAutomationExecutionPlan(automation);
+  const experimentAttribution = buildAutomationExperimentAttribution(automation.studio_state);
+  const scenarioTelemetry = buildAutomationScenarioTelemetry(automation.studio_state, executionPlan, experimentAttribution);
   const modelTier = executionPlan.suggestedModelTier;
   const runModelSource = getModelSource(modelTier, DEFAULT_WORKSPACE_ID);
   const complexity = executionPlan.complexity;
@@ -3024,6 +3120,8 @@ async function runAutomation(automation: {
       sourceSteps: automation.steps,
       executionPolicy: automation.execution_policy,
       studioState: automation.studio_state,
+        experimentAttribution,
+        scenarioTelemetry,
       automationPlan: executionPlan,
       plannedSteps: executionPlan.steps,
       rolePlan: {
@@ -3060,6 +3158,8 @@ async function runAutomation(automation: {
       sourceSteps: automation.steps,
       executionPolicy: automation.execution_policy,
       studioState: automation.studio_state,
+        experimentAttribution,
+        scenarioTelemetry,
       automationPlan: executionPlan,
       plannedSteps: executionPlan.steps,
       stepExecutions: [],
@@ -3104,6 +3204,8 @@ async function runAutomation(automation: {
           sourceSteps: automation.steps,
           executionPolicy: automation.execution_policy,
           studioState: automation.studio_state,
+        experimentAttribution,
+        scenarioTelemetry,
           automationPlan: executionPlan,
           plannedSteps: executionPlan.steps,
           stepExecutions: progress.stepExecutions,
@@ -3135,6 +3237,8 @@ async function runAutomation(automation: {
           sourceSteps: automation.steps,
           executionPolicy: automation.execution_policy,
           studioState: automation.studio_state,
+        experimentAttribution,
+        scenarioTelemetry,
           latestSummary: progress.summaryText || undefined,
           latestArtifacts: progress.artifacts,
           latestStepExecutions: progress.stepExecutions,
@@ -3199,6 +3303,8 @@ async function runAutomation(automation: {
         sourceSteps: automation.steps,
         executionPolicy: automation.execution_policy,
         studioState: automation.studio_state,
+        experimentAttribution,
+        scenarioTelemetry,
         automationPlan: execution.plan,
         plannedSteps: execution.plan.steps,
         actualToolCalls,
@@ -3226,6 +3332,8 @@ async function runAutomation(automation: {
         sourceSteps: automation.steps,
         executionPolicy: automation.execution_policy,
         studioState: automation.studio_state,
+        experimentAttribution,
+        scenarioTelemetry,
         latestSummary: summary,
         latestArtifacts: execution.artifacts,
         latestStepExecutions: execution.stepExecutions,
@@ -3261,6 +3369,8 @@ async function runAutomation(automation: {
         taskId: task.id,
         taskRunId: taskRun.id,
         actualToolCalls,
+        experimentAttribution,
+        scenarioTelemetry,
         stepCharges: execution.stepExecutions.map((step) => ({
           stepId: step.stepId,
           title: step.title,
@@ -3297,6 +3407,8 @@ async function runAutomation(automation: {
         stepExecutions: [],
         executionPolicy: automation.execution_policy,
         studioState: automation.studio_state,
+        experimentAttribution,
+        scenarioTelemetry,
         rolePlan: {
           primaryRole: executionPlan.primaryRole,
           supportingRoles: executionPlan.supportingRoles,
@@ -3330,6 +3442,8 @@ async function runAutomation(automation: {
         sourceSteps: automation.steps,
         executionPolicy: automation.execution_policy,
         studioState: automation.studio_state,
+        experimentAttribution,
+        scenarioTelemetry,
         latestSummary: failureSummary,
         latestStepExecutions: [],
         automationPlan: executionPlan,
