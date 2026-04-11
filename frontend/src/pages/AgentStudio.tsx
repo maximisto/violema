@@ -56,6 +56,7 @@ interface AutomationStudioStateDraft {
   experimentHistory?: StudioExperimentRecord[];
   roleDirectives?: Record<string, StudioRoleDirective>;
   promotionHistory?: StudioPromotionRecord[];
+  autoPromotionMinConfidence?: number;
 }
 
 interface StudioPromotionRecord {
@@ -776,6 +777,21 @@ function getExperimentDisplayLabel(experiment: StudioExperimentRecord) {
   return experiment.branchName || experiment.notes || `${getScenarioLabelFromId(experiment.scenarioId)} · ${getPresetLabelFromId(experiment.previewPresetId)}`;
 }
 
+function getExperimentRootId(experiment: StudioExperimentRecord, experiments: StudioExperimentRecord[]) {
+  const byId = new Map(experiments.map((item) => [item.id, item] as const));
+  let current: StudioExperimentRecord | undefined = experiment;
+  const visited = new Set<string>();
+
+  while (current?.parentExperimentId && !visited.has(current.parentExperimentId)) {
+    visited.add(current.id);
+    const parent = byId.get(current.parentExperimentId);
+    if (!parent) break;
+    current = parent;
+  }
+
+  return current?.id || experiment.id;
+}
+
 function getExperimentPhaseList(experiment: StudioExperimentRecord) {
   const phases = Object.values(experiment.roleDirectives || {}).flatMap((directive) => directive.phases || []);
   return [...new Set(phases)];
@@ -1304,6 +1320,10 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
     experimentHistory,
     roleDirectives,
     promotionHistory,
+    autoPromotionMinConfidence:
+      typeof value.autoPromotionMinConfidence === 'number'
+        ? clampNumber(Math.round(value.autoPromotionMinConfidence), 40, 95)
+        : undefined,
   };
 }
 
@@ -2504,11 +2524,13 @@ export default function AgentStudio() {
     });
   }, [phaseEvidence]);
 
+  const autoPromotionThreshold = selectedStudioState.autoPromotionMinConfidence ?? 55;
+
   const autoPromotionSuggestion = useMemo(() => {
     if (!winningExperiment || !currentCohortPerformance || winningExperiment.experiment.id === selectedComparisonExperimentId) return null;
     const beatsCurrentOnSuccess = winningExperiment.stats.successRate >= currentCohortPerformance.stats.successRate + 0.08;
     const beatsCurrentOnSpend = winningExperiment.stats.averageCredits > 0 && winningExperiment.stats.averageCredits <= currentCohortPerformance.stats.averageCredits - 6;
-    const confidenceStrong = winningExperiment.confidence >= 55 && evidenceFreshness.tone !== 'stale';
+    const confidenceStrong = winningExperiment.confidence >= autoPromotionThreshold && evidenceFreshness.tone !== 'stale';
     if (!confidenceStrong || (!beatsCurrentOnSuccess && !beatsCurrentOnSpend)) return null;
     return {
       tone: beatsCurrentOnSuccess ? 'quality' : 'efficiency',
@@ -2517,8 +2539,9 @@ export default function AgentStudio() {
         ? `${getExperimentDisplayLabel(winningExperiment.experiment)} is beating the live cohort on success with enough evidence to justify a promotion review.`
         : `${getExperimentDisplayLabel(winningExperiment.experiment)} is running cheaper than the live cohort without losing quality, and the evidence is now strong enough to act on.`,
       experiment: winningExperiment.experiment,
+      threshold: autoPromotionThreshold,
     };
-  }, [currentCohortPerformance, evidenceFreshness.tone, selectedComparisonExperimentId, winningExperiment]);
+  }, [autoPromotionThreshold, currentCohortPerformance, evidenceFreshness.tone, selectedComparisonExperimentId, winningExperiment]);
 
   const experimentBranches = useMemo(() => {
     const branchCountByParent = new Map<string, number>();
@@ -2529,6 +2552,52 @@ export default function AgentStudio() {
     });
     return branchCountByParent;
   }, [experimentHistory]);
+
+  const branchFamilyPerformance = useMemo(() => {
+    const observedRuns = rows.flatMap((row) => row.runs);
+    const families = new Map<string, {
+      rootExperiment: StudioExperimentRecord;
+      experiments: StudioExperimentRecord[];
+      runs: PlatformTaskRunRecord[];
+      latestAt?: string;
+    }>();
+
+    experimentHistory.forEach((experiment) => {
+      const rootId = getExperimentRootId(experiment, experimentHistory);
+      const rootExperiment = experimentHistory.find((item) => item.id === rootId) || experiment;
+      const current = families.get(rootId) || {
+        rootExperiment,
+        experiments: [],
+        runs: [],
+        latestAt: undefined,
+      };
+      current.experiments.push(experiment);
+      const matchedRuns = observedRuns.filter((run) => matchesExperimentRun(run, experiment));
+      current.runs.push(...matchedRuns);
+      matchedRuns.forEach((run) => {
+        const candidateAt = run.finishedAt || run.startedAt;
+        if (candidateAt && (!current.latestAt || Date.parse(candidateAt) > Date.parse(current.latestAt))) {
+          current.latestAt = candidateAt;
+        }
+      });
+      families.set(rootId, current);
+    });
+
+    return Array.from(families.values())
+      .map((family) => {
+        const uniqueRuns = Array.from(new Map(family.runs.map((run) => [run.id, run])).values());
+        const stats = summarizeRunCollection(uniqueRuns);
+        const scoring = scoreObservedPerformance(stats, family.latestAt);
+        return {
+          ...family,
+          stats,
+          ...scoring,
+        };
+      })
+      .filter((family) => family.experiments.length > 0)
+      .sort((a, b) => b.score - a.score || b.stats.count - a.stats.count)
+      .slice(0, 6);
+  }, [experimentHistory, rows]);
 
   const patchAutomationConfig = useCallback(async (patch: {
     executionPolicy?: AutomationExecutionPolicyDraft;
@@ -2572,6 +2641,13 @@ export default function AgentStudio() {
   const updateStudioState = useCallback(async (next: AutomationStudioStateDraft, successMessage?: string) => {
     await patchAutomationConfig({ studioState: next }, { successMessage, suppressBusy: !successMessage });
   }, [patchAutomationConfig]);
+
+  const handleSetAutoPromotionThreshold = useCallback((threshold: number) => {
+    void updateStudioState({
+      ...selectedStudioState,
+      autoPromotionMinConfidence: threshold,
+    }, `Auto-promotion gate set to ${threshold}% confidence.`);
+  }, [selectedStudioState, updateStudioState]);
 
   useEffect(() => {
     if (!selectedRow?.automation.id) return undefined;
@@ -4797,6 +4873,7 @@ export default function AgentStudio() {
                                 </div>
                                 {series.chart ? (() => {
                                   const chart = series.chart;
+                                  const highlightedPoint = focusedCohortRun ? chart.points.find((point) => point.run.id === focusedCohortRun.id) : undefined;
                                   return (
                                     <div className="mt-3">
                                       <div className="relative overflow-hidden rounded-2xl border border-white/6 bg-white/[0.02] px-2 py-3">
@@ -4821,6 +4898,19 @@ export default function AgentStudio() {
                                             />
                                           ))}
                                         </svg>
+                                        {highlightedPoint ? (
+                                          <div
+                                            className="pointer-events-none absolute z-10 w-44 -translate-x-1/2 -translate-y-full rounded-2xl border border-white/10 bg-navy-950/96 px-3 py-2 text-left shadow-[0_16px_40px_rgba(2,6,23,0.42)]"
+                                            style={{
+                                              left: `${(highlightedPoint.x / chart.width) * 100}%`,
+                                              top: `${Math.max(12, ((highlightedPoint.y / chart.height) * 100) - 4)}%`,
+                                            }}
+                                          >
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{highlightedPoint.label}</p>
+                                            <p className="mt-1 text-sm font-medium text-white">{highlightedPoint.metricLabel}</p>
+                                            <p className="mt-1 text-[11px] text-slate-400">{series.label}</p>
+                                          </div>
+                                        ) : null}
                                         <div className="mt-3 flex items-start justify-between gap-2">
                                           {chart.points.map((point) => (
                                             <button
@@ -4939,6 +5029,10 @@ export default function AgentStudio() {
                               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Automatic promotion suggestion</p>
                               <p className="mt-2 text-sm font-medium text-white">{autoPromotionSuggestion.title}</p>
                               <p className="mt-2 text-sm leading-relaxed text-slate-300">{autoPromotionSuggestion.body}</p>
+                              <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">gate {autoPromotionSuggestion.threshold}% confidence</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{evidenceFreshness.confidence}</span>
+                              </div>
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <button
                                   type="button"
@@ -4958,6 +5052,28 @@ export default function AgentStudio() {
                               </div>
                             </div>
                           ) : null}
+                          <div className="mb-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Promotion gate</p>
+                                <p className="mt-1 text-sm font-medium text-white">Only auto-suggest winners when confidence clears this threshold</p>
+                              </div>
+                              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{autoPromotionThreshold}%</span>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {[55, 70, 85].map((threshold) => (
+                                <button
+                                  key={`threshold-${threshold}`}
+                                  type="button"
+                                  disabled={studioBusy}
+                                  onClick={() => handleSetAutoPromotionThreshold(threshold)}
+                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${autoPromotionThreshold === threshold ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'} disabled:opacity-60`}
+                                >
+                                  {threshold}% confidence
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <div className="flex items-center gap-2">
                             <Target className="h-4 w-4 text-emerald-300" />
                             <div>
@@ -5056,6 +5172,71 @@ export default function AgentStudio() {
                               Save and run a few experiments first. This card promotes the strongest observed setup once there is evidence.
                             </div>
                           )}
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Workflow className="h-4 w-4 text-cyan-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Branch families</p>
+                              <h3 className="text-sm font-semibold text-white">Which experiment lines are compounding</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-3">
+                            {branchFamilyPerformance.length > 0 ? branchFamilyPerformance.map((family) => (
+                              <div key={`branch-family-${family.rootExperiment.id}`} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{getExperimentDisplayLabel(family.rootExperiment)}</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">
+                                      {family.experiments.length} branch {family.experiments.length === 1 ? 'member' : 'members'} · {family.stats.count} observed {family.stats.count === 1 ? 'run' : 'runs'}
+                                    </p>
+                                  </div>
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {family.score}</span>
+                                </div>
+                                <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                    <p className="text-slate-500">Success</p>
+                                    <p className="mt-1 text-white">{Math.round(family.stats.successRate * 100)}%</p>
+                                  </div>
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                    <p className="text-slate-500">Avg credits</p>
+                                    <p className="mt-1 text-white">{family.stats.averageCredits ? `${formatCredits(family.stats.averageCredits)} cr` : '—'}</p>
+                                  </div>
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                    <p className="text-slate-500">Confidence</p>
+                                    <p className="mt-1 text-white">{family.confidence}%</p>
+                                  </div>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                  {family.latestAt ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">seen {formatRelativeTimeFromIso(family.latestAt)}</span> : null}
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                    {family.confidence >= 70 ? 'Strong branch evidence' : family.confidence >= 50 ? 'Building branch evidence' : 'Thin branch evidence'}
+                                  </span>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCompareExperiment(family.rootExperiment)}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                  >
+                                    Compare branch family
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleForkWinningSetup(family.rootExperiment)}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                  >
+                                    Fork this line
+                                  </button>
+                                </div>
+                              </div>
+                            )) : (
+                              <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                                Branch families will appear once you start forking experiments and collecting a few runs against them.
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
