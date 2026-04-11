@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -1896,8 +1896,8 @@ export default function AgentStudio() {
   const [selectedAutomationId, setSelectedAutomationId] = useState<string>('');
   const [previewPresetId, setPreviewPresetId] = useState<string>('recommended');
   const [actionBusy, setActionBusy] = useState(false);
-  const [studioBusy, setStudioBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  const hydratedAutomationIdRef = useRef<string>('');
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
@@ -2141,6 +2141,13 @@ export default function AgentStudio() {
   }, [activePresetId, selectedRow?.automation.id]);
 
   useEffect(() => {
+    const automationId = selectedRow?.automation.id || '';
+    if (!automationId) {
+      hydratedAutomationIdRef.current = '';
+      return;
+    }
+    if (hydratedAutomationIdRef.current === automationId) return;
+    hydratedAutomationIdRef.current = automationId;
     setActiveRoom(selectedStudioState.activeRoom || 'live');
     setSelectedPlanId(selectedStudioState.selectedPlanId || '');
     setSelectedPlanCompareId(selectedStudioState.selectedPlanCompareId || '');
@@ -2166,29 +2173,10 @@ export default function AgentStudio() {
     );
     if (selectedStudioState.previewPresetId && POLICY_PRESETS.some((preset) => preset.id === selectedStudioState.previewPresetId)) {
       setPreviewPresetId(selectedStudioState.previewPresetId);
+    } else {
+      setPreviewPresetId(activePresetId === 'custom_live' ? 'recommended' : activePresetId);
     }
-  }, [
-    selectedStudioState.activeRoom,
-    selectedStudioState.branchRunFilter,
-    selectedStudioState.gateLearningWindow,
-    selectedStudioState.phaseSimulation,
-    selectedStudioState.selectedPlanId,
-    selectedStudioState.selectedPlanCompareId,
-    selectedStudioState.selectedPlanFamilyRootId,
-    selectedStudioState.selectedPlanIntentFilter,
-    selectedStudioState.selectedComparisonExperimentId,
-    selectedStudioState.selectedCohortRunId,
-    selectedStudioState.selectedReplayCompareRunId,
-    selectedStudioState.selectedDirectivePhase,
-    selectedStudioState.selectedReplayPhase,
-    selectedRow?.automation.id,
-    selectedStudioState.comparedBranchRootId,
-    selectedStudioState.previewPresetId,
-    selectedStudioState.selectedBranchRootId,
-    selectedStudioState.selectedScenarioId,
-    selectedStudioState.selectedWorkerRole,
-    selectedStudioState.trendMetric,
-  ]);
+  }, [activePresetId, selectedRow?.automation.id, selectedStudioState]);
 
   const previewPreset = useMemo(
     () => POLICY_PRESETS.find((preset) => preset.id === previewPresetId) || POLICY_PRESETS[0],
@@ -4440,9 +4428,7 @@ export default function AgentStudio() {
     studioState?: AutomationStudioStateDraft;
   }, options?: { successMessage?: string; suppressBusy?: boolean }) => {
     if (!selectedRow) return;
-    if (options?.suppressBusy) {
-      setStudioBusy(true);
-    } else {
+    if (!options?.suppressBusy) {
       setActionBusy(true);
     }
     try {
@@ -4462,9 +4448,7 @@ export default function AgentStudio() {
     } catch (error) {
       setNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not update agent policy.' });
     } finally {
-      if (options?.suppressBusy) {
-        setStudioBusy(false);
-      } else {
+      if (!options?.suppressBusy) {
         setActionBusy(false);
       }
     }
@@ -5819,7 +5803,7 @@ export default function AgentStudio() {
 
                 {activeRoom === 'live' ? (
                   <>
-                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.02fr),minmax(22rem,0.98fr)] xl:items-start">
+                    <div className="grid gap-6">
                       <div className="space-y-6">
                         <div className="rounded-[1.9rem] border border-cyan-500/15 bg-gradient-to-br from-cyan-500/8 via-navy-900/72 to-navy-950/92 p-5">
                         <div className="flex items-center justify-between gap-3">
@@ -6417,7 +6401,7 @@ export default function AgentStudio() {
 
                 {activeRoom === 'optimize' ? (
                   <>
-                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr),minmax(0,0.95fr)]">
+                    <div className="grid gap-4">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <Gauge className="h-4 w-4 text-emerald-300" />
@@ -6571,11 +6555,11 @@ export default function AgentStudio() {
                           <div className="mt-4 flex flex-wrap items-center gap-3">
                             <button
                               type="button"
-                              disabled={studioBusy}
+                              disabled={actionBusy}
                               onClick={handleSaveExperiment}
                               className="rounded-xl border border-cyan-500/24 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-100 transition-colors hover:bg-cyan-500/14 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              {studioBusy ? 'Saving…' : 'Save experiment snapshot'}
+                              {actionBusy ? 'Saving…' : 'Save experiment snapshot'}
                             </button>
                             <p className="text-[11px] leading-relaxed text-slate-500">Save strong scenario and preset pairings so the workflow can be compared and restored later.</p>
                           </div>
@@ -6583,7 +6567,7 @@ export default function AgentStudio() {
                       </div>
                     </div>
 
-                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr),minmax(22rem,0.95fr)]">
+                    <div className="grid gap-6">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <Target className="h-4 w-4 text-cyan-300" />
@@ -6845,7 +6829,7 @@ export default function AgentStudio() {
                       </div>
                     </div>
 
-                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr),minmax(0,1fr)] xl:items-start">
+                    <div className="grid gap-6">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <Gauge className="h-4 w-4 text-amber-300" />
@@ -8670,7 +8654,7 @@ export default function AgentStudio() {
 
                 {activeRoom === 'replay' ? (
                   <>
-                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.02fr),minmax(22rem,0.98fr)] xl:items-start">
+                    <div className="grid gap-6">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <LineChart className="h-4 w-4 text-cyan-300" />
@@ -9466,7 +9450,7 @@ export default function AgentStudio() {
                       </div>
                     </div>
 
-                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.02fr),minmax(22rem,0.98fr)] xl:items-start">
+                    <div className="grid gap-6">
                       <div className="space-y-6">
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           {autoPromotionSuggestion ? (
@@ -9520,7 +9504,7 @@ export default function AgentStudio() {
                                   </div>
                                   <button
                                     type="button"
-                                    disabled={studioBusy}
+                                    disabled={actionBusy}
                                     onClick={() => handleApplyGateProfile(recommendedGateProfile.id)}
                                     className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
                                   >
@@ -9591,7 +9575,7 @@ export default function AgentStudio() {
                                       <div className="mt-3 flex flex-wrap gap-2">
                                         <button
                                           type="button"
-                                          disabled={studioBusy}
+                                          disabled={actionBusy}
                                           onClick={() => handleApplyGateProfile(item.profile.id)}
                                           className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
                                         >
@@ -9646,7 +9630,7 @@ export default function AgentStudio() {
                                 <button
                                   key={profile.id}
                                   type="button"
-                                  disabled={studioBusy}
+                                  disabled={actionBusy}
                                   onClick={() => handleApplyGateProfile(profile.id)}
                                   className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3 text-left transition-colors hover:border-cyan-500/18 hover:bg-white/[0.04] disabled:opacity-60"
                                 >
@@ -9671,7 +9655,7 @@ export default function AgentStudio() {
                                       <button
                                         key={`threshold-${scopeItem.scope}-${threshold}`}
                                         type="button"
-                                        disabled={studioBusy}
+                                        disabled={actionBusy}
                                         onClick={() => handleSetScopedAutoPromotionThreshold(scopeItem.scope, threshold)}
                                         className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${scopeItem.value === threshold ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'} disabled:opacity-60`}
                                       >
@@ -9682,7 +9666,7 @@ export default function AgentStudio() {
                                   <div className="mt-3">
                                     <button
                                       type="button"
-                                      disabled={studioBusy}
+                                      disabled={actionBusy}
                                       onClick={() => handleClearScopedAutoPromotionThreshold(scopeItem.scope)}
                                       className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300 disabled:opacity-60"
                                     >
