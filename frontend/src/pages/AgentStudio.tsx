@@ -73,6 +73,7 @@ interface AutomationStudioStateDraft {
   previewPresetId?: string;
   selectedPlanId?: string;
   selectedPlanCompareId?: string;
+  selectedPlanFamilyRootId?: string;
   selectedPlanIntentFilter?: string;
   selectedReplayPhase?: 'all' | WorkflowBlockKind;
   selectedWorkerRole?: string;
@@ -1135,11 +1136,62 @@ function inferOperatingPlanIntent(
 }
 
 function doesRunMatchPlan(run: PlatformTaskRunRecord, plan: StudioOperatingPlan) {
+  return scoreRunPlanMatch(run, plan) >= 50;
+}
+
+function scoreRunPlanMatch(run: PlatformTaskRunRecord, plan: StudioOperatingPlan) {
   const attribution = getRunExperimentAttribution(run);
+  const studioState = getRunStudioState(run);
+  const telemetry = getRunScenarioTelemetry(run);
+  const stepExecutions = readStepExecutions(run.metadata?.stepExecutions);
+  let score = 0;
+
   if (plan.sourceExperimentId && attribution.experimentId) {
-    return attribution.experimentId === plan.sourceExperimentId;
+    if (attribution.experimentId === plan.sourceExperimentId) return 140;
+    return 0;
   }
-  return attribution.scenarioId === plan.scenarioId && attribution.previewPresetId === plan.previewPresetId;
+
+  if (attribution.scenarioId === plan.scenarioId) score += 28;
+  if (attribution.previewPresetId === plan.previewPresetId) score += 28;
+  if (studioState.selectedPlanId === plan.id) score += 38;
+
+  const directiveEntries = Object.entries(plan.roleDirectives || {});
+  if (directiveEntries.length === 0) {
+    score += 6;
+  } else {
+    let directiveScore = 0;
+    directiveEntries.forEach(([role, directive]) => {
+      const telemetryMatch = telemetry.directedRoles?.find((item) => item.role === role);
+      if (telemetryMatch) {
+        directiveScore += telemetryMatch.mode === directive.mode ? 12 : 4;
+        const planPhases = directive.phases || [];
+        const telemetryPhases = telemetryMatch.phases || [];
+        if (planPhases.length === 0 || telemetryPhases.length === 0) {
+          directiveScore += 4;
+        } else {
+          const overlap = planPhases.filter((phase) => telemetryPhases.includes(phase)).length;
+          directiveScore += overlap * 4;
+        }
+      }
+
+      const stepMatch = stepExecutions.some((step) => {
+        if (step.assignedRole !== role || step.directiveMode !== directive.mode) return false;
+        if (!directive.phases || directive.phases.length === 0) return true;
+        return directive.phases.includes(step.kind as WorkflowBlockKind);
+      });
+      if (stepMatch) directiveScore += 8;
+    });
+    score += Math.min(28, directiveScore);
+  }
+
+  return score;
+}
+
+function rankRunPlanMatches(run: PlatformTaskRunRecord, plans: StudioOperatingPlan[]) {
+  return plans
+    .map((plan) => ({ plan, score: scoreRunPlanMatch(run, plan) }))
+    .filter((entry) => entry.score >= 40)
+    .sort((left, right) => right.score - left.score);
 }
 
 function buildPhaseActivitySeries(runs: PlatformTaskRunRecord[], role: string) {
@@ -1491,6 +1543,7 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
     previewPresetId: readString(value.previewPresetId),
     selectedPlanId: readString(value.selectedPlanId),
     selectedPlanCompareId: readString(value.selectedPlanCompareId),
+    selectedPlanFamilyRootId: readString(value.selectedPlanFamilyRootId),
     selectedPlanIntentFilter: readString(value.selectedPlanIntentFilter),
     selectedReplayPhase:
       value.selectedReplayPhase === 'all' ||
@@ -1602,6 +1655,7 @@ export default function AgentStudio() {
   const [selectedScenarioId, setSelectedScenarioId] = useState<ScenarioPresetId>('baseline');
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
   const [selectedPlanCompareId, setSelectedPlanCompareId] = useState<string>('');
+  const [selectedPlanFamilyRootId, setSelectedPlanFamilyRootId] = useState<string>('');
   const [selectedPlanIntentFilter, setSelectedPlanIntentFilter] = useState<string>('all');
   const [selectedReplayPhase, setSelectedReplayPhase] = useState<'all' | WorkflowBlockKind>('all');
   const [selectedDirectivePhase, setSelectedDirectivePhase] = useState<'all' | WorkflowBlockKind>('all');
@@ -1856,6 +1910,7 @@ export default function AgentStudio() {
     setActiveRoom(selectedStudioState.activeRoom || 'live');
     setSelectedPlanId(selectedStudioState.selectedPlanId || '');
     setSelectedPlanCompareId(selectedStudioState.selectedPlanCompareId || '');
+    setSelectedPlanFamilyRootId(selectedStudioState.selectedPlanFamilyRootId || '');
     setSelectedPlanIntentFilter(selectedStudioState.selectedPlanIntentFilter || 'all');
     setSelectedReplayPhase(selectedStudioState.selectedReplayPhase || 'all');
     setSelectedWorkerRole(selectedStudioState.selectedWorkerRole || 'nexus');
@@ -1884,6 +1939,7 @@ export default function AgentStudio() {
     selectedStudioState.phaseSimulation,
     selectedStudioState.selectedPlanId,
     selectedStudioState.selectedPlanCompareId,
+    selectedStudioState.selectedPlanFamilyRootId,
     selectedStudioState.selectedPlanIntentFilter,
     selectedStudioState.selectedComparisonExperimentId,
     selectedStudioState.selectedCohortRunId,
@@ -3405,6 +3461,7 @@ export default function AgentStudio() {
   }, [branchFamilyPerformance, phaseEvidence, selectedRow?.averageCredits]);
 
   const savedPlanSummaries = useMemo(() => {
+    const planPool = savedOperatingPlans;
     return savedOperatingPlans.map((plan) => {
       const spendIndex = estimatePolicySpendIndex(plan.executionPolicy, selectedRow?.workflowSteps || []);
       const assuranceIndex = estimatePolicyAssuranceIndex(plan.executionPolicy, selectedRow?.workflowSteps || []);
@@ -3414,7 +3471,8 @@ export default function AgentStudio() {
         : undefined;
       const matchedRuns = (selectedRow?.runs || [])
         .filter((run) => run.status === 'succeeded' || run.status === 'failed')
-        .filter((run) => doesRunMatchPlan(run, plan));
+        .filter((run) => rankRunPlanMatches(run, planPool).some((entry) => entry.plan.id === plan.id && entry.score >= 50))
+        .sort((left, right) => Date.parse(right.finishedAt || right.startedAt) - Date.parse(left.finishedAt || left.startedAt));
       const stats = summarizeRunCollection(matchedRuns);
       const scoring = scoreObservedPerformance(stats, matchedRuns[0]?.finishedAt || matchedRuns[0]?.startedAt);
       return {
@@ -3472,14 +3530,44 @@ export default function AgentStudio() {
       const sortedEntries = entries.slice().sort((left, right) => right.score - left.score || right.confidence - left.confidence);
       const familyRuns = (selectedRow?.runs || [])
         .filter((run) => run.status === 'succeeded' || run.status === 'failed')
-        .filter((run) => sortedEntries.some((entry) => doesRunMatchPlan(run, entry.plan)));
+        .filter((run) => sortedEntries.some((entry) => rankRunPlanMatches(run, sortedEntries.map((item) => item.plan)).some((match) => match.plan.id === entry.plan.id && match.score >= 50)));
       return {
         root: sortedEntries[0],
         entries: sortedEntries,
+        runs: familyRuns,
         trend: buildTrendSeries(familyRuns, trendMetric, 220, 86, 8),
       };
     });
   }, [filteredSavedPlans, selectedRow?.runs, trendMetric]);
+
+  const selectedPlanFamily = useMemo(
+    () => planFamilies.find((family) => family.root.familyRootId === selectedPlanFamilyRootId) || planFamilies.find((family) => family.entries.some((entry) => entry.plan.id === activeSavedPlan?.plan.id)) || planFamilies[0],
+    [activeSavedPlan?.plan.id, planFamilies, selectedPlanFamilyRootId]
+  );
+
+  const selectedPlanFamilyReplay = useMemo(() => {
+    if (!selectedPlanFamily) return null;
+    const familyRuns = selectedPlanFamily.runs
+      .slice()
+      .sort((left, right) => Date.parse(right.finishedAt || right.startedAt) - Date.parse(left.finishedAt || left.startedAt))
+      .slice(0, 6);
+    const leaderboard = selectedPlanFamily.entries
+      .map((entry) => {
+        const branchRuns = familyRuns.filter((run) => rankRunPlanMatches(run, selectedPlanFamily.entries.map((item) => item.plan))[0]?.plan.id === entry.plan.id);
+        const stats = summarizeRunCollection(branchRuns);
+        return {
+          ...entry,
+          stats,
+        };
+      })
+      .sort((left, right) => right.stats.successRate - left.stats.successRate || right.stats.count - left.stats.count || left.stats.averageCredits - right.stats.averageCredits);
+    return {
+      family: selectedPlanFamily,
+      runs: familyRuns,
+      leaderboard,
+      trend: buildTrendSeries(familyRuns, trendMetric, 320, 110, 12),
+    };
+  }, [selectedPlanFamily, trendMetric]);
 
   const planComparison = useMemo(() => {
     if (!activeSavedPlan || !comparedSavedPlan) return null;
@@ -3525,7 +3613,7 @@ export default function AgentStudio() {
   }, [activeSavedPlan, savedPlanAudit]);
 
   const selectedRunMatchedPlans = useMemo(
-    () => (selectedCohortRun ? savedPlanSummaries.filter((entry) => doesRunMatchPlan(selectedCohortRun, entry.plan)).slice(0, 3) : []),
+    () => (selectedCohortRun ? rankRunPlanMatches(selectedCohortRun, savedPlanSummaries.map((entry) => entry.plan)).slice(0, 3).map((match) => ({ ...match, summary: savedPlanSummaries.find((entry) => entry.plan.id === match.plan.id) })) : []),
     [savedPlanSummaries, selectedCohortRun]
   );
 
@@ -3540,9 +3628,32 @@ export default function AgentStudio() {
   );
 
   const runComparisonMatchedPlans = useMemo(() => ({
-    current: currentComparisonRunRecord ? savedPlanSummaries.filter((entry) => doesRunMatchPlan(currentComparisonRunRecord, entry.plan)).slice(0, 2) : [],
-    previous: previousComparisonRunRecord ? savedPlanSummaries.filter((entry) => doesRunMatchPlan(previousComparisonRunRecord, entry.plan)).slice(0, 2) : [],
+    current: currentComparisonRunRecord ? rankRunPlanMatches(currentComparisonRunRecord, savedPlanSummaries.map((entry) => entry.plan)).slice(0, 2).map((match) => ({ ...match, summary: savedPlanSummaries.find((entry) => entry.plan.id === match.plan.id) })) : [],
+    previous: previousComparisonRunRecord ? rankRunPlanMatches(previousComparisonRunRecord, savedPlanSummaries.map((entry) => entry.plan)).slice(0, 2).map((match) => ({ ...match, summary: savedPlanSummaries.find((entry) => entry.plan.id === match.plan.id) })) : [],
   }), [currentComparisonRunRecord, previousComparisonRunRecord, savedPlanSummaries]);
+
+  const activeBranchParentComparison = useMemo(() => {
+    if (!activeSavedPlan?.plan.parentPlanId) return null;
+    const parent = savedPlanSummaries.find((entry) => entry.plan.id === activeSavedPlan.plan.parentPlanId);
+    if (!parent) return null;
+    const childRuns = activeSavedPlan.stats.count > 0
+      ? (selectedRow?.runs || [])
+          .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+          .filter((run) => rankRunPlanMatches(run, [activeSavedPlan.plan, parent.plan])[0]?.plan.id === activeSavedPlan.plan.id)
+          .filter((run) => Date.parse(run.finishedAt || run.startedAt) >= Date.parse(activeSavedPlan.plan.createdAt))
+          .slice(0, 4)
+      : [];
+    const childStats = summarizeRunCollection(childRuns);
+    return {
+      parent,
+      child: activeSavedPlan,
+      childStats,
+      childRunCount: childRuns.length,
+      successDelta: childRuns.length > 0 ? Math.round((childStats.successRate - parent.stats.successRate) * 100) : undefined,
+      creditsDelta: childRuns.length > 0 ? Math.round((childStats.averageCredits || 0) - (parent.stats.averageCredits || 0)) : undefined,
+      durationDelta: childRuns.length > 0 ? Math.round(((childStats.averageDurationMs || 0) - (parent.stats.averageDurationMs || 0)) / 1000) : undefined,
+    };
+  }, [activeSavedPlan, savedPlanSummaries, selectedRow?.runs]);
 
   const archetypePlanLearning = useMemo(() => {
     const relevantRows = rows.filter((row) => classifyWorkflowArchetype(row.workflowSteps).id === selectedArchetype.id);
@@ -3581,6 +3692,12 @@ export default function AgentStudio() {
       .slice(0, 4);
   }, [rows, selectedArchetype.id]);
 
+  const archetypeRecommendedPlan = useMemo(() => {
+    const topIntent = archetypePlanLearning[0]?.label;
+    if (!topIntent) return recommendedPlan;
+    return savedPlanAudit.find((entry) => entry.plan.intentLabel === topIntent) || recommendedPlan;
+  }, [archetypePlanLearning, recommendedPlan, savedPlanAudit]);
+
   const planActionQueue = useMemo(() => {
     const queue: Array<{ id: string; title: string; body: string; action: 'restore_recommended' | 'rollback' | 'compare' | 'save_phase_plan' }> = [];
     if (recommendedPlan && activeSavedPlan && recommendedPlan.plan.id !== activeSavedPlan.plan.id) {
@@ -3617,6 +3734,26 @@ export default function AgentStudio() {
     }
     return queue.slice(0, 4);
   }, [activeSavedPlan, planComparison, planRollbackSuggestion, recommendedPlan, selectedReplayPhaseDelta, selectedReplayPhaseDetail?.phase]);
+
+  useEffect(() => {
+    if (!selectedRow?.automation.id) return;
+    if (selectedStudioState.selectedPlanId || selectedPlanId || !archetypeRecommendedPlan) return;
+    setSelectedPlanId(archetypeRecommendedPlan.plan.id);
+    setSelectedPlanFamilyRootId(archetypeRecommendedPlan.familyRootId);
+    if (archetypeRecommendedPlan.plan.intentLabel) {
+      setSelectedPlanIntentFilter(archetypeRecommendedPlan.plan.intentLabel);
+    }
+    setNotice({
+      tone: 'success',
+      message: `Auto-loaded ${archetypeRecommendedPlan.plan.name} as the best current plan for ${selectedArchetype.label.toLowerCase()}.`,
+    });
+  }, [
+    archetypeRecommendedPlan,
+    selectedArchetype.label,
+    selectedPlanId,
+    selectedRow?.automation.id,
+    selectedStudioState.selectedPlanId,
+  ]);
 
   const patchAutomationConfig = useCallback(async (patch: {
     executionPolicy?: AutomationExecutionPolicyDraft;
@@ -3757,6 +3894,7 @@ export default function AgentStudio() {
     const nextRoom = activeRoom || undefined;
     const nextPlanId = selectedPlanId || undefined;
     const nextPlanCompareId = selectedPlanCompareId || undefined;
+    const nextPlanFamilyRootId = selectedPlanFamilyRootId || undefined;
     const nextPlanIntentFilter = selectedPlanIntentFilter || undefined;
     const nextReplayPhase = selectedReplayPhase || undefined;
     const nextWorkerRole = selectedWorkerRole || undefined;
@@ -3771,6 +3909,7 @@ export default function AgentStudio() {
       (selectedStudioState.activeRoom || undefined) === nextRoom &&
       (selectedStudioState.selectedPlanId || undefined) === nextPlanId &&
       (selectedStudioState.selectedPlanCompareId || undefined) === nextPlanCompareId &&
+      (selectedStudioState.selectedPlanFamilyRootId || undefined) === nextPlanFamilyRootId &&
       (selectedStudioState.selectedPlanIntentFilter || undefined) === nextPlanIntentFilter &&
       (selectedStudioState.selectedReplayPhase || undefined) === nextReplayPhase &&
       (selectedStudioState.selectedWorkerRole || undefined) === nextWorkerRole &&
@@ -3790,6 +3929,7 @@ export default function AgentStudio() {
         activeRoom: nextRoom,
         selectedPlanId: nextPlanId,
         selectedPlanCompareId: nextPlanCompareId,
+        selectedPlanFamilyRootId: nextPlanFamilyRootId,
         selectedPlanIntentFilter: nextPlanIntentFilter,
         selectedReplayPhase: nextReplayPhase,
         selectedWorkerRole: nextWorkerRole,
@@ -3810,6 +3950,7 @@ export default function AgentStudio() {
     phaseSimulation,
     selectedPlanId,
     selectedPlanCompareId,
+    selectedPlanFamilyRootId,
     selectedPlanIntentFilter,
     selectedComparisonExperimentId,
     selectedCohortRunId,
@@ -4152,8 +4293,10 @@ export default function AgentStudio() {
     void updateStudioState({
       ...selectedStudioState,
       selectedPlanId: nextPlans[0].id,
+      selectedPlanFamilyRootId: parentPlan?.parentPlanId || parentPlan?.id || nextPlans[0].id,
       savedPlans: nextPlans,
     }, 'Saved operating plan.');
+    setSelectedPlanFamilyRootId(parentPlan?.parentPlanId || parentPlan?.id || nextPlans[0].id);
   }, [previewPreset.label, previewPresetId, selectedPolicy, selectedRow?.workflowSteps, selectedScenario.label, selectedScenarioId, selectedStudioState, updateStudioState]);
 
   const handleForkOperatingPlan = useCallback((plan: StudioOperatingPlan) => {
@@ -4219,12 +4362,18 @@ export default function AgentStudio() {
     void updateStudioState({
       ...selectedStudioState,
       selectedPlanId: nextPlans[0].id,
+      selectedPlanCompareId: basePlan?.id,
+      selectedPlanFamilyRootId: basePlan?.parentPlanId || basePlan?.id || nextPlans[0].id,
       savedPlans: nextPlans,
     }, `Branched ${formatDirectivePhaseScope([phase])} into a new operating plan.`);
+    setSelectedPlanCompareId(basePlan?.id || '');
+    setSelectedPlanFamilyRootId(basePlan?.parentPlanId || basePlan?.id || nextPlans[0].id);
   }, [activeSavedPlan?.plan, previewPresetId, selectedMath.recommendedElasticLanes, selectedPolicy, selectedRow?.workflowSteps, selectedScenarioId, selectedStudioState, updateStudioState]);
 
   const handleRestoreOperatingPlan = useCallback((plan: StudioOperatingPlan) => {
     setSelectedPlanId(plan.id);
+    const familyRootId = savedPlanSummaries.find((entry) => entry.plan.id === plan.id)?.familyRootId;
+    if (familyRootId) setSelectedPlanFamilyRootId(familyRootId);
     setSelectedScenarioId(plan.scenarioId as ScenarioPresetId);
     setPreviewPresetId(plan.previewPresetId);
     void patchAutomationConfig({
@@ -4243,10 +4392,12 @@ export default function AgentStudio() {
         }),
       },
     }, { successMessage: `Restored ${plan.name}.` });
-  }, [patchAutomationConfig, selectedStudioState]);
+  }, [patchAutomationConfig, savedPlanSummaries, selectedStudioState]);
 
   const handleRestorePlanPresetOnly = useCallback((plan: StudioOperatingPlan) => {
     setSelectedPlanId(plan.id);
+    const familyRootId = savedPlanSummaries.find((entry) => entry.plan.id === plan.id)?.familyRootId;
+    if (familyRootId) setSelectedPlanFamilyRootId(familyRootId);
     setSelectedScenarioId(plan.scenarioId as ScenarioPresetId);
     setPreviewPresetId(plan.previewPresetId);
     void patchAutomationConfig({
@@ -4264,10 +4415,12 @@ export default function AgentStudio() {
         }),
       },
     }, { successMessage: `Restored preset only from ${plan.name}.` });
-  }, [patchAutomationConfig, selectedStudioState]);
+  }, [patchAutomationConfig, savedPlanSummaries, selectedStudioState]);
 
   const handleRestorePlanSteeringOnly = useCallback((plan: StudioOperatingPlan) => {
     setSelectedPlanId(plan.id);
+    const familyRootId = savedPlanSummaries.find((entry) => entry.plan.id === plan.id)?.familyRootId;
+    if (familyRootId) setSelectedPlanFamilyRootId(familyRootId);
     void updateStudioState({
       ...selectedStudioState,
       selectedPlanId: plan.id,
@@ -4279,16 +4432,18 @@ export default function AgentStudio() {
         sourceExperimentLabel: plan.sourceExperimentLabel || plan.name,
       }),
     }, `Restored steering only from ${plan.name}.`);
-  }, [selectedStudioState, updateStudioState]);
+  }, [savedPlanSummaries, selectedStudioState, updateStudioState]);
 
   const handleComparePlan = useCallback((plan: StudioOperatingPlan) => {
     setSelectedPlanCompareId(plan.id);
+    const familyRootId = savedPlanSummaries.find((entry) => entry.plan.id === plan.id)?.familyRootId;
+    if (familyRootId) setSelectedPlanFamilyRootId(familyRootId);
     if (plan.sourceExperimentId) {
       setSelectedComparisonExperimentId(plan.sourceExperimentId);
     }
     setActiveRoom('optimize');
     setNotice({ tone: 'success', message: `Loaded ${plan.name} for comparison.` });
-  }, []);
+  }, [savedPlanSummaries]);
 
   const handleRestoreExperiment = useCallback((experiment: StudioExperimentRecord) => {
     if (SCENARIO_PRESETS.some((scenario) => scenario.id === experiment.scenarioId)) {
@@ -4315,15 +4470,17 @@ export default function AgentStudio() {
 
   const handleOpenRunInReplay = useCallback((run: PlatformTaskRunRecord, sourceLabel = 'replay') => {
     const attribution = getRunExperimentAttribution(run);
-    const matchedPlan = savedPlanSummaries.find((entry) => doesRunMatchPlan(run, entry.plan));
+    const matchedPlan = rankRunPlanMatches(run, savedPlanSummaries.map((entry) => entry.plan))[0];
+    const matchedPlanSummary = matchedPlan ? savedPlanSummaries.find((entry) => entry.plan.id === matchedPlan.plan.id) : undefined;
     const dominantPhase = readStepExecutions(run.metadata?.stepExecutions)
       .filter((step) => step.kind === 'search' || step.kind === 'query' || step.kind === 'capture' || step.kind === 'analyze' || step.kind === 'summarize' || step.kind === 'deliver' || step.kind === 'note')
       .sort((left, right) => (right.actualCredits || 0) - (left.actualCredits || 0))[0]?.kind;
     if (attribution.experimentId) {
       setSelectedComparisonExperimentId(attribution.experimentId);
     }
-    if (matchedPlan) {
-      setSelectedPlanId(matchedPlan.plan.id);
+    if (matchedPlanSummary) {
+      setSelectedPlanId(matchedPlanSummary.plan.id);
+      setSelectedPlanFamilyRootId(matchedPlanSummary.familyRootId);
     }
     if (dominantPhase && dominantPhase !== 'note') {
       setSelectedReplayPhase(dominantPhase as WorkflowBlockKind);
@@ -5057,10 +5214,13 @@ export default function AgentStudio() {
                                       <button
                                         key={`run-plan-${entry.plan.id}`}
                                         type="button"
-                                        onClick={() => setSelectedPlanId(entry.plan.id)}
+                                        onClick={() => {
+                                          setSelectedPlanId(entry.plan.id);
+                                          if (entry.summary?.familyRootId) setSelectedPlanFamilyRootId(entry.summary.familyRootId);
+                                        }}
                                         className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${selectedPlanId === entry.plan.id ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
                                       >
-                                        {entry.plan.name}
+                                        {entry.plan.name} <span className="ml-1 text-[10px] text-slate-500">({entry.score})</span>
                                       </button>
                                     ))}
                                   </div>
@@ -6090,38 +6250,165 @@ export default function AgentStudio() {
                           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plan families</p>
                           <div className="mt-3 space-y-3">
                             {planFamilies.length > 0 ? planFamilies.map((family) => (
-                              <div key={`plan-family-${family.root.plan.id}`} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <div
+                                key={`plan-family-${family.root.plan.id}`}
+                                className={`rounded-2xl border p-3 ${selectedPlanFamily?.root.familyRootId === family.root.familyRootId ? 'border-cyan-500/24 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/45'}`}
+                              >
                                 <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-medium text-white">{family.root.plan.name}</p>
-                                  <p className="mt-1 text-[11px] text-slate-500">{family.entries.length} plans in this line</p>
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{family.root.plan.name}</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">{family.entries.length} plans in this line · {family.runs.length} attributed runs</p>
+                                  </div>
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {family.root.score}</span>
                                 </div>
-                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {family.root.score}</span>
+                                {family.trend ? (
+                                  <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                    <svg viewBox={`0 0 ${family.trend.width} ${family.trend.height}`} className="h-20 w-full">
+                                      <path d={family.trend.areaPath} fill="rgba(34,211,238,0.12)" />
+                                      <path d={family.trend.linePath} fill="none" stroke="rgba(34,211,238,0.92)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                      {family.trend.points.map((point) => (
+                                        <circle
+                                          key={`plan-family-point-${family.root.plan.id}-${point.run.id}`}
+                                          cx={point.x}
+                                          cy={point.y}
+                                          r="3.5"
+                                          fill="rgba(103,232,249,1)"
+                                        />
+                                      ))}
+                                    </svg>
+                                    <p className="mt-2 text-[11px] text-slate-500">Family evidence over recent runs.</p>
+                                  </div>
+                                ) : null}
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedPlanFamilyRootId(family.root.familyRootId)}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                  >
+                                    Inspect family replay
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedPlanFamilyRootId(family.root.familyRootId);
+                                      setSelectedPlanId(family.root.plan.id);
+                                      setActiveRoom('replay');
+                                    }}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                  >
+                                    Open family in replay
+                                  </button>
+                                </div>
                               </div>
-                              {family.trend ? (
-                                <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
-                                  <svg viewBox={`0 0 ${family.trend.width} ${family.trend.height}`} className="h-20 w-full">
-                                    <path d={family.trend.areaPath} fill="rgba(34,211,238,0.12)" />
-                                    <path d={family.trend.linePath} fill="none" stroke="rgba(34,211,238,0.92)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                    {family.trend.points.map((point) => (
-                                      <circle
-                                        key={`plan-family-point-${family.root.plan.id}-${point.run.id}`}
-                                        cx={point.x}
-                                        cy={point.y}
-                                        r="3.5"
-                                        fill="rgba(103,232,249,1)"
-                                      />
-                                    ))}
-                                  </svg>
-                                  <p className="mt-2 text-[11px] text-slate-500">Family evidence over recent runs.</p>
-                                </div>
-                              ) : null}
-                            </div>
                           )) : (
                             <p className="text-sm text-slate-500">Branch a plan and its family will appear here.</p>
                           )}
                         </div>
                       </div>
+                        {selectedPlanFamilyReplay ? (
+                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Selected plan family replay</p>
+                                <p className="mt-1 text-sm font-medium text-white">{selectedPlanFamilyReplay.family.root.plan.name}</p>
+                                <p className="mt-1 text-[11px] text-slate-500">{selectedPlanFamilyReplay.family.entries.length} plans in this line · drill into the exact run or restore the strongest child.</p>
+                              </div>
+                              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{selectedPlanFamilyReplay.runs.length} recent runs</span>
+                            </div>
+                            {selectedPlanFamilyReplay.trend ? (
+                              <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                <svg viewBox={`0 0 ${selectedPlanFamilyReplay.trend.width} ${selectedPlanFamilyReplay.trend.height}`} className="h-24 w-full">
+                                  <path d={selectedPlanFamilyReplay.trend.areaPath} fill="rgba(34,211,238,0.10)" />
+                                  <path d={selectedPlanFamilyReplay.trend.linePath} fill="none" stroke="rgba(34,211,238,0.92)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                  {selectedPlanFamilyReplay.trend.points.map((point) => (
+                                    <g
+                                      key={`selected-plan-family-point-${point.run.id}`}
+                                      onClick={() => handleOpenRunInReplay(point.run, 'plan family replay')}
+                                      className="cursor-pointer"
+                                      role="button"
+                                      tabIndex={0}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                          event.preventDefault();
+                                          handleOpenRunInReplay(point.run, 'plan family replay');
+                                        }
+                                      }}
+                                    >
+                                      <circle cx={point.x} cy={point.y} r="4" fill="rgba(103,232,249,1)" />
+                                    </g>
+                                  ))}
+                                </svg>
+                                <p className="mt-2 text-[11px] text-slate-500">Click any point to open the exact run in replay.</p>
+                              </div>
+                            ) : null}
+                            <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.95fr),minmax(0,1.05fr)]">
+                              <div className="space-y-3">
+                                {selectedPlanFamilyReplay.runs.length > 0 ? selectedPlanFamilyReplay.runs.map((run) => {
+                                  const topPlanMatch = rankRunPlanMatches(run, selectedPlanFamilyReplay.family.entries.map((entry) => entry.plan))[0];
+                                  return (
+                                    <button
+                                      key={`plan-family-run-${run.id}`}
+                                      type="button"
+                                      onClick={() => handleOpenRunInReplay(run, 'plan family replay')}
+                                      className="w-full rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3 text-left transition hover:border-cyan-500/30"
+                                    >
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                          <p className="text-sm font-medium text-white">{topPlanMatch?.plan.name || 'Unassigned family run'}</p>
+                                          <p className="mt-1 text-[11px] text-slate-500">{formatAutomationRunTime(run.finishedAt || run.startedAt)}</p>
+                                        </div>
+                                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(run.status)}`}>{run.status}</span>
+                                      </div>
+                                      <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{run.actualCredits ? `${formatCredits(run.actualCredits)} cr` : '—'}</span>
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCompactDuration(Number.isNaN(Date.parse(run.startedAt || '')) || Number.isNaN(Date.parse(run.finishedAt || '')) ? undefined : Math.max(0, Date.parse(run.finishedAt || '') - Date.parse(run.startedAt || '')))}</span>
+                                        {topPlanMatch ? (
+                                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200">
+                                            match {topPlanMatch.score}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    </button>
+                                  );
+                                }) : (
+                                  <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-3 text-sm text-slate-500">
+                                    This family needs a few more real runs before replay becomes useful.
+                                  </div>
+                                )}
+                              </div>
+                              <div className="space-y-3">
+                                {selectedPlanFamilyReplay.leaderboard.map((entry, index) => (
+                                  <div key={`selected-plan-family-leader-${entry.plan.id}`} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <p className="text-sm font-medium text-white">{index + 1}. {entry.plan.name}</p>
+                                        <p className="mt-1 text-[11px] text-slate-500">{entry.stats.count} family runs · {Math.round(entry.stats.successRate * 100)}% success</p>
+                                      </div>
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {entry.score}</span>
+                                    </div>
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRestoreOperatingPlan(entry.plan)}
+                                        disabled={actionBusy}
+                                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
+                                      >
+                                        Restore child
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleComparePlan(entry.plan)}
+                                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                      >
+                                        Compare child
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
                         <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plan performance audit</p>
                           <div className="mt-3 space-y-3">
@@ -6164,6 +6451,56 @@ export default function AgentStudio() {
                                 className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
                               >
                                 Compare recommended
+                              </button>
+                              {archetypeRecommendedPlan && archetypeRecommendedPlan.plan.id !== recommendedPlan.plan.id ? (
+                                <button
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => handleRestoreOperatingPlan(archetypeRecommendedPlan.plan)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-emerald-100 disabled:opacity-60"
+                                >
+                                  Restore archetype pick
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
+                        {activeBranchParentComparison ? (
+                          <div className="mt-4 rounded-2xl border border-violet-500/16 bg-violet-500/8 p-4">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-violet-100/80">Branch vs parent</p>
+                            <p className="mt-1 text-sm font-medium text-white">{activeBranchParentComparison.child.plan.name} vs {activeBranchParentComparison.parent.plan.name}</p>
+                            <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                              This branched plan is being judged against its parent over the next few attributed runs so the phase branch can prove itself quickly.
+                            </p>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
+                              <div className="rounded-xl border border-violet-500/18 bg-violet-500/8 px-3 py-2">
+                                <p className="text-slate-400">Child run count</p>
+                                <p className="mt-1 text-white">{activeBranchParentComparison.childRunCount}</p>
+                              </div>
+                              <div className="rounded-xl border border-violet-500/18 bg-violet-500/8 px-3 py-2">
+                                <p className="text-slate-400">Success vs parent</p>
+                                <p className={`mt-1 ${typeof activeBranchParentComparison.successDelta === 'number' && activeBranchParentComparison.successDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{typeof activeBranchParentComparison.successDelta === 'number' ? `${formatSignedDelta(activeBranchParentComparison.successDelta)} pts` : 'Waiting for runs'}</p>
+                              </div>
+                              <div className="rounded-xl border border-violet-500/18 bg-violet-500/8 px-3 py-2">
+                                <p className="text-slate-400">Spend vs parent</p>
+                                <p className={`mt-1 ${typeof activeBranchParentComparison.creditsDelta === 'number' && activeBranchParentComparison.creditsDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{typeof activeBranchParentComparison.creditsDelta === 'number' ? `${formatSignedDelta(activeBranchParentComparison.creditsDelta)} cr` : 'Waiting for runs'}</p>
+                              </div>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleComparePlan(activeBranchParentComparison.parent.plan)}
+                                className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                              >
+                                Compare parent
+                              </button>
+                              <button
+                                type="button"
+                                disabled={actionBusy}
+                                onClick={() => handleRestoreOperatingPlan(activeBranchParentComparison.parent.plan)}
+                                className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-violet-100 disabled:opacity-60"
+                              >
+                                Restore parent
                               </button>
                             </div>
                           </div>
@@ -6253,6 +6590,18 @@ export default function AgentStudio() {
                         <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Archetype plan learning</p>
                           <div className="mt-3 space-y-3">
+                            {archetypeRecommendedPlan ? (
+                              <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/8 p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">Auto-pick for this workflow</p>
+                                    <p className="mt-1 text-[11px] text-slate-300">{archetypeRecommendedPlan.plan.name}</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">Recommended from {selectedArchetype.label.toLowerCase()} learning so users land on a concrete setup instead of a blank state.</p>
+                                  </div>
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200">{archetypeRecommendedPlan.plan.intentLabel || 'No named intent'}</span>
+                                </div>
+                              </div>
+                            ) : null}
                             {archetypePlanLearning.length > 0 ? archetypePlanLearning.map((entry, index) => (
                               <div key={`archetype-plan-${entry.label}`} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
                                 <div className="flex items-start justify-between gap-3">
@@ -6753,10 +7102,13 @@ export default function AgentStudio() {
                                         <button
                                           key={`compare-current-plan-${entry.plan.id}`}
                                           type="button"
-                                          onClick={() => setSelectedPlanId(entry.plan.id)}
+                                          onClick={() => {
+                                            setSelectedPlanId(entry.plan.id);
+                                            if (entry.summary?.familyRootId) setSelectedPlanFamilyRootId(entry.summary.familyRootId);
+                                          }}
                                           className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200"
                                         >
-                                          {entry.plan.name}
+                                          {entry.plan.name} <span className="ml-1 text-[10px] text-cyan-100/70">({entry.score})</span>
                                         </button>
                                       ))}
                                     </div>
@@ -6779,10 +7131,13 @@ export default function AgentStudio() {
                                           <button
                                             key={`compare-previous-plan-${entry.plan.id}`}
                                             type="button"
-                                            onClick={() => setSelectedPlanId(entry.plan.id)}
+                                            onClick={() => {
+                                              setSelectedPlanId(entry.plan.id);
+                                              if (entry.summary?.familyRootId) setSelectedPlanFamilyRootId(entry.summary.familyRootId);
+                                            }}
                                             className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300"
                                           >
-                                            {entry.plan.name}
+                                            {entry.plan.name} <span className="ml-1 text-[10px] text-slate-500">({entry.score})</span>
                                           </button>
                                         ))}
                                       </div>
