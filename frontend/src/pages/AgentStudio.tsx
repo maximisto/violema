@@ -52,10 +52,25 @@ interface StudioRoleDirective {
   updatedAt: string;
 }
 
+interface StudioOperatingPlan {
+  id: string;
+  name: string;
+  createdAt: string;
+  scenarioId: string;
+  previewPresetId: string;
+  executionPolicy: AutomationExecutionPolicyDraft;
+  roleDirectives?: Record<string, StudioRoleDirective>;
+  sourceExperimentId?: string;
+  sourceExperimentLabel?: string;
+  notes?: string;
+}
+
 interface AutomationStudioStateDraft {
   activeRoom?: StudioRoom;
   selectedScenarioId?: string;
   previewPresetId?: string;
+  selectedPlanId?: string;
+  selectedReplayPhase?: 'all' | WorkflowBlockKind;
   selectedWorkerRole?: string;
   selectedDirectivePhase?: 'all' | WorkflowBlockKind;
   selectedComparisonExperimentId?: string;
@@ -75,6 +90,7 @@ interface AutomationStudioStateDraft {
   autoPromotionMinConfidence?: number;
   autoPromotionScenarioThresholds?: Record<string, number>;
   autoPromotionArchetypeThresholds?: Record<string, number>;
+  savedPlans?: StudioOperatingPlan[];
 }
 
 interface StudioPromotionRecord {
@@ -1007,6 +1023,15 @@ function clonePromotionHistory(history?: StudioPromotionRecord[]) {
   return history.map((entry) => ({ ...entry }));
 }
 
+function cloneOperatingPlans(plans?: StudioOperatingPlan[]) {
+  if (!plans) return undefined;
+  return plans.map((plan) => ({
+    ...plan,
+    executionPolicy: { ...plan.executionPolicy },
+    roleDirectives: cloneRoleDirectives(plan.roleDirectives),
+  }));
+}
+
 function appendPromotionHistory(
   history: StudioPromotionRecord[] | undefined,
   entry: Omit<StudioPromotionRecord, 'id' | 'appliedAt' | 'actor'>,
@@ -1310,6 +1335,42 @@ function classifyWorkflowArchetype(steps: WorkflowBlockDraft[]) {
 
 function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
   if (!isRecord(value)) return {};
+  const savedPlans = Array.isArray(value.savedPlans)
+    ? value.savedPlans
+        .map((item) => {
+          if (!isRecord(item)) return null;
+          const id = readString(item.id);
+          const name = readString(item.name);
+          const createdAt = readString(item.createdAt);
+          const scenarioId = readString(item.scenarioId);
+          const previewPresetId = readString(item.previewPresetId);
+          if (!id || !name || !createdAt || !scenarioId || !previewPresetId) return null;
+          const plan: StudioOperatingPlan = {
+            id,
+            name,
+            createdAt,
+            scenarioId,
+            previewPresetId,
+            executionPolicy: normalizeExecutionPolicy(item.executionPolicy),
+            roleDirectives: isRecord(item.roleDirectives)
+              ? Object.entries(item.roleDirectives).reduce<Record<string, StudioRoleDirective>>((directiveAcc, [role, directive]) => {
+                  if (!isRecord(directive)) return directiveAcc;
+                  if (directive.mode !== 'cheaper' && directive.mode !== 'review' && directive.mode !== 'promote') return directiveAcc;
+                  const updatedAt = readString(directive.updatedAt);
+                  if (!updatedAt) return directiveAcc;
+                  directiveAcc[role] = { mode: directive.mode, phases: normalizeDirectivePhases(directive.phases), updatedAt };
+                  return directiveAcc;
+                }, {})
+              : undefined,
+            sourceExperimentId: readString(item.sourceExperimentId),
+            sourceExperimentLabel: readString(item.sourceExperimentLabel),
+            notes: readString(item.notes),
+          };
+          return plan;
+        })
+        .filter((item): item is StudioOperatingPlan => Boolean(item))
+    : undefined;
+
   const experimentHistory = Array.isArray(value.experimentHistory)
     ? value.experimentHistory
         .map((item) => {
@@ -1395,6 +1456,18 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
       : undefined,
     selectedScenarioId: readString(value.selectedScenarioId),
     previewPresetId: readString(value.previewPresetId),
+    selectedPlanId: readString(value.selectedPlanId),
+    selectedReplayPhase:
+      value.selectedReplayPhase === 'all' ||
+      value.selectedReplayPhase === 'search' ||
+      value.selectedReplayPhase === 'query' ||
+      value.selectedReplayPhase === 'capture' ||
+      value.selectedReplayPhase === 'analyze' ||
+      value.selectedReplayPhase === 'summarize' ||
+      value.selectedReplayPhase === 'deliver' ||
+      value.selectedReplayPhase === 'note'
+        ? value.selectedReplayPhase
+        : undefined,
     selectedWorkerRole: readString(value.selectedWorkerRole),
     selectedDirectivePhase:
       value.selectedDirectivePhase === 'all' ||
@@ -1444,6 +1517,7 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
         : undefined,
     autoPromotionScenarioThresholds: normalizeThresholdMap(value.autoPromotionScenarioThresholds),
     autoPromotionArchetypeThresholds: normalizeThresholdMap(value.autoPromotionArchetypeThresholds),
+    savedPlans,
   };
 }
 
@@ -1491,6 +1565,8 @@ export default function AgentStudio() {
   const [activeRoom, setActiveRoom] = useState<StudioRoom>('live');
   const [selectedWorkerRole, setSelectedWorkerRole] = useState<string>('nexus');
   const [selectedScenarioId, setSelectedScenarioId] = useState<ScenarioPresetId>('baseline');
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+  const [selectedReplayPhase, setSelectedReplayPhase] = useState<'all' | WorkflowBlockKind>('all');
   const [selectedDirectivePhase, setSelectedDirectivePhase] = useState<'all' | WorkflowBlockKind>('all');
   const [selectedComparisonExperimentId, setSelectedComparisonExperimentId] = useState<string>('');
   const [selectedBranchRootId, setSelectedBranchRootId] = useState<string>('');
@@ -1741,6 +1817,8 @@ export default function AgentStudio() {
 
   useEffect(() => {
     setActiveRoom(selectedStudioState.activeRoom || 'live');
+    setSelectedPlanId(selectedStudioState.selectedPlanId || '');
+    setSelectedReplayPhase(selectedStudioState.selectedReplayPhase || 'all');
     setSelectedWorkerRole(selectedStudioState.selectedWorkerRole || 'nexus');
     setSelectedDirectivePhase(selectedStudioState.selectedDirectivePhase || 'all');
     setHoveredCohortRunId('');
@@ -1765,9 +1843,11 @@ export default function AgentStudio() {
     selectedStudioState.branchRunFilter,
     selectedStudioState.gateLearningWindow,
     selectedStudioState.phaseSimulation,
+    selectedStudioState.selectedPlanId,
     selectedStudioState.selectedComparisonExperimentId,
     selectedStudioState.selectedCohortRunId,
     selectedStudioState.selectedDirectivePhase,
+    selectedStudioState.selectedReplayPhase,
     selectedRow?.automation.id,
     selectedStudioState.comparedBranchRootId,
     selectedStudioState.previewPresetId,
@@ -2157,6 +2237,11 @@ export default function AgentStudio() {
     [selectedStudioState.experimentHistory]
   );
 
+  const savedOperatingPlans = useMemo(
+    () => (selectedStudioState.savedPlans || []).slice().sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
+    [selectedStudioState.savedPlans]
+  );
+
   const phaseEvidence = useMemo(() => {
     if (!selectedRow) return [] as Array<{ phase: WorkflowBlockKind; runs: number; successRate: number; averageCredits: number; averageDurationMs: number; directiveModes: string[] }>;
     const aggregate = new Map<WorkflowBlockKind, { runs: number; success: number; credits: number; durationMs: number; directiveModes: Set<string> }>();
@@ -2350,6 +2435,13 @@ export default function AgentStudio() {
       return experimentHistory[0]?.id || '';
     });
   }, [experimentHistory, selectedRow?.automation.id]);
+
+  useEffect(() => {
+    setSelectedPlanId((current) => {
+      if (current && savedOperatingPlans.some((plan) => plan.id === current)) return current;
+      return savedOperatingPlans[0]?.id || '';
+    });
+  }, [savedOperatingPlans, selectedRow?.automation.id]);
 
   useEffect(() => {
     const candidate = currentCohortPerformance?.runs[0]?.id || selectedExperimentPerformance?.runs[0]?.id || '';
@@ -3011,6 +3103,7 @@ export default function AgentStudio() {
       id: string;
       title: string;
       body: string;
+      sourceLabel: string;
       phase?: WorkflowBlockKind;
       mode?: 'cheaper' | 'review' | 'promote';
       action?: 'simulate_phase' | 'focus_phase' | 'apply_policy';
@@ -3022,6 +3115,7 @@ export default function AgentStudio() {
         id: `weak-${replayWeakSpot.phase}`,
         title: `Stress-test ${formatDirectivePhaseScope([replayWeakSpot.phase])}`,
         body: replayWeakSpot.body,
+        sourceLabel: 'Replay weak spot',
         phase: replayWeakSpot.phase,
         mode: replayWeakSpot.recommendedMode,
         action: 'simulate_phase',
@@ -3036,6 +3130,7 @@ export default function AgentStudio() {
           id: `waste-${index}`,
           title: item.title,
           body: item.body,
+          sourceLabel: 'Waste diagnostic',
           action: 'apply_policy',
           policyAction: item.action,
         });
@@ -3049,6 +3144,7 @@ export default function AgentStudio() {
           id: `risk-${index}`,
           title: item.title,
           body: item.body,
+          sourceLabel: 'Risk diagnostic',
           action: 'apply_policy',
           policyAction: item.action,
         });
@@ -3062,14 +3158,32 @@ export default function AgentStudio() {
           id: `learn-${item.phase}-${item.mode}`,
           title: `Replay-test ${formatDirectivePhaseScope([item.phase])}`,
           body: `${getDirectiveModeLabel(item.mode as 'cheaper' | 'review' | 'promote')} is outperforming baseline for this workflow class with ${item.confidence}% confidence.`,
+          sourceLabel: 'Phase learning',
           phase: item.phase,
           mode: item.mode as 'cheaper' | 'review' | 'promote',
           action: 'focus_phase',
         });
       });
 
+    if (selectedBranchFamily && selectedBranchFamily.stats.count >= 2) {
+      const weakestBranchPhase = phaseEvidence
+        .filter((phase) => phase.runs >= 2)
+        .sort((left, right) => left.successRate - right.successRate || right.averageCredits - left.averageCredits)[0];
+      if (weakestBranchPhase) {
+        queue.push({
+          id: `branch-${selectedBranchFamily.rootExperiment.id}-${weakestBranchPhase.phase}`,
+          title: `Fork a fix for ${formatDirectivePhaseScope([weakestBranchPhase.phase])}`,
+          body: `${getExperimentDisplayLabel(selectedBranchFamily.rootExperiment)} has enough evidence to branch. Best next test is a targeted ${getDirectiveModeLabel(weakestBranchPhase.successRate < 0.68 ? 'review' : 'cheaper').toLowerCase()} on ${formatDirectivePhaseScope([weakestBranchPhase.phase])}.`,
+          sourceLabel: 'Branch opportunity',
+          phase: weakestBranchPhase.phase,
+          mode: weakestBranchPhase.successRate < 0.68 ? 'review' : 'cheaper',
+          action: 'simulate_phase',
+        });
+      }
+    }
+
     return queue.slice(0, 5);
-  }, [phaseLearningByArchetype, replayWeakSpot, workflowDiagnostics.riskItems, workflowDiagnostics.wasteItems]);
+  }, [phaseEvidence, phaseLearningByArchetype, replayWeakSpot, selectedBranchFamily, workflowDiagnostics.riskItems, workflowDiagnostics.wasteItems]);
 
   const gateLearningComparison = useMemo(() => {
     const windows: GateLearningWindow[] = ['recent', 'deep', 'all'];
@@ -3166,6 +3280,91 @@ export default function AgentStudio() {
     selectedStudioState.autoPromotionArchetypeThresholds,
     selectedStudioState.autoPromotionScenarioThresholds,
   ]);
+
+  const replayPhaseOverlay = useMemo(() => {
+    const run = focusedCohortRun || selectedCohortRun;
+    if (!run) return [];
+    const phaseOrder: WorkflowBlockKind[] = ['search', 'query', 'capture', 'analyze', 'summarize', 'deliver', 'note'];
+    const grouped = phaseOrder
+      .map((phase) => {
+        const steps = readStepExecutions(run.metadata?.stepExecutions).filter((step) => step.kind === phase);
+        if (steps.length === 0) return null;
+        const credits = steps.reduce((sum, step) => sum + (step.actualCredits || 0), 0);
+        const durationMs = steps.reduce((sum, step) => sum + (step.durationMs || 0), 0);
+        const tokens = steps.reduce((sum, step) => sum + (step.tokenUsage?.totalTokens || 0), 0);
+        const failed = steps.some((step) => step.status === 'failed');
+        const succeeded = steps.some((step) => step.status === 'succeeded');
+        const primaryStep = steps
+          .slice()
+          .sort((left, right) => (right.actualCredits || 0) - (left.actualCredits || 0))[0];
+        return {
+          phase,
+          steps,
+          credits,
+          durationMs,
+          tokens,
+          failed,
+          succeeded,
+          primaryRole: primaryStep?.assignedRole || getPreferredRoleForPhase(phase),
+          modelSource: primaryStep?.modelSource,
+          directiveMode: primaryStep?.directiveMode,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+    const maxCredits = Math.max(...grouped.map((item) => item.credits || 0), 1);
+    return grouped.map((item) => ({
+      ...item,
+      costWidth: `${Math.max(16, ((item.credits || 0) / maxCredits) * 100)}%`,
+    }));
+  }, [focusedCohortRun, selectedCohortRun]);
+
+  const selectedReplayPhaseDetail = useMemo(() => {
+    if (selectedReplayPhase === 'all') return replayPhaseOverlay[0];
+    return replayPhaseOverlay.find((entry) => entry.phase === selectedReplayPhase) || replayPhaseOverlay[0];
+  }, [replayPhaseOverlay, selectedReplayPhase]);
+
+  const branchOpportunityMap = useMemo(() => {
+    const baselineCredits = selectedRow?.averageCredits || 0;
+    return branchFamilyPerformance.slice(0, 4).map((family) => {
+      const weakestPhase = phaseEvidence
+        .filter((phase) => phase.runs >= 2)
+        .sort((left, right) => left.successRate - right.successRate || right.averageCredits - left.averageCredits)[0];
+      return {
+        id: family.rootExperiment.id,
+        label: getExperimentDisplayLabel(family.rootExperiment),
+        score: family.score,
+        confidence: family.confidence,
+        successRate: Math.round(family.stats.successRate * 100),
+        spendDelta: Math.round((family.stats.averageCredits || 0) - baselineCredits),
+        focusPhase: weakestPhase?.phase,
+      };
+    });
+  }, [branchFamilyPerformance, phaseEvidence, selectedRow?.averageCredits]);
+
+  const savedPlanSummaries = useMemo(() => {
+    return savedOperatingPlans.map((plan) => {
+      const spendIndex = estimatePolicySpendIndex(plan.executionPolicy, selectedRow?.workflowSteps || []);
+      const assuranceIndex = estimatePolicyAssuranceIndex(plan.executionPolicy, selectedRow?.workflowSteps || []);
+      const fitIndex = estimatePolicyFitIndex(plan.executionPolicy, selectedRow?.workflowSteps || []);
+      const sourceExperiment = plan.sourceExperimentId
+        ? experimentHistory.find((experiment) => experiment.id === plan.sourceExperimentId)
+        : undefined;
+      return {
+        plan,
+        spendIndex,
+        assuranceIndex,
+        fitIndex,
+        steeringCount: countDirectiveEntries(plan.roleDirectives),
+        sourceExperiment,
+      };
+    });
+  }, [experimentHistory, savedOperatingPlans, selectedRow?.workflowSteps]);
+
+  const activeSavedPlan = useMemo(
+    () => savedPlanSummaries.find((entry) => entry.plan.id === selectedPlanId) || savedPlanSummaries[0],
+    [savedPlanSummaries, selectedPlanId]
+  );
 
   const patchAutomationConfig = useCallback(async (patch: {
     executionPolicy?: AutomationExecutionPolicyDraft;
@@ -3304,6 +3503,8 @@ export default function AgentStudio() {
   useEffect(() => {
     if (!selectedRow?.automation.id) return undefined;
     const nextRoom = activeRoom || undefined;
+    const nextPlanId = selectedPlanId || undefined;
+    const nextReplayPhase = selectedReplayPhase || undefined;
     const nextWorkerRole = selectedWorkerRole || undefined;
     const nextDirectivePhase = selectedDirectivePhase || undefined;
     const nextPhaseSimulation = phaseSimulation || undefined;
@@ -3314,6 +3515,8 @@ export default function AgentStudio() {
     const nextBranchFilter = branchRunFilter || undefined;
     if (
       (selectedStudioState.activeRoom || undefined) === nextRoom &&
+      (selectedStudioState.selectedPlanId || undefined) === nextPlanId &&
+      (selectedStudioState.selectedReplayPhase || undefined) === nextReplayPhase &&
       (selectedStudioState.selectedWorkerRole || undefined) === nextWorkerRole &&
       (selectedStudioState.selectedDirectivePhase || undefined) === nextDirectivePhase &&
       JSON.stringify(selectedStudioState.phaseSimulation || undefined) === JSON.stringify(nextPhaseSimulation) &&
@@ -3329,6 +3532,8 @@ export default function AgentStudio() {
       void updateStudioState({
         ...selectedStudioState,
         activeRoom: nextRoom,
+        selectedPlanId: nextPlanId,
+        selectedReplayPhase: nextReplayPhase,
         selectedWorkerRole: nextWorkerRole,
         selectedDirectivePhase: nextDirectivePhase,
         phaseSimulation: nextPhaseSimulation,
@@ -3345,9 +3550,11 @@ export default function AgentStudio() {
     branchRunFilter,
     gateLearningWindow,
     phaseSimulation,
+    selectedPlanId,
     selectedComparisonExperimentId,
     selectedCohortRunId,
     selectedDirectivePhase,
+    selectedReplayPhase,
     selectedRow?.automation.id,
     selectedWorkerRole,
     selectedStudioState,
@@ -3654,6 +3861,65 @@ export default function AgentStudio() {
     }, 'Saved experiment snapshot.');
   }, [previewPreset.label, previewPresetId, selectedScenario.label, selectedScenarioId, selectedStudioState, updateStudioState]);
 
+  const handleSaveOperatingPlan = useCallback((source?: { experiment?: StudioExperimentRecord; namePrefix?: string }) => {
+    const experiment = source?.experiment;
+    const planName = `${source?.namePrefix || 'Operating plan'} · ${experiment ? getExperimentDisplayLabel(experiment) : `${selectedScenario.label} · ${previewPreset.label}`}`;
+    const nextPlans = [
+      {
+        id: `plan_${Date.now()}`,
+        name: planName,
+        createdAt: new Date().toISOString(),
+        scenarioId: experiment?.scenarioId || selectedScenarioId,
+        previewPresetId: experiment?.previewPresetId || previewPresetId,
+        executionPolicy: experiment
+          ? normalizeExecutionPolicy(POLICY_PRESETS.find((preset) => preset.id === experiment.previewPresetId)?.policy || selectedPolicy)
+          : { ...selectedPolicy },
+        roleDirectives: cloneRoleDirectives(experiment?.roleDirectives || selectedStudioState.roleDirectives),
+        sourceExperimentId: experiment?.id,
+        sourceExperimentLabel: experiment ? getExperimentDisplayLabel(experiment) : undefined,
+        notes: experiment ? `Saved from ${getExperimentDisplayLabel(experiment)}.` : `Saved from live setup with ${countDirectiveEntries(selectedStudioState.roleDirectives)} steering signals.`,
+      },
+      ...(selectedStudioState.savedPlans || []),
+    ].slice(0, 10);
+
+    void updateStudioState({
+      ...selectedStudioState,
+      selectedPlanId: nextPlans[0].id,
+      savedPlans: nextPlans,
+    }, 'Saved operating plan.');
+  }, [previewPreset.label, previewPresetId, selectedPolicy, selectedScenario.label, selectedScenarioId, selectedStudioState, updateStudioState]);
+
+  const handleRestoreOperatingPlan = useCallback((plan: StudioOperatingPlan) => {
+    setSelectedPlanId(plan.id);
+    setSelectedScenarioId(plan.scenarioId as ScenarioPresetId);
+    setPreviewPresetId(plan.previewPresetId);
+    void patchAutomationConfig({
+      executionPolicy: plan.executionPolicy,
+      studioState: {
+        ...selectedStudioState,
+        selectedPlanId: plan.id,
+        selectedScenarioId: plan.scenarioId,
+        previewPresetId: plan.previewPresetId,
+        roleDirectives: cloneRoleDirectives(plan.roleDirectives),
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'full',
+          summary: `Restored saved operating plan ${plan.name}.`,
+          sourceExperimentId: plan.sourceExperimentId,
+          sourceExperimentLabel: plan.sourceExperimentLabel || plan.name,
+        }),
+      },
+    }, { successMessage: `Restored ${plan.name}.` });
+  }, [patchAutomationConfig, selectedStudioState]);
+
+  const handleComparePlan = useCallback((plan: StudioOperatingPlan) => {
+    setSelectedPlanId(plan.id);
+    if (plan.sourceExperimentId) {
+      setSelectedComparisonExperimentId(plan.sourceExperimentId);
+    }
+    setActiveRoom('optimize');
+    setNotice({ tone: 'success', message: `Loaded ${plan.name} for comparison.` });
+  }, []);
+
   const handleRestoreExperiment = useCallback((experiment: StudioExperimentRecord) => {
     if (SCENARIO_PRESETS.some((scenario) => scenario.id === experiment.scenarioId)) {
       setSelectedScenarioId(experiment.scenarioId as ScenarioPresetId);
@@ -3679,8 +3945,14 @@ export default function AgentStudio() {
 
   const handleOpenRunInReplay = useCallback((run: PlatformTaskRunRecord, sourceLabel = 'replay') => {
     const attribution = getRunExperimentAttribution(run);
+    const dominantPhase = readStepExecutions(run.metadata?.stepExecutions)
+      .filter((step) => step.kind === 'search' || step.kind === 'query' || step.kind === 'capture' || step.kind === 'analyze' || step.kind === 'summarize' || step.kind === 'deliver' || step.kind === 'note')
+      .sort((left, right) => (right.actualCredits || 0) - (left.actualCredits || 0))[0]?.kind;
     if (attribution.experimentId) {
       setSelectedComparisonExperimentId(attribution.experimentId);
+    }
+    if (dominantPhase && dominantPhase !== 'note') {
+      setSelectedReplayPhase(dominantPhase as WorkflowBlockKind);
     }
     setHoveredCohortRunId(run.id);
     setSelectedCohortRunId(run.id);
@@ -4561,7 +4833,10 @@ export default function AgentStudio() {
                         <div className="mt-4 space-y-3">
                           {nextExperimentQueue.map((item) => (
                             <div key={item.id} className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-                              <p className="text-sm font-medium text-white">{item.title}</p>
+                              <div className="flex items-start justify-between gap-3">
+                                <p className="text-sm font-medium text-white">{item.title}</p>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{item.sourceLabel}</span>
+                              </div>
                               <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.body}</p>
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <button
@@ -4587,6 +4862,13 @@ export default function AgentStudio() {
                                     View evidence
                                   </button>
                                 ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveOperatingPlan({ namePrefix: item.sourceLabel })}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Save as plan
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -5176,6 +5458,101 @@ export default function AgentStudio() {
 
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
+                          <Layers3 className="h-4 w-4 text-cyan-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Saved operating plans</p>
+                            <h3 className="text-sm font-semibold text-white">Reusable setups worth keeping close</h3>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                          Plans let us save strong operating postures, compare them later, and restore them without rebuilding the whole Studio state by hand.
+                        </p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveOperatingPlan()}
+                            className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                          >
+                            Save live setup as plan
+                          </button>
+                          {winningExperiment ? (
+                            <button
+                              type="button"
+                              onClick={() => handleSaveOperatingPlan({ experiment: winningExperiment.experiment, namePrefix: 'Winning plan' })}
+                              className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                            >
+                              Save winning setup
+                            </button>
+                          ) : null}
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {savedPlanSummaries.length > 0 ? savedPlanSummaries.map((entry) => (
+                            <div
+                              key={entry.plan.id}
+                              className={`rounded-2xl border p-4 ${activeSavedPlan?.plan.id === entry.plan.id ? 'border-cyan-500/22 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/45'}`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-white">{entry.plan.name}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">
+                                    {getScenarioLabelFromId(entry.plan.scenarioId)} · {getPresetLabelFromId(entry.plan.previewPresetId)} · saved {formatRelativeTimeFromIso(entry.plan.createdAt)}
+                                  </p>
+                                </div>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                  {entry.steeringCount} steering
+                                </span>
+                              </div>
+                              <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
+                                <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                  <p className="text-slate-500">Spend</p>
+                                  <p className="mt-1 text-white">{entry.spendIndex}</p>
+                                </div>
+                                <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                  <p className="text-slate-500">Assurance</p>
+                                  <p className="mt-1 text-white">{entry.assuranceIndex}</p>
+                                </div>
+                                <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                  <p className="text-slate-500">Fit</p>
+                                  <p className="mt-1 text-white">{entry.fitIndex}</p>
+                                </div>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleComparePlan(entry.plan)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Compare
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => handleRestoreOperatingPlan(entry.plan)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
+                                >
+                                  Restore
+                                </button>
+                                {entry.sourceExperiment ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCompareExperiment(entry.sourceExperiment!)}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                  >
+                                    Open source experiment
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          )) : (
+                            <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                              Save a live setup or a winning experiment and it will show up here as a reusable operating plan.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
                           <CheckCircle2 className="h-4 w-4 text-emerald-300" />
                           <div>
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">What Violema is learning</p>
@@ -5356,6 +5733,56 @@ export default function AgentStudio() {
                           )) : (
                             <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
                               Not enough phase evidence yet to map cost against confidence.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
+                          <Orbit className="h-4 w-4 text-cyan-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Branch opportunity map</p>
+                            <h3 className="text-sm font-semibold text-white">Which branch lines deserve the next experiment</h3>
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {branchOpportunityMap.length > 0 ? branchOpportunityMap.map((branch) => (
+                            <div key={branch.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-white">{branch.label}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">
+                                    {branch.successRate}% success · confidence {branch.confidence}% · spend {branch.spendDelta > 0 ? '+' : ''}{branch.spendDelta} cr vs workflow baseline
+                                  </p>
+                                </div>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {branch.score}</span>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedBranchRootId(branch.id);
+                                    setActiveRoom('replay');
+                                  }}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Inspect branch
+                                </button>
+                                {branch.focusPhase ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPhaseSimulation({ phase: branch.focusPhase!, mode: branch.successRate < 70 ? 'review' : 'cheaper' })}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                  >
+                                    Simulate {formatDirectivePhaseScope([branch.focusPhase])}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          )) : (
+                            <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                              Branch opportunity mapping unlocks once there are enough saved experiments and runs to compare real branch lines.
                             </div>
                           )}
                         </div>
@@ -5677,6 +6104,91 @@ export default function AgentStudio() {
                           <p className="mt-3 text-sm leading-relaxed text-slate-400">
                             Fresh, repeated evidence is what makes promotion decisions trustworthy. Thin or stale evidence means simulate more before locking policy.
                           </p>
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Workflow className="h-4 w-4 text-violet-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Phase overlay</p>
+                              <h3 className="text-sm font-semibold text-white">Where this exact run spent time, credits, and confidence</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedReplayPhase('all')}
+                              className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedReplayPhase === 'all' ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
+                            >
+                              All phases
+                            </button>
+                            {replayPhaseOverlay.map((phase) => (
+                              <button
+                                key={`replay-phase-${phase.phase}`}
+                                type="button"
+                                onClick={() => setSelectedReplayPhase(phase.phase)}
+                                className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedReplayPhase === phase.phase ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
+                              >
+                                {formatDirectivePhaseScope([phase.phase])}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="mt-4 space-y-3">
+                            {replayPhaseOverlay.length > 0 ? replayPhaseOverlay.map((phase) => (
+                              <button
+                                key={`overlay-${phase.phase}`}
+                                type="button"
+                                onClick={() => setSelectedReplayPhase(phase.phase)}
+                                className={`block w-full rounded-2xl border p-4 text-left ${selectedReplayPhaseDetail?.phase === phase.phase ? 'border-cyan-500/22 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/45'}`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{formatDirectivePhaseScope([phase.phase])}</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">{phase.primaryRole} · {phase.steps.length} steps · {phase.modelSource || 'Server default'}</p>
+                                  </div>
+                                  <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${phase.failed ? 'text-red-200' : phase.succeeded ? 'text-emerald-200' : 'text-slate-300'}`}>
+                                    {phase.failed ? 'Failure surfaced' : phase.succeeded ? 'Landed cleanly' : 'No result'}
+                                  </span>
+                                </div>
+                                <div className="mt-3">
+                                  <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                                    <span>Credit weight</span>
+                                    <span>{phase.credits ? `${formatCredits(phase.credits)} cr` : '—'}</span>
+                                  </div>
+                                  <div className="mt-1 h-2 rounded-full bg-navy-950/70">
+                                    <div className="h-full rounded-full bg-gradient-to-r from-violet-400 to-cyan-300" style={{ width: phase.costWidth }} />
+                                  </div>
+                                </div>
+                              </button>
+                            )) : (
+                              <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                                Replay overlay appears once the selected run has phase-level step evidence.
+                              </div>
+                            )}
+                          </div>
+                          {selectedReplayPhaseDetail ? (
+                            <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Selected phase</p>
+                              <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                                <div>
+                                  <p className="text-[11px] text-slate-500">Credits</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{selectedReplayPhaseDetail.credits ? `${formatCredits(selectedReplayPhaseDetail.credits)} cr` : '—'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] text-slate-500">Duration</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{formatCompactDuration(selectedReplayPhaseDetail.durationMs)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] text-slate-500">Tokens</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{formatTokenCount(selectedReplayPhaseDetail.tokens)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] text-slate-500">Directive</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{selectedReplayPhaseDetail.directiveMode ? getDirectiveModeLabel(selectedReplayPhaseDetail.directiveMode) : 'Baseline'}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
