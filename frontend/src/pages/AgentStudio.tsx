@@ -1244,6 +1244,8 @@ export default function AgentStudio() {
   const [selectedComparisonExperimentId, setSelectedComparisonExperimentId] = useState<string>('');
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('credits');
   const [selectedCohortRunId, setSelectedCohortRunId] = useState<string>('');
+  const [hoveredCohortRunId, setHoveredCohortRunId] = useState<string>('');
+  const [phaseSimulation, setPhaseSimulation] = useState<{ phase: WorkflowBlockKind; mode: 'cheaper' | 'review' | 'promote' } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<AgentStudioRow[]>([]);
@@ -1485,6 +1487,8 @@ export default function AgentStudio() {
   useEffect(() => {
     setSelectedWorkerRole('nexus');
     setSelectedDirectivePhase('all');
+    setHoveredCohortRunId('');
+    setPhaseSimulation(null);
     setSelectedScenarioId(
       selectedStudioState.selectedScenarioId && SCENARIO_PRESETS.some((scenario) => scenario.id === selectedStudioState.selectedScenarioId)
         ? selectedStudioState.selectedScenarioId as ScenarioPresetId
@@ -2079,6 +2083,13 @@ export default function AgentStudio() {
     return allRuns.find((run) => run.id === selectedCohortRunId) || currentCohortPerformance?.runs[0] || selectedExperimentPerformance?.runs[0];
   }, [currentCohortPerformance?.runs, selectedCohortRunId, selectedExperimentPerformance?.runs]);
 
+  const focusedCohortRun = useMemo(() => {
+    const allRuns = [...(currentCohortPerformance?.runs || []), ...(selectedExperimentPerformance?.runs || [])];
+    return allRuns.find((run) => run.id === hoveredCohortRunId)
+      || allRuns.find((run) => run.id === selectedCohortRunId)
+      || allRuns[0];
+  }, [currentCohortPerformance?.runs, hoveredCohortRunId, selectedCohortRunId, selectedExperimentPerformance?.runs]);
+
   const cohortTrendSeries = useMemo(
     () => [
       {
@@ -2104,6 +2115,68 @@ export default function AgentStudio() {
     ],
     [currentCohortPerformance?.runs, selectedExperimentPerformance?.runs, trendMetric],
   );
+
+  const phaseSimulationPreview = useMemo(() => {
+    if (!phaseSimulation) return null;
+    const targetRole = getPreferredRoleForPhase(phaseSimulation.phase);
+    const nextPolicy: AutomationExecutionPolicyDraft = {
+      ...selectedPolicy,
+      mode: 'custom',
+      optimizationGoal:
+        phaseSimulation.mode === 'cheaper'
+          ? 'cost_saver'
+          : phaseSimulation.mode === 'review'
+            ? (selectedPolicy.optimizationGoal === 'cost_saver' ? 'balanced' : selectedPolicy.optimizationGoal)
+            : 'quality_first',
+      reviewPolicy:
+        phaseSimulation.mode === 'review'
+          ? 'strict'
+          : phaseSimulation.mode === 'cheaper' && selectedPolicy.reviewPolicy === 'strict'
+            ? 'standard'
+            : selectedPolicy.reviewPolicy,
+      maxElasticLanes:
+        phaseSimulation.mode === 'promote'
+          ? Math.min(4, Math.max(selectedPolicy.maxElasticLanes, selectedMath.recommendedElasticLanes) + 1)
+          : phaseSimulation.mode === 'cheaper'
+            ? Math.max(1, Math.min(selectedPolicy.maxElasticLanes, selectedMath.recommendedElasticLanes))
+            : selectedPolicy.maxElasticLanes,
+    };
+
+    const nextSpend = estimatePolicySpendIndex(nextPolicy, selectedRow?.workflowSteps || []);
+    const nextAssurance = estimatePolicyAssuranceIndex(nextPolicy, selectedRow?.workflowSteps || []);
+    const nextFit = estimatePolicyFitIndex(nextPolicy, selectedRow?.workflowSteps || []);
+
+    return {
+      ...phaseSimulation,
+      targetRole,
+      nextPolicy,
+      nextSpend,
+      nextAssurance,
+      nextFit,
+      spendDelta: nextSpend - currentSpendIndex,
+      assuranceDelta: nextAssurance - currentAssuranceIndex,
+      fitDelta: nextFit - currentFitIndex,
+    };
+  }, [currentAssuranceIndex, currentFitIndex, currentSpendIndex, phaseSimulation, selectedMath.recommendedElasticLanes, selectedPolicy, selectedRow?.workflowSteps]);
+
+  const selectedRunDelta = useMemo(() => {
+    if (!selectedCohortRun) return null;
+    const source = (currentCohortPerformance?.runs || []).some((run) => run.id === selectedCohortRun.id)
+      ? currentCohortPerformance
+      : selectedExperimentPerformance
+        ? { label: getExperimentDisplayLabel(selectedExperimentPerformance.experiment), stats: selectedExperimentPerformance.stats }
+        : null;
+    if (!source) return null;
+    const runDuration = Number.isNaN(Date.parse(selectedCohortRun.startedAt || '')) || Number.isNaN(Date.parse(selectedCohortRun.finishedAt || ''))
+      ? 0
+      : Math.max(0, Date.parse(selectedCohortRun.finishedAt || '') - Date.parse(selectedCohortRun.startedAt || ''));
+    return {
+      label: source.label,
+      creditDelta: (selectedCohortRun.actualCredits || 0) - (source.stats.averageCredits || 0),
+      durationDelta: runDuration - (source.stats.averageDurationMs || 0),
+      successDelta: (selectedCohortRun.status === 'succeeded' ? 100 : selectedCohortRun.status === 'failed' ? 0 : 50) - Math.round((source.stats.successRate || 0) * 100),
+    };
+  }, [currentCohortPerformance, selectedCohortRun, selectedExperimentPerformance]);
 
   const policyDiffRows = useMemo(
     () => [
@@ -2242,6 +2315,63 @@ export default function AgentStudio() {
         .slice(0, 4),
     };
   }, [rows, selectedArchetype.id, selectedArchetype.label, selectedScenario.id, selectedScenario.label]);
+
+  const evidenceFreshness = useMemo(() => {
+    const latestRunAt = selectedRow?.runs[0]?.finishedAt || selectedRow?.runs[0]?.startedAt;
+    const latestExperimentAt = experimentPerformance[0]?.latestAt || experimentHistory[0]?.createdAt;
+    const runCount = selectedRow?.runs.filter((run) => run.status === 'succeeded' || run.status === 'failed').length || 0;
+    const experimentCount = experimentPerformance.filter((entry) => entry.stats.count > 0).length;
+    const freshnessDays = latestRunAt ? Math.max(0, (Date.now() - Date.parse(latestRunAt)) / 86400000) : 999;
+    const tone = freshnessDays <= 2 && runCount >= 3 ? 'fresh' : freshnessDays <= 7 && runCount >= 2 ? 'warm' : 'stale';
+    return {
+      runCount,
+      experimentCount,
+      latestRunAt,
+      latestExperimentAt,
+      tone,
+      confidence:
+        runCount >= 6 && experimentCount >= 2
+          ? 'High-confidence learning'
+          : runCount >= 3
+            ? 'Useful but still maturing'
+            : 'Thin evidence',
+    };
+  }, [experimentHistory, experimentPerformance, selectedRow]);
+
+  const winnerCausalReport = useMemo(() => {
+    if (!winningExperiment) return [] as Array<{ title: string; body: string; tone: string }>;
+    const insights: Array<{ title: string; body: string; tone: string }> = [];
+    if (winningExperiment.stats.successRate >= 0.85) {
+      insights.push({
+        title: 'It is winning on reliability',
+        body: `This setup is landing ${Math.round(winningExperiment.stats.successRate * 100)}% success across ${winningExperiment.stats.count} observed runs, which is strong enough to trust more than a one-off spike.`,
+        tone: 'border-emerald-500/18 bg-emerald-500/8 text-emerald-100',
+      });
+    }
+    if (winningExperiment.stats.averageCredits > 0 && currentCohortPerformance && winningExperiment.stats.averageCredits < currentCohortPerformance.stats.averageCredits) {
+      insights.push({
+        title: 'It is cheaper than the live cohort',
+        body: `Average spend is ${formatCredits(winningExperiment.stats.averageCredits)} credits versus ${formatCredits(currentCohortPerformance.stats.averageCredits || 0)} on the live cohort, so the gain is not just cosmetic.`,
+        tone: 'border-cyan-500/18 bg-cyan-500/8 text-cyan-100',
+      });
+    }
+    const strongestPhase = phaseLearningByArchetype.find((item) => item.mode !== 'baseline');
+    if (strongestPhase) {
+      insights.push({
+        title: `${formatDirectivePhaseScope([strongestPhase.phase])} carries the edge`,
+        body: `${strongestPhase.mode} bias is the strongest observed non-baseline move for this workflow class. That is the best place to apply pressure before changing the whole policy.`,
+        tone: 'border-violet-500/18 bg-violet-500/8 text-violet-100',
+      });
+    }
+    if (insights.length === 0) {
+      insights.push({
+        title: 'The winner is still forming',
+        body: 'There is enough signal to rank setups, but not enough to claim a single causal advantage yet. Keep running comparisons before locking the policy.',
+        tone: 'border-amber-500/18 bg-amber-500/8 text-amber-100',
+      });
+    }
+    return insights.slice(0, 3);
+  }, [currentCohortPerformance, phaseLearningByArchetype, winningExperiment]);
 
   const patchAutomationConfig = useCallback(async (patch: {
     executionPolicy?: AutomationExecutionPolicyDraft;
@@ -3135,6 +3265,41 @@ export default function AgentStudio() {
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCompactDuration(Number.isNaN(Date.parse(selectedCohortRun.startedAt || '')) || Number.isNaN(Date.parse(selectedCohortRun.finishedAt || '')) ? undefined : Math.max(0, Date.parse(selectedCohortRun.finishedAt || '') - Date.parse(selectedCohortRun.startedAt || '')))}</span>
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{getTrendMetricLabel(trendMetric)}: {formatTrendMetricValue(selectedCohortRun, trendMetric)}</span>
                               </div>
+                              {selectedRunDelta ? (
+                                <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                    <p className="text-slate-500">vs {selectedRunDelta.label}</p>
+                                    <p className={`mt-1 ${selectedRunDelta.creditDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(Math.round(selectedRunDelta.creditDelta))} cr</p>
+                                  </div>
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                    <p className="text-slate-500">Duration</p>
+                                    <p className={`mt-1 ${selectedRunDelta.durationDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(Math.round(selectedRunDelta.durationDelta / 1000))}s</p>
+                                  </div>
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                    <p className="text-slate-500">Outcome</p>
+                                    <p className={`mt-1 ${selectedRunDelta.successDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(selectedRunDelta.successDelta)} pts</p>
+                                  </div>
+                                </div>
+                              ) : null}
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveRoom('replay')}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Open in replay
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const attribution = getRunExperimentAttribution(selectedCohortRun);
+                                    if (attribution.experimentId) setSelectedComparisonExperimentId(attribution.experimentId);
+                                  }}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Sync comparison target
+                                </button>
+                              </div>
                             </div>
                           ) : null}
                         </div>
@@ -3934,14 +4099,23 @@ export default function AgentStudio() {
                                     Inspect this phase
                                   </button>
                                 ) : (
-                                  <button
-                                    type="button"
-                                    disabled={actionBusy}
-                                    onClick={() => handleApplyPhaseLearning(item.phase, item.mode as 'cheaper' | 'review' | 'promote')}
-                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
-                                  >
-                                    Apply {item.mode} here
-                                  </button>
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPhaseSimulation({ phase: item.phase, mode: item.mode as 'cheaper' | 'review' | 'promote' })}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                    >
+                                      Simulate first
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={actionBusy}
+                                      onClick={() => handleApplyPhaseLearning(item.phase, item.mode as 'cheaper' | 'review' | 'promote')}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
+                                    >
+                                      Apply {item.mode} here
+                                    </button>
+                                  </>
                                 )}
                                 <button
                                   type="button"
@@ -3954,6 +4128,16 @@ export default function AgentStudio() {
                                 >
                                   Open in node inspector
                                 </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDirectivePhase(item.phase);
+                                    setActiveRoom('replay');
+                                  }}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  View evidence in replay
+                                </button>
                               </div>
                             </div>
                           )) : (
@@ -3962,6 +4146,74 @@ export default function AgentStudio() {
                             </div>
                           )}
                         </div>
+                      </div>
+
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-violet-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Phase simulation</p>
+                            <h3 className="text-sm font-semibold text-white">Preview the move before you apply it</h3>
+                          </div>
+                        </div>
+                        {phaseSimulationPreview ? (
+                          <div className="mt-4 space-y-4">
+                            <div className="rounded-2xl border border-violet-500/16 bg-violet-500/8 p-4">
+                              <p className="text-sm font-medium text-white">
+                                {getDirectiveModeLabel(phaseSimulationPreview.mode)} on {formatDirectivePhaseScope([phaseSimulationPreview.phase])}
+                              </p>
+                              <p className="mt-1 text-[12px] text-slate-400">
+                                This would steer {phaseSimulationPreview.targetRole} and rebalance the workflow policy before you commit it.
+                              </p>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-3 text-[11px]">
+                              <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                <p className="text-slate-500">Spend delta</p>
+                                <p className={`mt-1 ${phaseSimulationPreview.spendDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(phaseSimulationPreview.spendDelta)}</p>
+                              </div>
+                              <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                <p className="text-slate-500">Assurance delta</p>
+                                <p className={`mt-1 ${phaseSimulationPreview.assuranceDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(phaseSimulationPreview.assuranceDelta)}</p>
+                              </div>
+                              <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                <p className="text-slate-500">Fit delta</p>
+                                <p className={`mt-1 ${phaseSimulationPreview.fitDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(phaseSimulationPreview.fitDelta)}</p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={actionBusy}
+                                onClick={() => handleApplyPhaseLearning(phaseSimulationPreview.phase, phaseSimulationPreview.mode)}
+                                className="rounded-xl border border-cyan-500/24 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-100 transition-colors hover:bg-cyan-500/14 disabled:opacity-60"
+                              >
+                                Apply simulated move
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedDirectivePhase(phaseSimulationPreview.phase);
+                                  setSelectedWorkerRole(phaseSimulationPreview.targetRole);
+                                  setActiveRoom('live');
+                                }}
+                                className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                              >
+                                Open target role
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPhaseSimulation(null)}
+                                className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                              >
+                                Clear preview
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-4 rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                            Pick a non-baseline phase-learning move and preview it here before pushing it into the live policy.
+                          </div>
+                        )}
                       </div>
 
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
@@ -4165,6 +4417,39 @@ export default function AgentStudio() {
 
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-emerald-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Evidence freshness</p>
+                              <h3 className="text-sm font-semibold text-white">How strong the current learning loop is</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Completed runs</p>
+                              <p className="mt-1 text-lg font-semibold text-white">{evidenceFreshness.runCount}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Observed experiments</p>
+                              <p className="mt-1 text-lg font-semibold text-white">{evidenceFreshness.experimentCount}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Latest run</p>
+                              <p className="mt-1 text-sm font-medium text-white">{formatRelativeTimeFromIso(evidenceFreshness.latestRunAt)}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Learning strength</p>
+                              <p className={`mt-1 text-sm font-medium ${evidenceFreshness.tone === 'fresh' ? 'text-emerald-200' : evidenceFreshness.tone === 'warm' ? 'text-cyan-200' : 'text-amber-200'}`}>
+                                {evidenceFreshness.confidence}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="mt-3 text-sm leading-relaxed text-slate-400">
+                            Fresh, repeated evidence is what makes promotion decisions trustworthy. Thin or stale evidence means simulate more before locking policy.
+                          </p>
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
                             <BarChart3 className="h-4 w-4 text-cyan-300" />
                             <div>
                               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Cohort trend</p>
@@ -4211,6 +4496,8 @@ export default function AgentStudio() {
                                               fill={series.tone.dot}
                                               stroke={selectedCohortRunId === point.run.id ? '#e2e8f0' : 'rgba(15,23,42,0.9)'}
                                               strokeWidth={selectedCohortRunId === point.run.id ? 2 : 1.5}
+                                              onMouseEnter={() => setHoveredCohortRunId(point.run.id)}
+                                              onMouseLeave={() => setHoveredCohortRunId('')}
                                             />
                                           ))}
                                         </svg>
@@ -4220,6 +4507,8 @@ export default function AgentStudio() {
                                               key={`${series.label}-${point.run.id}-label`}
                                               type="button"
                                               onClick={() => setSelectedCohortRunId(point.run.id)}
+                                              onMouseEnter={() => setHoveredCohortRunId(point.run.id)}
+                                              onMouseLeave={() => setHoveredCohortRunId('')}
                                               className={`flex flex-1 min-w-0 flex-col rounded-xl border px-2 py-2 text-left transition-colors ${
                                                 selectedCohortRunId === point.run.id
                                                   ? 'border-cyan-500/30 bg-cyan-500/10'
@@ -4236,6 +4525,23 @@ export default function AgentStudio() {
                                         <span>Older → newer evidence on the left-to-right curve</span>
                                         <span>{getTrendMetricLabel(trendMetric)} window</span>
                                       </div>
+                                      {focusedCohortRun ? (
+                                        <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2 text-[11px] text-slate-300">
+                                          <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <span className="font-medium text-white">
+                                              Focus run: {getRunExperimentAttribution(focusedCohortRun).experimentNotes || `${getRunExperimentAttribution(focusedCohortRun).scenarioLabel} · ${getRunExperimentAttribution(focusedCohortRun).previewPresetLabel}`}
+                                            </span>
+                                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(focusedCohortRun.status)}`}>
+                                              {focusedCohortRun.status}
+                                            </span>
+                                          </div>
+                                          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatTrendMetricValue(focusedCohortRun, trendMetric)}</span>
+                                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{focusedCohortRun.actualCredits ? `${formatCredits(focusedCohortRun.actualCredits)} cr` : '—'}</span>
+                                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatAutomationRunTime(focusedCohortRun.finishedAt || focusedCohortRun.startedAt)}</span>
+                                          </div>
+                                        </div>
+                                      ) : null}
                                     </div>
                                   );
                                 })() : (
@@ -4323,6 +4629,8 @@ export default function AgentStudio() {
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{Math.round(winningExperiment.stats.successRate * 100)}% success</span>
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{winningExperiment.stats.averageCredits ? `${formatCredits(winningExperiment.stats.averageCredits)} cr avg` : '—'}</span>
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {winningExperiment.score}</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{winningExperiment.confidence}% confidence</span>
+                                {winningExperiment.latestAt ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">seen {formatRelativeTimeFromIso(winningExperiment.latestAt)}</span> : null}
                               </div>
                               <p className="mt-3 text-sm leading-relaxed text-slate-400">This is the strongest observed setup for this workflow right now. Promote it when you want the live policy to match what is already working in practice.</p>
                               <div className="mt-4 flex flex-wrap gap-2">
@@ -4401,6 +4709,24 @@ export default function AgentStudio() {
 
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-violet-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Causal report</p>
+                              <h3 className="text-sm font-semibold text-white">Why the current winner is winning</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-3">
+                            {winnerCausalReport.map((item) => (
+                              <div key={item.title} className={`rounded-2xl border p-4 ${item.tone}`}>
+                                <p className="text-sm font-medium text-white">{item.title}</p>
+                                <p className="mt-2 text-sm leading-relaxed text-slate-200/90">{item.body}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
                             <Brain className="h-4 w-4 text-violet-300" />
                             <div>
                               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Experiment scorecards</p>
@@ -4410,11 +4736,11 @@ export default function AgentStudio() {
                           <div className="mt-4 space-y-3">
                             {experimentPerformance.length > 0 ? experimentPerformance.map((entry) => (
                               <div key={entry.experiment.id} className={`rounded-2xl border p-3 ${selectedComparisonExperimentId === entry.experiment.id ? 'border-cyan-500/24 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/45'}`}>
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-medium text-white">{getExperimentDisplayLabel(entry.experiment)}</p>
-                                    <p className="mt-1 text-[11px] text-slate-500">Saved {formatRelativeTimeFromIso(entry.experiment.createdAt)}{entry.latestAt ? ` · observed ${formatRelativeTimeFromIso(entry.latestAt)}` : ''}</p>
-                                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-white">{getExperimentDisplayLabel(entry.experiment)}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">Saved {formatRelativeTimeFromIso(entry.experiment.createdAt)}{entry.latestAt ? ` · observed ${formatRelativeTimeFromIso(entry.latestAt)}` : ''}</p>
+                                  <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
                                       {getExperimentTags(entry.experiment, { count: entry.stats.count, successRate: entry.stats.successRate, averageCredits: entry.stats.averageCredits }, winningExperiment?.experiment.id === entry.experiment.id).map((tag) => (
                                         <span key={`${entry.experiment.id}-${tag}`} className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{tag}</span>
                                       ))}
@@ -4427,6 +4753,10 @@ export default function AgentStudio() {
                                   <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Success</p><p className="mt-1 text-white">{Math.round(entry.stats.successRate * 100)}%</p></div>
                                   <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Avg credits</p><p className="mt-1 text-white">{entry.stats.averageCredits ? `${formatCredits(entry.stats.averageCredits)} cr` : '—'}</p></div>
                                   <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Confidence</p><p className="mt-1 text-white">{entry.confidence}%</p></div>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">recency +{entry.recencyBoost}</span>
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{entry.stats.count >= 4 ? 'Deep evidence' : entry.stats.count >= 2 ? 'Moderate evidence' : 'Thin evidence'}</span>
                                 </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   <button type="button" onClick={() => handleCompareExperiment(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300">Compare</button>
