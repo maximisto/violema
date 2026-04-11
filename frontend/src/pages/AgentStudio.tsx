@@ -341,6 +341,8 @@ const AUTO_GRADUATION_PROFILES = [
   },
 ] as const;
 
+const AUTO_GRADUATION_WORKSPACE_KEY_PREFIX = 'violema_agentstudio_auto_graduation_profiles_';
+
 const WORKER_DEFINITIONS: Array<{
   role: string;
   label: string;
@@ -1123,6 +1125,13 @@ function getAutoGraduationProfileById(id?: string) {
   return AUTO_GRADUATION_PROFILES.find((profile) => profile.id === id);
 }
 
+function inferAutoGraduationProfileIdFromThreshold(threshold: number) {
+  const nearest = AUTO_GRADUATION_PROFILES
+    .map((profile) => ({ profile, delta: Math.abs(profile.archetype - threshold) }))
+    .sort((left, right) => left.delta - right.delta)[0];
+  return nearest?.profile.id || 'balanced';
+}
+
 function getEffectiveAutoPromotionThreshold(
   studioState: AutomationStudioStateDraft | undefined,
   scenarioId: string,
@@ -1176,6 +1185,37 @@ function getRecommendedAutoGraduationProfileId(
     return 'fast_learning';
   }
   return 'balanced';
+}
+
+function getWorkspaceAutoGraduationStorageKey(workspaceId: string) {
+  return `${AUTO_GRADUATION_WORKSPACE_KEY_PREFIX}${workspaceId}`;
+}
+
+function readWorkspaceAutoGraduationProfiles(workspaceId: string) {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(getWorkspaceAutoGraduationStorageKey(workspaceId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.entries(parsed).reduce<Record<string, string>>((acc, [archetypeId, profileId]) => {
+      if (typeof profileId !== 'string') return acc;
+      if (!getAutoGraduationProfileById(profileId)) return acc;
+      acc[archetypeId] = profileId;
+      return acc;
+    }, {});
+  } catch {
+    return {};
+  }
+}
+
+function writeWorkspaceAutoGraduationProfiles(workspaceId: string, value: Record<string, string>) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(getWorkspaceAutoGraduationStorageKey(workspaceId), JSON.stringify(value));
+  } catch {
+    // Ignore localStorage write failures.
+  }
 }
 
 function normalizeThresholdMap(value: unknown) {
@@ -1773,6 +1813,7 @@ export default function AgentStudio() {
   const [selectedReplayCompareRunId, setSelectedReplayCompareRunId] = useState<string>('');
   const [hoveredCohortRunId, setHoveredCohortRunId] = useState<string>('');
   const [phaseSimulation, setPhaseSimulation] = useState<{ phase: WorkflowBlockKind; mode: 'cheaper' | 'review' | 'promote' } | null>(null);
+  const [workspaceAutoGraduationProfiles, setWorkspaceAutoGraduationProfiles] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<AgentStudioRow[]>([]);
@@ -1893,6 +1934,14 @@ export default function AgentStudio() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    setWorkspaceAutoGraduationProfiles(readWorkspaceAutoGraduationProfiles(workspace.workspaceId));
+  }, [workspace.workspaceId]);
+
+  useEffect(() => {
+    writeWorkspaceAutoGraduationProfiles(workspace.workspaceId, workspaceAutoGraduationProfiles);
+  }, [workspace.workspaceId, workspaceAutoGraduationProfiles]);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -3897,7 +3946,43 @@ export default function AgentStudio() {
   }, [archetypeRecommendedPlan]);
 
   const autoGraduateEnabled = selectedStudioState.autoGraduateEnabled === true;
-  const autoGraduateMinConfidence = getEffectiveAutoGraduateThreshold(selectedStudioState, selectedScenario.id, selectedArchetype.id);
+  const workspaceAutoGraduationProfile = useMemo(
+    () => getAutoGraduationProfileById(workspaceAutoGraduationProfiles[selectedArchetype.id]),
+    [selectedArchetype.id, workspaceAutoGraduationProfiles]
+  );
+
+  const activeAutoGraduationProfile = useMemo(
+    () => getAutoGraduationProfileById(inferAutoGraduationProfileIdFromThreshold(
+      selectedStudioState.autoGraduateArchetypeThresholds?.[selectedArchetype.id]
+        ?? workspaceAutoGraduationProfile?.archetype
+        ?? selectedStudioState.autoGraduateMinConfidence
+        ?? 72
+    )) || AUTO_GRADUATION_PROFILES[1],
+    [
+      selectedArchetype.id,
+      selectedStudioState.autoGraduateArchetypeThresholds,
+      selectedStudioState.autoGraduateMinConfidence,
+      workspaceAutoGraduationProfile?.archetype,
+    ]
+  );
+
+  const autoGraduateMinConfidence = useMemo(() => {
+    if (selectedStudioState.autoGraduateScenarioThresholds?.[selectedScenario.id]) {
+      return selectedStudioState.autoGraduateScenarioThresholds[selectedScenario.id];
+    }
+    if (selectedStudioState.autoGraduateArchetypeThresholds?.[selectedArchetype.id]) {
+      return selectedStudioState.autoGraduateArchetypeThresholds[selectedArchetype.id];
+    }
+    if (workspaceAutoGraduationProfile) {
+      return workspaceAutoGraduationProfile.archetype;
+    }
+    return getEffectiveAutoGraduateThreshold(selectedStudioState, selectedScenario.id, selectedArchetype.id);
+  }, [
+    selectedArchetype.id,
+    selectedScenario.id,
+    selectedStudioState,
+    workspaceAutoGraduationProfile,
+  ]);
 
   const autoGraduateScope = useMemo(() => {
     if (selectedStudioState.autoGraduateScenarioThresholds?.[selectedScenario.id]) {
@@ -3905,6 +3990,9 @@ export default function AgentStudio() {
     }
     if (selectedStudioState.autoGraduateArchetypeThresholds?.[selectedArchetype.id]) {
       return { scope: 'Workflow-class gate', label: selectedArchetype.label };
+    }
+    if (workspaceAutoGraduationProfile) {
+      return { scope: 'Workspace archetype default', label: workspaceAutoGraduationProfile.label };
     }
     return { scope: 'Global default', label: 'All workflows' };
   }, [
@@ -3914,6 +4002,7 @@ export default function AgentStudio() {
     selectedScenario.label,
     selectedStudioState.autoGraduateArchetypeThresholds,
     selectedStudioState.autoGraduateScenarioThresholds,
+    workspaceAutoGraduationProfile,
   ]);
 
   const graduationHistory = useMemo(
@@ -3950,6 +4039,37 @@ export default function AgentStudio() {
           : childSummary && parentSummary
             ? Math.round(((childSummary.stats.averageDurationMs || 0) - (parentSummary.stats.averageDurationMs || 0)) / 1000)
             : undefined;
+        const childRun = childSummary
+          ? (selectedRow?.runs || [])
+              .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+              .find((run) => rankRunPlanMatches(run, [childSummary.plan])[0]?.plan.id === childSummary.plan.id)
+          : undefined;
+        const parentRun = parentSummary
+          ? (selectedRow?.runs || [])
+              .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+              .find((run) => rankRunPlanMatches(run, [parentSummary.plan])[0]?.plan.id === parentSummary.plan.id)
+          : undefined;
+        const dominantPhase = entry.phase
+          || (readStepExecutions(childRun?.metadata?.stepExecutions)
+            .filter((step) => step.kind !== 'note')
+            .sort((left, right) => (right.actualCredits || 0) - (left.actualCredits || 0))[0]?.kind as WorkflowBlockKind | undefined);
+        const reasons = [
+          typeof successDelta === 'number'
+            ? `${formatSignedDelta(successDelta)} pts success against parent`
+            : null,
+          typeof creditsDelta === 'number'
+            ? `${formatSignedDelta(creditsDelta)} cr spend delta`
+            : null,
+          typeof durationDelta === 'number'
+            ? `${formatSignedDelta(durationDelta)}s duration delta`
+            : null,
+          typeof entry.confidence === 'number'
+            ? `${entry.confidence}% graduation confidence`
+            : null,
+          dominantPhase
+            ? `${formatDirectivePhaseScope([dominantPhase])} carried the strongest signal`
+            : null,
+        ].filter((item): item is string => Boolean(item)).slice(0, 3);
         return {
           entry,
           childLabel,
@@ -3957,15 +4077,29 @@ export default function AgentStudio() {
           successDelta,
           creditsDelta,
           durationDelta,
+          childRun,
+          parentRun,
+          dominantPhase,
+          reasons,
         };
       })
       .slice(0, 6);
-  }, [graduationHistory, savedPlanSummaries]);
+  }, [graduationHistory, savedPlanSummaries, selectedRow?.runs]);
 
   const autoGraduationRollbackSuggestion = useMemo(() => {
     if (!activeBranchParentComparison || selectedStudioState.lastAutoGraduatedPlanId !== activeBranchParentComparison.child.plan.id) return null;
     if (activeBranchParentComparison.outcome !== 'Weak') return null;
     const latestAutoGraduation = graduationHistory.find((entry) => entry.planId === activeBranchParentComparison.child.plan.id && entry.autoApplied);
+    const parentWindowRuns = (selectedRow?.runs || [])
+      .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+      .filter((run) => rankRunPlanMatches(run, [activeBranchParentComparison.parent.plan])[0]?.plan.id === activeBranchParentComparison.parent.plan.id)
+      .slice(0, 8);
+    const childWindowRuns = (selectedRow?.runs || [])
+      .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+      .filter((run) => rankRunPlanMatches(run, [activeBranchParentComparison.child.plan])[0]?.plan.id === activeBranchParentComparison.child.plan.id)
+      .slice(0, 8);
+    const parentWindowStats = summarizeRunCollection(parentWindowRuns);
+    const childWindowStats = summarizeRunCollection(childWindowRuns);
     return {
       child: activeBranchParentComparison.child,
       parent: activeBranchParentComparison.parent,
@@ -3974,8 +4108,10 @@ export default function AgentStudio() {
       successDelta: activeBranchParentComparison.successDelta,
       creditsDelta: activeBranchParentComparison.creditsDelta,
       durationDelta: activeBranchParentComparison.durationDelta,
+      parentWindowStats,
+      childWindowStats,
     };
-  }, [activeBranchParentComparison, graduationHistory, selectedStudioState.lastAutoGraduatedPlanId]);
+  }, [activeBranchParentComparison, graduationHistory, selectedRow?.runs, selectedStudioState.lastAutoGraduatedPlanId]);
 
   const planActionQueue = useMemo(() => {
     const queue: Array<{ id: string; title: string; body: string; action: 'restore_recommended' | 'rollback' | 'compare' | 'save_phase_plan' }> = [];
@@ -4899,6 +5035,30 @@ export default function AgentStudio() {
     }
     void updateStudioState(nextState, `Applied the ${profile.label.toLowerCase()} graduation profile to the ${scope === 'global' ? 'global' : scope === 'archetype' ? 'workflow class' : 'scenario'} gate.`);
   }, [selectedArchetype.id, selectedScenario.id, selectedStudioState, updateStudioState]);
+
+  const handleRememberWorkspaceAutoGraduationProfile = useCallback((profileId: typeof AUTO_GRADUATION_PROFILES[number]['id']) => {
+    setWorkspaceAutoGraduationProfiles((current) => ({
+      ...current,
+      [selectedArchetype.id]: profileId,
+    }));
+    const profile = getAutoGraduationProfileById(profileId);
+    setNotice({
+      tone: 'success',
+      message: `Remembered ${profile?.label.toLowerCase() || 'this'} graduation profile as the workspace default for ${selectedArchetype.label.toLowerCase()}.`,
+    });
+  }, [selectedArchetype.id, selectedArchetype.label]);
+
+  const handleClearWorkspaceAutoGraduationProfile = useCallback(() => {
+    setWorkspaceAutoGraduationProfiles((current) => {
+      const next = { ...current };
+      delete next[selectedArchetype.id];
+      return next;
+    });
+    setNotice({
+      tone: 'success',
+      message: `Cleared the workspace graduation default for ${selectedArchetype.label.toLowerCase()}.`,
+    });
+  }, [selectedArchetype.id, selectedArchetype.label]);
 
   const handleRestoreExperiment = useCallback((experiment: StudioExperimentRecord) => {
     if (SCENARIO_PRESETS.some((scenario) => scenario.id === experiment.scenarioId)) {
@@ -7146,6 +7306,16 @@ export default function AgentStudio() {
                                 <p className="mt-2 text-[12px] leading-relaxed text-slate-300">
                                   {recommendedAutoGraduationProfile.summary}
                                 </p>
+                                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                    Active: {activeAutoGraduationProfile.label}
+                                  </span>
+                                  {workspaceAutoGraduationProfile ? (
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200">
+                                      Workspace default: {workspaceAutoGraduationProfile.label}
+                                    </span>
+                                  ) : null}
+                                </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   {AUTO_GRADUATION_PROFILES.map((profile) => (
                                     <button
@@ -7153,12 +7323,30 @@ export default function AgentStudio() {
                                       type="button"
                                       onClick={() => handleApplyAutoGraduationProfile(profile.id, 'archetype')}
                                       className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${
-                                        profile.id === recommendedAutoGraduationProfile.id ? 'border-emerald-500/30 bg-emerald-500/12 text-emerald-200' : 'text-slate-300'
+                                        profile.id === activeAutoGraduationProfile.id ? 'border-emerald-500/30 bg-emerald-500/12 text-emerald-200' : 'text-slate-300'
                                       }`}
                                     >
                                       {profile.label}
                                     </button>
                                   ))}
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRememberWorkspaceAutoGraduationProfile(activeAutoGraduationProfile.id)}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                  >
+                                    Remember active profile for workspace
+                                  </button>
+                                  {workspaceAutoGraduationProfile ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleClearWorkspaceAutoGraduationProfile()}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                    >
+                                      Clear workspace default
+                                    </button>
+                                  ) : null}
                                 </div>
                               </div>
                               <div className="mt-3 flex flex-wrap gap-2">
@@ -7289,6 +7477,43 @@ export default function AgentStudio() {
                                           </span>
                                         ) : null}
                                       </div>
+                                      {item.reasons.length > 0 ? (
+                                        <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Why this graduated</p>
+                                          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                            {item.reasons.map((reason) => (
+                                              <span key={`${item.entry.id}-${reason}`} className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                                {reason}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ) : null}
+                                      {(item.childRun && item.parentRun && item.dominantPhase) ? (
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenRunPairInReplay(item.childRun!, item.parentRun!, item.dominantPhase!, 'graduation timeline')}
+                                            className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                          >
+                                            Open before / after
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenRunInReplay(item.childRun!, 'graduation child')}
+                                            className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                          >
+                                            Child replay
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenRunInReplay(item.parentRun!, 'graduation parent')}
+                                            className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                          >
+                                            Parent replay
+                                          </button>
+                                        </div>
+                                      ) : null}
                                     </div>
                                   </div>
                                 </div>
@@ -7317,6 +7542,16 @@ export default function AgentStudio() {
                               <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
                                 {autoGraduationRollbackSuggestion.childRunCount} child runs observed
                               </span>
+                            </div>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2 text-[11px]">
+                              <div className="rounded-xl border border-red-500/16 bg-red-500/8 px-3 py-3">
+                                <p className="text-slate-400">Keep child branch</p>
+                                <p className="mt-1 text-white">{Math.round(autoGraduationRollbackSuggestion.childWindowStats.successRate * 100)}% success · {autoGraduationRollbackSuggestion.childWindowStats.averageCredits ? `${formatCredits(autoGraduationRollbackSuggestion.childWindowStats.averageCredits)} cr avg` : '—'}</p>
+                              </div>
+                              <div className="rounded-xl border border-emerald-500/16 bg-emerald-500/8 px-3 py-3">
+                                <p className="text-slate-400">Restore parent</p>
+                                <p className="mt-1 text-white">{Math.round(autoGraduationRollbackSuggestion.parentWindowStats.successRate * 100)}% success · {autoGraduationRollbackSuggestion.parentWindowStats.averageCredits ? `${formatCredits(autoGraduationRollbackSuggestion.parentWindowStats.averageCredits)} cr avg` : '—'}</p>
+                              </div>
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
                               <button
