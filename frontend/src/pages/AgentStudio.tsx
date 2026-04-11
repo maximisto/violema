@@ -1377,6 +1377,16 @@ function rankRunPlanMatches(run: PlatformTaskRunRecord, plans: StudioOperatingPl
     .sort((left, right) => right.score - left.score);
 }
 
+function deriveWorkflowStepsFromAutomation(automation: AutomationApiRecord): WorkflowBlockDraft[] {
+  if (Array.isArray(automation.steps) && automation.steps.length > 0) {
+    return automation.steps;
+  }
+  if (automation.authoring_mode === 'describe') {
+    return buildWorkflowBlocksFromPrompt(automation.workflow_prompt);
+  }
+  return (automation.actions || []).map((action) => parseLegacyActionToWorkflowBlock(action));
+}
+
 function buildPhaseActivitySeries(runs: PlatformTaskRunRecord[], role: string) {
   const relevantRuns = runs.filter((run) => run.status === 'succeeded' || run.status === 'failed').slice(0, 8).reverse();
   const phaseOrder: WorkflowBlockKind[] = ['search', 'query', 'capture', 'analyze', 'summarize', 'deliver'];
@@ -1897,6 +1907,7 @@ export default function AgentStudio() {
   const [selectedAutomationId, setSelectedAutomationId] = useState<string>('');
   const [previewPresetId, setPreviewPresetId] = useState<string>('recommended');
   const [actionBusy, setActionBusy] = useState(false);
+  const [experimentSaveBusy, setExperimentSaveBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const hydratedAutomationIdRef = useRef<string>('');
 
@@ -4442,7 +4453,20 @@ export default function AgentStudio() {
         }),
       });
       if (!response.ok) throw new Error('Could not update execution policy');
-      await loadData(true);
+      const payload = await response.json().catch(() => null) as { item?: AutomationApiRecord } | null;
+      if (payload?.item) {
+        const updatedAutomation = payload.item;
+        setRows((current) => current.map((row) => {
+          if (row.automation.id !== updatedAutomation.id) return row;
+          return {
+            ...row,
+            automation: updatedAutomation,
+            workflowSteps: deriveWorkflowStepsFromAutomation(updatedAutomation),
+          };
+        }));
+      } else {
+        await loadData(true);
+      }
       if (options?.successMessage) {
         setNotice({ tone: 'success', message: options.successMessage });
       }
@@ -4606,130 +4630,6 @@ export default function AgentStudio() {
       },
     }, `Applied the ${profile.label.toLowerCase()} gate profile.`);
   }, [selectedArchetype.id, selectedScenario.id, selectedStudioState, updateStudioState]);
-
-  useEffect(() => {
-    if (!selectedRow?.automation.id) return undefined;
-    const currentScenarioId = selectedStudioState.selectedScenarioId || 'baseline';
-    const currentPresetId = selectedStudioState.previewPresetId || (activePresetId === 'custom_live' ? 'recommended' : activePresetId);
-    if (currentScenarioId === selectedScenarioId && currentPresetId === previewPresetId) return undefined;
-    const timeout = window.setTimeout(() => {
-      void updateStudioState({
-        ...selectedStudioState,
-        selectedScenarioId,
-        previewPresetId,
-      });
-    }, 450);
-    return () => window.clearTimeout(timeout);
-  }, [
-    activePresetId,
-    previewPresetId,
-    selectedRow?.automation.id,
-    selectedScenarioId,
-    selectedStudioState,
-    updateStudioState,
-  ]);
-
-  useEffect(() => {
-    if (!selectedRow?.automation.id) return undefined;
-    const nextRoom = activeRoom || undefined;
-    const nextPlanId = selectedPlanId || undefined;
-    const nextPlanCompareId = selectedPlanCompareId || undefined;
-    const nextPlanFamilyRootId = selectedPlanFamilyRootId || undefined;
-    const nextPlanIntentFilter = selectedPlanIntentFilter || undefined;
-    const nextReplayPhase = selectedReplayPhase || undefined;
-    const nextWorkerRole = selectedWorkerRole || undefined;
-    const nextDirectivePhase = selectedDirectivePhase || undefined;
-    const nextPhaseSimulation = phaseSimulation || undefined;
-    const nextExperimentId = selectedComparisonExperimentId || undefined;
-    const nextRunId = selectedCohortRunId || undefined;
-    const nextReplayCompareRunId = selectedReplayCompareRunId || undefined;
-    const nextMetric = trendMetric || undefined;
-    const nextGateWindow = gateLearningWindow || undefined;
-    const nextBranchFilter = branchRunFilter || undefined;
-    if (
-      (selectedStudioState.activeRoom || undefined) === nextRoom &&
-      (selectedStudioState.selectedPlanId || undefined) === nextPlanId &&
-      (selectedStudioState.selectedPlanCompareId || undefined) === nextPlanCompareId &&
-      (selectedStudioState.selectedPlanFamilyRootId || undefined) === nextPlanFamilyRootId &&
-      (selectedStudioState.selectedPlanIntentFilter || undefined) === nextPlanIntentFilter &&
-      (selectedStudioState.selectedReplayPhase || undefined) === nextReplayPhase &&
-      (selectedStudioState.selectedWorkerRole || undefined) === nextWorkerRole &&
-      (selectedStudioState.selectedDirectivePhase || undefined) === nextDirectivePhase &&
-      JSON.stringify(selectedStudioState.phaseSimulation || undefined) === JSON.stringify(nextPhaseSimulation) &&
-      (selectedStudioState.selectedComparisonExperimentId || undefined) === nextExperimentId &&
-      (selectedStudioState.selectedCohortRunId || undefined) === nextRunId &&
-      (selectedStudioState.selectedReplayCompareRunId || undefined) === nextReplayCompareRunId &&
-      (selectedStudioState.trendMetric || undefined) === nextMetric &&
-      (selectedStudioState.gateLearningWindow || undefined) === nextGateWindow &&
-      (selectedStudioState.branchRunFilter || undefined) === nextBranchFilter
-    ) {
-      return undefined;
-    }
-    const timeout = window.setTimeout(() => {
-      void updateStudioState({
-        ...selectedStudioState,
-        activeRoom: nextRoom,
-        selectedPlanId: nextPlanId,
-        selectedPlanCompareId: nextPlanCompareId,
-        selectedPlanFamilyRootId: nextPlanFamilyRootId,
-        selectedPlanIntentFilter: nextPlanIntentFilter,
-        selectedReplayPhase: nextReplayPhase,
-        selectedWorkerRole: nextWorkerRole,
-        selectedDirectivePhase: nextDirectivePhase,
-        phaseSimulation: nextPhaseSimulation,
-        selectedComparisonExperimentId: nextExperimentId,
-        selectedCohortRunId: nextRunId,
-        selectedReplayCompareRunId: nextReplayCompareRunId,
-        trendMetric: nextMetric,
-        gateLearningWindow: nextGateWindow,
-        branchRunFilter: nextBranchFilter,
-      });
-    }, 450);
-    return () => window.clearTimeout(timeout);
-  }, [
-    activeRoom,
-    branchRunFilter,
-    gateLearningWindow,
-    phaseSimulation,
-    selectedPlanId,
-    selectedPlanCompareId,
-    selectedPlanFamilyRootId,
-    selectedPlanIntentFilter,
-    selectedComparisonExperimentId,
-    selectedCohortRunId,
-    selectedReplayCompareRunId,
-    selectedDirectivePhase,
-    selectedReplayPhase,
-    selectedRow?.automation.id,
-    selectedWorkerRole,
-    selectedStudioState,
-    trendMetric,
-    updateStudioState,
-  ]);
-
-  useEffect(() => {
-    if (!selectedRow?.automation.id) return undefined;
-    const nextPrimary = selectedBranchRootId || undefined;
-    const nextCompared = comparedBranchRootId && comparedBranchRootId !== selectedBranchRootId ? comparedBranchRootId : undefined;
-    if ((selectedStudioState.selectedBranchRootId || undefined) === nextPrimary && (selectedStudioState.comparedBranchRootId || undefined) === nextCompared) {
-      return undefined;
-    }
-    if (!nextPrimary && !nextCompared) return undefined;
-    const timeout = window.setTimeout(() => {
-      void updateStudioState({
-        ...selectedStudioState,
-        selectedBranchRootId: nextPrimary,
-        comparedBranchRootId: nextCompared,
-      });
-    }, 450);
-    return () => window.clearTimeout(timeout);
-  }, [
-    comparedBranchRootId,
-    selectedBranchRootId,
-    selectedRow?.automation.id,
-    selectedStudioState,
-    updateStudioState,
-  ]);
 
   useEffect(() => {
     if (branchFamilyPerformance.length === 0) return;
@@ -4985,7 +4885,7 @@ export default function AgentStudio() {
     }
   }, [applyRecommendationAction, nextExperimentQueue]);
 
-  const handleSaveExperiment = useCallback(() => {
+  const handleSaveExperiment = useCallback(async () => {
     const nextHistory = [
       {
         id: `exp_${Date.now()}`,
@@ -4998,12 +4898,17 @@ export default function AgentStudio() {
       ...(selectedStudioState.experimentHistory || []),
     ].slice(0, 8);
 
-    void updateStudioState({
-      ...selectedStudioState,
-      selectedScenarioId,
-      previewPresetId,
-      experimentHistory: nextHistory,
-    }, 'Saved experiment snapshot.');
+    setExperimentSaveBusy(true);
+    try {
+      await updateStudioState({
+        ...selectedStudioState,
+        selectedScenarioId,
+        previewPresetId,
+        experimentHistory: nextHistory,
+      }, 'Saved experiment snapshot.');
+    } finally {
+      setExperimentSaveBusy(false);
+    }
   }, [previewPreset.label, previewPresetId, selectedScenario.label, selectedScenarioId, selectedStudioState, updateStudioState]);
 
   const handleSaveOperatingPlan = useCallback((source?: { experiment?: StudioExperimentRecord; namePrefix?: string; intentLabel?: string; parentPlan?: StudioOperatingPlan }) => {
@@ -6619,11 +6524,11 @@ export default function AgentStudio() {
                           <div className="mt-4 flex flex-wrap items-center gap-3">
                             <button
                               type="button"
-                              disabled={actionBusy}
+                              disabled={actionBusy || experimentSaveBusy}
                               onClick={handleSaveExperiment}
                               className="rounded-xl border border-cyan-500/24 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-100 transition-colors hover:bg-cyan-500/14 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              {actionBusy ? 'Saving…' : 'Save experiment snapshot'}
+                              {experimentSaveBusy ? 'Saving…' : 'Save experiment snapshot'}
                             </button>
                             <p className="text-[11px] leading-relaxed text-slate-500">Save strong scenario and preset pairings so the workflow can be compared and restored later.</p>
                           </div>
