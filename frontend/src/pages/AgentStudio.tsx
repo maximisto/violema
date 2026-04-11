@@ -6418,7 +6418,7 @@ export default function AgentStudio() {
                 {activeRoom === 'optimize' ? (
                   <>
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr),minmax(0,0.95fr)]">
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <Gauge className="h-4 w-4 text-emerald-300" />
                           <div>
@@ -6584,7 +6584,7 @@ export default function AgentStudio() {
                     </div>
 
                     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr),minmax(22rem,0.95fr)]">
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <Target className="h-4 w-4 text-cyan-300" />
                           <div>
@@ -6845,8 +6845,8 @@ export default function AgentStudio() {
                       </div>
                     </div>
 
-                    <div className="space-y-6 xl:columns-2 xl:gap-6 xl:space-y-0">
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr),minmax(0,1fr)] xl:items-start">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <Gauge className="h-4 w-4 text-amber-300" />
                           <div>
@@ -6895,7 +6895,7 @@ export default function AgentStudio() {
                         </div>
                       </div>
 
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <Brain className="h-4 w-4 text-violet-300" />
                           <div>
@@ -6993,7 +6993,7 @@ export default function AgentStudio() {
                         </div>
                       </div>
 
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <Layers3 className="h-4 w-4 text-cyan-300" />
                           <div>
@@ -7279,7 +7279,7 @@ export default function AgentStudio() {
                           )}
                         </div>
                       </div>
-                        <div className="space-y-4 xl:mb-6 xl:[break-inside:avoid]">
+                        <div className="space-y-4">
                         {selectedPlanFamilyReplay ? (
                           <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                             <div className="flex items-start justify-between gap-3">
@@ -7584,7 +7584,7 @@ export default function AgentStudio() {
                         ) : null}
                         </div>
                         {activeBranchParentComparison ? (
-                          <div className="mt-4 rounded-2xl border border-violet-500/16 bg-violet-500/8 p-4 xl:mt-0 xl:mb-6 xl:[break-inside:avoid]">
+                          <div className="mt-4 rounded-2xl border border-violet-500/16 bg-violet-500/8 p-4 xl:mt-0">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-violet-100/80">Branch vs parent</p>
                             <p className="mt-1 text-sm font-medium text-white">{activeBranchParentComparison.child.plan.name} vs {activeBranchParentComparison.parent.plan.name}</p>
                             <p className="mt-2 text-sm leading-relaxed text-slate-300">
@@ -7766,7 +7766,7 @@ export default function AgentStudio() {
                           </div>
                         ) : null}
                         {graduationHistory.length > 0 ? (
-                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4 xl:mt-0 xl:mb-6 xl:[break-inside:avoid]">
+                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4 xl:mt-0">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Graduation history</p>
                             <div className="mt-3 space-y-3">
                               {graduationTimeline.map((item, index) => (
@@ -7882,7 +7882,7 @@ export default function AgentStudio() {
                           </div>
                         ) : null}
                         {autoGraduationRollbackSuggestion ? (
-                          <div className="mt-4 rounded-2xl border border-red-500/16 bg-red-500/8 p-4 xl:mt-0 xl:mb-6 xl:[break-inside:avoid]">
+                          <div className="mt-4 rounded-2xl border border-red-500/16 bg-red-500/8 p-4 xl:mt-0">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-red-100/80">Auto-graduation rollback</p>
                             <p className="mt-1 text-sm font-medium text-white">{autoGraduationRollbackSuggestion.child.plan.name} lost momentum after auto-graduation</p>
                             <p className="mt-2 text-sm leading-relaxed text-slate-300">
@@ -7989,7 +7989,7 @@ export default function AgentStudio() {
                           </div>
                         ) : null}
                         {rollbackTimeline.length > 0 ? (
-                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4 xl:mt-0 xl:mb-6 xl:[break-inside:avoid]">
+                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4 xl:mt-0">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Rollback history</p>
                             <div className="mt-3 space-y-3">
                               {rollbackTimeline.map((item) => (
@@ -8670,7 +8670,7 @@ export default function AgentStudio() {
 
                 {activeRoom === 'replay' ? (
                   <>
-                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr),minmax(22rem,0.92fr)] xl:items-start">
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.02fr),minmax(22rem,0.98fr)] xl:items-start">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <LineChart className="h-4 w-4 text-cyan-300" />
@@ -9466,7 +9466,7 @@ export default function AgentStudio() {
                       </div>
                     </div>
 
-                    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr),minmax(0,1.08fr)]">
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.02fr),minmax(22rem,0.98fr)] xl:items-start">
                       <div className="space-y-6">
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           {autoPromotionSuggestion ? (
