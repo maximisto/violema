@@ -1402,6 +1402,7 @@ export default function AgentStudio() {
   const [selectedDirectivePhase, setSelectedDirectivePhase] = useState<'all' | WorkflowBlockKind>('all');
   const [selectedComparisonExperimentId, setSelectedComparisonExperimentId] = useState<string>('');
   const [selectedBranchRootId, setSelectedBranchRootId] = useState<string>('');
+  const [comparedBranchRootId, setComparedBranchRootId] = useState<string>('');
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('credits');
   const [selectedCohortRunId, setSelectedCohortRunId] = useState<string>('');
   const [hoveredCohortRunId, setHoveredCohortRunId] = useState<string>('');
@@ -1650,6 +1651,7 @@ export default function AgentStudio() {
     setHoveredCohortRunId('');
     setPhaseSimulation(null);
     setSelectedBranchRootId('');
+    setComparedBranchRootId('');
     setSelectedScenarioId(
       selectedStudioState.selectedScenarioId && SCENARIO_PRESETS.some((scenario) => scenario.id === selectedStudioState.selectedScenarioId)
         ? selectedStudioState.selectedScenarioId as ScenarioPresetId
@@ -2646,6 +2648,15 @@ export default function AgentStudio() {
     return branchFamilyPerformance.find((family) => family.rootExperiment.id === selectedBranchRootId) || branchFamilyPerformance[0];
   }, [branchFamilyPerformance, selectedBranchRootId]);
 
+  const comparedBranchFamily = useMemo(() => {
+    if (branchFamilyPerformance.length < 2) return undefined;
+    if (comparedBranchRootId) {
+      const explicit = branchFamilyPerformance.find((family) => family.rootExperiment.id === comparedBranchRootId);
+      if (explicit && explicit.rootExperiment.id !== selectedBranchFamily?.rootExperiment.id) return explicit;
+    }
+    return branchFamilyPerformance.find((family) => family.rootExperiment.id !== selectedBranchFamily?.rootExperiment.id) || undefined;
+  }, [branchFamilyPerformance, comparedBranchRootId, selectedBranchFamily?.rootExperiment.id]);
+
   const branchTrendSeries = useMemo(() => {
     if (!selectedBranchFamily) return null;
     const orderedRuns = selectedBranchFamily.runs
@@ -2711,8 +2722,9 @@ export default function AgentStudio() {
   }, [selectedBranchFamily, selectedBranchMemberPerformance, selectedRow?.averageCredits]);
 
   const branchFamilyComparison = useMemo(() => {
-    if (branchFamilyPerformance.length < 2) return null;
-    const [leader, challenger] = branchFamilyPerformance;
+    if (!selectedBranchFamily || !comparedBranchFamily) return null;
+    const leader = selectedBranchFamily.score >= comparedBranchFamily.score ? selectedBranchFamily : comparedBranchFamily;
+    const challenger = leader.rootExperiment.id === selectedBranchFamily.rootExperiment.id ? comparedBranchFamily : selectedBranchFamily;
     return {
       leader,
       challenger,
@@ -2720,7 +2732,7 @@ export default function AgentStudio() {
       creditsDelta: Math.round((leader.stats.averageCredits || 0) - (challenger.stats.averageCredits || 0)),
       confidenceDelta: leader.confidence - challenger.confidence,
     };
-  }, [branchFamilyPerformance]);
+  }, [comparedBranchFamily, selectedBranchFamily]);
 
   const branchComparisonCharts = useMemo(() => {
     if (!branchFamilyComparison) return null;
@@ -2766,6 +2778,29 @@ export default function AgentStudio() {
       .filter((item): item is NonNullable<typeof item> => Boolean(item))
       .slice(0, 8);
   }, [selectedRow?.runs, selectedStudioState.promotionHistory]);
+
+  const rollbackSuggestion = useMemo(() => {
+    const weak = promotionAudit.find((entry) => entry.outcome === 'Weak');
+    if (!weak) return null;
+    return {
+      title: 'Rollback candidate detected',
+      body: `${weak.summary} has weak follow-through across ${weak.subsequentRuns.length} subsequent runs. This is a good candidate to unwind or retest before it hardens into the live policy.`,
+      entry: weak,
+    };
+  }, [promotionAudit]);
+
+  const recommendedGateProfile = useMemo(() => {
+    if (selectedScenario.id === 'high_stakes' || selectedPolicy.reviewPolicy === 'strict') {
+      return PROMOTION_GATE_PROFILES.find((item) => item.id === 'conservative');
+    }
+    if (evidenceFreshness.tone === 'stale' || (selectedRow?.successRate || 0) < 0.65) {
+      return PROMOTION_GATE_PROFILES.find((item) => item.id === 'conservative');
+    }
+    if (selectedScenario.id === 'monitoring' || selectedPolicy.optimizationGoal === 'cost_saver') {
+      return PROMOTION_GATE_PROFILES.find((item) => item.id === 'aggressive');
+    }
+    return PROMOTION_GATE_PROFILES.find((item) => item.id === 'balanced');
+  }, [evidenceFreshness.tone, selectedPolicy.optimizationGoal, selectedPolicy.reviewPolicy, selectedRow?.successRate, selectedScenario.id]);
 
   const activeGateScope = useMemo(() => {
     if (selectedStudioState.autoPromotionScenarioThresholds?.[selectedScenario.id]) {
@@ -2923,6 +2958,13 @@ export default function AgentStudio() {
     if (selectedBranchRootId && branchFamilyPerformance.some((family) => family.rootExperiment.id === selectedBranchRootId)) return;
     setSelectedBranchRootId(branchFamilyPerformance[0].rootExperiment.id);
   }, [branchFamilyPerformance, selectedBranchRootId]);
+
+  useEffect(() => {
+    if (branchFamilyPerformance.length < 2) return;
+    if (comparedBranchRootId && branchFamilyPerformance.some((family) => family.rootExperiment.id === comparedBranchRootId && family.rootExperiment.id !== selectedBranchRootId)) return;
+    const fallback = branchFamilyPerformance.find((family) => family.rootExperiment.id !== selectedBranchRootId);
+    if (fallback) setComparedBranchRootId(fallback.rootExperiment.id);
+  }, [branchFamilyPerformance, comparedBranchRootId, selectedBranchRootId]);
 
   const handleRouteCheaper = useCallback(() => {
     const nextLaneCap =
@@ -5331,6 +5373,25 @@ export default function AgentStudio() {
                               <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{activeGateScope.scope}</span>
                               <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{activeGateScope.label}</span>
                             </div>
+                            {recommendedGateProfile ? (
+                              <div className="mt-3 rounded-xl border border-cyan-500/16 bg-cyan-500/8 px-3 py-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Recommended profile</p>
+                                    <p className="mt-1 text-sm font-medium text-white">{recommendedGateProfile.label}</p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    disabled={studioBusy}
+                                    onClick={() => handleApplyGateProfile(recommendedGateProfile.id)}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
+                                  >
+                                    Apply recommendation
+                                  </button>
+                                </div>
+                                <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{recommendedGateProfile.summary}</p>
+                              </div>
+                            ) : null}
                             <div className="mt-3 grid gap-3 sm:grid-cols-3">
                               {PROMOTION_GATE_PROFILES.map((profile) => (
                                 <button
@@ -5494,6 +5555,32 @@ export default function AgentStudio() {
                           {branchFamilyComparison ? (
                             <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Branch vs branch</p>
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                {[
+                                  { slot: 'left', family: selectedBranchFamily, label: 'Primary branch' },
+                                  { slot: 'right', family: comparedBranchFamily, label: 'Compare against' },
+                                ].map((slot) => (
+                                  <div key={`branch-slot-${slot.slot}`} className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                    <p className="text-[11px] text-slate-400">{slot.label}</p>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {branchFamilyPerformance.map((family) => (
+                                        <button
+                                          key={`${slot.slot}-${family.rootExperiment.id}`}
+                                          type="button"
+                                          onClick={() => slot.slot === 'left' ? setSelectedBranchRootId(family.rootExperiment.id) : setComparedBranchRootId(family.rootExperiment.id)}
+                                          className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${
+                                            slot.family?.rootExperiment.id === family.rootExperiment.id
+                                              ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
+                                              : 'text-slate-300'
+                                          }`}
+                                        >
+                                          {getExperimentDisplayLabel(family.rootExperiment)}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                               <div className="mt-2 grid gap-3 sm:grid-cols-2">
                                 <div className="rounded-xl border border-emerald-500/16 bg-emerald-500/8 px-3 py-3">
                                   <p className="text-[11px] text-slate-400">Leader</p>
@@ -5634,7 +5721,10 @@ export default function AgentStudio() {
                                   <button
                                     key={`branch-run-${run.id}`}
                                     type="button"
-                                    onClick={() => setSelectedCohortRunId(run.id)}
+                                    onClick={() => {
+                                      setSelectedCohortRunId(run.id);
+                                      setActiveRoom('replay');
+                                    }}
                                     className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${selectedCohortRunId === run.id ? 'border-cyan-500/30 bg-cyan-500/10' : 'border-white/6 bg-white/[0.02] hover:border-white/10'}`}
                                   >
                                     <div>
@@ -5820,6 +5910,13 @@ export default function AgentStudio() {
                               <h3 className="text-sm font-semibold text-white">How the live policy got here</h3>
                             </div>
                           </div>
+                          {rollbackSuggestion ? (
+                            <div className="mt-4 rounded-2xl border border-amber-500/18 bg-amber-500/8 p-4">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Rollback suggestion</p>
+                              <p className="mt-2 text-sm font-medium text-white">{rollbackSuggestion.title}</p>
+                              <p className="mt-2 text-sm leading-relaxed text-slate-300">{rollbackSuggestion.body}</p>
+                            </div>
+                          ) : null}
                           {promotionAudit.length > 0 ? (
                             <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Promotion audit</p>
