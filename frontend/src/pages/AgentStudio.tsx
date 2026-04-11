@@ -82,6 +82,8 @@ interface AutomationStudioStateDraft {
   selectedCohortRunId?: string;
   selectedBranchRootId?: string;
   comparedBranchRootId?: string;
+  pinnedSuggestedPlanId?: string;
+  dismissedSuggestedPlanId?: string;
   trendMetric?: TrendMetric;
   gateLearningWindow?: GateLearningWindow;
   branchRunFilter?: BranchRunFilter;
@@ -995,11 +997,12 @@ function scoreObservedPerformance(
   stats: ReturnType<typeof summarizeRunCollection>,
   latestAt?: string,
 ) {
-  const confidence = clampNumber(Math.round((Math.min(stats.count, 12) / 12) * 100), 8, 100);
+  const sampleConfidence = clampNumber(Math.round((Math.min(stats.count, 12) / 12) * 100), 8, 100);
   const latestTime = latestAt ? Date.parse(latestAt) : Number.NaN;
   const recencyDays = Number.isNaN(latestTime) ? 30 : Math.max(0, (Date.now() - latestTime) / 86400000);
   const recencyBoost = clampNumber(Math.round(18 - recencyDays), 0, 18);
   const stalePenalty = clampNumber(Math.round(Math.max(0, recencyDays - 10) * 0.8), 0, 24);
+  const confidence = clampNumber(sampleConfidence - stalePenalty, 8, 100);
   const score = clampNumber(
     Math.round(
       stats.successRate * 72 +
@@ -1016,6 +1019,7 @@ function scoreObservedPerformance(
   return {
     score,
     confidence,
+    sampleConfidence,
     recencyBoost,
     stalePenalty,
     freshness: recencyDays > 21 ? 'stale' : recencyDays > 8 ? 'warm' : 'fresh',
@@ -1580,6 +1584,8 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
     selectedCohortRunId: readString(value.selectedCohortRunId),
     selectedBranchRootId: readString(value.selectedBranchRootId),
     comparedBranchRootId: readString(value.comparedBranchRootId),
+    pinnedSuggestedPlanId: readString(value.pinnedSuggestedPlanId),
+    dismissedSuggestedPlanId: readString(value.dismissedSuggestedPlanId),
     trendMetric:
       value.trendMetric === 'credits' || value.trendMetric === 'duration' || value.trendMetric === 'success'
         ? value.trendMetric
@@ -3600,6 +3606,20 @@ export default function AgentStudio() {
     };
   }, [comparedPlanFamily, selectedPlanFamily]);
 
+  const planFamilyReplayComparison = useMemo(() => {
+    if (!selectedPlanFamily || !comparedPlanFamily) return null;
+    const primaryRun = selectedPlanFamily.runs
+      .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+      .sort((left, right) => Date.parse(right.finishedAt || right.startedAt) - Date.parse(left.finishedAt || left.startedAt))[0];
+    const comparedRun = comparedPlanFamily.runs
+      .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+      .sort((left, right) => Date.parse(right.finishedAt || right.startedAt) - Date.parse(left.finishedAt || left.startedAt))[0];
+    return {
+      primaryRun,
+      comparedRun,
+    };
+  }, [comparedPlanFamily, selectedPlanFamily]);
+
   const planComparison = useMemo(() => {
     if (!activeSavedPlan || !comparedSavedPlan) return null;
     return {
@@ -3634,6 +3654,13 @@ export default function AgentStudio() {
     () => savedPlanAudit.find((entry) => entry.outcome === 'Compounding') || savedPlanAudit.find((entry) => entry.outcome === 'Promising') || savedPlanAudit[0],
     [savedPlanAudit]
   );
+
+  const pinnedSuggestedPlan = useMemo(
+    () => selectedStudioState.pinnedSuggestedPlanId ? savedPlanSummaries.find((entry) => entry.plan.id === selectedStudioState.pinnedSuggestedPlanId) : undefined,
+    [savedPlanSummaries, selectedStudioState.pinnedSuggestedPlanId]
+  );
+
+  const dismissedSuggestedPlanId = selectedStudioState.dismissedSuggestedPlanId;
 
   const planRollbackSuggestion = useMemo(() => {
     if (!activeSavedPlan) return null;
@@ -3690,9 +3717,10 @@ export default function AgentStudio() {
           ? 'No evidence yet'
           : childStats.successRate >= parent.stats.successRate && (childStats.averageCredits || 0) <= (parent.stats.averageCredits || 0)
             ? 'Compounding'
-            : childStats.successRate >= parent.stats.successRate - 0.04
+          : childStats.successRate >= parent.stats.successRate - 0.04
               ? 'Promising'
               : 'Weak',
+      graduationReady: childRuns.length >= 4 && childStats.successRate >= parent.stats.successRate + 0.08 && (childStats.averageCredits || 0) <= (parent.stats.averageCredits || 0) + 4,
     };
   }, [activeSavedPlan, savedPlanSummaries, selectedRow?.runs]);
 
@@ -3735,9 +3763,12 @@ export default function AgentStudio() {
 
   const archetypeRecommendedPlan = useMemo(() => {
     const topIntent = archetypePlanLearning[0]?.label;
-    if (!topIntent) return recommendedPlan;
-    return savedPlanAudit.find((entry) => entry.plan.intentLabel === topIntent) || recommendedPlan;
-  }, [archetypePlanLearning, recommendedPlan, savedPlanAudit]);
+    const learned = topIntent ? savedPlanAudit.find((entry) => entry.plan.intentLabel === topIntent) : undefined;
+    if (pinnedSuggestedPlan) return pinnedSuggestedPlan;
+    if (learned && learned.plan.id !== dismissedSuggestedPlanId) return learned;
+    if (recommendedPlan && recommendedPlan.plan.id !== dismissedSuggestedPlanId) return recommendedPlan;
+    return savedPlanAudit.find((entry) => entry.plan.id !== dismissedSuggestedPlanId) || recommendedPlan;
+  }, [archetypePlanLearning, dismissedSuggestedPlanId, pinnedSuggestedPlan, recommendedPlan, savedPlanAudit]);
 
   const archetypeRecommendedPlanMode = useMemo(() => {
     if (!archetypeRecommendedPlan) return 'none' as const;
@@ -4499,6 +4530,28 @@ export default function AgentStudio() {
     setActiveRoom('optimize');
     setNotice({ tone: 'success', message: `Loaded ${plan.name} for comparison.` });
   }, [savedPlanSummaries]);
+
+  const handlePinSuggestedPlan = useCallback((plan: StudioOperatingPlan) => {
+    void updateStudioState({
+      ...selectedStudioState,
+      pinnedSuggestedPlanId: plan.id,
+      dismissedSuggestedPlanId: selectedStudioState.dismissedSuggestedPlanId === plan.id ? undefined : selectedStudioState.dismissedSuggestedPlanId,
+    }, `${plan.name} is now pinned as the suggested plan for this workflow.`);
+  }, [selectedStudioState, updateStudioState]);
+
+  const handleDismissSuggestedPlan = useCallback((plan: StudioOperatingPlan) => {
+    void updateStudioState({
+      ...selectedStudioState,
+      dismissedSuggestedPlanId: plan.id,
+      pinnedSuggestedPlanId: selectedStudioState.pinnedSuggestedPlanId === plan.id ? undefined : selectedStudioState.pinnedSuggestedPlanId,
+    }, `Dismissed ${plan.name} from automatic suggestion for this workflow.`);
+  }, [selectedStudioState, updateStudioState]);
+
+  const handleGraduateBranchPlan = useCallback(() => {
+    if (!activeBranchParentComparison) return;
+    setSelectedPlanCompareId(activeBranchParentComparison.parent.plan.id);
+    void handleRestoreOperatingPlan(activeBranchParentComparison.child.plan);
+  }, [activeBranchParentComparison, handleRestoreOperatingPlan]);
 
   const handleRestoreExperiment = useCallback((experiment: StudioExperimentRecord) => {
     if (SCENARIO_PRESETS.some((scenario) => scenario.id === experiment.scenarioId)) {
@@ -6505,6 +6558,52 @@ export default function AgentStudio() {
                               <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Spend delta</p><p className={`mt-1 ${planFamilyComparison.creditsDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(planFamilyComparison.creditsDelta)} cr</p></div>
                               <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Duration delta</p><p className={`mt-1 ${planFamilyComparison.durationDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(planFamilyComparison.durationDelta)}s</p></div>
                             </div>
+                            {planFamilyReplayComparison ? (
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-2xl border border-cyan-500/18 bg-cyan-500/8 p-3">
+                                  <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/80">Primary replay slice</p>
+                                  {planFamilyReplayComparison.primaryRun ? (
+                                    <>
+                                      <p className="mt-1 text-sm font-medium text-white">{formatAutomationRunTime(planFamilyReplayComparison.primaryRun.finishedAt || planFamilyReplayComparison.primaryRun.startedAt)}</p>
+                                      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                        <span className={`rounded-full border px-2 py-0.5 font-medium ${getStatusTone(planFamilyReplayComparison.primaryRun.status)}`}>{planFamilyReplayComparison.primaryRun.status}</span>
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{planFamilyReplayComparison.primaryRun.actualCredits ? `${formatCredits(planFamilyReplayComparison.primaryRun.actualCredits)} cr` : '—'}</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenRunInReplay(planFamilyReplayComparison.primaryRun!, 'primary plan family')}
+                                        className="mt-3 ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                      >
+                                        Open primary replay
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <p className="mt-2 text-sm text-slate-500">No replay slice yet.</p>
+                                  )}
+                                </div>
+                                <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-3">
+                                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Compared replay slice</p>
+                                  {planFamilyReplayComparison.comparedRun ? (
+                                    <>
+                                      <p className="mt-1 text-sm font-medium text-white">{formatAutomationRunTime(planFamilyReplayComparison.comparedRun.finishedAt || planFamilyReplayComparison.comparedRun.startedAt)}</p>
+                                      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                        <span className={`rounded-full border px-2 py-0.5 font-medium ${getStatusTone(planFamilyReplayComparison.comparedRun.status)}`}>{planFamilyReplayComparison.comparedRun.status}</span>
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{planFamilyReplayComparison.comparedRun.actualCredits ? `${formatCredits(planFamilyReplayComparison.comparedRun.actualCredits)} cr` : '—'}</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenRunInReplay(planFamilyReplayComparison.comparedRun!, 'compared plan family')}
+                                        className="mt-3 ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                      >
+                                        Open compared replay
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <p className="mt-2 text-sm text-slate-500">No replay slice yet.</p>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                         <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
@@ -6585,6 +6684,11 @@ export default function AgentStudio() {
                               <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${activeBranchParentComparison.childScoring.freshness === 'fresh' ? 'text-emerald-200' : activeBranchParentComparison.childScoring.freshness === 'warm' ? 'text-cyan-200' : 'text-amber-200'}`}>
                                 {activeBranchParentComparison.childScoring.freshness} child evidence
                               </span>
+                              {activeBranchParentComparison.graduationReady ? (
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-emerald-200">
+                                  Graduation ready
+                                </span>
+                              ) : null}
                             </div>
                             <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
                               <div className="rounded-xl border border-violet-500/18 bg-violet-500/8 px-3 py-2">
@@ -6601,6 +6705,16 @@ export default function AgentStudio() {
                               </div>
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
+                              {activeBranchParentComparison.graduationReady ? (
+                                <button
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => handleGraduateBranchPlan()}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-violet-100 disabled:opacity-60"
+                                >
+                                  Graduate branch
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 onClick={() => handleComparePlan(activeBranchParentComparison.parent.plan)}
@@ -6734,6 +6848,20 @@ export default function AgentStudio() {
                                       className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
                                     >
                                       Compare first
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePinSuggestedPlan(archetypeRecommendedPlan.plan)}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                    >
+                                      Pin suggestion
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDismissSuggestedPlan(archetypeRecommendedPlan.plan)}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                    >
+                                      Dismiss suggestion
                                     </button>
                                   </div>
                                 ) : null}
