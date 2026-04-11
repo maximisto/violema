@@ -1,0 +1,91 @@
+# Product Split
+
+This repo is moving toward two distinct products.
+
+## Decision
+
+- `Violema` is the outcome product.
+- `Agent Studio` is the optimization product.
+
+That separation is not branding theater. It fixes a real product problem:
+
+- Violema should sell completed work.
+- Agent Studio should sell better agent-system performance.
+
+## Product roles
+
+### Violema
+
+Violema should answer:
+
+- What work can I hand off?
+- What ran?
+- What succeeded?
+- What needs attention?
+- What should I automate next?
+
+Violema should not require users to think about:
+
+- branch promotion logic
+- topology tuning
+- review-pressure experiments
+- architecture comparisons
+
+### Agent Studio
+
+Agent Studio should answer:
+
+- Which architecture performs better?
+- Where is cost wasted?
+- Where is reliability weak?
+- Should this branch be promoted or rolled back?
+- What policy should we run next?
+
+Agent Studio should not try to be:
+
+- another chat product
+- another workflow automation frontend
+- another generic visual builder
+
+## Shared integration boundary
+
+The two products should connect through a stable data boundary.
+
+Agent Studio should ingest:
+
+- workflow definitions
+- role and phase topology
+- run traces
+- cost data
+- success and failure outcomes
+- policy state
+- promotion and rollback history
+
+Violema should receive back:
+
+- recommended policies
+- branch experiments
+- promotion or rollback decisions
+- evaluation summaries
+- safe defaults for execution
+
+## Separation rules
+
+### For Violema
+
+- Keep the UX outcome-first.
+- Hide architecture depth unless the user explicitly wants it.
+- Make reliability and completed work the retention loop.
+
+### For Agent Studio
+
+- Keep it runtime-agnostic.
+- Do not make it depend on Violema-only UI metaphors.
+- Treat Violema as one integration, not the whole product.
+
+## Files in this docs area
+
+- [Violema setup](/Users/maximisto/Documents/New%20project/docs/products/violema/SETUP.md)
+- [Violema handoff](/Users/maximisto/Documents/New%20project/docs/products/violema/HANDOFF.md)
+- [Agent Studio setup](/Users/maximisto/Documents/New%20project/docs/products/agent-studio/SETUP.md)
+- [Agent Studio handoff](/Users/maximisto/Documents/New%20project/docs/products/agent-studio/HANDOFF.md)
