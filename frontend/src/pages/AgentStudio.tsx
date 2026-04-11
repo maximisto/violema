@@ -57,6 +57,8 @@ interface AutomationStudioStateDraft {
   roleDirectives?: Record<string, StudioRoleDirective>;
   promotionHistory?: StudioPromotionRecord[];
   autoPromotionMinConfidence?: number;
+  autoPromotionScenarioThresholds?: Record<string, number>;
+  autoPromotionArchetypeThresholds?: Record<string, number>;
 }
 
 interface StudioPromotionRecord {
@@ -1002,6 +1004,16 @@ function buildBranchName(sourceLabel: string, index: number) {
   return `${sourceLabel} branch ${index}`;
 }
 
+function normalizeThresholdMap(value: unknown) {
+  if (!value || typeof value !== 'object') return undefined;
+  const next = Object.entries(value as Record<string, unknown>).reduce<Record<string, number>>((acc, [key, raw]) => {
+    if (typeof raw !== 'number') return acc;
+    acc[key] = clampNumber(Math.round(raw), 40, 95);
+    return acc;
+  }, {});
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
 function mergeRoleDirectiveSnapshots(
   base?: Record<string, StudioRoleDirective>,
   incoming?: Record<string, StudioRoleDirective>
@@ -1042,8 +1054,9 @@ function buildTrendSeries(
   metric: TrendMetric,
   width = 320,
   height = 130,
+  maxPoints = 8,
 ) {
-  const ordered = runs.slice(0, 8).reverse();
+  const ordered = runs.slice(0, maxPoints).reverse();
   if (ordered.length === 0) return null;
   const paddingX = 18;
   const paddingY = 14;
@@ -1324,6 +1337,8 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
       typeof value.autoPromotionMinConfidence === 'number'
         ? clampNumber(Math.round(value.autoPromotionMinConfidence), 40, 95)
         : undefined,
+    autoPromotionScenarioThresholds: normalizeThresholdMap(value.autoPromotionScenarioThresholds),
+    autoPromotionArchetypeThresholds: normalizeThresholdMap(value.autoPromotionArchetypeThresholds),
   };
 }
 
@@ -1373,6 +1388,7 @@ export default function AgentStudio() {
   const [selectedScenarioId, setSelectedScenarioId] = useState<ScenarioPresetId>('baseline');
   const [selectedDirectivePhase, setSelectedDirectivePhase] = useState<'all' | WorkflowBlockKind>('all');
   const [selectedComparisonExperimentId, setSelectedComparisonExperimentId] = useState<string>('');
+  const [selectedBranchRootId, setSelectedBranchRootId] = useState<string>('');
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('credits');
   const [selectedCohortRunId, setSelectedCohortRunId] = useState<string>('');
   const [hoveredCohortRunId, setHoveredCohortRunId] = useState<string>('');
@@ -1620,6 +1636,7 @@ export default function AgentStudio() {
     setSelectedDirectivePhase('all');
     setHoveredCohortRunId('');
     setPhaseSimulation(null);
+    setSelectedBranchRootId('');
     setSelectedScenarioId(
       selectedStudioState.selectedScenarioId && SCENARIO_PRESETS.some((scenario) => scenario.id === selectedStudioState.selectedScenarioId)
         ? selectedStudioState.selectedScenarioId as ScenarioPresetId
@@ -2524,7 +2541,19 @@ export default function AgentStudio() {
     });
   }, [phaseEvidence]);
 
-  const autoPromotionThreshold = selectedStudioState.autoPromotionMinConfidence ?? 55;
+  const autoPromotionThreshold = useMemo(() => {
+    const scenarioThreshold = selectedStudioState.autoPromotionScenarioThresholds?.[selectedScenario.id];
+    if (typeof scenarioThreshold === 'number') return scenarioThreshold;
+    const archetypeThreshold = selectedStudioState.autoPromotionArchetypeThresholds?.[selectedArchetype.id];
+    if (typeof archetypeThreshold === 'number') return archetypeThreshold;
+    return selectedStudioState.autoPromotionMinConfidence ?? 55;
+  }, [
+    selectedArchetype.id,
+    selectedScenario.id,
+    selectedStudioState.autoPromotionArchetypeThresholds,
+    selectedStudioState.autoPromotionMinConfidence,
+    selectedStudioState.autoPromotionScenarioThresholds,
+  ]);
 
   const autoPromotionSuggestion = useMemo(() => {
     if (!winningExperiment || !currentCohortPerformance || winningExperiment.experiment.id === selectedComparisonExperimentId) return null;
@@ -2599,6 +2628,19 @@ export default function AgentStudio() {
       .slice(0, 6);
   }, [experimentHistory, rows]);
 
+  const selectedBranchFamily = useMemo(() => {
+    if (branchFamilyPerformance.length === 0) return undefined;
+    return branchFamilyPerformance.find((family) => family.rootExperiment.id === selectedBranchRootId) || branchFamilyPerformance[0];
+  }, [branchFamilyPerformance, selectedBranchRootId]);
+
+  const branchTrendSeries = useMemo(() => {
+    if (!selectedBranchFamily) return null;
+    const orderedRuns = selectedBranchFamily.runs
+      .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+      .sort((left, right) => Date.parse(right.finishedAt || right.startedAt || '') - Date.parse(left.finishedAt || left.startedAt || ''));
+    return buildTrendSeries(orderedRuns, trendMetric, 360, 140, 12);
+  }, [selectedBranchFamily, trendMetric]);
+
   const patchAutomationConfig = useCallback(async (patch: {
     executionPolicy?: AutomationExecutionPolicyDraft;
     studioState?: AutomationStudioStateDraft;
@@ -2642,12 +2684,32 @@ export default function AgentStudio() {
     await patchAutomationConfig({ studioState: next }, { successMessage, suppressBusy: !successMessage });
   }, [patchAutomationConfig]);
 
-  const handleSetAutoPromotionThreshold = useCallback((threshold: number) => {
-    void updateStudioState({
-      ...selectedStudioState,
-      autoPromotionMinConfidence: threshold,
-    }, `Auto-promotion gate set to ${threshold}% confidence.`);
-  }, [selectedStudioState, updateStudioState]);
+  const handleSetScopedAutoPromotionThreshold = useCallback((
+    scope: 'global' | 'scenario' | 'archetype',
+    threshold: number,
+  ) => {
+    const nextState: AutomationStudioStateDraft = { ...selectedStudioState };
+    let message = `Auto-promotion gate set to ${threshold}% confidence.`;
+
+    if (scope === 'scenario') {
+      nextState.autoPromotionScenarioThresholds = {
+        ...(selectedStudioState.autoPromotionScenarioThresholds || {}),
+        [selectedScenario.id]: threshold,
+      };
+      message = `${selectedScenario.label} gate set to ${threshold}% confidence.`;
+    } else if (scope === 'archetype') {
+      nextState.autoPromotionArchetypeThresholds = {
+        ...(selectedStudioState.autoPromotionArchetypeThresholds || {}),
+        [selectedArchetype.id]: threshold,
+      };
+      message = `${selectedArchetype.label} gate set to ${threshold}% confidence.`;
+    } else {
+      nextState.autoPromotionMinConfidence = threshold;
+      message = `Global auto-promotion gate set to ${threshold}% confidence.`;
+    }
+
+    void updateStudioState(nextState, message);
+  }, [selectedArchetype.id, selectedArchetype.label, selectedScenario.id, selectedScenario.label, selectedStudioState, updateStudioState]);
 
   useEffect(() => {
     if (!selectedRow?.automation.id) return undefined;
@@ -2670,6 +2732,12 @@ export default function AgentStudio() {
     selectedStudioState,
     updateStudioState,
   ]);
+
+  useEffect(() => {
+    if (branchFamilyPerformance.length === 0) return;
+    if (selectedBranchRootId && branchFamilyPerformance.some((family) => family.rootExperiment.id === selectedBranchRootId)) return;
+    setSelectedBranchRootId(branchFamilyPerformance[0].rootExperiment.id);
+  }, [branchFamilyPerformance, selectedBranchRootId]);
 
   const handleRouteCheaper = useCallback(() => {
     const nextLaneCap =
@@ -4900,7 +4968,7 @@ export default function AgentStudio() {
                                         </svg>
                                         {highlightedPoint ? (
                                           <div
-                                            className="pointer-events-none absolute z-10 w-44 -translate-x-1/2 -translate-y-full rounded-2xl border border-white/10 bg-navy-950/96 px-3 py-2 text-left shadow-[0_16px_40px_rgba(2,6,23,0.42)]"
+                                            className="pointer-events-none absolute z-10 w-56 -translate-x-1/2 -translate-y-full rounded-2xl border border-white/10 bg-navy-950/96 px-3 py-3 text-left shadow-[0_16px_40px_rgba(2,6,23,0.42)]"
                                             style={{
                                               left: `${(highlightedPoint.x / chart.width) * 100}%`,
                                               top: `${Math.max(12, ((highlightedPoint.y / chart.height) * 100) - 4)}%`,
@@ -4909,6 +4977,20 @@ export default function AgentStudio() {
                                             <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{highlightedPoint.label}</p>
                                             <p className="mt-1 text-sm font-medium text-white">{highlightedPoint.metricLabel}</p>
                                             <p className="mt-1 text-[11px] text-slate-400">{series.label}</p>
+                                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                              <span className={`rounded-full border px-2 py-0.5 font-medium ${getStatusTone(highlightedPoint.run.status)}`}>
+                                                {highlightedPoint.run.status}
+                                              </span>
+                                              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                                {highlightedPoint.run.actualCredits ? `${formatCredits(highlightedPoint.run.actualCredits)} cr` : '—'}
+                                              </span>
+                                              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                                {formatAutomationRunTime(highlightedPoint.run.finishedAt || highlightedPoint.run.startedAt)}
+                                              </span>
+                                            </div>
+                                            <p className="mt-2 text-[10px] leading-relaxed text-slate-400">
+                                              {getRunExperimentAttribution(highlightedPoint.run).experimentNotes || `${getRunExperimentAttribution(highlightedPoint.run).scenarioLabel} · ${getRunExperimentAttribution(highlightedPoint.run).previewPresetLabel}`}
+                                            </p>
                                           </div>
                                         ) : null}
                                         <div className="mt-3 flex items-start justify-between gap-2">
@@ -5060,17 +5142,31 @@ export default function AgentStudio() {
                               </div>
                               <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{autoPromotionThreshold}%</span>
                             </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {[55, 70, 85].map((threshold) => (
-                                <button
-                                  key={`threshold-${threshold}`}
-                                  type="button"
-                                  disabled={studioBusy}
-                                  onClick={() => handleSetAutoPromotionThreshold(threshold)}
-                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${autoPromotionThreshold === threshold ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'} disabled:opacity-60`}
-                                >
-                                  {threshold}% confidence
-                                </button>
+                            <div className="mt-3 space-y-3">
+                              {[
+                                { scope: 'global' as const, label: 'Global default', value: selectedStudioState.autoPromotionMinConfidence ?? 55 },
+                                { scope: 'archetype' as const, label: `${selectedArchetype.label}`, value: selectedStudioState.autoPromotionArchetypeThresholds?.[selectedArchetype.id] ?? autoPromotionThreshold },
+                                { scope: 'scenario' as const, label: `${selectedScenario.label}`, value: selectedStudioState.autoPromotionScenarioThresholds?.[selectedScenario.id] ?? autoPromotionThreshold },
+                              ].map((scopeItem) => (
+                                <div key={`gate-${scopeItem.scope}`} className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-[11px] font-medium text-white">{scopeItem.label}</p>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{scopeItem.value}%</span>
+                                  </div>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {[55, 70, 85].map((threshold) => (
+                                      <button
+                                        key={`threshold-${scopeItem.scope}-${threshold}`}
+                                        type="button"
+                                        disabled={studioBusy}
+                                        onClick={() => handleSetScopedAutoPromotionThreshold(scopeItem.scope, threshold)}
+                                        className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${scopeItem.value === threshold ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'} disabled:opacity-60`}
+                                      >
+                                        {threshold}% confidence
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
                               ))}
                             </div>
                           </div>
@@ -5184,7 +5280,10 @@ export default function AgentStudio() {
                           </div>
                           <div className="mt-4 space-y-3">
                             {branchFamilyPerformance.length > 0 ? branchFamilyPerformance.map((family) => (
-                              <div key={`branch-family-${family.rootExperiment.id}`} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
+                              <div
+                                key={`branch-family-${family.rootExperiment.id}`}
+                                className={`rounded-2xl border p-4 transition-colors ${selectedBranchFamily?.rootExperiment.id === family.rootExperiment.id ? 'border-cyan-500/22 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/45'}`}
+                              >
                                 <div className="flex items-start justify-between gap-3">
                                   <div>
                                     <p className="text-sm font-medium text-white">{getExperimentDisplayLabel(family.rootExperiment)}</p>
@@ -5217,7 +5316,10 @@ export default function AgentStudio() {
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   <button
                                     type="button"
-                                    onClick={() => handleCompareExperiment(family.rootExperiment)}
+                                    onClick={() => {
+                                      setSelectedBranchRootId(family.rootExperiment.id);
+                                      handleCompareExperiment(family.rootExperiment);
+                                    }}
                                     className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
                                   >
                                     Compare branch family
@@ -5229,6 +5331,13 @@ export default function AgentStudio() {
                                   >
                                     Fork this line
                                   </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedBranchRootId(family.rootExperiment.id)}
+                                    className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedBranchFamily?.rootExperiment.id === family.rootExperiment.id ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
+                                  >
+                                    Inspect branch replay
+                                  </button>
                                 </div>
                               </div>
                             )) : (
@@ -5237,6 +5346,59 @@ export default function AgentStudio() {
                               </div>
                             )}
                           </div>
+                          {selectedBranchFamily ? (
+                            <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Selected branch replay</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{getExperimentDisplayLabel(selectedBranchFamily.rootExperiment)}</p>
+                                </div>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{selectedBranchFamily.runs.length} runs in branch line</span>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                {selectedBranchFamily.experiments.slice(0, 5).map((experiment) => (
+                                  <span key={`member-${experiment.id}`} className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                    {getExperimentDisplayLabel(experiment)}
+                                  </span>
+                                ))}
+                                {selectedBranchFamily.experiments.length > 5 ? (
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                    +{selectedBranchFamily.experiments.length - 5} more
+                                  </span>
+                                ) : null}
+                              </div>
+                              {branchTrendSeries ? (
+                                <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.02] px-3 py-4">
+                                  <svg viewBox={`0 0 ${branchTrendSeries.width} ${branchTrendSeries.height}`} className="h-36 w-full">
+                                    {[0.25, 0.5, 0.75].map((ratio) => {
+                                      const y = branchTrendSeries.height - 14 - (ratio * (branchTrendSeries.height - 28));
+                                      return <line key={`branch-grid-${ratio}`} x1="18" x2={branchTrendSeries.width - 18} y1={y} y2={y} stroke="rgba(148,163,184,0.12)" strokeDasharray="4 6" />;
+                                    })}
+                                    <path d={branchTrendSeries.areaPath} fill="rgba(34,211,238,0.12)" />
+                                    <path d={branchTrendSeries.linePath} fill="none" stroke="rgba(34,211,238,0.95)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                                    {branchTrendSeries.points.map((point) => (
+                                      <circle
+                                        key={`branch-point-${point.run.id}`}
+                                        cx={point.x}
+                                        cy={point.y}
+                                        r={selectedCohortRunId === point.run.id ? 6 : 4}
+                                        fill="rgba(103,232,249,1)"
+                                        stroke={selectedCohortRunId === point.run.id ? '#e2e8f0' : 'rgba(15,23,42,0.9)'}
+                                        strokeWidth={selectedCohortRunId === point.run.id ? 2 : 1.5}
+                                        onMouseEnter={() => setHoveredCohortRunId(point.run.id)}
+                                        onMouseLeave={() => setHoveredCohortRunId('')}
+                                        onClick={() => setSelectedCohortRunId(point.run.id)}
+                                      />
+                                    ))}
+                                  </svg>
+                                  <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-slate-500">
+                                    <span>Longer branch evidence window</span>
+                                    <span>{getTrendMetricLabel(trendMetric)} over up to 12 runs</span>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
