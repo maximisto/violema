@@ -277,6 +277,7 @@ interface AgentStudioSettingsPayload {
       autoGraduationProfiles?: Record<string, string>;
       autoRollbackEnabled?: boolean;
       autoRollbackWeaknessThreshold?: number;
+      autoRollbackMomentumThreshold?: number;
     };
   };
 }
@@ -1888,6 +1889,7 @@ export default function AgentStudio() {
     enabled: false,
     weaknessThreshold: 12,
   });
+  const [workspaceAutoRollbackMomentumThreshold, setWorkspaceAutoRollbackMomentumThreshold] = useState(6);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<AgentStudioRow[]>([]);
@@ -1925,6 +1927,7 @@ export default function AgentStudio() {
         enabled: settings?.settings?.agentStudio?.autoRollbackEnabled === true,
         weaknessThreshold: settings?.settings?.agentStudio?.autoRollbackWeaknessThreshold ?? 12,
       });
+      setWorkspaceAutoRollbackMomentumThreshold(settings?.settings?.agentStudio?.autoRollbackMomentumThreshold ?? 6);
 
       const taskByAutomationId = new Map<string, PlatformTaskRecord>();
       const automationIdByTaskId = new Map<string, string>();
@@ -3717,6 +3720,26 @@ export default function AgentStudio() {
       .filter((item): item is NonNullable<typeof item> => Boolean(item));
   }, [replayComparedPhaseOverlay, replayPhaseOverlay]);
 
+  const pairedReplayPhaseTimeline = useMemo(() => {
+    const phaseOrder: WorkflowBlockKind[] = ['search', 'query', 'capture', 'analyze', 'summarize', 'deliver', 'note'];
+    return phaseOrder
+      .map((phase) => {
+        const currentSteps = replayTimeline.filter((step) => step.kind === phase);
+        const comparedSteps = replayComparedTimeline.filter((step) => step.kind === phase);
+        if (currentSteps.length === 0 && comparedSteps.length === 0) return null;
+        return {
+          phase,
+          currentSteps,
+          comparedSteps,
+          currentCredits: currentSteps.reduce((sum, step) => sum + (step.actualCredits || 0), 0),
+          comparedCredits: comparedSteps.reduce((sum, step) => sum + (step.actualCredits || 0), 0),
+          currentDurationMs: currentSteps.reduce((sum, step) => sum + (step.durationMs || 0), 0),
+          comparedDurationMs: comparedSteps.reduce((sum, step) => sum + (step.durationMs || 0), 0),
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  }, [replayComparedTimeline, replayTimeline]);
+
   const branchOpportunityMap = useMemo(() => {
     const baselineCredits = selectedRow?.averageCredits || 0;
     return branchFamilyPerformance.slice(0, 4).map((family) => {
@@ -4105,6 +4128,7 @@ export default function AgentStudio() {
 
   const autoRollbackEnabled = selectedStudioState.autoRollbackEnabled ?? workspaceAutoRollbackDefaults.enabled;
   const autoRollbackWeaknessThreshold = selectedStudioState.autoRollbackWeaknessThreshold ?? workspaceAutoRollbackDefaults.weaknessThreshold;
+  const autoRollbackMomentumThreshold = workspaceAutoRollbackMomentumThreshold;
 
   const autoGraduateScope = useMemo(() => {
     if (selectedStudioState.autoGraduateScenarioThresholds?.[selectedScenario.id]) {
@@ -4227,15 +4251,24 @@ export default function AgentStudio() {
       .map((entry) => {
         const restoredSummary = entry.planId ? savedPlanSummaries.find((item) => item.plan.id === entry.planId) : undefined;
         const rolledBackSummary = entry.parentPlanId ? savedPlanSummaries.find((item) => item.plan.id === entry.parentPlanId) : undefined;
+        const workflowRuns = (selectedRow?.runs || []).filter((run) => run.status === 'succeeded' || run.status === 'failed');
+        const restoredRuns = restoredSummary
+          ? workflowRuns
+              .filter((run) => rankRunPlanMatches(run, [restoredSummary.plan])[0]?.plan.id === restoredSummary.plan.id)
+              .sort((left, right) => Date.parse(right.finishedAt || right.startedAt) - Date.parse(left.finishedAt || left.startedAt))
+              .slice(0, 6)
+          : [];
+        const rolledBackRuns = rolledBackSummary
+          ? workflowRuns
+              .filter((run) => rankRunPlanMatches(run, [rolledBackSummary.plan])[0]?.plan.id === rolledBackSummary.plan.id)
+              .sort((left, right) => Date.parse(right.finishedAt || right.startedAt) - Date.parse(left.finishedAt || left.startedAt))
+              .slice(0, 6)
+          : [];
         const restoredRun = restoredSummary
-          ? (selectedRow?.runs || [])
-              .filter((run) => run.status === 'succeeded' || run.status === 'failed')
-              .find((run) => rankRunPlanMatches(run, [restoredSummary.plan])[0]?.plan.id === restoredSummary.plan.id)
+          ? restoredRuns[0]
           : undefined;
         const rolledBackRun = rolledBackSummary
-          ? (selectedRow?.runs || [])
-              .filter((run) => run.status === 'succeeded' || run.status === 'failed')
-              .find((run) => rankRunPlanMatches(run, [rolledBackSummary.plan])[0]?.plan.id === rolledBackSummary.plan.id)
+          ? rolledBackRuns[0]
           : undefined;
         return {
           entry,
@@ -4252,6 +4285,16 @@ export default function AgentStudio() {
           currentDurationDelta: restoredSummary && rolledBackSummary
             ? Math.round(((restoredSummary.stats.averageDurationMs || 0) - (rolledBackSummary.stats.averageDurationMs || 0)) / 1000)
             : undefined,
+          recoverySeries: Array.from({
+            length: Math.max(
+              restoredRuns.length,
+              rolledBackRuns.length,
+            ),
+          }, (_, index) => ({
+            index,
+            restored: restoredRuns[index],
+            rolledBack: rolledBackRuns[index],
+          })),
         };
       })
       .slice(0, 6);
@@ -4276,7 +4319,7 @@ export default function AgentStudio() {
     const freshNegativeMomentum =
       childRecentStats.count >= 2 &&
       parentRecentStats.count >= 2 &&
-      childRecentStats.successRate + 0.04 < parentRecentStats.successRate &&
+      (parentRecentStats.successRate - childRecentStats.successRate) * 100 >= autoRollbackMomentumThreshold &&
       (
         (childRecentStats.averageCredits || 0) > (parentRecentStats.averageCredits || 0)
         || (childRecentStats.averageDurationMs || 0) > (parentRecentStats.averageDurationMs || 0)
@@ -4300,7 +4343,7 @@ export default function AgentStudio() {
       freshNegativeMomentum,
       weaknessScore: Math.round(weaknessScore),
     };
-  }, [activeBranchParentComparison, graduationHistory, selectedRow?.runs, selectedStudioState.lastAutoGraduatedPlanId]);
+  }, [activeBranchParentComparison, autoRollbackMomentumThreshold, graduationHistory, selectedRow?.runs, selectedStudioState.lastAutoGraduatedPlanId]);
 
   const planActionQueue = useMemo(() => {
     const queue: Array<{ id: string; title: string; body: string; action: 'restore_recommended' | 'rollback' | 'compare' | 'save_phase_plan' }> = [];
@@ -6775,7 +6818,7 @@ export default function AgentStudio() {
                       </div>
                     </div>
 
-                    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr),minmax(0,1.05fr)]">
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr),minmax(0,1.05fr)] xl:items-start">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <Gauge className="h-4 w-4 text-amber-300" />
@@ -7209,8 +7252,9 @@ export default function AgentStudio() {
                           )}
                         </div>
                       </div>
+                        <div className="mt-4 space-y-4">
                         {selectedPlanFamilyReplay ? (
-                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                          <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                             <div className="flex items-start justify-between gap-3">
                               <div>
                                 <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Selected plan family replay</p>
@@ -7314,7 +7358,7 @@ export default function AgentStudio() {
                           </div>
                         ) : null}
                         {planFamilyComparison ? (
-                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                          <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                             <div className="flex items-center justify-between gap-3">
                               <div>
                                 <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plan family comparison</p>
@@ -7447,7 +7491,7 @@ export default function AgentStudio() {
                             ) : null}
                           </div>
                         ) : null}
-                        <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                        <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plan performance audit</p>
                           <div className="mt-3 space-y-3">
                             {savedPlanAudit.length > 0 ? savedPlanAudit.map((entry) => (
@@ -7468,7 +7512,7 @@ export default function AgentStudio() {
                           </div>
                         </div>
                         {recommendedPlan ? (
-                          <div className="mt-4 rounded-2xl border border-emerald-500/16 bg-emerald-500/8 p-4">
+                          <div className="rounded-2xl border border-emerald-500/16 bg-emerald-500/8 p-4">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-100/80">Recommended plan</p>
                             <p className="mt-1 text-sm font-medium text-white">{recommendedPlan.plan.name}</p>
                             <p className="mt-2 text-sm leading-relaxed text-slate-300">
@@ -7511,6 +7555,7 @@ export default function AgentStudio() {
                             </div>
                           </div>
                         ) : null}
+                        </div>
                         {activeBranchParentComparison ? (
                           <div className="mt-4 rounded-2xl border border-violet-500/16 bg-violet-500/8 p-4">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-violet-100/80">Branch vs parent</p>
@@ -7843,6 +7888,9 @@ export default function AgentStudio() {
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
                                   Workspace default: {workspaceAutoRollbackDefaults.enabled ? `enabled at ${workspaceAutoRollbackDefaults.weaknessThreshold}` : 'disabled'}
                                 </span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                  Momentum gate: {autoRollbackMomentumThreshold}+ pt recent drop
+                                </span>
                                 <button
                                   type="button"
                                   onClick={() => navigate('/settings')}
@@ -7968,6 +8016,27 @@ export default function AgentStudio() {
                                     </div>
                                   ) : null}
                                   <p className="mt-3 text-sm leading-relaxed text-slate-300">{item.entry.summary}</p>
+                                  {item.recoverySeries.length > 0 ? (
+                                    <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Recovery window</p>
+                                      <div className="mt-3 flex h-24 items-end gap-2">
+                                        {item.recoverySeries.map((sample) => {
+                                          const restoredCredits = sample.restored?.actualCredits || 0;
+                                          const rolledBackCredits = sample.rolledBack?.actualCredits || 0;
+                                          return (
+                                            <div key={`rollback-recovery-${item.entry.id}-${sample.index}`} className="flex min-w-0 flex-1 items-end gap-1">
+                                              <div className="flex-1 rounded-t-md bg-emerald-400/75" style={{ height: `${Math.min(Math.max(18, restoredCredits * 2), 88)}px` }} />
+                                              <div className="flex-1 rounded-t-md bg-amber-400/65" style={{ height: `${Math.min(Math.max(18, rolledBackCredits * 2), 88)}px` }} />
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-emerald-200">restored parent</span>
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-amber-200">rolled-back child</span>
+                                      </div>
+                                    </div>
+                                  ) : null}
                                   {(item.restoredRun && item.rolledBackRun) ? (
                                     <div className="mt-3 flex flex-wrap gap-2">
                                       <button
@@ -8574,7 +8643,7 @@ export default function AgentStudio() {
 
                 {activeRoom === 'replay' ? (
                   <>
-                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr),minmax(22rem,0.92fr)]">
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr),minmax(22rem,0.92fr)] xl:items-start">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <LineChart className="h-4 w-4 text-cyan-300" />
@@ -8886,7 +8955,7 @@ export default function AgentStudio() {
                                 </span>
                               ) : null}
                             </div>
-                            <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                            <div className="mt-4 grid gap-4 xl:grid-cols-2 xl:items-start">
                               <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/8 p-4">
                                 <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/80">Current run</p>
                                 <div className="mt-3 space-y-2">
@@ -8932,56 +9001,62 @@ export default function AgentStudio() {
                                 </div>
                               </div>
                             </div>
-                            {pairedReplayTimeline.length > 0 ? (
+                            {pairedReplayPhaseTimeline.length > 0 ? (
                               <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                                 <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Paired replay timeline</p>
-                                <p className="mt-1 text-sm text-white">A true side-by-side step view for the current run and its paired comparison.</p>
+                                <p className="mt-1 text-sm text-white">A causal phase-by-phase view of the current run and its paired comparison.</p>
                                 <div className="mt-4 space-y-3">
-                                  {pairedReplayTimeline.map((row) => (
-                                    <div key={`paired-row-${row.index}`} className="grid gap-3 xl:grid-cols-2">
-                                      <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/8 p-4">
-                                        {row.current ? (
-                                          <>
-                                            <div className="flex items-start justify-between gap-3">
-                                              <div>
-                                                <p className="text-sm font-medium text-white">{row.current.marker}. {row.current.title}</p>
-                                                <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500">{row.current.assignedRole} · {row.current.kind}</p>
-                                              </div>
-                                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(row.current.status)}`}>
-                                                {row.current.status}
-                                              </span>
-                                            </div>
-                                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-200">
-                                              {typeof row.current.actualCredits === 'number' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{formatCredits(row.current.actualCredits)} cr</span> : null}
-                                              {row.current.duration !== '—' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{row.current.duration}</span> : null}
-                                              {row.current.tokens !== '—' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{row.current.tokens}</span> : null}
-                                            </div>
-                                          </>
-                                        ) : (
-                                          <p className="text-sm text-slate-500">No matching current step here.</p>
-                                        )}
+                                  {pairedReplayPhaseTimeline.map((row) => (
+                                    <div key={`paired-phase-${row.phase}`} className="rounded-2xl border border-white/6 bg-white/[0.02] p-4">
+                                      <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div>
+                                          <p className="text-sm font-medium text-white">{formatDirectivePhaseScope([row.phase])}</p>
+                                          <p className="mt-1 text-[11px] text-slate-500">
+                                            {row.currentSteps.length} current steps · {row.comparedSteps.length} compared steps
+                                          </p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                          <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${row.currentCredits <= row.comparedCredits ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                            {formatSignedDelta(Math.round(row.currentCredits - row.comparedCredits))} cr
+                                          </span>
+                                          <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${row.currentDurationMs <= row.comparedDurationMs ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                            {formatSignedDelta(Math.round((row.currentDurationMs - row.comparedDurationMs) / 1000))}s
+                                          </span>
+                                        </div>
                                       </div>
-                                      <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-                                        {row.compared ? (
-                                          <>
-                                            <div className="flex items-start justify-between gap-3">
-                                              <div>
-                                                <p className="text-sm font-medium text-white">{row.compared.marker}. {row.compared.title}</p>
-                                                <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500">{row.compared.assignedRole} · {row.compared.kind}</p>
+                                      <div className="mt-4 grid gap-3 xl:grid-cols-2 xl:items-start">
+                                        <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/8 p-4">
+                                          <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/80">Current run</p>
+                                          <div className="mt-3 space-y-2">
+                                            {row.currentSteps.length > 0 ? row.currentSteps.map((step) => (
+                                              <div key={`phase-current-${row.phase}-${step.stepId}`} className="rounded-xl border border-white/6 bg-white/[0.03] px-3 py-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                  <div>
+                                                    <p className="text-sm font-medium text-white">{step.title}</p>
+                                                    <p className="mt-1 text-[11px] text-slate-500">{step.assignedRole}</p>
+                                                  </div>
+                                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(step.status)}`}>{step.status}</span>
+                                                </div>
                                               </div>
-                                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(row.compared.status)}`}>
-                                                {row.compared.status}
-                                              </span>
-                                            </div>
-                                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
-                                              {typeof row.compared.actualCredits === 'number' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCredits(row.compared.actualCredits)} cr</span> : null}
-                                              {row.compared.duration !== '—' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{row.compared.duration}</span> : null}
-                                              {row.compared.tokens !== '—' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{row.compared.tokens}</span> : null}
-                                            </div>
-                                          </>
-                                        ) : (
-                                          <p className="text-sm text-slate-500">No matching compared step here.</p>
-                                        )}
+                                            )) : <p className="text-sm text-slate-500">Phase not used in the current run.</p>}
+                                          </div>
+                                        </div>
+                                        <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Compared run</p>
+                                          <div className="mt-3 space-y-2">
+                                            {row.comparedSteps.length > 0 ? row.comparedSteps.map((step) => (
+                                              <div key={`phase-compared-${row.phase}-${step.stepId}`} className="rounded-xl border border-white/6 bg-white/[0.03] px-3 py-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                  <div>
+                                                    <p className="text-sm font-medium text-white">{step.title}</p>
+                                                    <p className="mt-1 text-[11px] text-slate-500">{step.assignedRole}</p>
+                                                  </div>
+                                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(step.status)}`}>{step.status}</span>
+                                                </div>
+                                              </div>
+                                            )) : <p className="text-sm text-slate-500">Phase not used in the compared run.</p>}
+                                          </div>
+                                        </div>
                                       </div>
                                     </div>
                                   ))}

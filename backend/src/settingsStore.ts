@@ -23,6 +23,7 @@ export interface WorkspaceAgentStudioSettings {
   autoGraduationProfiles?: Record<string, string>;
   autoRollbackEnabled?: boolean;
   autoRollbackWeaknessThreshold?: number;
+  autoRollbackMomentumThreshold?: number;
 }
 
 export interface WorkspaceSettingsRecord {
@@ -166,6 +167,7 @@ export function upsertWorkspaceSettings(input: {
     autoGraduationProfiles?: Record<string, string> | null;
     autoRollbackEnabled?: boolean | null;
     autoRollbackWeaknessThreshold?: number | null;
+    autoRollbackMomentumThreshold?: number | null;
   };
 }): WorkspaceSettingsView {
   const records = readStore();
@@ -229,6 +231,12 @@ export function upsertWorkspaceSettings(input: {
       current.autoRollbackWeaknessThreshold =
         typeof input.agentStudio.autoRollbackWeaknessThreshold === 'number'
           ? Math.max(4, Math.min(30, Math.round(input.agentStudio.autoRollbackWeaknessThreshold)))
+          : undefined;
+    }
+    if ('autoRollbackMomentumThreshold' in input.agentStudio) {
+      current.autoRollbackMomentumThreshold =
+        typeof input.agentStudio.autoRollbackMomentumThreshold === 'number'
+          ? Math.max(2, Math.min(20, Math.round(input.agentStudio.autoRollbackMomentumThreshold)))
           : undefined;
     }
     next.agentStudio = current;

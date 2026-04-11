@@ -36,6 +36,7 @@ interface SettingsPayload {
       autoGraduationProfiles?: Record<string, string>;
       autoRollbackEnabled?: boolean;
       autoRollbackWeaknessThreshold?: number;
+      autoRollbackMomentumThreshold?: number;
     };
   };
   modelRouting: Record<string, {
@@ -142,10 +143,12 @@ export default function SettingsPage() {
     autoGraduationProfiles: Partial<Record<WorkflowArchetypeId, AutoGraduationProfileId>>;
     autoRollbackEnabled: boolean;
     autoRollbackWeaknessThreshold: number;
+    autoRollbackMomentumThreshold: number;
   }>({
     autoGraduationProfiles: {},
     autoRollbackEnabled: false,
     autoRollbackWeaknessThreshold: 12,
+    autoRollbackMomentumThreshold: 6,
   });
 
   async function loadSettings(silent = false) {
@@ -165,6 +168,7 @@ export default function SettingsPage() {
         autoGraduationProfiles: (payload.settings.agentStudio?.autoGraduationProfiles || {}) as Partial<Record<WorkflowArchetypeId, AutoGraduationProfileId>>,
         autoRollbackEnabled: payload.settings.agentStudio?.autoRollbackEnabled === true,
         autoRollbackWeaknessThreshold: payload.settings.agentStudio?.autoRollbackWeaknessThreshold ?? 12,
+        autoRollbackMomentumThreshold: payload.settings.agentStudio?.autoRollbackMomentumThreshold ?? 6,
       });
       setProviderClears({
         anthropic: false,
@@ -247,6 +251,7 @@ export default function SettingsPage() {
             autoGraduationProfiles: agentStudioSettings.autoGraduationProfiles,
             autoRollbackEnabled: agentStudioSettings.autoRollbackEnabled,
             autoRollbackWeaknessThreshold: agentStudioSettings.autoRollbackWeaknessThreshold,
+            autoRollbackMomentumThreshold: agentStudioSettings.autoRollbackMomentumThreshold,
           },
         }),
       });
@@ -258,6 +263,7 @@ export default function SettingsPage() {
         autoGraduationProfiles: (payload.settings.agentStudio?.autoGraduationProfiles || {}) as Partial<Record<WorkflowArchetypeId, AutoGraduationProfileId>>,
         autoRollbackEnabled: payload.settings.agentStudio?.autoRollbackEnabled === true,
         autoRollbackWeaknessThreshold: payload.settings.agentStudio?.autoRollbackWeaknessThreshold ?? 12,
+        autoRollbackMomentumThreshold: payload.settings.agentStudio?.autoRollbackMomentumThreshold ?? 6,
       });
       setProviderInputs({
         anthropic: '',
@@ -748,6 +754,24 @@ export default function SettingsPage() {
                       </button>
                     ))}
                   </div>
+                  <div className="mt-4 border-t border-white/6 pt-4">
+                    <p className="text-sm font-medium text-white">Momentum sensitivity</p>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                      Guarded rollback should only fire when recent child momentum is meaningfully worse than the parent. This controls how strong that negative recent signal must be.
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {[4, 6, 9].map((threshold) => (
+                        <button
+                          key={`settings-auto-rollback-momentum-${threshold}`}
+                          type="button"
+                          onClick={() => setAgentStudioSettings((current) => ({ ...current, autoRollbackMomentumThreshold: threshold }))}
+                          className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${agentStudioSettings.autoRollbackMomentumThreshold === threshold ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
+                        >
+                          Require {threshold}+ point drop
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
                   <p className="text-sm font-medium text-white">How to think about it</p>
@@ -755,6 +779,7 @@ export default function SettingsPage() {
                     <p><span className="text-white">8</span> is faster learning. Good when you want the system to self-correct aggressively.</p>
                     <p><span className="text-white">12</span> is balanced. Good default when you want fewer false reversals.</p>
                     <p><span className="text-white">16</span> is cautious. Better for high-stakes workflows where short-term noise should not undo the branch.</p>
+                    <p><span className="text-white">Momentum sensitivity</span> keeps rollback from overreacting to noise. Lower values move faster. Higher values wait for a clearer recent collapse.</p>
                   </div>
                 </div>
               </div>

@@ -3605,6 +3605,7 @@ app.patch('/api/settings', (req: Request, res: Response) => {
       autoGraduationProfiles?: Record<string, string | null> | null;
       autoRollbackEnabled?: boolean | null;
       autoRollbackWeaknessThreshold?: number | null;
+      autoRollbackMomentumThreshold?: number | null;
     };
   };
 
@@ -3657,6 +3658,11 @@ app.patch('/api/settings', (req: Request, res: Response) => {
         autoRollbackWeaknessThreshold: typeof body.agentStudio.autoRollbackWeaknessThreshold === 'number'
           ? body.agentStudio.autoRollbackWeaknessThreshold
           : body.agentStudio.autoRollbackWeaknessThreshold === null
+            ? null
+            : undefined,
+        autoRollbackMomentumThreshold: typeof body.agentStudio.autoRollbackMomentumThreshold === 'number'
+          ? body.agentStudio.autoRollbackMomentumThreshold
+          : body.agentStudio.autoRollbackMomentumThreshold === null
             ? null
             : undefined,
       }
