@@ -256,6 +256,12 @@ const POLICY_PRESETS: Array<{
   },
 ];
 
+const PROMOTION_GATE_PROFILES = [
+  { id: 'conservative', label: 'Conservative', global: 85, archetype: 85, scenario: 85, summary: 'Only promote when evidence is very strong.' },
+  { id: 'balanced', label: 'Balanced', global: 70, archetype: 70, scenario: 70, summary: 'Good default when you want measured adaptation.' },
+  { id: 'aggressive', label: 'Aggressive', global: 55, archetype: 55, scenario: 55, summary: 'Move faster when the goal is rapid iteration.' },
+] as const;
+
 const WORKER_DEFINITIONS: Array<{
   role: string;
   label: string;
@@ -2716,6 +2722,51 @@ export default function AgentStudio() {
     };
   }, [branchFamilyPerformance]);
 
+  const branchComparisonCharts = useMemo(() => {
+    if (!branchFamilyComparison) return null;
+    const leaderRuns = branchFamilyComparison.leader.runs
+      .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+      .sort((left, right) => Date.parse(right.finishedAt || right.startedAt || '') - Date.parse(left.finishedAt || left.startedAt || ''));
+    const challengerRuns = branchFamilyComparison.challenger.runs
+      .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+      .sort((left, right) => Date.parse(right.finishedAt || right.startedAt || '') - Date.parse(left.finishedAt || left.startedAt || ''));
+    return {
+      leader: buildTrendSeries(leaderRuns, trendMetric, 260, 120, 10),
+      challenger: buildTrendSeries(challengerRuns, trendMetric, 260, 120, 10),
+    };
+  }, [branchFamilyComparison, trendMetric]);
+
+  const promotionAudit = useMemo(() => {
+    const completedRuns = (selectedRow?.runs || [])
+      .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+      .sort((left, right) => Date.parse(right.finishedAt || right.startedAt || '') - Date.parse(left.finishedAt || left.startedAt || ''));
+
+    return (selectedStudioState.promotionHistory || [])
+      .map((entry) => {
+        const appliedAt = Date.parse(entry.appliedAt);
+        if (Number.isNaN(appliedAt)) return null;
+        const subsequentRuns = completedRuns
+          .filter((run) => Date.parse(run.finishedAt || run.startedAt || '') >= appliedAt)
+          .slice(0, 3);
+        const stats = summarizeRunCollection(subsequentRuns);
+        return {
+          ...entry,
+          subsequentRuns,
+          stats,
+          outcome:
+            subsequentRuns.length === 0
+              ? 'No evidence yet'
+              : stats.successRate >= 0.8
+                ? 'Positive'
+                : stats.successRate >= 0.5
+                  ? 'Mixed'
+                  : 'Weak',
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .slice(0, 8);
+  }, [selectedRow?.runs, selectedStudioState.promotionHistory]);
+
   const activeGateScope = useMemo(() => {
     if (selectedStudioState.autoPromotionScenarioThresholds?.[selectedScenario.id]) {
       return { scope: 'Scenario gate', label: selectedScenario.label };
@@ -2827,6 +2878,23 @@ export default function AgentStudio() {
     selectedStudioState,
     updateStudioState,
   ]);
+
+  const handleApplyGateProfile = useCallback((profileId: typeof PROMOTION_GATE_PROFILES[number]['id']) => {
+    const profile = PROMOTION_GATE_PROFILES.find((item) => item.id === profileId);
+    if (!profile) return;
+    void updateStudioState({
+      ...selectedStudioState,
+      autoPromotionMinConfidence: profile.global,
+      autoPromotionArchetypeThresholds: {
+        ...(selectedStudioState.autoPromotionArchetypeThresholds || {}),
+        [selectedArchetype.id]: profile.archetype,
+      },
+      autoPromotionScenarioThresholds: {
+        ...(selectedStudioState.autoPromotionScenarioThresholds || {}),
+        [selectedScenario.id]: profile.scenario,
+      },
+    }, `Applied the ${profile.label.toLowerCase()} gate profile.`);
+  }, [selectedArchetype.id, selectedScenario.id, selectedStudioState, updateStudioState]);
 
   useEffect(() => {
     if (!selectedRow?.automation.id) return undefined;
@@ -5263,6 +5331,20 @@ export default function AgentStudio() {
                               <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{activeGateScope.scope}</span>
                               <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{activeGateScope.label}</span>
                             </div>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                              {PROMOTION_GATE_PROFILES.map((profile) => (
+                                <button
+                                  key={profile.id}
+                                  type="button"
+                                  disabled={studioBusy}
+                                  onClick={() => handleApplyGateProfile(profile.id)}
+                                  className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3 text-left transition-colors hover:border-cyan-500/18 hover:bg-white/[0.04] disabled:opacity-60"
+                                >
+                                  <p className="text-sm font-medium text-white">{profile.label}</p>
+                                  <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{profile.summary}</p>
+                                </button>
+                              ))}
+                            </div>
                             <div className="mt-3 space-y-3">
                               {[
                                 { scope: 'global' as const, label: 'Global default', value: selectedStudioState.autoPromotionMinConfidence ?? 55 },
@@ -5427,6 +5509,30 @@ export default function AgentStudio() {
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{branchFamilyComparison.creditsDelta <= 0 ? '' : '+'}{branchFamilyComparison.creditsDelta} credits</span>
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{branchFamilyComparison.confidenceDelta >= 0 ? '+' : ''}{branchFamilyComparison.confidenceDelta}% confidence</span>
                               </div>
+                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                {[
+                                  { label: 'Leader line', family: branchFamilyComparison.leader, chart: branchComparisonCharts?.leader, tone: 'rgba(16,185,129,0.9)', fill: 'rgba(16,185,129,0.14)' },
+                                  { label: 'Challenger line', family: branchFamilyComparison.challenger, chart: branchComparisonCharts?.challenger, tone: 'rgba(34,211,238,0.95)', fill: 'rgba(34,211,238,0.12)' },
+                                ].map((item) => (
+                                  <div key={`branch-compare-${item.label}`} className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                    <p className="text-[11px] font-medium text-white">{item.label}</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">{getExperimentDisplayLabel(item.family.rootExperiment)}</p>
+                                    {item.chart ? (
+                                      <svg viewBox={`0 0 ${item.chart.width} ${item.chart.height}`} className="mt-3 h-28 w-full">
+                                        <path d={item.chart.areaPath} fill={item.fill} />
+                                        <path d={item.chart.linePath} fill="none" stroke={item.tone} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                                        {item.chart.points.map((point) => (
+                                          <circle key={`branch-compare-${item.label}-${point.run.id}`} cx={point.x} cy={point.y} r="3.5" fill={item.tone} />
+                                        ))}
+                                      </svg>
+                                    ) : (
+                                      <div className="mt-3 rounded-xl border border-dashed border-white/6 bg-white/[0.02] p-3 text-[11px] text-slate-500">
+                                        Not enough runs yet for this line.
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           ) : null}
                           <div className="mt-4 space-y-3">
@@ -5522,6 +5628,28 @@ export default function AgentStudio() {
                                     +{selectedBranchFamily.experiments.length - 5} more
                                   </span>
                                 ) : null}
+                              </div>
+                              <div className="mt-3 space-y-2">
+                                {selectedBranchFamily.runs.slice(0, 6).map((run, index) => (
+                                  <button
+                                    key={`branch-run-${run.id}`}
+                                    type="button"
+                                    onClick={() => setSelectedCohortRunId(run.id)}
+                                    className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${selectedCohortRunId === run.id ? 'border-cyan-500/30 bg-cyan-500/10' : 'border-white/6 bg-white/[0.02] hover:border-white/10'}`}
+                                  >
+                                    <div>
+                                      <p className="text-sm font-medium text-white">Branch run {index + 1}</p>
+                                      <p className="mt-1 text-[11px] text-slate-500">
+                                        {getRunExperimentAttribution(run).experimentNotes || `${getRunExperimentAttribution(run).scenarioLabel} · ${getRunExperimentAttribution(run).previewPresetLabel}`}
+                                      </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-end gap-2 text-[10px] text-slate-300">
+                                      <span className={`rounded-full border px-2 py-0.5 font-medium ${getStatusTone(run.status)}`}>{run.status}</span>
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{run.actualCredits ? `${formatCredits(run.actualCredits)} cr` : '—'}</span>
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatAutomationRunTime(run.finishedAt || run.startedAt)}</span>
+                                    </div>
+                                  </button>
+                                ))}
                               </div>
                               <div className="mt-4 grid gap-3 sm:grid-cols-3 text-[11px]">
                                 <div className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
@@ -5692,6 +5820,31 @@ export default function AgentStudio() {
                               <h3 className="text-sm font-semibold text-white">How the live policy got here</h3>
                             </div>
                           </div>
+                          {promotionAudit.length > 0 ? (
+                            <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Promotion audit</p>
+                              <div className="mt-3 space-y-3">
+                                {promotionAudit.slice(0, 4).map((entry) => (
+                                  <div key={`audit-${entry.id}`} className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <p className="text-sm font-medium text-white">{getPromotionModeLabel(entry.mode)}</p>
+                                        <p className="mt-1 text-[11px] text-slate-500">{entry.summary}</p>
+                                      </div>
+                                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${entry.outcome === 'Positive' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : entry.outcome === 'Mixed' ? 'border-amber-500/25 bg-amber-500/10 text-amber-200' : 'border-slate-600 bg-slate-800/60 text-slate-300'}`}>
+                                        {entry.outcome}
+                                      </span>
+                                    </div>
+                                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{entry.subsequentRuns.length} subsequent runs</span>
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{Math.round(entry.stats.successRate * 100)}% success</span>
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{entry.stats.averageCredits ? `${formatCredits(entry.stats.averageCredits)} cr avg` : '—'}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="mt-4 space-y-3">
                             {selectedStudioState.promotionHistory?.length ? selectedStudioState.promotionHistory.map((entry) => (
                               <div key={entry.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
