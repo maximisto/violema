@@ -183,6 +183,7 @@ export interface AutomationStepDefinition {
   title: string;
   objective: string;
   assignedRole: AgentRole;
+  directiveMode?: 'cheaper' | 'review' | 'promote';
   modelTier?: ModelTier;
   estimatedCredits?: number;
   dependsOnStepIds?: string[];
@@ -196,6 +197,7 @@ export interface AutomationStepExecution {
   kind: AutomationStepKind;
   title: string;
   assignedRole: AgentRole;
+  directiveMode?: 'cheaper' | 'review' | 'promote';
   modelTier?: ModelTier;
   modelSource?: 'server_default' | 'workspace_override' | 'workspace_token';
   modelSourceLabel?: string;

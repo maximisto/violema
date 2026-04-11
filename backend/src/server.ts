@@ -2307,6 +2307,122 @@ function estimateAutomationToolCallCount(steps: AutomationStepDefinition[]) {
   return steps.filter((step) => step.toolName && step.toolName !== 'generate_text').length;
 }
 
+function inferAutomationStepEstimateOptions(step: AutomationStepDefinition): { complexity?: 'low' | 'medium' | 'high'; toolCalls?: number } {
+  if (step.kind === 'analyze') {
+    return { complexity: step.modelTier === 'hard' || step.modelTier === 'critical' ? 'high' : 'medium' };
+  }
+  if (step.kind === 'summarize') {
+    return { complexity: 'medium' };
+  }
+  if (step.kind === 'capture') {
+    return { toolCalls: step.inputs?.url ? 1 : 0 };
+  }
+  if (step.kind === 'search' || step.kind === 'query' || step.kind === 'deliver') {
+    return { toolCalls: 1 };
+  }
+  return {};
+}
+
+function retuneAutomationStepDefinition(
+  step: AutomationStepDefinition,
+  modelTier: ModelTier,
+  directiveMode?: 'cheaper' | 'review' | 'promote',
+): AutomationStepDefinition {
+  return {
+    ...step,
+    directiveMode,
+    modelTier,
+    estimatedCredits: estimateAutomationStepCredits(step.kind, modelTier, inferAutomationStepEstimateOptions({ ...step, modelTier })),
+  };
+}
+
+function applyAutomationStudioDirectives(
+  steps: AutomationStepDefinition[],
+  policyPlan: {
+    primaryRole: AgentRole;
+    supportingRoles: AgentRole[];
+    elasticLanes: AgentRole[];
+    suggestedModelTier: ModelTier;
+    rationale: string;
+    policy: AutomationExecutionPolicy;
+  },
+  studioState?: AutomationStudioState,
+) {
+  if (!studioState?.roleDirectives || Object.keys(studioState.roleDirectives).length === 0) {
+    return {
+      steps,
+      primaryRole: policyPlan.primaryRole,
+      supportingRoles: policyPlan.supportingRoles,
+      elasticLanes: policyPlan.elasticLanes,
+      suggestedModelTier: policyPlan.suggestedModelTier,
+      rationale: policyPlan.rationale,
+      appliedDirectives: [] as string[],
+    };
+  }
+
+  const nextSteps = steps.map((step) => ({ ...step }));
+  const supportingRoles = [...policyPlan.supportingRoles];
+  const elasticLanes = [...policyPlan.elasticLanes];
+  const appliedDirectives: string[] = [];
+  let suggestedModelTier = policyPlan.suggestedModelTier;
+
+  for (const [role, directive] of Object.entries(studioState.roleDirectives)) {
+    const affectedSteps = nextSteps.filter((step) => step.assignedRole === role);
+    if (affectedSteps.length === 0) continue;
+
+    if (directive.mode === 'cheaper') {
+      for (const step of affectedSteps) {
+        const nextTier = downgradeAutomationModelTier(step.modelTier || suggestedModelTier);
+        Object.assign(step, retuneAutomationStepDefinition(step, nextTier, directive.mode));
+      }
+      appliedDirectives.push(`${role} is being routed down-market for lower spend.`);
+    }
+
+    if (directive.mode === 'review') {
+      for (const step of affectedSteps) {
+        const nextTier = upgradeAutomationModelTier(step.modelTier || suggestedModelTier);
+        Object.assign(step, retuneAutomationStepDefinition(step, nextTier, directive.mode));
+      }
+      if (!supportingRoles.includes('reviewer') && policyPlan.primaryRole !== 'reviewer') {
+        supportingRoles.push('reviewer');
+      }
+      suggestedModelTier = upgradeAutomationModelTier(suggestedModelTier);
+      appliedDirectives.push(`${role} now carries a stricter review bias.`);
+    }
+
+    if (directive.mode === 'promote') {
+      for (const step of affectedSteps) {
+        const nextTier = upgradeAutomationModelTier(step.modelTier || suggestedModelTier);
+        Object.assign(step, retuneAutomationStepDefinition(step, nextTier, directive.mode));
+      }
+      suggestedModelTier = upgradeAutomationModelTier(suggestedModelTier);
+      if (isElasticLane(role as AgentRole)) {
+        if (!elasticLanes.includes(role as AgentRole)) {
+          elasticLanes.unshift(role as AgentRole);
+        }
+      } else if (role !== policyPlan.primaryRole && !supportingRoles.includes(role as AgentRole)) {
+        supportingRoles.push(role as AgentRole);
+      }
+      appliedDirectives.push(`${role} is being promoted into a stronger lane for this workflow.`);
+    }
+  }
+
+  const uniqueSupportingRoles = [...new Set(supportingRoles)];
+  const uniqueElasticLanes = [...new Set(elasticLanes)].slice(0, 4);
+
+  return {
+    steps: nextSteps,
+    primaryRole: policyPlan.primaryRole,
+    supportingRoles: uniqueSupportingRoles,
+    elasticLanes: uniqueElasticLanes,
+    suggestedModelTier,
+    rationale: appliedDirectives.length > 0
+      ? `${policyPlan.rationale} ${appliedDirectives.join(' ')}`
+      : policyPlan.rationale,
+    appliedDirectives,
+  };
+}
+
 function applyAutomationExecutionPolicy(
   rolePlan: AutomationRolePlan,
   suggestedModelTier: ModelTier,
@@ -2502,6 +2618,7 @@ function buildAutomationExecutionPlan(automation: {
   actions: string[];
   steps?: PersistedAutomationStep[];
   execution_policy?: AutomationExecutionPolicy;
+  studio_state?: AutomationStudioState;
   notify?: string;
   condition?: string;
 }): AutomationExecutionPlan {
@@ -2523,32 +2640,33 @@ function buildAutomationExecutionPlan(automation: {
     estimatedToolCalls,
     executionPolicy,
   );
+  const studioPlan = applyAutomationStudioDirectives(steps, policyPlan, automation.studio_state);
   const topology = buildWorkerTopologySnapshot({
-    primaryRole: policyPlan.primaryRole,
-    supportingRoles: policyPlan.supportingRoles,
-    elasticLanes: policyPlan.elasticLanes,
-    modelTier: policyPlan.suggestedModelTier,
+    primaryRole: studioPlan.primaryRole,
+    supportingRoles: studioPlan.supportingRoles,
+    elasticLanes: studioPlan.elasticLanes,
+    modelTier: studioPlan.suggestedModelTier,
     complexity,
     taskKind: 'automation',
   });
 
   return {
-    primaryRole: policyPlan.primaryRole,
-    supportingRoles: policyPlan.supportingRoles,
-    elasticLanes: policyPlan.elasticLanes,
-    rationale: policyPlan.rationale,
+    primaryRole: studioPlan.primaryRole,
+    supportingRoles: studioPlan.supportingRoles,
+    elasticLanes: studioPlan.elasticLanes,
+    rationale: studioPlan.rationale,
     primaryBand: topology.primaryBand,
-    suggestedModelTier: policyPlan.suggestedModelTier,
+    suggestedModelTier: studioPlan.suggestedModelTier,
     complexity,
     estimatedToolCalls,
     estimatedCredits: estimateCreditCost({
       taskKind: 'automation',
-      modelTier: policyPlan.suggestedModelTier,
+      modelTier: studioPlan.suggestedModelTier,
       automationRuns: 1,
       toolCalls: estimatedToolCalls,
       complexity,
     }).estimatedCredits,
-    steps,
+    steps: studioPlan.steps,
     topology,
   };
 }
@@ -2645,6 +2763,7 @@ async function executeAutomationCore(
       kind: step.kind,
       title: step.title,
       assignedRole: step.assignedRole,
+      directiveMode: step.directiveMode,
       modelTier: step.modelTier,
       modelSource: stepModelSource,
       modelSourceLabel: getModelSourceLabel(stepModelSource),
@@ -2861,6 +2980,7 @@ async function runAutomation(automation: {
   actions: string[];
   steps?: PersistedAutomationStep[];
   execution_policy?: AutomationExecutionPolicy;
+  studio_state?: AutomationStudioState;
   notify?: string;
   condition?: string;
   timezone?: string;
@@ -2903,6 +3023,7 @@ async function runAutomation(automation: {
       modelSourceLabel: getModelSourceLabel(runModelSource),
       sourceSteps: automation.steps,
       executionPolicy: automation.execution_policy,
+      studioState: automation.studio_state,
       automationPlan: executionPlan,
       plannedSteps: executionPlan.steps,
       rolePlan: {
@@ -2938,6 +3059,7 @@ async function runAutomation(automation: {
       modelSourceLabel: getModelSourceLabel(runModelSource),
       sourceSteps: automation.steps,
       executionPolicy: automation.execution_policy,
+      studioState: automation.studio_state,
       automationPlan: executionPlan,
       plannedSteps: executionPlan.steps,
       stepExecutions: [],
@@ -2981,6 +3103,7 @@ async function runAutomation(automation: {
           modelSourceLabel: getModelSourceLabel(runModelSource),
           sourceSteps: automation.steps,
           executionPolicy: automation.execution_policy,
+          studioState: automation.studio_state,
           automationPlan: executionPlan,
           plannedSteps: executionPlan.steps,
           stepExecutions: progress.stepExecutions,
@@ -3011,6 +3134,7 @@ async function runAutomation(automation: {
           modelSourceLabel: getModelSourceLabel(runModelSource),
           sourceSteps: automation.steps,
           executionPolicy: automation.execution_policy,
+          studioState: automation.studio_state,
           latestSummary: progress.summaryText || undefined,
           latestArtifacts: progress.artifacts,
           latestStepExecutions: progress.stepExecutions,
@@ -3074,6 +3198,7 @@ async function runAutomation(automation: {
         })),
         sourceSteps: automation.steps,
         executionPolicy: automation.execution_policy,
+        studioState: automation.studio_state,
         automationPlan: execution.plan,
         plannedSteps: execution.plan.steps,
         actualToolCalls,
@@ -3100,6 +3225,7 @@ async function runAutomation(automation: {
         modelSourceLabel: getModelSourceLabel(runModelSource),
         sourceSteps: automation.steps,
         executionPolicy: automation.execution_policy,
+        studioState: automation.studio_state,
         latestSummary: summary,
         latestArtifacts: execution.artifacts,
         latestStepExecutions: execution.stepExecutions,
@@ -3170,6 +3296,7 @@ async function runAutomation(automation: {
         plannedSteps: executionPlan.steps,
         stepExecutions: [],
         executionPolicy: automation.execution_policy,
+        studioState: automation.studio_state,
         rolePlan: {
           primaryRole: executionPlan.primaryRole,
           supportingRoles: executionPlan.supportingRoles,
@@ -3202,6 +3329,7 @@ async function runAutomation(automation: {
         modelSourceLabel: getModelSourceLabel(runModelSource),
         sourceSteps: automation.steps,
         executionPolicy: automation.execution_policy,
+        studioState: automation.studio_state,
         latestSummary: failureSummary,
         latestStepExecutions: [],
         automationPlan: executionPlan,

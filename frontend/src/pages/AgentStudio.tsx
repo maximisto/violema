@@ -123,6 +123,7 @@ interface DashboardTaskStepExecution {
   startedAt?: string;
   finishedAt?: string;
   modelTier?: string;
+  directiveMode?: 'cheaper' | 'review' | 'promote';
   modelSource?: string;
   actualCredits?: number;
   toolCalls?: number;
@@ -596,6 +597,7 @@ function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
         startedAt: readString(item.startedAt),
         finishedAt: readString(item.finishedAt),
         modelTier: readString(item.modelTier),
+        directiveMode: item.directiveMode === 'cheaper' || item.directiveMode === 'review' || item.directiveMode === 'promote' ? item.directiveMode : undefined,
         modelSource: readString(item.modelSourceLabel) || readString(item.modelSource),
         actualCredits: typeof item.actualCredits === 'number' ? item.actualCredits : undefined,
         toolCalls: typeof item.toolCalls === 'number' ? item.toolCalls : undefined,
@@ -697,6 +699,32 @@ function formatSignedDelta(value: number) {
 
 function getScenarioPreset(id: ScenarioPresetId) {
   return SCENARIO_PRESETS.find((scenario) => scenario.id === id) || SCENARIO_PRESETS[0];
+}
+
+function getRunStudioState(run?: PlatformTaskRunRecord) {
+  return normalizeStudioState(run?.metadata?.studioState);
+}
+
+function getScenarioLabelFromId(id?: string) {
+  if (!id) return 'Baseline';
+  return getScenarioPreset(id as ScenarioPresetId).label;
+}
+
+function getPresetLabelFromId(id?: string) {
+  if (!id) return 'System recommended';
+  return POLICY_PRESETS.find((preset) => preset.id === id)?.label || id;
+}
+
+function buildRadarPolygon(values: number[], radius: number, cx: number, cy: number) {
+  return values
+    .map((value, index) => {
+      const angle = (-Math.PI / 2) + (index / values.length) * Math.PI * 2;
+      const scaled = (Math.max(0, Math.min(100, value)) / 100) * radius;
+      const x = cx + Math.cos(angle) * scaled;
+      const y = cy + Math.sin(angle) * scaled;
+      return `${x},${y}`;
+    })
+    .join(' ');
 }
 
 function simulateScenarioMath(
@@ -1042,6 +1070,7 @@ export default function AgentStudio() {
     }));
   }, [selectedRow]);
 
+
   const presetComparisons = useMemo(() => {
     const steps = selectedRow?.workflowSteps || [];
     return POLICY_PRESETS.map((preset) => {
@@ -1096,6 +1125,42 @@ export default function AgentStudio() {
     () => getScenarioPreset(selectedScenarioId),
     [selectedScenarioId]
   );
+
+  const runComparison = useMemo(() => {
+    if (!selectedRow) return null;
+    const completedRuns = selectedRow.runs.filter((run) => run.status === 'succeeded' || run.status === 'failed');
+    const current = completedRuns[0];
+    const previous = completedRuns[1];
+    if (!current) return null;
+
+    const currentStudio = getRunStudioState(current);
+    const previousStudio = getRunStudioState(previous);
+    const currentDuration = Number.isNaN(Date.parse(current.startedAt || '')) || Number.isNaN(Date.parse(current.finishedAt || ''))
+      ? undefined
+      : Math.max(0, Date.parse(current.finishedAt || '') - Date.parse(current.startedAt || ''));
+    const previousDuration = !previous || Number.isNaN(Date.parse(previous.startedAt || '')) || Number.isNaN(Date.parse(previous.finishedAt || ''))
+      ? undefined
+      : Math.max(0, Date.parse(previous.finishedAt || '') - Date.parse(previous.startedAt || ''));
+
+    return {
+      current: {
+        id: current.id,
+        status: current.status,
+        credits: current.actualCredits || 0,
+        durationMs: currentDuration,
+        scenarioLabel: getScenarioLabelFromId(currentStudio.selectedScenarioId || selectedStudioState.selectedScenarioId || 'baseline'),
+        presetLabel: getPresetLabelFromId(currentStudio.previewPresetId || selectedStudioState.previewPresetId || activePresetId),
+      },
+      previous: previous ? {
+        id: previous.id,
+        status: previous.status,
+        credits: previous.actualCredits || 0,
+        durationMs: previousDuration,
+        scenarioLabel: getScenarioLabelFromId(previousStudio.selectedScenarioId || 'baseline'),
+        presetLabel: getPresetLabelFromId(previousStudio.previewPresetId || 'recommended'),
+      } : null,
+    };
+  }, [activePresetId, selectedRow, selectedStudioState.previewPresetId, selectedStudioState.selectedScenarioId]);
 
   const currentSpendIndex = useMemo(
     () => estimatePolicySpendIndex(selectedPolicy, selectedRow?.workflowSteps || []),
@@ -1248,6 +1313,7 @@ export default function AgentStudio() {
     [presetComparisons]
   );
 
+
   const replayTimeline = useMemo(() => {
     const latest = selectedRow?.runs[0];
     const runSteps = readStepExecutions(latest?.metadata?.stepExecutions);
@@ -1355,6 +1421,15 @@ export default function AgentStudio() {
     [previewPreset.id, scenarioComparisons]
   );
 
+  const policyRadarMetrics = useMemo(
+    () => ([
+      { label: 'Spend', live: currentSpendIndex, preview: previewScenarioComparison?.scenarioSpend ?? currentSpendIndex },
+      { label: 'Assurance', live: currentAssuranceIndex, preview: previewScenarioComparison?.scenarioAssurance ?? currentAssuranceIndex },
+      { label: 'Fit', live: currentFitIndex, preview: previewScenarioComparison?.scenarioFit ?? currentFitIndex },
+    ]),
+    [currentAssuranceIndex, currentFitIndex, currentSpendIndex, previewScenarioComparison?.scenarioAssurance, previewScenarioComparison?.scenarioFit, previewScenarioComparison?.scenarioSpend]
+  );
+
   const selectedRoleDirective = useMemo(
     () => selectedStudioState.roleDirectives?.[selectedWorkerDetail.worker?.role || ''],
     [selectedStudioState.roleDirectives, selectedWorkerDetail.worker?.role]
@@ -1407,7 +1482,7 @@ export default function AgentStudio() {
     ]
   );
 
-  const learnedPresetLeaderboard = useMemo(() => {
+  const learnedPresetLearning = useMemo(() => {
     const scored = rows.map((row) => {
       const policy = normalizeExecutionPolicy(row.automation.execution_policy);
       const archetype = classifyWorkflowArchetype(row.workflowSteps);
@@ -1417,12 +1492,17 @@ export default function AgentStudio() {
         preset.policy.reviewPolicy === policy.reviewPolicy &&
         preset.policy.maxElasticLanes === policy.maxElasticLanes
       );
+      const automationStudio = normalizeStudioState(row.automation.studio_state);
+      const latestRunStudio = getRunStudioState(row.latestRun);
+      const scenarioId = latestRunStudio.selectedScenarioId || automationStudio.selectedScenarioId || 'baseline';
       const score = Math.round(row.successRate * 70 + Math.max(0, 30 - row.averageCredits / 4));
       return {
         workflowId: row.automation.id,
         workflowName: row.automation.name,
         archetypeId: archetype.id,
         archetypeLabel: archetype.label,
+        scenarioId,
+        scenarioLabel: getScenarioLabelFromId(scenarioId),
         presetId: presetMatch?.id || 'custom_live',
         presetLabel: presetMatch?.label || 'Custom live policy',
         score,
@@ -1432,8 +1512,10 @@ export default function AgentStudio() {
       };
     }).filter((item) => item.archetypeId === selectedArchetype.id);
 
+    const scenarioScoped = scored.filter((item) => item.scenarioId === selectedScenario.id);
+    const scopedItems = scenarioScoped.length >= 2 ? scenarioScoped : scored;
     const aggregate = new Map<string, { label: string; workflows: number; score: number; success: number; credits: number }>();
-    scored.forEach((item) => {
+    scopedItems.forEach((item) => {
       const current = aggregate.get(item.presetId) || { label: item.presetLabel, workflows: 0, score: 0, success: 0, credits: 0 };
       current.workflows += 1;
       current.score += item.score;
@@ -1442,18 +1524,22 @@ export default function AgentStudio() {
       aggregate.set(item.presetId, current);
     });
 
-    return Array.from(aggregate.entries())
-      .map(([presetId, value]) => ({
-        presetId,
-        label: value.label,
-        workflowCount: value.workflows,
-        averageScore: Math.round(value.score / value.workflows),
-        averageSuccess: Math.round(value.success / value.workflows),
-        averageCredits: value.workflows ? value.credits / value.workflows : 0,
-      }))
-      .sort((a, b) => b.averageScore - a.averageScore)
-      .slice(0, 4);
-  }, [rows, selectedArchetype.id]);
+    return {
+      scenarioMatched: scenarioScoped.length >= 2,
+      scopeLabel: scenarioScoped.length >= 2 ? `${selectedArchetype.label.toLowerCase()} in ${selectedScenario.label.toLowerCase()}` : selectedArchetype.label.toLowerCase(),
+      items: Array.from(aggregate.entries())
+        .map(([presetId, value]) => ({
+          presetId,
+          label: value.label,
+          workflowCount: value.workflows,
+          averageScore: Math.round(value.score / value.workflows),
+          averageSuccess: Math.round(value.success / value.workflows),
+          averageCredits: value.workflows ? value.credits / value.workflows : 0,
+        }))
+        .sort((a, b) => b.averageScore - a.averageScore)
+        .slice(0, 4),
+    };
+  }, [rows, selectedArchetype.id, selectedArchetype.label, selectedScenario.id, selectedScenario.label]);
 
   const patchAutomationConfig = useCallback(async (patch: {
     executionPolicy?: AutomationExecutionPolicyDraft;
@@ -2387,6 +2473,81 @@ export default function AgentStudio() {
 
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
+                            <Orbit className="h-4 w-4 text-violet-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Live vs preview</p>
+                              <h3 className="text-sm font-semibold text-white">Policy radar</h3>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                            The preview should earn its extra cost. This chart makes the tradeoff visible before you apply the policy.
+                          </p>
+                          <div className="mt-4 grid gap-4 lg:grid-cols-[13rem,minmax(0,1fr)]">
+                            <div className="flex items-center justify-center rounded-[1.6rem] border border-white/6 bg-white/[0.03] p-4">
+                              <svg viewBox="0 0 220 220" className="h-48 w-48" aria-hidden="true">
+                                {[1, 2, 3, 4].map((ring) => (
+                                  <polygon
+                                    key={ring}
+                                    points={buildRadarPolygon([25 * ring, 25 * ring, 25 * ring], 72, 110, 110)}
+                                    fill="none"
+                                    stroke="rgba(148,163,184,0.14)"
+                                    strokeWidth="1"
+                                  />
+                                ))}
+                                {policyRadarMetrics.map((metric, index) => {
+                                  const angle = (-Math.PI / 2) + (index / policyRadarMetrics.length) * Math.PI * 2;
+                                  const x = 110 + Math.cos(angle) * 84;
+                                  const y = 110 + Math.sin(angle) * 84;
+                                  return (
+                                    <g key={metric.label}>
+                                      <line x1="110" y1="110" x2={x} y2={y} stroke="rgba(148,163,184,0.16)" strokeWidth="1" />
+                                      <text x={x} y={y} fill="rgba(226,232,240,0.88)" fontSize="11" textAnchor="middle" dominantBaseline="middle">
+                                        {metric.label}
+                                      </text>
+                                    </g>
+                                  );
+                                })}
+                                <polygon
+                                  points={buildRadarPolygon(policyRadarMetrics.map((metric) => metric.live), 72, 110, 110)}
+                                  fill="rgba(56,189,248,0.16)"
+                                  stroke="rgba(34,211,238,0.9)"
+                                  strokeWidth="2"
+                                />
+                                <polygon
+                                  points={buildRadarPolygon(policyRadarMetrics.map((metric) => metric.preview), 72, 110, 110)}
+                                  fill="rgba(168,85,247,0.16)"
+                                  stroke="rgba(192,132,252,0.92)"
+                                  strokeWidth="2"
+                                />
+                              </svg>
+                            </div>
+                            <div className="space-y-3">
+                              {policyRadarMetrics.map((metric) => (
+                                <div key={metric.label} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-sm font-medium text-white">{metric.label}</p>
+                                    <p className={`text-[11px] ${metric.preview === metric.live ? 'text-slate-500' : metric.preview > metric.live ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                      {formatSignedDelta(metric.preview - metric.live)}
+                                    </p>
+                                  </div>
+                                  <div className="mt-3 grid grid-cols-2 gap-3 text-[11px]">
+                                    <div className="rounded-xl border border-cyan-500/18 bg-cyan-500/8 px-3 py-2">
+                                      <p className="text-slate-400">Live</p>
+                                      <p className="mt-1 text-white">{metric.live}</p>
+                                    </div>
+                                    <div className="rounded-xl border border-violet-500/18 bg-violet-500/8 px-3 py-2">
+                                      <p className="text-slate-400">Preview</p>
+                                      <p className="mt-1 text-white">{metric.preview}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
                             <Radar className="h-4 w-4 text-cyan-300" />
                             <div>
                               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Cost-quality frontier</p>
@@ -2580,14 +2741,14 @@ export default function AgentStudio() {
                           <CheckCircle2 className="h-4 w-4 text-emerald-300" />
                           <div>
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">What Violema is learning</p>
-                            <h3 className="text-sm font-semibold text-white">Best presets for {selectedArchetype.label.toLowerCase()}</h3>
+                            <h3 className="text-sm font-semibold text-white">Best presets for {learnedPresetLearning.scopeLabel}</h3>
                           </div>
                         </div>
                         <p className="mt-2 text-sm leading-relaxed text-slate-400">
                           {selectedArchetype.summary}
                         </p>
                         <div className="mt-4 space-y-3">
-                          {learnedPresetLeaderboard.map((item, index) => (
+                          {learnedPresetLearning.items.map((item, index) => (
                             <div key={item.presetId} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
                               <div className="flex items-start justify-between gap-3">
                                 <div>
@@ -2614,7 +2775,7 @@ export default function AgentStudio() {
                               </div>
                             </div>
                           ))}
-                          {learnedPresetLeaderboard.length === 0 ? (
+                          {learnedPresetLearning.items.length === 0 ? (
                             <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
                               Not enough live history yet to rank presets for this workflow class.
                             </div>
@@ -2693,6 +2854,7 @@ export default function AgentStudio() {
                                 <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
                                   {step.modelTier ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.modelTier}</span> : null}
                                   {step.modelSource ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.modelSource}</span> : null}
+                                  {step.directiveMode ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200">{step.directiveMode === 'cheaper' ? 'Cheaper bias' : step.directiveMode === 'review' ? 'Review bias' : 'Promoted lane'}</span> : null}
                                   {typeof step.actualCredits === 'number' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCredits(step.actualCredits)} cr</span> : null}
                                   {step.toolCalls ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.toolCalls} tools</span> : null}
                                   {step.tokenUsage?.totalTokens ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{step.tokens}</span> : null}
@@ -2710,6 +2872,64 @@ export default function AgentStudio() {
                       </div>
 
                       <div className="space-y-6">
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Layers3 className="h-4 w-4 text-cyan-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Run comparison lab</p>
+                              <h3 className="text-sm font-semibold text-white">Latest vs previous operating setup</h3>
+                            </div>
+                          </div>
+                          {runComparison ? (
+                            <div className="mt-4 space-y-3">
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-2xl border border-cyan-500/18 bg-cyan-500/8 p-4">
+                                  <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/80">Latest run</p>
+                                  <p className="mt-2 text-sm font-semibold text-white">{runComparison.current.presetLabel}</p>
+                                  <p className="mt-1 text-[12px] text-slate-300">{runComparison.current.scenarioLabel}</p>
+                                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-200">
+                                    <span className={`rounded-full border px-2 py-0.5 font-medium ${getStatusTone(runComparison.current.status)}`}>{runComparison.current.status}</span>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{formatCredits(runComparison.current.credits)} cr</span>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{formatCompactDuration(runComparison.current.durationMs)}</span>
+                                  </div>
+                                </div>
+                                <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Previous run</p>
+                                  {runComparison.previous ? (<>
+                                    <p className="mt-2 text-sm font-semibold text-white">{runComparison.previous.presetLabel}</p>
+                                    <p className="mt-1 text-[12px] text-slate-400">{runComparison.previous.scenarioLabel}</p>
+                                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                      <span className={`rounded-full border px-2 py-0.5 font-medium ${getStatusTone(runComparison.previous.status)}`}>{runComparison.previous.status}</span>
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCredits(runComparison.previous.credits)} cr</span>
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCompactDuration(runComparison.previous.durationMs)}</span>
+                                    </div>
+                                  </>) : <p className="mt-2 text-sm text-slate-500">No previous completed run yet.</p>}
+                                </div>
+                              </div>
+                              {runComparison.previous ? (
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Credit delta</p>
+                                    <p className={`mt-1 text-lg font-semibold ${runComparison.current.credits <= runComparison.previous.credits ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                      {formatSignedDelta(Math.round(runComparison.current.credits - runComparison.previous.credits))} cr
+                                    </p>
+                                  </div>
+                                  <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Duration delta</p>
+                                    <p className={`mt-1 text-lg font-semibold ${((runComparison.current.durationMs || 0) <= (runComparison.previous.durationMs || 0)) ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                      {formatSignedDelta(Math.round(((runComparison.current.durationMs || 0) - (runComparison.previous.durationMs || 0)) / 1000))}s
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="mt-4 rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                              Run this workflow twice and this lab will compare the operating setups side by side.
+                            </div>
+                          )}
+                        </div>
+
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
                             <Clock3 className="h-4 w-4 text-amber-300" />
