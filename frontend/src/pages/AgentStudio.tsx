@@ -39,6 +39,8 @@ interface StudioExperimentRecord {
   previewPresetId: string;
   createdAt: string;
   notes?: string;
+  branchName?: string;
+  parentExperimentId?: string;
   roleDirectives?: Record<string, StudioRoleDirective>;
 }
 
@@ -53,6 +55,18 @@ interface AutomationStudioStateDraft {
   previewPresetId?: string;
   experimentHistory?: StudioExperimentRecord[];
   roleDirectives?: Record<string, StudioRoleDirective>;
+  promotionHistory?: StudioPromotionRecord[];
+}
+
+interface StudioPromotionRecord {
+  id: string;
+  appliedAt: string;
+  mode: 'preset' | 'steering' | 'full' | 'phase' | 'preset_phase' | 'learning';
+  summary: string;
+  actor: 'manual';
+  sourceExperimentId?: string;
+  sourceExperimentLabel?: string;
+  phase?: WorkflowBlockKind;
 }
 
 interface WorkflowBlockDraft {
@@ -759,7 +773,7 @@ function getPresetLabelFromId(id?: string) {
 }
 
 function getExperimentDisplayLabel(experiment: StudioExperimentRecord) {
-  return experiment.notes || `${getScenarioLabelFromId(experiment.scenarioId)} · ${getPresetLabelFromId(experiment.previewPresetId)}`;
+  return experiment.branchName || experiment.notes || `${getScenarioLabelFromId(experiment.scenarioId)} · ${getPresetLabelFromId(experiment.previewPresetId)}`;
 }
 
 function getExperimentPhaseList(experiment: StudioExperimentRecord) {
@@ -948,6 +962,30 @@ function cloneRoleDirectives(roleDirectives?: Record<string, StudioRoleDirective
   }, {});
 }
 
+function clonePromotionHistory(history?: StudioPromotionRecord[]) {
+  if (!history) return undefined;
+  return history.map((entry) => ({ ...entry }));
+}
+
+function appendPromotionHistory(
+  history: StudioPromotionRecord[] | undefined,
+  entry: Omit<StudioPromotionRecord, 'id' | 'appliedAt' | 'actor'>,
+) {
+  return [
+    {
+      id: `promo_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      appliedAt: new Date().toISOString(),
+      actor: 'manual' as const,
+      ...entry,
+    },
+    ...(clonePromotionHistory(history) || []),
+  ].slice(0, 14);
+}
+
+function buildBranchName(sourceLabel: string, index: number) {
+  return `${sourceLabel} branch ${index}`;
+}
+
 function mergeRoleDirectiveSnapshots(
   base?: Record<string, StudioRoleDirective>,
   incoming?: Record<string, StudioRoleDirective>
@@ -1021,6 +1059,40 @@ function getDirectiveModeLabel(mode: 'cheaper' | 'review' | 'promote') {
   if (mode === 'cheaper') return 'Cheaper bias';
   if (mode === 'review') return 'Review bias';
   return 'Promoted lane';
+}
+
+function getPromotionModeLabel(mode: StudioPromotionRecord['mode']) {
+  switch (mode) {
+    case 'preset':
+      return 'Preset promoted';
+    case 'steering':
+      return 'Steering promoted';
+    case 'full':
+      return 'Full setup promoted';
+    case 'phase':
+      return 'Phase promoted';
+    case 'preset_phase':
+      return 'Preset + phase promoted';
+    case 'learning':
+    default:
+      return 'Learning action';
+  }
+}
+
+function getPromotionModeTone(mode: StudioPromotionRecord['mode']) {
+  switch (mode) {
+    case 'full':
+    case 'preset_phase':
+      return 'border-emerald-500/18 bg-emerald-500/8 text-emerald-100';
+    case 'preset':
+    case 'phase':
+      return 'border-cyan-500/18 bg-cyan-500/8 text-cyan-100';
+    case 'steering':
+      return 'border-violet-500/18 bg-violet-500/8 text-violet-100';
+    case 'learning':
+    default:
+      return 'border-amber-500/18 bg-amber-500/8 text-amber-100';
+  }
 }
 
 function getDirectiveActionLabel(mode: 'cheaper' | 'review' | 'promote') {
@@ -1162,6 +1234,8 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
             previewPresetId,
             createdAt,
             notes: readString(item.notes),
+            branchName: readString(item.branchName),
+            parentExperimentId: readString(item.parentExperimentId),
             roleDirectives: isRecord(item.roleDirectives)
               ? Object.entries(item.roleDirectives).reduce<Record<string, StudioRoleDirective>>((directiveAcc, [role, directive]) => {
                   if (!isRecord(directive)) return directiveAcc;
@@ -1171,6 +1245,42 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
                   directiveAcc[role] = { mode: directive.mode, phases: normalizeDirectivePhases(directive.phases), updatedAt };
                   return directiveAcc;
                 }, {})
+              : undefined,
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    : undefined;
+
+  const promotionHistory = Array.isArray(value.promotionHistory)
+    ? value.promotionHistory
+        .map((item) => {
+          if (!isRecord(item)) return null;
+          const id = readString(item.id);
+          const appliedAt = readString(item.appliedAt);
+          const summary = readString(item.summary);
+          const actor = readString(item.actor);
+          const mode = readString(item.mode);
+          if (
+            !id ||
+            !appliedAt ||
+            !summary ||
+            actor !== 'manual' ||
+            !mode ||
+            !['preset', 'steering', 'full', 'phase', 'preset_phase', 'learning'].includes(mode)
+          ) {
+            return null;
+          }
+          const phaseValue = readString(item.phase);
+          return {
+            id,
+            appliedAt,
+            summary,
+            actor: 'manual' as const,
+            mode: mode as StudioPromotionRecord['mode'],
+            sourceExperimentId: readString(item.sourceExperimentId),
+            sourceExperimentLabel: readString(item.sourceExperimentLabel),
+            phase: phaseValue && ['search', 'query', 'capture', 'analyze', 'summarize', 'deliver', 'note'].includes(phaseValue)
+              ? phaseValue as WorkflowBlockKind
               : undefined,
           };
         })
@@ -1193,6 +1303,7 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
     previewPresetId: readString(value.previewPresetId),
     experimentHistory,
     roleDirectives,
+    promotionHistory,
   };
 }
 
@@ -2373,6 +2484,52 @@ export default function AgentStudio() {
     return insights.slice(0, 3);
   }, [currentCohortPerformance, phaseLearningByArchetype, winningExperiment]);
 
+  const phaseCostConfidenceMap = useMemo(() => {
+    const maxCredits = Math.max(...phaseEvidence.map((phase) => phase.averageCredits || 0), 1);
+    return phaseEvidence.map((phase) => {
+      const confidence = clampNumber(Math.round(phase.successRate * 100 * Math.min(1, phase.runs / 5)), 8, 100);
+      const costPressure = clampNumber(Math.round(((phase.averageCredits || 0) / maxCredits) * 100), 0, 100);
+      const recommendation =
+        confidence < 55
+          ? 'Needs stronger review or clearer instructions'
+          : costPressure > 70
+            ? 'Candidate for cheaper routing'
+            : 'Healthy phase economics';
+      return {
+        ...phase,
+        confidence,
+        costPressure,
+        recommendation,
+      };
+    });
+  }, [phaseEvidence]);
+
+  const autoPromotionSuggestion = useMemo(() => {
+    if (!winningExperiment || !currentCohortPerformance || winningExperiment.experiment.id === selectedComparisonExperimentId) return null;
+    const beatsCurrentOnSuccess = winningExperiment.stats.successRate >= currentCohortPerformance.stats.successRate + 0.08;
+    const beatsCurrentOnSpend = winningExperiment.stats.averageCredits > 0 && winningExperiment.stats.averageCredits <= currentCohortPerformance.stats.averageCredits - 6;
+    const confidenceStrong = winningExperiment.confidence >= 55 && evidenceFreshness.tone !== 'stale';
+    if (!confidenceStrong || (!beatsCurrentOnSuccess && !beatsCurrentOnSpend)) return null;
+    return {
+      tone: beatsCurrentOnSuccess ? 'quality' : 'efficiency',
+      title: beatsCurrentOnSuccess ? 'Auto-promotion candidate for quality' : 'Auto-promotion candidate for efficiency',
+      body: beatsCurrentOnSuccess
+        ? `${getExperimentDisplayLabel(winningExperiment.experiment)} is beating the live cohort on success with enough evidence to justify a promotion review.`
+        : `${getExperimentDisplayLabel(winningExperiment.experiment)} is running cheaper than the live cohort without losing quality, and the evidence is now strong enough to act on.`,
+      experiment: winningExperiment.experiment,
+    };
+  }, [currentCohortPerformance, evidenceFreshness.tone, selectedComparisonExperimentId, winningExperiment]);
+
+  const experimentBranches = useMemo(() => {
+    const branchCountByParent = new Map<string, number>();
+    experimentHistory.forEach((experiment) => {
+      if (experiment.parentExperimentId) {
+        branchCountByParent.set(experiment.parentExperimentId, (branchCountByParent.get(experiment.parentExperimentId) || 0) + 1);
+      }
+    });
+    return branchCountByParent;
+  }, [experimentHistory]);
+
   const patchAutomationConfig = useCallback(async (patch: {
     executionPolicy?: AutomationExecutionPolicyDraft;
     studioState?: AutomationStudioStateDraft;
@@ -2462,6 +2619,11 @@ export default function AgentStudio() {
               [role]: { mode: 'cheaper', phases: directivePhases, updatedAt: new Date().toISOString() },
             }
           : selectedStudioState.roleDirectives,
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'learning',
+          summary: `Shifted ${role || 'this role'} cheaper for ${formatDirectivePhaseScope(directivePhases)}.`,
+          phase: directivePhases?.[0],
+        }),
       },
     }, { successMessage: `Shifted this role toward cheaper routing for ${formatDirectivePhaseScope(directivePhases)}.` });
   }, [patchAutomationConfig, selectedDirectivePhase, selectedMath.recommendedElasticLanes, selectedPolicy, selectedStudioState, selectedWorkerDetail.worker?.laneType, selectedWorkerDetail.worker?.role]);
@@ -2485,6 +2647,11 @@ export default function AgentStudio() {
               [role]: { mode: 'review', phases: directivePhases, updatedAt: new Date().toISOString() },
             }
           : selectedStudioState.roleDirectives,
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'learning',
+          summary: `Raised review on ${role || 'this role'} for ${formatDirectivePhaseScope(directivePhases)}.`,
+          phase: directivePhases?.[0],
+        }),
       },
     }, { successMessage: `Raised review pressure for ${formatDirectivePhaseScope(directivePhases)}.` });
   }, [patchAutomationConfig, selectedDirectivePhase, selectedPolicy, selectedStudioState, selectedWorkerDetail.worker?.role]);
@@ -2508,6 +2675,11 @@ export default function AgentStudio() {
               [role]: { mode: 'promote', phases: directivePhases, updatedAt: new Date().toISOString() },
             }
           : selectedStudioState.roleDirectives,
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'learning',
+          summary: `Promoted ${role || 'this role'} for ${formatDirectivePhaseScope(directivePhases)}.`,
+          phase: directivePhases?.[0],
+        }),
       },
     }, { successMessage: `Promoted this lane for ${formatDirectivePhaseScope(directivePhases)}.` });
   }, [patchAutomationConfig, selectedDirectivePhase, selectedMath.recommendedElasticLanes, selectedPolicy, selectedStudioState, selectedWorkerDetail.worker?.role]);
@@ -2550,6 +2722,13 @@ export default function AgentStudio() {
         selectedScenarioId: experiment.scenarioId,
         previewPresetId: experiment.previewPresetId,
         roleDirectives: mergeRoleDirectiveSnapshots(selectedStudioState.roleDirectives, phaseDirectives),
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'preset_phase',
+          summary: `Promoted ${formatDirectivePhaseScope([phase])} plus preset from ${getExperimentDisplayLabel(experiment)}.`,
+          sourceExperimentId: experiment.id,
+          sourceExperimentLabel: getExperimentDisplayLabel(experiment),
+          phase,
+        }),
       },
     }, { successMessage: `Promoted ${formatDirectivePhaseScope([phase])} plus the experiment preset.` });
   }, [patchAutomationConfig, selectedStudioState]);
@@ -2566,6 +2745,13 @@ export default function AgentStudio() {
       selectedScenarioId: experiment.scenarioId,
       previewPresetId: experiment.previewPresetId,
       roleDirectives: mergeRoleDirectiveSnapshots(selectedStudioState.roleDirectives, phaseDirectives),
+      promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+        mode: 'phase',
+        summary: `Promoted ${formatDirectivePhaseScope([phase])} steering from ${getExperimentDisplayLabel(experiment)}.`,
+        sourceExperimentId: experiment.id,
+        sourceExperimentLabel: getExperimentDisplayLabel(experiment),
+        phase,
+      }),
     }, `Promoted ${formatDirectivePhaseScope([phase])} steering from this experiment.`);
   }, [selectedStudioState, updateStudioState]);
 
@@ -2606,6 +2792,11 @@ export default function AgentStudio() {
           ...(selectedStudioState.roleDirectives || {}),
           [role]: { mode, phases: [phase], updatedAt: new Date().toISOString() },
         },
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'learning',
+          summary: `Applied ${getDirectiveModeLabel(mode).toLowerCase()} to ${formatDirectivePhaseScope([phase])} on ${role}.`,
+          phase,
+        }),
       },
     }, {
       successMessage: `Applied ${getDirectiveModeLabel(mode).toLowerCase()} to ${formatDirectivePhaseScope([phase])} on ${role}.`,
@@ -2656,6 +2847,52 @@ export default function AgentStudio() {
     setNotice({ tone: 'success', message: 'Loaded this experiment into the comparison lab.' });
   }, []);
 
+  const handleForkCurrentSetup = useCallback(() => {
+    const sourceLabel = getPresetLabelFromId(previewPresetId);
+    const siblingCount = experimentHistory.filter((experiment) => !experiment.parentExperimentId).length + 1;
+    const nextHistory = [
+      {
+        id: `exp_${Date.now()}`,
+        scenarioId: selectedScenarioId,
+        previewPresetId,
+        createdAt: new Date().toISOString(),
+        branchName: buildBranchName(sourceLabel, siblingCount),
+        notes: `Forked from live setup · ${selectedScenario.label}`,
+        roleDirectives: cloneRoleDirectives(selectedStudioState.roleDirectives),
+      },
+      ...(selectedStudioState.experimentHistory || []),
+    ].slice(0, 12);
+
+    void updateStudioState({
+      ...selectedStudioState,
+      selectedScenarioId,
+      previewPresetId,
+      experimentHistory: nextHistory,
+    }, 'Forked the current live setup into a new experiment branch.');
+  }, [experimentHistory, previewPresetId, selectedScenario.label, selectedScenarioId, selectedStudioState, updateStudioState]);
+
+  const handleForkWinningSetup = useCallback((experiment: StudioExperimentRecord) => {
+    const siblingCount = (experimentBranches.get(experiment.id) || 0) + 1;
+    const nextHistory = [
+      {
+        id: `exp_${Date.now()}`,
+        scenarioId: experiment.scenarioId,
+        previewPresetId: experiment.previewPresetId,
+        createdAt: new Date().toISOString(),
+        branchName: buildBranchName(getExperimentDisplayLabel(experiment), siblingCount),
+        parentExperimentId: experiment.id,
+        notes: `Forked from ${getExperimentDisplayLabel(experiment)}`,
+        roleDirectives: cloneRoleDirectives(experiment.roleDirectives),
+      },
+      ...(selectedStudioState.experimentHistory || []),
+    ].slice(0, 12);
+
+    void updateStudioState({
+      ...selectedStudioState,
+      experimentHistory: nextHistory,
+    }, 'Forked the winning setup into a new branch.');
+  }, [experimentBranches, selectedStudioState, updateStudioState]);
+
   const handlePromoteExperimentPreset = useCallback((experiment: StudioExperimentRecord) => {
     const preset = POLICY_PRESETS.find((item) => item.id === experiment.previewPresetId);
     if (!preset) {
@@ -2671,6 +2908,12 @@ export default function AgentStudio() {
         ...selectedStudioState,
         selectedScenarioId: experiment.scenarioId,
         previewPresetId: experiment.previewPresetId,
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'preset',
+          summary: `Promoted preset from ${getExperimentDisplayLabel(experiment)}.`,
+          sourceExperimentId: experiment.id,
+          sourceExperimentLabel: getExperimentDisplayLabel(experiment),
+        }),
       },
     }, { successMessage: 'Promoted the winning preset into the live policy.' });
   }, [patchAutomationConfig, selectedStudioState]);
@@ -2684,6 +2927,12 @@ export default function AgentStudio() {
       selectedScenarioId: experiment.scenarioId,
       previewPresetId: experiment.previewPresetId,
       roleDirectives: mergeRoleDirectiveSnapshots(selectedStudioState.roleDirectives, experiment.roleDirectives),
+      promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+        mode: 'steering',
+        summary: `Promoted steering from ${getExperimentDisplayLabel(experiment)}.`,
+        sourceExperimentId: experiment.id,
+        sourceExperimentLabel: getExperimentDisplayLabel(experiment),
+      }),
     }, 'Promoted steering from this saved experiment.');
   }, [selectedStudioState, updateStudioState]);
 
@@ -2703,6 +2952,12 @@ export default function AgentStudio() {
         selectedScenarioId: experiment.scenarioId,
         previewPresetId: experiment.previewPresetId,
         roleDirectives: mergeRoleDirectiveSnapshots(selectedStudioState.roleDirectives, experiment.roleDirectives),
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'full',
+          summary: `Promoted full setup from ${getExperimentDisplayLabel(experiment)}.`,
+          sourceExperimentId: experiment.id,
+          sourceExperimentLabel: getExperimentDisplayLabel(experiment),
+        }),
       },
     }, { successMessage: 'Promoted the full winning setup into the live policy.' });
   }, [patchAutomationConfig, selectedStudioState]);
@@ -4150,6 +4405,53 @@ export default function AgentStudio() {
 
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
+                          <BarChart3 className="h-4 w-4 text-amber-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Phase cost map</p>
+                            <h3 className="text-sm font-semibold text-white">Where spend is actually buying confidence</h3>
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {phaseCostConfidenceMap.length > 0 ? phaseCostConfidenceMap.map((phase) => (
+                            <div key={`phase-map-${phase.phase}`} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-white">{formatDirectivePhaseScope([phase.phase])}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">{phase.runs} observed executions</p>
+                                </div>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{phase.recommendation}</span>
+                              </div>
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <div>
+                                  <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                                    <span>Confidence</span>
+                                    <span>{phase.confidence}%</span>
+                                  </div>
+                                  <div className="mt-1 h-2 rounded-full bg-navy-950/70">
+                                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-300" style={{ width: `${Math.max(10, phase.confidence)}%` }} />
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                                    <span>Cost pressure</span>
+                                    <span>{phase.costPressure}%</span>
+                                  </div>
+                                  <div className="mt-1 h-2 rounded-full bg-navy-950/70">
+                                    <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-red-300" style={{ width: `${Math.max(10, phase.costPressure)}%` }} />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )) : (
+                            <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                              Not enough phase evidence yet to map cost against confidence.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
                           <Sparkles className="h-4 w-4 text-violet-300" />
                           <div>
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Phase simulation</p>
@@ -4217,12 +4519,21 @@ export default function AgentStudio() {
                       </div>
 
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                        <div className="flex items-center gap-2">
-                          <RotateCcw className="h-4 w-4 text-cyan-300" />
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Saved experiments</p>
-                            <h3 className="text-sm font-semibold text-white">Restore strong operating setups</h3>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <RotateCcw className="h-4 w-4 text-cyan-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Saved experiments</p>
+                              <h3 className="text-sm font-semibold text-white">Restore strong operating setups</h3>
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            onClick={handleForkCurrentSetup}
+                            className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                          >
+                            Fork live policy
+                          </button>
                         </div>
                         <div className="mt-4 space-y-3">
                           {experimentHistory.length > 0 ? experimentHistory.map((experiment) => {
@@ -4241,6 +4552,8 @@ export default function AgentStudio() {
                                       {getExperimentTags(experiment).map((tag) => (
                                         <span key={`${experiment.id}-${tag}`} className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{tag}</span>
                                       ))}
+                                      {experiment.parentExperimentId ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">Branch</span> : null}
+                                      {(experimentBranches.get(experiment.id) || 0) > 0 ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{experimentBranches.get(experiment.id)} child branches</span> : null}
                                     </div>
                                   </div>
                                   <span className="rounded-full border border-navy-700 bg-navy-900 px-2 py-0.5 text-[10px] text-slate-300">
@@ -4269,6 +4582,13 @@ export default function AgentStudio() {
                                     className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
                                   >
                                     Restore setup
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleForkWinningSetup(experiment)}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                  >
+                                    Branch from here
                                   </button>
                                 </div>
                               </div>
@@ -4614,6 +4934,30 @@ export default function AgentStudio() {
                     <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr),minmax(0,1.08fr)]">
                       <div className="space-y-6">
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          {autoPromotionSuggestion ? (
+                            <div className={`mb-4 rounded-2xl border p-4 ${autoPromotionSuggestion.tone === 'quality' ? 'border-emerald-500/18 bg-emerald-500/8' : 'border-cyan-500/18 bg-cyan-500/8'}`}>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Automatic promotion suggestion</p>
+                              <p className="mt-2 text-sm font-medium text-white">{autoPromotionSuggestion.title}</p>
+                              <p className="mt-2 text-sm leading-relaxed text-slate-300">{autoPromotionSuggestion.body}</p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => handlePromoteExperimentFull(autoPromotionSuggestion.experiment)}
+                                  className="rounded-xl border border-emerald-500/24 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/14 disabled:opacity-60"
+                                >
+                                  Promote recommended winner
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCompareExperiment(autoPromotionSuggestion.experiment)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Review in comparison lab
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="flex items-center gap-2">
                             <Target className="h-4 w-4 text-emerald-300" />
                             <div>
@@ -4664,6 +5008,13 @@ export default function AgentStudio() {
                                   className="rounded-xl border border-emerald-500/24 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/14 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   Promote full setup
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleForkWinningSetup(winningExperiment.experiment)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Branch winner
                                 </button>
                               </div>
                               {winningExperimentPhases.length > 0 ? (
@@ -4768,6 +5119,47 @@ export default function AgentStudio() {
                             )) : (
                               <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
                                 No saved experiment performance yet.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Clock3 className="h-4 w-4 text-amber-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Promotion history</p>
+                              <h3 className="text-sm font-semibold text-white">How the live policy got here</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-3">
+                            {selectedStudioState.promotionHistory?.length ? selectedStudioState.promotionHistory.map((entry) => (
+                              <div key={entry.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getPromotionModeTone(entry.mode)}`}>
+                                        {getPromotionModeLabel(entry.mode)}
+                                      </span>
+                                      {entry.phase ? (
+                                        <span className="ui-pill px-2 py-0.5 text-[10px] normal-case tracking-normal text-slate-300">
+                                          {formatDirectivePhaseScope([entry.phase])}
+                                        </span>
+                                      ) : null}
+                                      {entry.sourceExperimentLabel ? (
+                                        <span className="ui-pill px-2 py-0.5 text-[10px] normal-case tracking-normal text-slate-300">
+                                          {entry.sourceExperimentLabel}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <p className="mt-3 text-sm leading-relaxed text-slate-300">{entry.summary}</p>
+                                  </div>
+                                  <span className="text-[11px] text-slate-500">{formatRelativeTimeFromIso(entry.appliedAt)}</span>
+                                </div>
+                              </div>
+                            )) : (
+                              <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                                No promotions yet. Once you start promoting winners, steering phases, or branching live policy, the decision trail will show up here.
                               </div>
                             )}
                           </div>
