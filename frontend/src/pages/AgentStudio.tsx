@@ -1169,6 +1169,7 @@ export default function AgentStudio() {
   const [selectedDirectivePhase, setSelectedDirectivePhase] = useState<'all' | WorkflowBlockKind>('all');
   const [selectedComparisonExperimentId, setSelectedComparisonExperimentId] = useState<string>('');
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('credits');
+  const [selectedCohortRunId, setSelectedCohortRunId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<AgentStudioRow[]>([]);
@@ -1554,86 +1555,6 @@ export default function AgentStudio() {
     return items.slice(0, 4);
   }, [selectedMath, selectedPolicy, selectedRow]);
 
-  const workflowDiagnostics = useMemo(() => {
-    const riskItems: Array<{ title: string; body: string; severity: 'low' | 'medium' | 'high'; action: 'raise_review' | 'none' }> = [];
-    const wasteItems: Array<{ title: string; body: string; severity: 'low' | 'medium' | 'high'; action: 'lean_ops' | 'trim_lanes' | 'match_lanes' | 'none' }> = [];
-
-    if (selectedRow) {
-      if (selectedRow.successRate > 0 && selectedRow.successRate < 0.7) {
-        riskItems.push({
-          title: 'Reliability is below target',
-          body: 'Recent runs are failing often enough that this workflow is under-protected. The fix is stricter review where the final reasoning happens, not more lanes everywhere.',
-          severity: 'high',
-          action: 'raise_review',
-        });
-      }
-      const expensiveDelivery = (selectedRow.stepExecutions || []).find((step) => step.kind === 'deliver' && (step.actualCredits || 0) >= 20);
-      if (expensiveDelivery) {
-        wasteItems.push({
-          title: 'Delivery is too expensive',
-          body: `${expensiveDelivery.title} is burning strong-model budget on work that should usually live on cheaper operational lanes.`,
-          severity: 'medium',
-          action: 'lean_ops',
-        });
-      }
-      if (selectedPolicy.maxElasticLanes > selectedMath.recommendedElasticLanes + 1) {
-        wasteItems.push({
-          title: 'Elastic capacity is over-provisioned',
-          body: `Live cap is ${selectedPolicy.maxElasticLanes}, but the workflow math only justifies about ${selectedMath.recommendedElasticLanes}.`,
-          severity: 'medium',
-          action: 'trim_lanes',
-        });
-      }
-      if (selectedPolicy.maxElasticLanes < selectedMath.recommendedElasticLanes) {
-        riskItems.push({
-          title: 'Parallel depth is constrained',
-          body: 'The workflow needs more elastic headroom than the current cap allows, which can create slower runs and overloaded core roles.',
-          severity: 'medium',
-          action: 'none',
-        });
-        wasteItems.push({
-          title: 'Queueing is likely hurting throughput',
-          body: 'This is one of the few workflows where spending a bit more on lane capacity is likely to return better cycle time.',
-          severity: 'low',
-          action: 'match_lanes',
-        });
-      }
-      if (riskItems.length === 0) {
-        riskItems.push({
-          title: 'No dominant risk signal',
-          body: 'Nothing here is screaming for heavier review. Preserve speed and focus on workflow quality or experiment learning.',
-          severity: 'low',
-          action: 'none',
-        });
-      }
-      if (wasteItems.length === 0) {
-        wasteItems.push({
-          title: 'Spend profile looks disciplined',
-          body: 'The current setup is not obviously wasting tokens or elastic capacity. Improvements will likely come from sharper experiments, not blanket cost cutting.',
-          severity: 'low',
-          action: 'none',
-        });
-      }
-    }
-
-    return { riskItems: riskItems.slice(0, 3), wasteItems: wasteItems.slice(0, 3) };
-  }, [selectedMath.recommendedElasticLanes, selectedPolicy.maxElasticLanes, selectedRow, selectedRow?.successRate]);
-
-  const optimizationScorecard = useMemo(() => {
-    const spendPressure = clampNumber(Math.round((currentSpendIndex * 0.55) + (selectedMath.toolCalls * 6) + (selectedMath.activeElasticLanes * 5)), 10, 99);
-    const riskPressure = clampNumber(Math.round((100 - Math.round(selectedRow?.successRate ? selectedRow.successRate * 100 : 72)) * 0.55 + currentAssuranceIndex * 0.35), 10, 99);
-    const leverageScore = clampNumber(Math.round(currentFitIndex + Math.max(0, 18 - spendPressure / 6) + (selectedMath.recommendedElasticLanes >= selectedMath.activeElasticLanes ? 6 : -4)), 10, 99);
-    const verdict = leverageScore >= 78 ? 'Strong operating setup' : leverageScore >= 58 ? 'Good with room to tune' : 'Needs a sharper policy';
-    const nextMove = workflowDiagnostics.riskItems[0]?.severity === 'high'
-      ? 'Tighten review around the highest-risk phase.'
-      : workflowDiagnostics.wasteItems[0]?.action === 'lean_ops'
-        ? 'Route more operational work down-market.'
-        : workflowDiagnostics.wasteItems[0]?.action === 'trim_lanes'
-          ? 'Trim elastic capacity before adding more logic.'
-          : 'Keep testing saved experiments and promote only what consistently wins.';
-    return { spendPressure, riskPressure, leverageScore, verdict, nextMove };
-  }, [currentAssuranceIndex, currentFitIndex, currentSpendIndex, selectedMath.activeElasticLanes, selectedMath.recommendedElasticLanes, selectedMath.toolCalls, selectedRow?.successRate, workflowDiagnostics.riskItems, workflowDiagnostics.wasteItems]);
-
   const studioStats = useMemo(() => {
     const completedRuns = rows.flatMap((row) => row.runs).filter((run) => run.status === 'succeeded' || run.status === 'failed');
     const succeededRuns = completedRuns.filter((run) => run.status === 'succeeded');
@@ -1880,6 +1801,127 @@ export default function AgentStudio() {
     [selectedStudioState.experimentHistory]
   );
 
+  const phaseEvidence = useMemo(() => {
+    if (!selectedRow) return [] as Array<{ phase: WorkflowBlockKind; runs: number; successRate: number; averageCredits: number; averageDurationMs: number; directiveModes: string[] }>;
+    const aggregate = new Map<WorkflowBlockKind, { runs: number; success: number; credits: number; durationMs: number; directiveModes: Set<string> }>();
+    selectedRow.runs
+      .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+      .forEach((run) => {
+        readStepExecutions(run.metadata?.stepExecutions).forEach((step) => {
+          if (!(step.kind === 'search' || step.kind === 'query' || step.kind === 'capture' || step.kind === 'analyze' || step.kind === 'summarize' || step.kind === 'deliver' || step.kind === 'note')) return;
+          const current = aggregate.get(step.kind) || { runs: 0, success: 0, credits: 0, durationMs: 0, directiveModes: new Set<string>() };
+          current.runs += 1;
+          current.success += step.status === 'succeeded' ? 1 : 0;
+          current.credits += step.actualCredits || 0;
+          current.durationMs += step.durationMs || 0;
+          if (step.directiveMode) current.directiveModes.add(step.directiveMode);
+          aggregate.set(step.kind, current);
+        });
+      });
+
+    return Array.from(aggregate.entries()).map(([phase, value]) => ({
+      phase,
+      runs: value.runs,
+      successRate: value.runs ? value.success / value.runs : 0,
+      averageCredits: value.runs ? value.credits / value.runs : 0,
+      averageDurationMs: value.runs ? value.durationMs / value.runs : 0,
+      directiveModes: Array.from(value.directiveModes),
+    })).sort((a, b) => b.runs - a.runs);
+  }, [selectedRow]);
+
+  const workflowDiagnostics = useMemo(() => {
+    const riskItems: Array<{ title: string; body: string; severity: 'low' | 'medium' | 'high'; action: 'raise_review' | 'none' }> = [];
+    const wasteItems: Array<{ title: string; body: string; severity: 'low' | 'medium' | 'high'; action: 'lean_ops' | 'trim_lanes' | 'match_lanes' | 'none' }> = [];
+
+    if (selectedRow) {
+      const weakestPhase = phaseEvidence
+        .filter((phase) => phase.runs >= 2)
+        .sort((a, b) => a.successRate - b.successRate || b.runs - a.runs)[0];
+      const costlyPhase = phaseEvidence
+        .filter((phase) => phase.runs >= 2)
+        .sort((a, b) => b.averageCredits - a.averageCredits || b.runs - a.runs)[0];
+
+      if (selectedRow.successRate > 0 && selectedRow.successRate < 0.7) {
+        riskItems.push({
+          title: 'Reliability is below target',
+          body: 'Recent runs are failing often enough that this workflow is under-protected. The fix is stricter review where the final reasoning happens, not more lanes everywhere.',
+          severity: 'high',
+          action: 'raise_review',
+        });
+      }
+      if (weakestPhase && weakestPhase.successRate < 0.7) {
+        riskItems.push({
+          title: `${formatDirectivePhaseScope([weakestPhase.phase])} is the weak phase`,
+          body: `Across ${weakestPhase.runs} recent step executions, this phase is only landing ${Math.round(weakestPhase.successRate * 100)}% of the time. Tighten review here before changing the entire workflow posture.`,
+          severity: weakestPhase.successRate < 0.55 ? 'high' : 'medium',
+          action: 'raise_review',
+        });
+      }
+      if (costlyPhase && costlyPhase.averageCredits >= 18) {
+        wasteItems.push({
+          title: `${formatDirectivePhaseScope([costlyPhase.phase])} is burning budget`,
+          body: `This phase averages ${formatCredits(costlyPhase.averageCredits)} credits across ${costlyPhase.runs} executions. That is the best candidate for cheaper routing or tighter instructions.`,
+          severity: costlyPhase.averageCredits >= 28 ? 'high' : 'medium',
+          action: costlyPhase.phase === 'deliver' || costlyPhase.phase === 'search' ? 'lean_ops' : 'none',
+        });
+      }
+      if (selectedPolicy.maxElasticLanes > selectedMath.recommendedElasticLanes + 1) {
+        wasteItems.push({
+          title: 'Elastic capacity is over-provisioned',
+          body: `Live cap is ${selectedPolicy.maxElasticLanes}, but the workflow math only justifies about ${selectedMath.recommendedElasticLanes}.`,
+          severity: 'medium',
+          action: 'trim_lanes',
+        });
+      }
+      if (selectedPolicy.maxElasticLanes < selectedMath.recommendedElasticLanes) {
+        riskItems.push({
+          title: 'Parallel depth is constrained',
+          body: 'The workflow needs more elastic headroom than the current cap allows, which can create slower runs and overloaded core roles.',
+          severity: 'medium',
+          action: 'none',
+        });
+        wasteItems.push({
+          title: 'Queueing is likely hurting throughput',
+          body: 'This is one of the few workflows where spending a bit more on lane capacity is likely to return better cycle time.',
+          severity: 'low',
+          action: 'match_lanes',
+        });
+      }
+      if (riskItems.length === 0) {
+        riskItems.push({
+          title: 'No dominant risk signal',
+          body: 'Nothing here is screaming for heavier review. Preserve speed and focus on workflow quality or experiment learning.',
+          severity: 'low',
+          action: 'none',
+        });
+      }
+      if (wasteItems.length === 0) {
+        wasteItems.push({
+          title: 'Spend profile looks disciplined',
+          body: 'The current setup is not obviously wasting tokens or elastic capacity. Improvements will likely come from sharper experiments, not blanket cost cutting.',
+          severity: 'low',
+          action: 'none',
+        });
+      }
+    }
+
+    return { riskItems: riskItems.slice(0, 3), wasteItems: wasteItems.slice(0, 3) };
+  }, [phaseEvidence, selectedMath.recommendedElasticLanes, selectedPolicy.maxElasticLanes, selectedRow, selectedRow?.successRate]);
+
+  const optimizationScorecard = useMemo(() => {
+    const spendPressure = clampNumber(Math.round((currentSpendIndex * 0.55) + (selectedMath.toolCalls * 6) + (selectedMath.activeElasticLanes * 5)), 10, 99);
+    const riskPressure = clampNumber(Math.round((100 - Math.round(selectedRow?.successRate ? selectedRow.successRate * 100 : 72)) * 0.55 + currentAssuranceIndex * 0.35), 10, 99);
+    const leverageScore = clampNumber(Math.round(currentFitIndex + Math.max(0, 18 - spendPressure / 6) + (selectedMath.recommendedElasticLanes >= selectedMath.activeElasticLanes ? 6 : -4)), 10, 99);
+    const verdict = leverageScore >= 78 ? 'Strong operating setup' : leverageScore >= 58 ? 'Good with room to tune' : 'Needs a sharper policy';
+    const nextMove = workflowDiagnostics.riskItems[0]?.severity === 'high'
+      ? 'Tighten review around the highest-risk phase.'
+      : workflowDiagnostics.wasteItems[0]?.action === 'lean_ops'
+        ? 'Route more operational work down-market.'
+        : workflowDiagnostics.wasteItems[0]?.action === 'trim_lanes'
+          ? 'Trim elastic capacity before adding more logic.'
+          : 'Keep testing saved experiments and promote only what consistently wins.';
+    return { spendPressure, riskPressure, leverageScore, verdict, nextMove };
+  }, [currentAssuranceIndex, currentFitIndex, currentSpendIndex, selectedMath.activeElasticLanes, selectedMath.recommendedElasticLanes, selectedMath.toolCalls, selectedRow?.successRate, workflowDiagnostics.riskItems, workflowDiagnostics.wasteItems]);
 
   const experimentRunMatches = useMemo(() => {
     const matches = new Map<string, PlatformTaskRunRecord | undefined>();
@@ -1951,6 +1993,16 @@ export default function AgentStudio() {
     });
   }, [experimentHistory, selectedRow?.automation.id]);
 
+  useEffect(() => {
+    const candidate = currentCohortPerformance?.runs[0]?.id || selectedExperimentPerformance?.runs[0]?.id || '';
+    setSelectedCohortRunId((current) => current || candidate);
+  }, [currentCohortPerformance?.runs, selectedExperimentPerformance?.runs, selectedRow?.automation.id]);
+
+  const selectedCohortRun = useMemo(() => {
+    const allRuns = [...(currentCohortPerformance?.runs || []), ...(selectedExperimentPerformance?.runs || [])];
+    return allRuns.find((run) => run.id === selectedCohortRunId) || currentCohortPerformance?.runs[0] || selectedExperimentPerformance?.runs[0];
+  }, [currentCohortPerformance?.runs, selectedCohortRunId, selectedExperimentPerformance?.runs]);
+
   const policyDiffRows = useMemo(
     () => [
       {
@@ -1992,6 +2044,39 @@ export default function AgentStudio() {
       selectedPolicy.reviewPolicy,
     ]
   );
+
+  const phaseLearningByArchetype = useMemo(() => {
+    const scopedRows = rows.filter((row) => classifyWorkflowArchetype(row.workflowSteps).id === selectedArchetype.id);
+    const aggregate = new Map<string, { phase: WorkflowBlockKind; mode: string; runs: number; success: number; credits: number }>();
+
+    scopedRows.forEach((row) => {
+      row.runs
+        .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+        .forEach((run) => {
+          readStepExecutions(run.metadata?.stepExecutions).forEach((step) => {
+            if (!(step.kind === 'search' || step.kind === 'query' || step.kind === 'capture' || step.kind === 'analyze' || step.kind === 'summarize' || step.kind === 'deliver' || step.kind === 'note')) return;
+            const mode = step.directiveMode || 'baseline';
+            const key = `${step.kind}:${mode}`;
+            const current = aggregate.get(key) || { phase: step.kind, mode, runs: 0, success: 0, credits: 0 };
+            current.runs += 1;
+            current.success += step.status === 'succeeded' ? 1 : 0;
+            current.credits += step.actualCredits || 0;
+            aggregate.set(key, current);
+          });
+        });
+    });
+
+    return Array.from(aggregate.values())
+      .filter((item) => item.runs >= 2)
+      .map((item) => ({
+        ...item,
+        successRate: item.success / item.runs,
+        averageCredits: item.credits / item.runs,
+        score: Math.round((item.success / item.runs) * 100 - (item.credits / item.runs) / 4),
+      }))
+      .sort((a, b) => b.score - a.score || b.runs - a.runs)
+      .slice(0, 6);
+  }, [rows, selectedArchetype.id]);
 
   const learnedPresetLearning = useMemo(() => {
     const scored = rows.map((row) => {
@@ -2210,6 +2295,29 @@ export default function AgentStudio() {
       void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', maxElasticLanes: Math.max(0, selectedMath.recommendedElasticLanes) });
     }
   }, [patchExecutionPolicy, selectedMath.recommendedElasticLanes, selectedPolicy]);
+
+  const handlePromoteExperimentPresetAndPhase = useCallback((experiment: StudioExperimentRecord, phase: WorkflowBlockKind) => {
+    const preset = POLICY_PRESETS.find((item) => item.id === experiment.previewPresetId);
+    const phaseDirectives = extractPhaseDirectiveSnapshot(experiment.roleDirectives, phase);
+    if (!preset) {
+      setNotice({ tone: 'error', message: 'This experiment no longer matches an available preset.' });
+      return;
+    }
+    if (!phaseDirectives) {
+      setNotice({ tone: 'error', message: `No saved steering for ${formatDirectivePhaseScope([phase])} in this experiment.` });
+      return;
+    }
+    setSelectedComparisonExperimentId(experiment.id);
+    void patchAutomationConfig({
+      executionPolicy: preset.policy,
+      studioState: {
+        ...selectedStudioState,
+        selectedScenarioId: experiment.scenarioId,
+        previewPresetId: experiment.previewPresetId,
+        roleDirectives: mergeRoleDirectiveSnapshots(selectedStudioState.roleDirectives, phaseDirectives),
+      },
+    }, { successMessage: `Promoted ${formatDirectivePhaseScope([phase])} plus the experiment preset.` });
+  }, [patchAutomationConfig, selectedStudioState]);
 
   const handlePromoteExperimentPhase = useCallback((experiment: StudioExperimentRecord, phase: WorkflowBlockKind) => {
     const phaseDirectives = extractPhaseDirectiveSnapshot(experiment.roleDirectives, phase);
@@ -2864,6 +2972,23 @@ export default function AgentStudio() {
                               {liveScenarioTelemetry.matchedSavedExperiment ? 'Matched saved experiment' : 'Ad hoc live posture'}
                             </span>
                           </div>
+                          {selectedCohortRun ? (
+                            <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Selected run</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{getRunExperimentAttribution(selectedCohortRun).experimentNotes || `${getRunExperimentAttribution(selectedCohortRun).scenarioLabel} · ${getRunExperimentAttribution(selectedCohortRun).previewPresetLabel}`}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">{formatAutomationRunTime(selectedCohortRun.finishedAt || selectedCohortRun.startedAt)}</p>
+                                </div>
+                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(selectedCohortRun.status)}`}>{selectedCohortRun.status}</span>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{selectedCohortRun.actualCredits ? `${formatCredits(selectedCohortRun.actualCredits)} cr` : '—'}</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCompactDuration(Number.isNaN(Date.parse(selectedCohortRun.startedAt || '')) || Number.isNaN(Date.parse(selectedCohortRun.finishedAt || '')) ? undefined : Math.max(0, Date.parse(selectedCohortRun.finishedAt || '') - Date.parse(selectedCohortRun.startedAt || '')))}</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{getTrendMetricLabel(trendMetric)}: {formatTrendMetricValue(selectedCohortRun, trendMetric)}</span>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
@@ -3619,6 +3744,38 @@ export default function AgentStudio() {
 
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
+                          <Brain className="h-4 w-4 text-cyan-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Phase learning</p>
+                            <h3 className="text-sm font-semibold text-white">What wins by phase for this workflow class</h3>
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {phaseLearningByArchetype.length > 0 ? phaseLearningByArchetype.map((item) => (
+                            <div key={`${item.phase}-${item.mode}`} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-white">{formatDirectivePhaseScope([item.phase])} · {item.mode === 'baseline' ? 'Baseline' : item.mode}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">{item.runs} observed step runs in {selectedArchetype.label.toLowerCase()}</p>
+                                </div>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {item.score}</span>
+                              </div>
+                              <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
+                                <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Success</p><p className="mt-1 text-white">{Math.round(item.successRate * 100)}%</p></div>
+                                <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Avg credits</p><p className="mt-1 text-white">{item.averageCredits ? `${formatCredits(item.averageCredits)} cr` : '—'}</p></div>
+                                <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Best use</p><p className="mt-1 text-white">{item.mode === 'baseline' ? 'Default posture' : `${item.mode} bias`}</p></div>
+                              </div>
+                            </div>
+                          )) : (
+                            <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                              Not enough phase-level history yet to say which steering wins for this workflow class.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
                           <RotateCcw className="h-4 w-4 text-cyan-300" />
                           <div>
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Saved experiments</p>
@@ -3858,9 +4015,9 @@ export default function AgentStudio() {
                                       const height = `${Math.max(18, (getTrendMetricValue(run, trendMetric) / maxMetric) * 100)}%`;
                                       return (
                                         <div key={run.id} className="flex min-w-0 flex-1 flex-col items-center">
-                                          <div className="flex h-20 w-full items-end">
-                                            <div className={`w-full rounded-t-2xl border border-white/8 bg-gradient-to-t ${series.tone}`} style={{ height }} />
-                                          </div>
+                                          <button type="button" onClick={() => setSelectedCohortRunId(run.id)} className="flex h-20 w-full items-end">
+                                            <div className={`w-full rounded-t-2xl border ${selectedCohortRunId === run.id ? 'border-cyan-200 shadow-[0_0_24px_rgba(34,211,238,0.18)]' : 'border-white/8'} bg-gradient-to-t ${series.tone}`} style={{ height }} />
+                                          </button>
                                           <p className="mt-1 text-[10px] text-slate-500">R{idx + 1}</p>
                                           <p className="mt-1 text-[10px] text-slate-400">{formatTrendMetricValue(run, trendMetric)}</p>
                                         </div>
@@ -3998,15 +4155,24 @@ export default function AgentStudio() {
                                   </div>
                                   <div className="mt-3 flex flex-wrap gap-2">
                                     {winningExperimentPhases.map((phase) => (
-                                      <button
-                                        key={`winning-${phase}`}
-                                        type="button"
-                                        disabled={actionBusy}
-                                        onClick={() => handlePromoteExperimentPhase(winningExperiment.experiment, phase)}
-                                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
-                                      >
-                                        Adopt {formatDirectivePhaseScope([phase])}
-                                      </button>
+                                      <div key={`winning-${phase}`} className="flex flex-wrap gap-2">
+                                        <button
+                                          type="button"
+                                          disabled={actionBusy}
+                                          onClick={() => handlePromoteExperimentPhase(winningExperiment.experiment, phase)}
+                                          className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
+                                        >
+                                          Adopt {formatDirectivePhaseScope([phase])}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={actionBusy}
+                                          onClick={() => handlePromoteExperimentPresetAndPhase(winningExperiment.experiment, phase)}
+                                          className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-emerald-200 disabled:opacity-60"
+                                        >
+                                          Add preset + {formatDirectivePhaseScope([phase])}
+                                        </button>
+                                      </div>
                                     ))}
                                   </div>
                                 </div>
