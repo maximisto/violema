@@ -5799,11 +5799,64 @@ export default function AgentStudio() {
                       );
                     })}
                   </div>
+
+                  <div className="mt-5 rounded-[1.4rem] border border-white/6 bg-white/[0.03] p-4">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Path forward</p>
+                    {activeRoom === 'live' ? (
+                      <>
+                        <p className="mt-1 text-sm font-medium text-white">Inspect the system first, then steer one role at a time.</p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          {[
+                            'Read the system map and pick the worker that looks overloaded or underused.',
+                            'Use the node inspector to see recent work, phase history, and any active directive.',
+                            'Only then apply a cheaper, review, or promote move and watch the next run.',
+                          ].map((step) => (
+                            <div key={step} className="rounded-xl border border-navy-700/70 bg-navy-950/45 px-3 py-3 text-sm leading-relaxed text-slate-300">
+                              {step}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                    {activeRoom === 'optimize' ? (
+                      <>
+                        <p className="mt-1 text-sm font-medium text-white">Start with scenarios and presets. Only open the strategy lab when the simple path stops being enough.</p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          {[
+                            'Choose the scenario that matches the pressure you expect this workflow to face.',
+                            'Preview presets and compare spend, assurance, and fit before applying anything.',
+                            'Use plans, branches, and advanced overrides only when you have real evidence.',
+                          ].map((step) => (
+                            <div key={step} className="rounded-xl border border-navy-700/70 bg-navy-950/45 px-3 py-3 text-sm leading-relaxed text-slate-300">
+                              {step}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                    {activeRoom === 'replay' ? (
+                      <>
+                        <p className="mt-1 text-sm font-medium text-white">Use replay to understand what happened, then decide whether to branch, promote, or roll back.</p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          {[
+                            'Start with the run timeline and paired replay so you understand the exact handoff sequence.',
+                            'Use the findings and dual-run comparison to locate the phase that changed the outcome.',
+                            'Only then open promotion, branch, and rollback history to decide the next policy move.',
+                          ].map((step) => (
+                            <div key={step} className="rounded-xl border border-navy-700/70 bg-navy-950/45 px-3 py-3 text-sm leading-relaxed text-slate-300">
+                              {step}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
 
                 {activeRoom === 'live' ? (
                   <>
-                    <div className="grid gap-6">
+                    <div className="space-y-6">
+                      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] xl:items-start">
                       <div className="space-y-6">
                         <div className="rounded-[1.9rem] border border-cyan-500/15 bg-gradient-to-br from-cyan-500/8 via-navy-900/72 to-navy-950/92 p-5">
                         <div className="flex items-center justify-between gap-3">
@@ -6167,7 +6220,11 @@ export default function AgentStudio() {
                             </>
                           ) : null}
                         </div>
+                      </div>
+                    </div>
 
+                    <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
+                      <div className="space-y-6">
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
                             <Activity className="h-4 w-4 text-emerald-300" />
@@ -6334,6 +6391,9 @@ export default function AgentStudio() {
                             ))}
                           </div>
                         </div>
+                      </div>
+
+                      <div className="space-y-6">
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
                             <Workflow className="h-4 w-4 text-cyan-300" />
@@ -6366,8 +6426,10 @@ export default function AgentStudio() {
                             ))}
                           </div>
                         </div>
+                      </div>
+                    </div>
 
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                    <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <Sparkles className="h-4 w-4 text-violet-300" />
                           <div>
@@ -6394,7 +6456,6 @@ export default function AgentStudio() {
                             ))}
                           </div>
                         </div>
-                      </div>
                     </div>
                   </>
                 ) : null}
