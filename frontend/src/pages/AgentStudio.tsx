@@ -60,6 +60,8 @@ interface StudioOperatingPlan {
   previewPresetId: string;
   executionPolicy: AutomationExecutionPolicyDraft;
   roleDirectives?: Record<string, StudioRoleDirective>;
+  intentLabel?: string;
+  parentPlanId?: string;
   sourceExperimentId?: string;
   sourceExperimentLabel?: string;
   notes?: string;
@@ -443,6 +445,13 @@ const DIRECTIVE_PHASE_OPTIONS: Array<{ value: 'all' | WorkflowBlockKind; label: 
   { value: 'summarize', label: 'Summarize' },
   { value: 'deliver', label: 'Deliver' },
 ];
+
+const OPERATING_PLAN_INTENTS = [
+  'Fast founder loop',
+  'Low-cost monitoring',
+  'High-assurance briefings',
+  'Balanced execution',
+] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -1111,6 +1120,18 @@ function mergeRoleDirectiveSnapshots(
   };
 }
 
+function inferOperatingPlanIntent(
+  policy: AutomationExecutionPolicyDraft,
+  scenarioId: string,
+  steps: WorkflowBlockDraft[],
+) {
+  const toolCalls = countWorkflowToolCalls(steps);
+  if (scenarioId === 'rush') return 'Fast founder loop';
+  if (scenarioId === 'monitoring' || (policy.optimizationGoal === 'cost_saver' && toolCalls >= 2)) return 'Low-cost monitoring';
+  if (scenarioId === 'high_stakes' || policy.reviewPolicy === 'strict' || policy.optimizationGoal === 'quality_first') return 'High-assurance briefings';
+  return 'Balanced execution';
+}
+
 function buildPhaseActivitySeries(runs: PlatformTaskRunRecord[], role: string) {
   const relevantRuns = runs.filter((run) => run.status === 'succeeded' || run.status === 'failed').slice(0, 8).reverse();
   const phaseOrder: WorkflowBlockKind[] = ['search', 'query', 'capture', 'analyze', 'summarize', 'deliver'];
@@ -1362,6 +1383,8 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
                   return directiveAcc;
                 }, {})
               : undefined,
+            intentLabel: readString(item.intentLabel),
+            parentPlanId: readString(item.parentPlanId),
             sourceExperimentId: readString(item.sourceExperimentId),
             sourceExperimentLabel: readString(item.sourceExperimentLabel),
             notes: readString(item.notes),
@@ -3297,6 +3320,7 @@ export default function AgentStudio() {
         const primaryStep = steps
           .slice()
           .sort((left, right) => (right.actualCredits || 0) - (left.actualCredits || 0))[0];
+        const baseline = phaseEvidence.find((entry) => entry.phase === phase);
         return {
           phase,
           steps,
@@ -3308,6 +3332,9 @@ export default function AgentStudio() {
           primaryRole: primaryStep?.assignedRole || getPreferredRoleForPhase(phase),
           modelSource: primaryStep?.modelSource,
           directiveMode: primaryStep?.directiveMode,
+          baselineCredits: baseline?.averageCredits || 0,
+          baselineDurationMs: baseline?.averageDurationMs || 0,
+          baselineSuccessRate: baseline?.successRate || 0,
         };
       })
       .filter((item): item is NonNullable<typeof item> => Boolean(item));
@@ -3317,12 +3344,22 @@ export default function AgentStudio() {
       ...item,
       costWidth: `${Math.max(16, ((item.credits || 0) / maxCredits) * 100)}%`,
     }));
-  }, [focusedCohortRun, selectedCohortRun]);
+  }, [focusedCohortRun, phaseEvidence, selectedCohortRun]);
 
   const selectedReplayPhaseDetail = useMemo(() => {
     if (selectedReplayPhase === 'all') return replayPhaseOverlay[0];
     return replayPhaseOverlay.find((entry) => entry.phase === selectedReplayPhase) || replayPhaseOverlay[0];
   }, [replayPhaseOverlay, selectedReplayPhase]);
+
+  const selectedReplayPhaseDelta = useMemo(() => {
+    if (!selectedReplayPhaseDetail) return null;
+    return {
+      creditsDelta: (selectedReplayPhaseDetail.credits || 0) - (selectedReplayPhaseDetail.baselineCredits || 0),
+      durationDelta: (selectedReplayPhaseDetail.durationMs || 0) - (selectedReplayPhaseDetail.baselineDurationMs || 0),
+      expectedSuccess: Math.round((selectedReplayPhaseDetail.baselineSuccessRate || 0) * 100),
+      actualStatus: selectedReplayPhaseDetail.failed ? 'failed' : selectedReplayPhaseDetail.succeeded ? 'succeeded' : 'unknown',
+    };
+  }, [selectedReplayPhaseDetail]);
 
   const branchOpportunityMap = useMemo(() => {
     const baselineCredits = selectedRow?.averageCredits || 0;
@@ -3350,6 +3387,18 @@ export default function AgentStudio() {
       const sourceExperiment = plan.sourceExperimentId
         ? experimentHistory.find((experiment) => experiment.id === plan.sourceExperimentId)
         : undefined;
+      const matchedRuns = (selectedRow?.runs || [])
+        .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+        .filter((run) => {
+          if (plan.sourceExperimentId) {
+            const attribution = getRunExperimentAttribution(run);
+            if (attribution.experimentId) return attribution.experimentId === plan.sourceExperimentId;
+          }
+          const attribution = getRunExperimentAttribution(run);
+          return attribution.scenarioId === plan.scenarioId && attribution.previewPresetId === plan.previewPresetId;
+        });
+      const stats = summarizeRunCollection(matchedRuns);
+      const scoring = scoreObservedPerformance(stats, matchedRuns[0]?.finishedAt || matchedRuns[0]?.startedAt);
       return {
         plan,
         spendIndex,
@@ -3357,14 +3406,34 @@ export default function AgentStudio() {
         fitIndex,
         steeringCount: countDirectiveEntries(plan.roleDirectives),
         sourceExperiment,
+        stats,
+        score: scoring.score,
+        confidence: scoring.confidence,
       };
     });
-  }, [experimentHistory, savedOperatingPlans, selectedRow?.workflowSteps]);
+  }, [experimentHistory, savedOperatingPlans, selectedRow?.runs, selectedRow?.workflowSteps]);
 
   const activeSavedPlan = useMemo(
     () => savedPlanSummaries.find((entry) => entry.plan.id === selectedPlanId) || savedPlanSummaries[0],
     [savedPlanSummaries, selectedPlanId]
   );
+
+  const savedPlanAudit = useMemo(() => {
+    return savedPlanSummaries
+      .map((entry) => ({
+        ...entry,
+        outcome:
+          entry.stats.count === 0
+            ? 'No evidence yet'
+            : entry.stats.successRate >= 0.8
+              ? 'Compounding'
+              : entry.stats.successRate >= 0.6
+                ? 'Promising'
+                : 'Weak',
+      }))
+      .sort((left, right) => right.score - left.score || right.confidence - left.confidence || right.stats.count - left.stats.count)
+      .slice(0, 5);
+  }, [savedPlanSummaries]);
 
   const patchAutomationConfig = useCallback(async (patch: {
     executionPolicy?: AutomationExecutionPolicyDraft;
@@ -3861,20 +3930,27 @@ export default function AgentStudio() {
     }, 'Saved experiment snapshot.');
   }, [previewPreset.label, previewPresetId, selectedScenario.label, selectedScenarioId, selectedStudioState, updateStudioState]);
 
-  const handleSaveOperatingPlan = useCallback((source?: { experiment?: StudioExperimentRecord; namePrefix?: string }) => {
+  const handleSaveOperatingPlan = useCallback((source?: { experiment?: StudioExperimentRecord; namePrefix?: string; intentLabel?: string; parentPlan?: StudioOperatingPlan }) => {
     const experiment = source?.experiment;
+    const parentPlan = source?.parentPlan;
+    const policyForPlan = experiment
+      ? normalizeExecutionPolicy(POLICY_PRESETS.find((preset) => preset.id === experiment.previewPresetId)?.policy || selectedPolicy)
+      : { ...selectedPolicy };
+    const scenarioForPlan = experiment?.scenarioId || selectedScenarioId;
+    const previewPresetForPlan = experiment?.previewPresetId || previewPresetId;
+    const intentLabel = source?.intentLabel || parentPlan?.intentLabel || inferOperatingPlanIntent(policyForPlan, scenarioForPlan, selectedRow?.workflowSteps || []);
     const planName = `${source?.namePrefix || 'Operating plan'} · ${experiment ? getExperimentDisplayLabel(experiment) : `${selectedScenario.label} · ${previewPreset.label}`}`;
     const nextPlans = [
       {
         id: `plan_${Date.now()}`,
         name: planName,
         createdAt: new Date().toISOString(),
-        scenarioId: experiment?.scenarioId || selectedScenarioId,
-        previewPresetId: experiment?.previewPresetId || previewPresetId,
-        executionPolicy: experiment
-          ? normalizeExecutionPolicy(POLICY_PRESETS.find((preset) => preset.id === experiment.previewPresetId)?.policy || selectedPolicy)
-          : { ...selectedPolicy },
+        scenarioId: scenarioForPlan,
+        previewPresetId: previewPresetForPlan,
+        executionPolicy: policyForPlan,
         roleDirectives: cloneRoleDirectives(experiment?.roleDirectives || selectedStudioState.roleDirectives),
+        intentLabel,
+        parentPlanId: parentPlan?.id,
         sourceExperimentId: experiment?.id,
         sourceExperimentLabel: experiment ? getExperimentDisplayLabel(experiment) : undefined,
         notes: experiment ? `Saved from ${getExperimentDisplayLabel(experiment)}.` : `Saved from live setup with ${countDirectiveEntries(selectedStudioState.roleDirectives)} steering signals.`,
@@ -3887,7 +3963,18 @@ export default function AgentStudio() {
       selectedPlanId: nextPlans[0].id,
       savedPlans: nextPlans,
     }, 'Saved operating plan.');
-  }, [previewPreset.label, previewPresetId, selectedPolicy, selectedScenario.label, selectedScenarioId, selectedStudioState, updateStudioState]);
+  }, [previewPreset.label, previewPresetId, selectedPolicy, selectedRow?.workflowSteps, selectedScenario.label, selectedScenarioId, selectedStudioState, updateStudioState]);
+
+  const handleForkOperatingPlan = useCallback((plan: StudioOperatingPlan) => {
+    void handleSaveOperatingPlan({
+      namePrefix: 'Plan branch',
+      intentLabel: plan.intentLabel,
+      parentPlan: plan,
+      experiment: plan.sourceExperimentId
+        ? experimentHistory.find((experiment) => experiment.id === plan.sourceExperimentId)
+        : undefined,
+    });
+  }, [experimentHistory, handleSaveOperatingPlan]);
 
   const handleRestoreOperatingPlan = useCallback((plan: StudioOperatingPlan) => {
     setSelectedPlanId(plan.id);
@@ -5485,6 +5572,18 @@ export default function AgentStudio() {
                             </button>
                           ) : null}
                         </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {OPERATING_PLAN_INTENTS.map((intent) => (
+                            <button
+                              key={intent}
+                              type="button"
+                              onClick={() => handleSaveOperatingPlan({ intentLabel: intent, namePrefix: intent })}
+                              className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                            >
+                              Save {intent}
+                            </button>
+                          ))}
+                        </div>
                         <div className="mt-4 space-y-3">
                           {savedPlanSummaries.length > 0 ? savedPlanSummaries.map((entry) => (
                             <div
@@ -5500,6 +5599,24 @@ export default function AgentStudio() {
                                 </div>
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
                                   {entry.steeringCount} steering
+                                </span>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {entry.plan.intentLabel ? (
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200">
+                                    {entry.plan.intentLabel}
+                                  </span>
+                                ) : null}
+                                {entry.plan.parentPlanId ? (
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                    Branch plan
+                                  </span>
+                                ) : null}
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                  {entry.stats.count} observed runs
+                                </span>
+                                <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${entry.confidence >= 70 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                  {entry.confidence}% confidence
                                 </span>
                               </div>
                               <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
@@ -5532,6 +5649,13 @@ export default function AgentStudio() {
                                 >
                                   Restore
                                 </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleForkOperatingPlan(entry.plan)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Branch
+                                </button>
                                 {entry.sourceExperiment ? (
                                   <button
                                     type="button"
@@ -5548,6 +5672,26 @@ export default function AgentStudio() {
                               Save a live setup or a winning experiment and it will show up here as a reusable operating plan.
                             </div>
                           )}
+                        </div>
+                        <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plan performance audit</p>
+                          <div className="mt-3 space-y-3">
+                            {savedPlanAudit.length > 0 ? savedPlanAudit.map((entry) => (
+                              <div key={`plan-audit-${entry.plan.id}`} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{entry.plan.name}</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">{entry.stats.count} runs · {Math.round(entry.stats.successRate * 100)}% success · {entry.stats.averageCredits ? `${formatCredits(entry.stats.averageCredits)} cr avg` : '—'}</p>
+                                  </div>
+                                  <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${entry.outcome === 'Compounding' ? 'text-emerald-200' : entry.outcome === 'Promising' ? 'text-cyan-200' : entry.outcome === 'Weak' ? 'text-amber-200' : 'text-slate-300'}`}>
+                                    {entry.outcome}
+                                  </span>
+                                </div>
+                              </div>
+                            )) : (
+                              <p className="text-sm text-slate-500">No saved-plan evidence yet. Once plans are restored and exercised in real runs, they will be audited here.</p>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -6187,6 +6331,28 @@ export default function AgentStudio() {
                                   <p className="mt-1 text-sm font-medium text-white">{selectedReplayPhaseDetail.directiveMode ? getDirectiveModeLabel(selectedReplayPhaseDetail.directiveMode) : 'Baseline'}</p>
                                 </div>
                               </div>
+                              {selectedReplayPhaseDelta ? (
+                                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                    <p className="text-[11px] text-slate-500">Credits vs baseline</p>
+                                    <p className={`mt-1 text-sm font-medium ${selectedReplayPhaseDelta.creditsDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                      {formatSignedDelta(Math.round(selectedReplayPhaseDelta.creditsDelta))} cr
+                                    </p>
+                                  </div>
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                    <p className="text-[11px] text-slate-500">Duration vs baseline</p>
+                                    <p className={`mt-1 text-sm font-medium ${selectedReplayPhaseDelta.durationDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                      {formatSignedDelta(Math.round(selectedReplayPhaseDelta.durationDelta / 1000))}s
+                                    </p>
+                                  </div>
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
+                                    <p className="text-[11px] text-slate-500">Expected success</p>
+                                    <p className="mt-1 text-sm font-medium text-white">
+                                      {selectedReplayPhaseDelta.expectedSuccess}% · {selectedReplayPhaseDelta.actualStatus}
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
                         </div>
