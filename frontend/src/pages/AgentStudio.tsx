@@ -999,11 +999,13 @@ function scoreObservedPerformance(
   const latestTime = latestAt ? Date.parse(latestAt) : Number.NaN;
   const recencyDays = Number.isNaN(latestTime) ? 30 : Math.max(0, (Date.now() - latestTime) / 86400000);
   const recencyBoost = clampNumber(Math.round(18 - recencyDays), 0, 18);
+  const stalePenalty = clampNumber(Math.round(Math.max(0, recencyDays - 10) * 0.8), 0, 24);
   const score = clampNumber(
     Math.round(
       stats.successRate * 72 +
       confidence * 0.18 +
       recencyBoost * 0.1 -
+      stalePenalty * 0.8 -
       stats.averageCredits / 4 -
       stats.averageDurationMs / 20000
     ),
@@ -1011,7 +1013,13 @@ function scoreObservedPerformance(
     99,
   );
 
-  return { score, confidence, recencyBoost };
+  return {
+    score,
+    confidence,
+    recencyBoost,
+    stalePenalty,
+    freshness: recencyDays > 21 ? 'stale' : recencyDays > 8 ? 'warm' : 'fresh',
+  };
 }
 
 function countDirectiveEntries(roleDirectives?: Record<string, StudioRoleDirective>) {
@@ -3485,6 +3493,7 @@ export default function AgentStudio() {
         stats,
         score: scoring.score,
         confidence: scoring.confidence,
+        freshness: scoring.freshness,
         familyRootId: (() => {
           let current = plan;
           const visited = new Set<string>();
@@ -3569,6 +3578,28 @@ export default function AgentStudio() {
     };
   }, [selectedPlanFamily, trendMetric]);
 
+  const comparedPlanFamily = useMemo(() => {
+    if (!selectedPlanFamily || planFamilies.length < 2) return undefined;
+    const explicit = planFamilies.find((family) => family.entries.some((entry) => entry.plan.id === selectedPlanCompareId) && family.root.familyRootId !== selectedPlanFamily.root.familyRootId);
+    if (explicit) return explicit;
+    return planFamilies.find((family) => family.root.familyRootId !== selectedPlanFamily.root.familyRootId);
+  }, [planFamilies, selectedPlanCompareId, selectedPlanFamily]);
+
+  const planFamilyComparison = useMemo(() => {
+    if (!selectedPlanFamily || !comparedPlanFamily) return null;
+    const primaryStats = summarizeRunCollection(selectedPlanFamily.runs);
+    const comparedStats = summarizeRunCollection(comparedPlanFamily.runs);
+    return {
+      primary: selectedPlanFamily,
+      compared: comparedPlanFamily,
+      primaryStats,
+      comparedStats,
+      successDelta: Math.round((primaryStats.successRate - comparedStats.successRate) * 100),
+      creditsDelta: Math.round((primaryStats.averageCredits || 0) - (comparedStats.averageCredits || 0)),
+      durationDelta: Math.round(((primaryStats.averageDurationMs || 0) - (comparedStats.averageDurationMs || 0)) / 1000),
+    };
+  }, [comparedPlanFamily, selectedPlanFamily]);
+
   const planComparison = useMemo(() => {
     if (!activeSavedPlan || !comparedSavedPlan) return null;
     return {
@@ -3641,17 +3672,27 @@ export default function AgentStudio() {
           .filter((run) => run.status === 'succeeded' || run.status === 'failed')
           .filter((run) => rankRunPlanMatches(run, [activeSavedPlan.plan, parent.plan])[0]?.plan.id === activeSavedPlan.plan.id)
           .filter((run) => Date.parse(run.finishedAt || run.startedAt) >= Date.parse(activeSavedPlan.plan.createdAt))
-          .slice(0, 4)
+          .slice(0, 8)
       : [];
     const childStats = summarizeRunCollection(childRuns);
+    const childScoring = scoreObservedPerformance(childStats, childRuns[0]?.finishedAt || childRuns[0]?.startedAt);
     return {
       parent,
       child: activeSavedPlan,
       childStats,
+      childScoring,
       childRunCount: childRuns.length,
       successDelta: childRuns.length > 0 ? Math.round((childStats.successRate - parent.stats.successRate) * 100) : undefined,
       creditsDelta: childRuns.length > 0 ? Math.round((childStats.averageCredits || 0) - (parent.stats.averageCredits || 0)) : undefined,
       durationDelta: childRuns.length > 0 ? Math.round(((childStats.averageDurationMs || 0) - (parent.stats.averageDurationMs || 0)) / 1000) : undefined,
+      outcome:
+        childRuns.length === 0
+          ? 'No evidence yet'
+          : childStats.successRate >= parent.stats.successRate && (childStats.averageCredits || 0) <= (parent.stats.averageCredits || 0)
+            ? 'Compounding'
+            : childStats.successRate >= parent.stats.successRate - 0.04
+              ? 'Promising'
+              : 'Weak',
     };
   }, [activeSavedPlan, savedPlanSummaries, selectedRow?.runs]);
 
@@ -3698,6 +3739,12 @@ export default function AgentStudio() {
     return savedPlanAudit.find((entry) => entry.plan.intentLabel === topIntent) || recommendedPlan;
   }, [archetypePlanLearning, recommendedPlan, savedPlanAudit]);
 
+  const archetypeRecommendedPlanMode = useMemo(() => {
+    if (!archetypeRecommendedPlan) return 'none' as const;
+    if (archetypeRecommendedPlan.confidence < 60 || archetypeRecommendedPlan.stats.count < 2) return 'suggested' as const;
+    return 'auto' as const;
+  }, [archetypeRecommendedPlan]);
+
   const planActionQueue = useMemo(() => {
     const queue: Array<{ id: string; title: string; body: string; action: 'restore_recommended' | 'rollback' | 'compare' | 'save_phase_plan' }> = [];
     if (recommendedPlan && activeSavedPlan && recommendedPlan.plan.id !== activeSavedPlan.plan.id) {
@@ -3738,17 +3785,25 @@ export default function AgentStudio() {
   useEffect(() => {
     if (!selectedRow?.automation.id) return;
     if (selectedStudioState.selectedPlanId || selectedPlanId || !archetypeRecommendedPlan) return;
-    setSelectedPlanId(archetypeRecommendedPlan.plan.id);
-    setSelectedPlanFamilyRootId(archetypeRecommendedPlan.familyRootId);
-    if (archetypeRecommendedPlan.plan.intentLabel) {
-      setSelectedPlanIntentFilter(archetypeRecommendedPlan.plan.intentLabel);
+    if (archetypeRecommendedPlanMode === 'auto') {
+      setSelectedPlanId(archetypeRecommendedPlan.plan.id);
+      setSelectedPlanFamilyRootId(archetypeRecommendedPlan.familyRootId);
+      if (archetypeRecommendedPlan.plan.intentLabel) {
+        setSelectedPlanIntentFilter(archetypeRecommendedPlan.plan.intentLabel);
+      }
+      setNotice({
+        tone: 'success',
+        message: `Auto-loaded ${archetypeRecommendedPlan.plan.name} as the best current plan for ${selectedArchetype.label.toLowerCase()}.`,
+      });
+      return;
     }
     setNotice({
       tone: 'success',
-      message: `Auto-loaded ${archetypeRecommendedPlan.plan.name} as the best current plan for ${selectedArchetype.label.toLowerCase()}.`,
+      message: `Suggested ${archetypeRecommendedPlan.plan.name} for this workflow. Evidence is still thin, so Studio is recommending it without switching you automatically.`,
     });
   }, [
     archetypeRecommendedPlan,
+    archetypeRecommendedPlanMode,
     selectedArchetype.label,
     selectedPlanId,
     selectedRow?.automation.id,
@@ -6116,6 +6171,9 @@ export default function AgentStudio() {
                                 <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${entry.confidence >= 70 ? 'text-emerald-200' : 'text-amber-200'}`}>
                                   {entry.confidence}% confidence
                                 </span>
+                                <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${entry.freshness === 'fresh' ? 'text-emerald-200' : entry.freshness === 'warm' ? 'text-cyan-200' : 'text-amber-200'}`}>
+                                  {entry.freshness}
+                                </span>
                               </div>
                               <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
                                 <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
@@ -6409,6 +6467,46 @@ export default function AgentStudio() {
                             </div>
                           </div>
                         ) : null}
+                        {planFamilyComparison ? (
+                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plan family comparison</p>
+                                <p className="mt-1 text-sm font-medium text-white">Primary family vs alternate line</p>
+                              </div>
+                              {comparedPlanFamily ? (
+                                <select
+                                  value={comparedPlanFamily.root.plan.id}
+                                  onChange={(event) => setSelectedPlanCompareId(event.target.value)}
+                                  className="rounded-full border border-white/10 bg-navy-950/70 px-3 py-1.5 text-xs text-slate-200"
+                                >
+                                  {planFamilies.filter((family) => family.root.familyRootId !== selectedPlanFamily?.root.familyRootId).map((family) => (
+                                    <option key={`compare-plan-family-${family.root.plan.id}`} value={family.root.plan.id}>
+                                      {family.root.plan.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : null}
+                            </div>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                              <div className="rounded-2xl border border-cyan-500/18 bg-cyan-500/8 p-3">
+                                <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/80">Primary family</p>
+                                <p className="mt-1 text-sm font-medium text-white">{planFamilyComparison.primary.root.plan.name}</p>
+                                <p className="mt-1 text-[11px] text-slate-300">{planFamilyComparison.primary.entries.length} plans · {planFamilyComparison.primaryStats.count} runs</p>
+                              </div>
+                              <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-3">
+                                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Compared family</p>
+                                <p className="mt-1 text-sm font-medium text-white">{planFamilyComparison.compared.root.plan.name}</p>
+                                <p className="mt-1 text-[11px] text-slate-400">{planFamilyComparison.compared.entries.length} plans · {planFamilyComparison.comparedStats.count} runs</p>
+                              </div>
+                            </div>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-3 text-[11px]">
+                              <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Success delta</p><p className={`mt-1 ${planFamilyComparison.successDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(planFamilyComparison.successDelta)} pts</p></div>
+                              <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Spend delta</p><p className={`mt-1 ${planFamilyComparison.creditsDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(planFamilyComparison.creditsDelta)} cr</p></div>
+                              <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Duration delta</p><p className={`mt-1 ${planFamilyComparison.durationDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(planFamilyComparison.durationDelta)}s</p></div>
+                            </div>
+                          </div>
+                        ) : null}
                         <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plan performance audit</p>
                           <div className="mt-3 space-y-3">
@@ -6436,6 +6534,14 @@ export default function AgentStudio() {
                             <p className="mt-2 text-sm leading-relaxed text-slate-300">
                               Best current saved operating setup for this workflow based on observed runs, confidence, and spend discipline.
                             </p>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                              <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${recommendedPlan.freshness === 'fresh' ? 'text-emerald-200' : recommendedPlan.freshness === 'warm' ? 'text-cyan-200' : 'text-amber-200'}`}>
+                                {recommendedPlan.freshness} evidence
+                              </span>
+                              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                {recommendedPlan.stats.count} observed runs
+                              </span>
+                            </div>
                             <div className="mt-3 flex flex-wrap gap-2">
                               <button
                                 type="button"
@@ -6472,6 +6578,14 @@ export default function AgentStudio() {
                             <p className="mt-2 text-sm leading-relaxed text-slate-300">
                               This branched plan is being judged against its parent over the next few attributed runs so the phase branch can prove itself quickly.
                             </p>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                              <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${activeBranchParentComparison.outcome === 'Compounding' ? 'text-emerald-200' : activeBranchParentComparison.outcome === 'Promising' ? 'text-cyan-200' : activeBranchParentComparison.outcome === 'Weak' ? 'text-amber-200' : 'text-slate-300'}`}>
+                                {activeBranchParentComparison.outcome}
+                              </span>
+                              <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${activeBranchParentComparison.childScoring.freshness === 'fresh' ? 'text-emerald-200' : activeBranchParentComparison.childScoring.freshness === 'warm' ? 'text-cyan-200' : 'text-amber-200'}`}>
+                                {activeBranchParentComparison.childScoring.freshness} child evidence
+                              </span>
+                            </div>
                             <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
                               <div className="rounded-xl border border-violet-500/18 bg-violet-500/8 px-3 py-2">
                                 <p className="text-slate-400">Child run count</p>
@@ -6594,12 +6708,35 @@ export default function AgentStudio() {
                               <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/8 p-3">
                                 <div className="flex items-start justify-between gap-3">
                                   <div>
-                                    <p className="text-sm font-medium text-white">Auto-pick for this workflow</p>
+                                    <p className="text-sm font-medium text-white">{archetypeRecommendedPlanMode === 'auto' ? 'Auto-pick for this workflow' : 'Suggested plan for this workflow'}</p>
                                     <p className="mt-1 text-[11px] text-slate-300">{archetypeRecommendedPlan.plan.name}</p>
-                                    <p className="mt-1 text-[11px] text-slate-500">Recommended from {selectedArchetype.label.toLowerCase()} learning so users land on a concrete setup instead of a blank state.</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">
+                                      {archetypeRecommendedPlanMode === 'auto'
+                                        ? `Recommended from ${selectedArchetype.label.toLowerCase()} learning so users land on a concrete setup instead of a blank state.`
+                                        : `Evidence is still thin for ${selectedArchetype.label.toLowerCase()}, so Violema is suggesting this plan without switching automatically.`}
+                                    </p>
                                   </div>
                                   <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200">{archetypeRecommendedPlan.plan.intentLabel || 'No named intent'}</span>
                                 </div>
+                                {archetypeRecommendedPlanMode === 'suggested' ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={actionBusy}
+                                      onClick={() => handleRestoreOperatingPlan(archetypeRecommendedPlan.plan)}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
+                                    >
+                                      Try suggested plan
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleComparePlan(archetypeRecommendedPlan.plan)}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                    >
+                                      Compare first
+                                    </button>
+                                  </div>
+                                ) : null}
                               </div>
                             ) : null}
                             {archetypePlanLearning.length > 0 ? archetypePlanLearning.map((entry, index) => (
