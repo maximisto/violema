@@ -860,6 +860,23 @@ function formatDirectivePhaseShort(phase: WorkflowBlockKind) {
   }
 }
 
+function getPreferredRoleForPhase(phase: WorkflowBlockKind) {
+  switch (phase) {
+    case 'search':
+    case 'query':
+    case 'capture':
+      return 'researcher';
+    case 'analyze':
+      return 'analyst';
+    case 'summarize':
+      return 'reviewer';
+    case 'deliver':
+    case 'note':
+    default:
+      return 'operator';
+  }
+}
+
 function matchesExperimentRun(run: PlatformTaskRunRecord, experiment: StudioExperimentRecord) {
   const attribution = getRunExperimentAttribution(run);
   if (attribution.experimentId) return attribution.experimentId === experiment.id;
@@ -890,6 +907,29 @@ function summarizeRunCollection(runs: PlatformTaskRunRecord[]) {
     averageDurationMs: totalDuration / runs.length,
     latestStatus: runs[0]?.status,
   };
+}
+
+function scoreObservedPerformance(
+  stats: ReturnType<typeof summarizeRunCollection>,
+  latestAt?: string,
+) {
+  const confidence = clampNumber(Math.round((Math.min(stats.count, 12) / 12) * 100), 8, 100);
+  const latestTime = latestAt ? Date.parse(latestAt) : Number.NaN;
+  const recencyDays = Number.isNaN(latestTime) ? 30 : Math.max(0, (Date.now() - latestTime) / 86400000);
+  const recencyBoost = clampNumber(Math.round(18 - recencyDays), 0, 18);
+  const score = clampNumber(
+    Math.round(
+      stats.successRate * 72 +
+      confidence * 0.18 +
+      recencyBoost * 0.1 -
+      stats.averageCredits / 4 -
+      stats.averageDurationMs / 20000
+    ),
+    0,
+    99,
+  );
+
+  return { score, confidence, recencyBoost };
 }
 
 function countDirectiveEntries(roleDirectives?: Record<string, StudioRoleDirective>) {
@@ -941,6 +981,40 @@ function buildPhaseActivitySeries(runs: PlatformTaskRunRecord[], role: string) {
     };
   });
   return series;
+}
+
+function buildTrendSeries(
+  runs: PlatformTaskRunRecord[],
+  metric: TrendMetric,
+  width = 320,
+  height = 130,
+) {
+  const ordered = runs.slice(0, 8).reverse();
+  if (ordered.length === 0) return null;
+  const paddingX = 18;
+  const paddingY = 14;
+  const values = ordered.map((run) => getTrendMetricValue(run, metric));
+  const minValue = metric === 'success' ? 0 : Math.min(...values, 0);
+  const maxValue = Math.max(...values, 1);
+  const range = Math.max(maxValue - minValue, 1);
+
+  const points = ordered.map((run, index) => {
+    const ratio = ordered.length === 1 ? 0.5 : index / (ordered.length - 1);
+    const x = paddingX + ratio * (width - paddingX * 2);
+    const y = height - paddingY - (((getTrendMetricValue(run, metric) - minValue) / range) * (height - paddingY * 2));
+    return {
+      run,
+      x,
+      y,
+      label: ordered.length === 1 ? 'Latest' : `R${index + 1}`,
+      metricLabel: formatTrendMetricValue(run, metric),
+    };
+  });
+
+  const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
+  const areaPath = `${linePath} L ${points[points.length - 1].x} ${height - paddingY} L ${points[0].x} ${height - paddingY} Z`;
+
+  return { width, height, points, linePath, areaPath, minValue, maxValue };
 }
 
 function getDirectiveModeLabel(mode: 'cheaper' | 'review' | 'promote') {
@@ -1940,17 +2014,19 @@ export default function AgentStudio() {
       runs: PlatformTaskRunRecord[];
       stats: ReturnType<typeof summarizeRunCollection>;
       score: number;
+      confidence: number;
+      recencyBoost: number;
+      latestAt?: string;
     }>;
 
     const completedRuns = selectedRow.runs.filter((run) => run.status === 'succeeded' || run.status === 'failed');
     return experimentHistory.map((experiment) => {
       const runs = completedRuns.filter((run) => matchesExperimentRun(run, experiment));
       const stats = summarizeRunCollection(runs);
-      const score = runs.length > 0
-        ? Math.round(stats.successRate * 100 - stats.averageCredits / 5 - stats.averageDurationMs / 15000)
-        : 0;
-      return { experiment, runs, stats, score };
-    }).sort((left, right) => right.score - left.score || right.stats.count - left.stats.count);
+      const latestAt = runs[0]?.finishedAt || runs[0]?.startedAt;
+      const weighted = scoreObservedPerformance(stats, latestAt);
+      return { experiment, runs, stats, latestAt, ...weighted };
+    }).sort((left, right) => right.score - left.score || right.confidence - left.confidence || right.stats.count - left.stats.count);
   }, [experimentHistory, selectedRow]);
 
   const winningExperiment = useMemo(
@@ -2002,6 +2078,32 @@ export default function AgentStudio() {
     const allRuns = [...(currentCohortPerformance?.runs || []), ...(selectedExperimentPerformance?.runs || [])];
     return allRuns.find((run) => run.id === selectedCohortRunId) || currentCohortPerformance?.runs[0] || selectedExperimentPerformance?.runs[0];
   }, [currentCohortPerformance?.runs, selectedCohortRunId, selectedExperimentPerformance?.runs]);
+
+  const cohortTrendSeries = useMemo(
+    () => [
+      {
+        label: 'Current',
+        tone: {
+          stroke: '#22d3ee',
+          fill: 'rgba(34, 211, 238, 0.14)',
+          dot: 'rgba(103, 232, 249, 0.95)',
+          grid: 'rgba(34, 211, 238, 0.18)',
+        },
+        chart: buildTrendSeries(currentCohortPerformance?.runs || [], trendMetric),
+      },
+      {
+        label: 'Experiment',
+        tone: {
+          stroke: '#a78bfa',
+          fill: 'rgba(167, 139, 250, 0.14)',
+          dot: 'rgba(196, 181, 253, 0.95)',
+          grid: 'rgba(167, 139, 250, 0.18)',
+        },
+        chart: buildTrendSeries(selectedExperimentPerformance?.runs || [], trendMetric),
+      },
+    ],
+    [currentCohortPerformance?.runs, selectedExperimentPerformance?.runs, trendMetric],
+  );
 
   const policyDiffRows = useMemo(
     () => [
@@ -2072,16 +2174,18 @@ export default function AgentStudio() {
         ...item,
         successRate: item.success / item.runs,
         averageCredits: item.credits / item.runs,
-        score: Math.round((item.success / item.runs) * 100 - (item.credits / item.runs) / 4),
+        confidence: clampNumber(Math.round((Math.min(item.runs, 10) / 10) * 100), 10, 100),
+        score: clampNumber(Math.round((item.success / item.runs) * 76 + (Math.min(item.runs, 10) / 10) * 18 - (item.credits / item.runs) / 4), 0, 99),
       }))
       .sort((a, b) => b.score - a.score || b.runs - a.runs)
       .slice(0, 6);
   }, [rows, selectedArchetype.id]);
 
   const learnedPresetLearning = useMemo(() => {
-    const scored = rows.map((row) => {
-      const policy = normalizeExecutionPolicy(row.automation.execution_policy);
+    const scoredRuns = rows.flatMap((row) => {
       const archetype = classifyWorkflowArchetype(row.workflowSteps);
+      if (archetype.id !== selectedArchetype.id) return [];
+      const policy = normalizeExecutionPolicy(row.automation.execution_policy);
       const presetMatch = POLICY_PRESETS.find((preset) =>
         preset.policy.mode === policy.mode &&
         preset.policy.optimizationGoal === policy.optimizationGoal &&
@@ -2089,51 +2193,52 @@ export default function AgentStudio() {
         preset.policy.maxElasticLanes === policy.maxElasticLanes
       );
       const automationStudio = normalizeStudioState(row.automation.studio_state);
-      const latestAttribution = getRunExperimentAttribution(row.latestRun);
-      const scenarioId = latestAttribution.scenarioId || automationStudio.selectedScenarioId || 'baseline';
-      const presetId = latestAttribution.previewPresetId || presetMatch?.id || 'custom_live';
-      const score = Math.round(row.successRate * 70 + Math.max(0, 30 - row.averageCredits / 4));
-      return {
-        workflowId: row.automation.id,
-        workflowName: row.automation.name,
-        archetypeId: archetype.id,
-        archetypeLabel: archetype.label,
-        scenarioId,
-        scenarioLabel: latestAttribution.scenarioLabel || getScenarioLabelFromId(scenarioId),
-        presetId,
-        presetLabel: latestAttribution.previewPresetLabel || presetMatch?.label || 'Custom live policy',
-        score,
-        successRate: Math.round(row.successRate * 100),
-        averageCredits: row.averageCredits,
-        averageDurationMs: row.averageDurationMs,
-      };
-    }).filter((item) => item.archetypeId === selectedArchetype.id);
 
-    const scenarioScoped = scored.filter((item) => item.scenarioId === selectedScenario.id);
-    const scopedItems = scenarioScoped.length >= 2 ? scenarioScoped : scored;
-    const aggregate = new Map<string, { label: string; workflows: number; score: number; success: number; credits: number }>();
+      return row.runs
+        .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+        .map((run) => {
+          const attribution = getRunExperimentAttribution(run);
+          const scenarioId = attribution.scenarioId || automationStudio.selectedScenarioId || 'baseline';
+          const presetId = attribution.previewPresetId || presetMatch?.id || 'custom_live';
+          return {
+            workflowId: row.automation.id,
+            scenarioId,
+            scenarioLabel: attribution.scenarioLabel || getScenarioLabelFromId(scenarioId),
+            presetId,
+            presetLabel: attribution.previewPresetLabel || presetMatch?.label || 'Custom live policy',
+            run,
+          };
+        });
+    });
+
+    const scenarioScoped = scoredRuns.filter((item) => item.scenarioId === selectedScenario.id);
+    const scopedItems = scenarioScoped.length >= 3 ? scenarioScoped : scoredRuns;
+    const aggregate = new Map<string, { label: string; workflows: Set<string>; runs: PlatformTaskRunRecord[]; latestAt?: string }>();
     scopedItems.forEach((item) => {
-      const current = aggregate.get(item.presetId) || { label: item.presetLabel, workflows: 0, score: 0, success: 0, credits: 0 };
-      current.workflows += 1;
-      current.score += item.score;
-      current.success += item.successRate;
-      current.credits += item.averageCredits;
+      const current = aggregate.get(item.presetId) || { label: item.presetLabel, workflows: new Set<string>(), runs: [], latestAt: undefined };
+      current.workflows.add(item.workflowId);
+      current.runs.push(item.run);
+      const candidateAt = item.run.finishedAt || item.run.startedAt;
+      if (candidateAt && (!current.latestAt || Date.parse(candidateAt) > Date.parse(current.latestAt))) {
+        current.latestAt = candidateAt;
+      }
       aggregate.set(item.presetId, current);
     });
 
     return {
-      scenarioMatched: scenarioScoped.length >= 2,
+      scenarioMatched: scenarioScoped.length >= 3,
       scopeLabel: scenarioScoped.length >= 2 ? `${selectedArchetype.label.toLowerCase()} in ${selectedScenario.label.toLowerCase()}` : selectedArchetype.label.toLowerCase(),
       items: Array.from(aggregate.entries())
         .map(([presetId, value]) => ({
+          ...scoreObservedPerformance(summarizeRunCollection(value.runs), value.latestAt),
           presetId,
           label: value.label,
-          workflowCount: value.workflows,
-          averageScore: Math.round(value.score / value.workflows),
-          averageSuccess: Math.round(value.success / value.workflows),
-          averageCredits: value.workflows ? value.credits / value.workflows : 0,
+          workflowCount: value.workflows.size,
+          runCount: value.runs.length,
+          averageSuccess: Math.round(summarizeRunCollection(value.runs).successRate * 100),
+          averageCredits: summarizeRunCollection(value.runs).averageCredits,
         }))
-        .sort((a, b) => b.averageScore - a.averageScore)
+        .sort((a, b) => b.score - a.score || b.runCount - a.runCount)
         .slice(0, 4),
     };
   }, [rows, selectedArchetype.id, selectedArchetype.label, selectedScenario.id, selectedScenario.label]);
@@ -2333,6 +2438,49 @@ export default function AgentStudio() {
       roleDirectives: mergeRoleDirectiveSnapshots(selectedStudioState.roleDirectives, phaseDirectives),
     }, `Promoted ${formatDirectivePhaseScope([phase])} steering from this experiment.`);
   }, [selectedStudioState, updateStudioState]);
+
+  const handleApplyPhaseLearning = useCallback((phase: WorkflowBlockKind, mode: 'cheaper' | 'review' | 'promote') => {
+    const role = getPreferredRoleForPhase(phase);
+    setSelectedDirectivePhase(phase);
+    setSelectedWorkerRole(role);
+    setActiveRoom('live');
+
+    const nextPolicy: AutomationExecutionPolicyDraft = {
+      ...selectedPolicy,
+      mode: 'custom',
+      optimizationGoal:
+        mode === 'cheaper'
+          ? 'cost_saver'
+          : mode === 'review'
+            ? (selectedPolicy.optimizationGoal === 'cost_saver' ? 'balanced' : selectedPolicy.optimizationGoal)
+            : 'quality_first',
+      reviewPolicy:
+        mode === 'review'
+          ? 'strict'
+          : mode === 'cheaper' && selectedPolicy.reviewPolicy === 'strict'
+            ? 'standard'
+            : selectedPolicy.reviewPolicy,
+      maxElasticLanes:
+        mode === 'promote'
+          ? Math.min(4, Math.max(selectedPolicy.maxElasticLanes, selectedMath.recommendedElasticLanes) + 1)
+          : mode === 'cheaper'
+            ? Math.max(1, Math.min(selectedPolicy.maxElasticLanes, selectedMath.recommendedElasticLanes))
+            : selectedPolicy.maxElasticLanes,
+    };
+
+    void patchAutomationConfig({
+      executionPolicy: nextPolicy,
+      studioState: {
+        ...selectedStudioState,
+        roleDirectives: {
+          ...(selectedStudioState.roleDirectives || {}),
+          [role]: { mode, phases: [phase], updatedAt: new Date().toISOString() },
+        },
+      },
+    }, {
+      successMessage: `Applied ${getDirectiveModeLabel(mode).toLowerCase()} to ${formatDirectivePhaseScope([phase])} on ${role}.`,
+    });
+  }, [patchAutomationConfig, selectedMath.recommendedElasticLanes, selectedPolicy, selectedStudioState]);
 
   const handleSaveExperiment = useCallback(() => {
     const nextHistory = [
@@ -3712,13 +3860,13 @@ export default function AgentStudio() {
                               <div className="flex items-start justify-between gap-3">
                                 <div>
                                   <p className="text-sm font-semibold text-white">{index + 1}. {item.label}</p>
-                                  <p className="mt-1 text-[11px] text-slate-500">{item.workflowCount} workflows using this posture</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">{item.runCount} observed runs across {item.workflowCount} workflows</p>
                                 </div>
                                 <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
-                                  Score {item.averageScore}
+                                  Score {item.score}
                                 </span>
                               </div>
-                              <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+                              <div className="mt-3 grid grid-cols-4 gap-2 text-[11px]">
                                 <div>
                                   <p className="text-slate-500">Success</p>
                                   <p className="mt-1 text-white">{item.averageSuccess}%</p>
@@ -3726,6 +3874,10 @@ export default function AgentStudio() {
                                 <div>
                                   <p className="text-slate-500">Spend</p>
                                   <p className="mt-1 text-white">{item.averageCredits ? `${formatCredits(item.averageCredits)} cr` : '—'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-slate-500">Confidence</p>
+                                  <p className="mt-1 text-white">{item.confidence}%</p>
                                 </div>
                                 <div>
                                   <p className="text-slate-500">Position</p>
@@ -3756,14 +3908,52 @@ export default function AgentStudio() {
                               <div className="flex items-start justify-between gap-3">
                                 <div>
                                   <p className="text-sm font-medium text-white">{formatDirectivePhaseScope([item.phase])} · {item.mode === 'baseline' ? 'Baseline' : item.mode}</p>
-                                  <p className="mt-1 text-[11px] text-slate-500">{item.runs} observed step runs in {selectedArchetype.label.toLowerCase()}</p>
+                                  <p className="mt-1 text-[11px] text-slate-500">{item.runs} observed step runs in {selectedArchetype.label.toLowerCase()} · steer {getPreferredRoleForPhase(item.phase)}</p>
                                 </div>
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {item.score}</span>
                               </div>
-                              <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
+                              <div className="mt-3 grid gap-2 sm:grid-cols-4 text-[11px]">
                                 <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Success</p><p className="mt-1 text-white">{Math.round(item.successRate * 100)}%</p></div>
                                 <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Avg credits</p><p className="mt-1 text-white">{item.averageCredits ? `${formatCredits(item.averageCredits)} cr` : '—'}</p></div>
                                 <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Best use</p><p className="mt-1 text-white">{item.mode === 'baseline' ? 'Default posture' : `${item.mode} bias`}</p></div>
+                                <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Confidence</p><p className="mt-1 text-white">{item.confidence}%</p></div>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {item.mode === 'baseline' ? (
+                                  <button
+                                    type="button"
+                                    disabled={actionBusy}
+                                    onClick={() => {
+                                      setSelectedDirectivePhase(item.phase);
+                                      setSelectedWorkerRole(getPreferredRoleForPhase(item.phase));
+                                      setActiveRoom('live');
+                                      setNotice({ tone: 'success', message: `Focused Agent Studio on ${formatDirectivePhaseScope([item.phase])} for ${getPreferredRoleForPhase(item.phase)}.` });
+                                    }}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300 disabled:opacity-60"
+                                  >
+                                    Inspect this phase
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={actionBusy}
+                                    onClick={() => handleApplyPhaseLearning(item.phase, item.mode as 'cheaper' | 'review' | 'promote')}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
+                                  >
+                                    Apply {item.mode} here
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDirectivePhase(item.phase);
+                                    setSelectedWorkerRole(getPreferredRoleForPhase(item.phase));
+                                    setActiveRoom('live');
+                                  }}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Open in node inspector
+                                </button>
                               </div>
                             </div>
                           )) : (
@@ -3994,37 +4184,61 @@ export default function AgentStudio() {
                             ))}
                           </div>
                           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            {[{
-                              label: 'Current',
-                              items: currentCohortPerformance?.runs || [],
-                              tone: 'from-cyan-400/18 to-cyan-300/75',
-                            }, {
-                              label: 'Experiment',
-                              items: selectedExperimentPerformance?.runs || [],
-                              tone: 'from-violet-400/18 to-violet-300/75',
-                            }].map((series) => (
+                            {cohortTrendSeries.map((series) => (
                               <div key={series.label} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
                                 <div className="flex items-center justify-between gap-3">
                                   <p className="text-sm font-medium text-white">{series.label}</p>
-                                  <span className="text-[11px] text-slate-500">{series.items.length} runs</span>
+                                  <span className="text-[11px] text-slate-500">{series.chart?.points.length || 0} runs</span>
                                 </div>
-                                {series.items.length > 0 ? (
-                                  <div className="mt-3 flex h-24 items-end gap-2">
-                                    {series.items.slice(0, 6).reverse().map((run, idx, arr) => {
-                                      const maxMetric = Math.max(...arr.map((item) => getTrendMetricValue(item, trendMetric)), 1);
-                                      const height = `${Math.max(18, (getTrendMetricValue(run, trendMetric) / maxMetric) * 100)}%`;
-                                      return (
-                                        <div key={run.id} className="flex min-w-0 flex-1 flex-col items-center">
-                                          <button type="button" onClick={() => setSelectedCohortRunId(run.id)} className="flex h-20 w-full items-end">
-                                            <div className={`w-full rounded-t-2xl border ${selectedCohortRunId === run.id ? 'border-cyan-200 shadow-[0_0_24px_rgba(34,211,238,0.18)]' : 'border-white/8'} bg-gradient-to-t ${series.tone}`} style={{ height }} />
-                                          </button>
-                                          <p className="mt-1 text-[10px] text-slate-500">R{idx + 1}</p>
-                                          <p className="mt-1 text-[10px] text-slate-400">{formatTrendMetricValue(run, trendMetric)}</p>
+                                {series.chart ? (() => {
+                                  const chart = series.chart;
+                                  return (
+                                    <div className="mt-3">
+                                      <div className="relative overflow-hidden rounded-2xl border border-white/6 bg-white/[0.02] px-2 py-3">
+                                        <svg viewBox={`0 0 ${chart.width} ${chart.height}`} className="h-32 w-full">
+                                          {[0.25, 0.5, 0.75].map((ratio) => {
+                                            const y = chart.height - 14 - (ratio * (chart.height - 28));
+                                            return <line key={`${series.label}-${ratio}`} x1="18" x2={chart.width - 18} y1={y} y2={y} stroke={series.tone.grid} strokeDasharray="4 6" />;
+                                          })}
+                                          <path d={chart.areaPath} fill={series.tone.fill} />
+                                          <path d={chart.linePath} fill="none" stroke={series.tone.stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                                          {chart.points.map((point) => (
+                                            <circle
+                                              key={`${series.label}-${point.run.id}`}
+                                              cx={point.x}
+                                              cy={point.y}
+                                              r={selectedCohortRunId === point.run.id ? 6 : 4}
+                                              fill={series.tone.dot}
+                                              stroke={selectedCohortRunId === point.run.id ? '#e2e8f0' : 'rgba(15,23,42,0.9)'}
+                                              strokeWidth={selectedCohortRunId === point.run.id ? 2 : 1.5}
+                                            />
+                                          ))}
+                                        </svg>
+                                        <div className="mt-3 flex items-start justify-between gap-2">
+                                          {chart.points.map((point) => (
+                                            <button
+                                              key={`${series.label}-${point.run.id}-label`}
+                                              type="button"
+                                              onClick={() => setSelectedCohortRunId(point.run.id)}
+                                              className={`flex flex-1 min-w-0 flex-col rounded-xl border px-2 py-2 text-left transition-colors ${
+                                                selectedCohortRunId === point.run.id
+                                                  ? 'border-cyan-500/30 bg-cyan-500/10'
+                                                  : 'border-transparent bg-white/[0.02] hover:border-white/8'
+                                              }`}
+                                            >
+                                              <span className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{point.label}</span>
+                                              <span className="mt-1 text-[11px] text-white">{point.metricLabel}</span>
+                                            </button>
+                                          ))}
                                         </div>
-                                      );
-                                    })}
-                                  </div>
-                                ) : (
+                                      </div>
+                                      <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-slate-500">
+                                        <span>Older → newer evidence on the left-to-right curve</span>
+                                        <span>{getTrendMetricLabel(trendMetric)} window</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })() : (
                                   <div className="mt-3 rounded-xl border border-dashed border-navy-700/70 bg-navy-950/35 p-3 text-sm text-slate-500">
                                     No run cohort yet for this setup.
                                   </div>
@@ -4199,7 +4413,7 @@ export default function AgentStudio() {
                                 <div className="flex items-start justify-between gap-3">
                                   <div>
                                     <p className="text-sm font-medium text-white">{getExperimentDisplayLabel(entry.experiment)}</p>
-                                    <p className="mt-1 text-[11px] text-slate-500">Saved {formatRelativeTimeFromIso(entry.experiment.createdAt)}</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">Saved {formatRelativeTimeFromIso(entry.experiment.createdAt)}{entry.latestAt ? ` · observed ${formatRelativeTimeFromIso(entry.latestAt)}` : ''}</p>
                                     <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
                                       {getExperimentTags(entry.experiment, { count: entry.stats.count, successRate: entry.stats.successRate, averageCredits: entry.stats.averageCredits }, winningExperiment?.experiment.id === entry.experiment.id).map((tag) => (
                                         <span key={`${entry.experiment.id}-${tag}`} className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{tag}</span>
@@ -4208,10 +4422,11 @@ export default function AgentStudio() {
                                   </div>
                                   <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {entry.score}</span>
                                 </div>
-                                <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
+                                <div className="mt-3 grid gap-2 sm:grid-cols-4 text-[11px]">
                                   <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Runs</p><p className="mt-1 text-white">{entry.stats.count}</p></div>
                                   <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Success</p><p className="mt-1 text-white">{Math.round(entry.stats.successRate * 100)}%</p></div>
                                   <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Avg credits</p><p className="mt-1 text-white">{entry.stats.averageCredits ? `${formatCredits(entry.stats.averageCredits)} cr` : '—'}</p></div>
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Confidence</p><p className="mt-1 text-white">{entry.confidence}%</p></div>
                                 </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   <button type="button" onClick={() => handleCompareExperiment(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300">Compare</button>
