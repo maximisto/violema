@@ -21,6 +21,8 @@ export interface WorkspaceModelOverride {
 
 export interface WorkspaceAgentStudioSettings {
   autoGraduationProfiles?: Record<string, string>;
+  autoRollbackEnabled?: boolean;
+  autoRollbackWeaknessThreshold?: number;
 }
 
 export interface WorkspaceSettingsRecord {
@@ -162,6 +164,8 @@ export function upsertWorkspaceSettings(input: {
   modelOverrides?: Partial<Record<TextProfile | EmbeddingProfile, WorkspaceModelOverride | null>>;
   agentStudio?: {
     autoGraduationProfiles?: Record<string, string> | null;
+    autoRollbackEnabled?: boolean | null;
+    autoRollbackWeaknessThreshold?: number | null;
   };
 }): WorkspaceSettingsView {
   const records = readStore();
@@ -217,6 +221,15 @@ export function upsertWorkspaceSettings(input: {
             return acc;
           }, {})
         : undefined;
+    }
+    if ('autoRollbackEnabled' in input.agentStudio) {
+      current.autoRollbackEnabled = input.agentStudio.autoRollbackEnabled === true ? true : undefined;
+    }
+    if ('autoRollbackWeaknessThreshold' in input.agentStudio) {
+      current.autoRollbackWeaknessThreshold =
+        typeof input.agentStudio.autoRollbackWeaknessThreshold === 'number'
+          ? Math.max(4, Math.min(30, Math.round(input.agentStudio.autoRollbackWeaknessThreshold)))
+          : undefined;
     }
     next.agentStudio = current;
   }

@@ -275,6 +275,8 @@ interface AgentStudioSettingsPayload {
   settings?: {
     agentStudio?: {
       autoGraduationProfiles?: Record<string, string>;
+      autoRollbackEnabled?: boolean;
+      autoRollbackWeaknessThreshold?: number;
     };
   };
 }
@@ -1882,6 +1884,10 @@ export default function AgentStudio() {
   const [hoveredCohortRunId, setHoveredCohortRunId] = useState<string>('');
   const [phaseSimulation, setPhaseSimulation] = useState<{ phase: WorkflowBlockKind; mode: 'cheaper' | 'review' | 'promote' } | null>(null);
   const [workspaceAutoGraduationProfiles, setWorkspaceAutoGraduationProfiles] = useState<Record<string, string>>({});
+  const [workspaceAutoRollbackDefaults, setWorkspaceAutoRollbackDefaults] = useState<{ enabled: boolean; weaknessThreshold: number }>({
+    enabled: false,
+    weaknessThreshold: 12,
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<AgentStudioRow[]>([]);
@@ -1915,6 +1921,10 @@ export default function AgentStudio() {
         ? backendProfiles
         : readWorkspaceAutoGraduationProfilesFallback(workspace.workspaceId);
       setWorkspaceAutoGraduationProfiles(nextWorkspaceProfiles);
+      setWorkspaceAutoRollbackDefaults({
+        enabled: settings?.settings?.agentStudio?.autoRollbackEnabled === true,
+        weaknessThreshold: settings?.settings?.agentStudio?.autoRollbackWeaknessThreshold ?? 12,
+      });
 
       const taskByAutomationId = new Map<string, PlatformTaskRecord>();
       const automationIdByTaskId = new Map<string, string>();
@@ -4074,8 +4084,8 @@ export default function AgentStudio() {
     workspaceAutoGraduationProfile,
   ]);
 
-  const autoRollbackEnabled = selectedStudioState.autoRollbackEnabled === true;
-  const autoRollbackWeaknessThreshold = selectedStudioState.autoRollbackWeaknessThreshold ?? 12;
+  const autoRollbackEnabled = selectedStudioState.autoRollbackEnabled ?? workspaceAutoRollbackDefaults.enabled;
+  const autoRollbackWeaknessThreshold = selectedStudioState.autoRollbackWeaknessThreshold ?? workspaceAutoRollbackDefaults.weaknessThreshold;
 
   const autoGraduateScope = useMemo(() => {
     if (selectedStudioState.autoGraduateScenarioThresholds?.[selectedScenario.id]) {
@@ -4100,6 +4110,11 @@ export default function AgentStudio() {
 
   const graduationHistory = useMemo(
     () => (selectedStudioState.promotionHistory || []).filter((entry) => entry.mode === 'graduation'),
+    [selectedStudioState.promotionHistory]
+  );
+
+  const rollbackHistory = useMemo(
+    () => (selectedStudioState.promotionHistory || []).filter((entry) => entry.mode === 'rollback'),
     [selectedStudioState.promotionHistory]
   );
 
@@ -4188,6 +4203,32 @@ export default function AgentStudio() {
       .slice(0, 6);
   }, [graduationHistory, savedPlanSummaries, selectedRow?.runs]);
 
+  const rollbackTimeline = useMemo(() => {
+    return rollbackHistory
+      .map((entry) => {
+        const restoredSummary = entry.planId ? savedPlanSummaries.find((item) => item.plan.id === entry.planId) : undefined;
+        const rolledBackSummary = entry.parentPlanId ? savedPlanSummaries.find((item) => item.plan.id === entry.parentPlanId) : undefined;
+        const restoredRun = restoredSummary
+          ? (selectedRow?.runs || [])
+              .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+              .find((run) => rankRunPlanMatches(run, [restoredSummary.plan])[0]?.plan.id === restoredSummary.plan.id)
+          : undefined;
+        const rolledBackRun = rolledBackSummary
+          ? (selectedRow?.runs || [])
+              .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+              .find((run) => rankRunPlanMatches(run, [rolledBackSummary.plan])[0]?.plan.id === rolledBackSummary.plan.id)
+          : undefined;
+        return {
+          entry,
+          restoredLabel: restoredSummary?.plan.name || 'Restored parent',
+          rolledBackLabel: rolledBackSummary?.plan.name || 'Rolled-back child',
+          restoredRun,
+          rolledBackRun,
+        };
+      })
+      .slice(0, 6);
+  }, [rollbackHistory, savedPlanSummaries, selectedRow?.runs]);
+
   const autoGraduationRollbackSuggestion = useMemo(() => {
     if (!activeBranchParentComparison || selectedStudioState.lastAutoGraduatedPlanId !== activeBranchParentComparison.child.plan.id) return null;
     if (activeBranchParentComparison.outcome !== 'Weak') return null;
@@ -4195,13 +4236,15 @@ export default function AgentStudio() {
     const parentWindowRuns = (selectedRow?.runs || [])
       .filter((run) => run.status === 'succeeded' || run.status === 'failed')
       .filter((run) => rankRunPlanMatches(run, [activeBranchParentComparison.parent.plan])[0]?.plan.id === activeBranchParentComparison.parent.plan.id)
-      .slice(0, 8);
+      .slice(0, 12);
     const childWindowRuns = (selectedRow?.runs || [])
       .filter((run) => run.status === 'succeeded' || run.status === 'failed')
       .filter((run) => rankRunPlanMatches(run, [activeBranchParentComparison.child.plan])[0]?.plan.id === activeBranchParentComparison.child.plan.id)
-      .slice(0, 8);
+      .slice(0, 12);
     const parentWindowStats = summarizeRunCollection(parentWindowRuns);
     const childWindowStats = summarizeRunCollection(childWindowRuns);
+    const parentRecentStats = summarizeRunCollection(parentWindowRuns.slice(0, 4));
+    const childRecentStats = summarizeRunCollection(childWindowRuns.slice(0, 4));
     const weaknessScore =
       Math.max(0, (parentWindowStats.successRate - childWindowStats.successRate) * 100)
       + Math.max(0, (childWindowStats.averageCredits || 0) - (parentWindowStats.averageCredits || 0))
@@ -4216,6 +4259,8 @@ export default function AgentStudio() {
       durationDelta: activeBranchParentComparison.durationDelta,
       parentWindowStats,
       childWindowStats,
+      parentRecentStats,
+      childRecentStats,
       weaknessScore: Math.round(weaknessScore),
     };
   }, [activeBranchParentComparison, graduationHistory, selectedRow?.runs, selectedStudioState.lastAutoGraduatedPlanId]);
@@ -7753,6 +7798,18 @@ export default function AgentStudio() {
                             </div>
                             <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
                               <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Automatic rollback</p>
+                              <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                  Workspace default: {workspaceAutoRollbackDefaults.enabled ? `enabled at ${workspaceAutoRollbackDefaults.weaknessThreshold}` : 'disabled'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => navigate('/settings')}
+                                  className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200"
+                                >
+                                  Open workspace setup
+                                </button>
+                              </div>
                               <div className="mt-2 flex flex-wrap gap-2">
                                 <button
                                   type="button"
@@ -7780,10 +7837,12 @@ export default function AgentStudio() {
                               <div className="rounded-xl border border-red-500/16 bg-red-500/8 px-3 py-3">
                                 <p className="text-slate-400">Keep child branch</p>
                                 <p className="mt-1 text-white">{Math.round(autoGraduationRollbackSuggestion.childWindowStats.successRate * 100)}% success · {autoGraduationRollbackSuggestion.childWindowStats.averageCredits ? `${formatCredits(autoGraduationRollbackSuggestion.childWindowStats.averageCredits)} cr avg` : '—'}</p>
+                                <p className="mt-1 text-[10px] text-slate-400">Recent 4 runs: {Math.round(autoGraduationRollbackSuggestion.childRecentStats.successRate * 100)}% · {autoGraduationRollbackSuggestion.childRecentStats.averageCredits ? `${formatCredits(autoGraduationRollbackSuggestion.childRecentStats.averageCredits)} cr avg` : '—'}</p>
                               </div>
                               <div className="rounded-xl border border-emerald-500/16 bg-emerald-500/8 px-3 py-3">
                                 <p className="text-slate-400">Restore parent</p>
                                 <p className="mt-1 text-white">{Math.round(autoGraduationRollbackSuggestion.parentWindowStats.successRate * 100)}% success · {autoGraduationRollbackSuggestion.parentWindowStats.averageCredits ? `${formatCredits(autoGraduationRollbackSuggestion.parentWindowStats.averageCredits)} cr avg` : '—'}</p>
+                                <p className="mt-1 text-[10px] text-slate-400">Recent 4 runs: {Math.round(autoGraduationRollbackSuggestion.parentRecentStats.successRate * 100)}% · {autoGraduationRollbackSuggestion.parentRecentStats.averageCredits ? `${formatCredits(autoGraduationRollbackSuggestion.parentRecentStats.averageCredits)} cr avg` : '—'}</p>
                               </div>
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -7802,6 +7861,57 @@ export default function AgentStudio() {
                               >
                                 Compare before rollback
                               </button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {rollbackTimeline.length > 0 ? (
+                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Rollback history</p>
+                            <div className="mt-3 space-y-3">
+                              {rollbackTimeline.map((item) => (
+                                <div key={item.entry.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-medium text-white">{item.restoredLabel}</p>
+                                      <p className="mt-1 text-[11px] text-slate-400">rolled back from {item.rolledBackLabel} · {formatRelativeTimeFromIso(item.entry.appliedAt)}</p>
+                                    </div>
+                                    <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${getPromotionModeTone(item.entry.mode)}`}>
+                                      {item.entry.autoApplied ? 'Auto rollback' : 'Manual rollback'}
+                                    </span>
+                                  </div>
+                                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                    {typeof item.entry.successDelta === 'number' ? (
+                                      <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${item.entry.successDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                        {formatSignedDelta(item.entry.successDelta)} pts
+                                      </span>
+                                    ) : null}
+                                    {typeof item.entry.creditsDelta === 'number' ? (
+                                      <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${item.entry.creditsDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                        {formatSignedDelta(item.entry.creditsDelta)} cr
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <p className="mt-3 text-sm leading-relaxed text-slate-300">{item.entry.summary}</p>
+                                  {(item.restoredRun && item.rolledBackRun) ? (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenRunPairInReplay(item.restoredRun!, item.rolledBackRun!, item.entry.phase || 'analyze', 'rollback timeline')}
+                                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                      >
+                                        Open before / after
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenRunInReplay(item.restoredRun!, 'rollback restored')}
+                                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                      >
+                                        Restored replay
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ) : null}
@@ -8673,6 +8783,81 @@ export default function AgentStudio() {
                             Fresh, repeated evidence is what makes promotion decisions trustworthy. Thin or stale evidence means simulate more before locking policy.
                           </p>
                         </div>
+
+                        {replayComparedRun ? (
+                          <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                            <div className="flex items-center gap-2">
+                              <Layers3 className="h-4 w-4 text-cyan-300" />
+                              <div>
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Dual-run replay canvas</p>
+                                <h3 className="text-sm font-semibold text-white">Compare both runs phase by phase</h3>
+                              </div>
+                            </div>
+                            <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                              This is the cleanest exact comparison surface in Studio. Same phases, same metrics, and a direct before/after jump when you want to inspect the pair in full replay.
+                            </p>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => replayBaseRun ? handleOpenRunPairInReplay(replayBaseRun, replayComparedRun, selectedReplayPhase === 'all' ? selectedReplayPhaseDetail?.phase : selectedReplayPhase, 'dual-run replay canvas') : undefined}
+                                className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                              >
+                                Open paired replay
+                              </button>
+                              {runComparison?.previous ? (
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                  {runComparison.current.presetLabel} vs {runComparison.previous.presetLabel}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                              <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/8 p-4">
+                                <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/80">Current run</p>
+                                <div className="mt-3 space-y-2">
+                                  {replayPhaseOverlay.map((phase) => (
+                                    <button
+                                      key={`dual-current-${phase.phase}`}
+                                      type="button"
+                                      onClick={() => setSelectedReplayPhase(phase.phase)}
+                                      className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left ${selectedReplayPhase === phase.phase ? 'border-cyan-500/24 bg-cyan-500/10' : 'border-white/6 bg-white/[0.03]'}`}
+                                    >
+                                      <div>
+                                        <p className="text-sm font-medium text-white">{formatDirectivePhaseScope([phase.phase])}</p>
+                                        <p className="mt-1 text-[11px] text-slate-400">{phase.primaryRole} · {phase.directiveMode ? getDirectiveModeLabel(phase.directiveMode) : 'Baseline'}</p>
+                                      </div>
+                                      <div className="text-right text-[11px] text-slate-300">
+                                        <p>{phase.credits ? `${formatCredits(phase.credits)} cr` : '—'}</p>
+                                        <p className="mt-1">{formatCompactDuration(phase.durationMs)}</p>
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Compared run</p>
+                                <div className="mt-3 space-y-2">
+                                  {replayComparedPhaseOverlay.map((phase) => (
+                                    <button
+                                      key={`dual-compared-${phase.phase}`}
+                                      type="button"
+                                      onClick={() => setSelectedReplayPhase(phase.phase)}
+                                      className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left ${selectedReplayPhase === phase.phase ? 'border-cyan-500/24 bg-cyan-500/8' : 'border-white/6 bg-white/[0.03]'}`}
+                                    >
+                                      <div>
+                                        <p className="text-sm font-medium text-white">{formatDirectivePhaseScope([phase.phase])}</p>
+                                        <p className="mt-1 text-[11px] text-slate-400">{phase.primaryRole} · {phase.directiveMode ? getDirectiveModeLabel(phase.directiveMode) : 'Baseline'}</p>
+                                      </div>
+                                      <div className="text-right text-[11px] text-slate-300">
+                                        <p>{phase.credits ? `${formatCredits(phase.credits)} cr` : '—'}</p>
+                                        <p className="mt-1">{formatCompactDuration(phase.durationMs)}</p>
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
 
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">

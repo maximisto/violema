@@ -30,6 +30,11 @@ interface SettingsPayload {
     updatedAt?: string;
     providers: Record<Provider, ProviderStatus>;
     modelOverrides: Partial<Record<Profile, ModelOverride>>;
+    agentStudio?: {
+      autoGraduationProfiles?: Record<string, string>;
+      autoRollbackEnabled?: boolean;
+      autoRollbackWeaknessThreshold?: number;
+    };
   };
   modelRouting: Record<string, {
     provider: string;
@@ -115,6 +120,13 @@ export default function SettingsPage() {
     memory_text: { tone: 'idle' },
     memory_code: { tone: 'idle' },
   });
+  const [agentStudioSettings, setAgentStudioSettings] = useState<{
+    autoRollbackEnabled: boolean;
+    autoRollbackWeaknessThreshold: number;
+  }>({
+    autoRollbackEnabled: false,
+    autoRollbackWeaknessThreshold: 12,
+  });
 
   async function loadSettings(silent = false) {
     if (!silent) setLoading(true);
@@ -129,6 +141,10 @@ export default function SettingsPage() {
       const payload = await response.json() as SettingsPayload;
       setData(payload);
       setModelOverrides(payload.settings.modelOverrides || {});
+      setAgentStudioSettings({
+        autoRollbackEnabled: payload.settings.agentStudio?.autoRollbackEnabled === true,
+        autoRollbackWeaknessThreshold: payload.settings.agentStudio?.autoRollbackWeaknessThreshold ?? 12,
+      });
       setProviderClears({
         anthropic: false,
         openai: false,
@@ -206,6 +222,10 @@ export default function SettingsPage() {
           workspaceName: workspace.workspaceName,
           providerTokens,
           modelOverrides: serializedOverrides,
+          agentStudio: {
+            autoRollbackEnabled: agentStudioSettings.autoRollbackEnabled,
+            autoRollbackWeaknessThreshold: agentStudioSettings.autoRollbackWeaknessThreshold,
+          },
         }),
       });
       if (!response.ok) throw new Error('Could not save settings');
@@ -605,6 +625,54 @@ export default function SettingsPage() {
                 </div>
               </section>
             </div>
+
+            <section className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-cyan-300" />
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Agent Studio defaults</p>
+                  <h2 className="text-sm font-semibold text-white">Workspace rollback policy</h2>
+                </div>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                These defaults apply before a workflow overrides them inside Agent Studio. Use them to keep self-correction behavior consistent across the workspace.
+              </p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.92fr),minmax(0,1.08fr)]">
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
+                  <p className="text-sm font-medium text-white">Automatic rollback</p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                    When enabled, an auto-graduated child can be unwound if follow-through weakens enough over the observed run window.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAgentStudioSettings((current) => ({ ...current, autoRollbackEnabled: !current.autoRollbackEnabled }))}
+                      className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${agentStudioSettings.autoRollbackEnabled ? 'border-red-500/30 bg-red-500/12 text-red-100' : 'text-slate-300'}`}
+                    >
+                      {agentStudioSettings.autoRollbackEnabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                    {[8, 12, 16].map((threshold) => (
+                      <button
+                        key={`settings-auto-rollback-${threshold}`}
+                        type="button"
+                        onClick={() => setAgentStudioSettings((current) => ({ ...current, autoRollbackWeaknessThreshold: threshold }))}
+                        className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${agentStudioSettings.autoRollbackWeaknessThreshold === threshold ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
+                      >
+                        Trigger at {threshold}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
+                  <p className="text-sm font-medium text-white">How to think about it</p>
+                  <div className="mt-3 space-y-3 text-sm text-slate-400">
+                    <p><span className="text-white">8</span> is faster learning. Good when you want the system to self-correct aggressively.</p>
+                    <p><span className="text-white">12</span> is balanced. Good default when you want fewer false reversals.</p>
+                    <p><span className="text-white">16</span> is cautious. Better for high-stakes workflows where short-term noise should not undo the branch.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
 
             <section className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
               <div className="flex items-center gap-2">

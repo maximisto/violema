@@ -3603,6 +3603,8 @@ app.patch('/api/settings', (req: Request, res: Response) => {
     modelOverrides?: Record<string, { provider?: string; model?: string; baseUrl?: string; reasoningEffort?: string } | null>;
     agentStudio?: {
       autoGraduationProfiles?: Record<string, string | null> | null;
+      autoRollbackEnabled?: boolean | null;
+      autoRollbackWeaknessThreshold?: number | null;
     };
   };
 
@@ -3649,6 +3651,12 @@ app.patch('/api/settings', (req: Request, res: Response) => {
                 .map(([archetypeId, profileId]) => [archetypeId, profileId!.trim()]),
             )
           : body.agentStudio.autoGraduationProfiles === null
+            ? null
+            : undefined,
+        autoRollbackEnabled: body.agentStudio.autoRollbackEnabled === true ? true : body.agentStudio.autoRollbackEnabled === null ? null : undefined,
+        autoRollbackWeaknessThreshold: typeof body.agentStudio.autoRollbackWeaknessThreshold === 'number'
+          ? body.agentStudio.autoRollbackWeaknessThreshold
+          : body.agentStudio.autoRollbackWeaknessThreshold === null
             ? null
             : undefined,
       }
