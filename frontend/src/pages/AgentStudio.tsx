@@ -31,6 +31,7 @@ type OptimizationGoal = 'balanced' | 'cost_saver' | 'quality_first';
 type ReviewPolicy = 'lean' | 'standard' | 'strict';
 type StudioRoom = 'live' | 'optimize' | 'replay';
 type ScenarioPresetId = 'baseline' | 'rush' | 'deep_research' | 'monitoring' | 'high_stakes';
+type TrendMetric = 'credits' | 'duration' | 'success';
 
 interface StudioExperimentRecord {
   id: string;
@@ -757,6 +758,74 @@ function getPresetLabelFromId(id?: string) {
   return POLICY_PRESETS.find((preset) => preset.id === id)?.label || id;
 }
 
+function getExperimentDisplayLabel(experiment: StudioExperimentRecord) {
+  return experiment.notes || `${getScenarioLabelFromId(experiment.scenarioId)} · ${getPresetLabelFromId(experiment.previewPresetId)}`;
+}
+
+function getExperimentPhaseList(experiment: StudioExperimentRecord) {
+  const phases = Object.values(experiment.roleDirectives || {}).flatMap((directive) => directive.phases || []);
+  return [...new Set(phases)];
+}
+
+function extractPhaseDirectiveSnapshot(
+  roleDirectives: Record<string, StudioRoleDirective> | undefined,
+  phase: WorkflowBlockKind,
+) {
+  if (!roleDirectives) return undefined;
+  const next = Object.entries(roleDirectives).reduce<Record<string, StudioRoleDirective>>((acc, [role, directive]) => {
+    if (!directive.phases || directive.phases.length === 0 || directive.phases.includes(phase)) {
+      acc[role] = {
+        mode: directive.mode,
+        phases: [phase],
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    return acc;
+  }, {});
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function getTrendMetricLabel(metric: TrendMetric) {
+  if (metric === 'duration') return 'Duration';
+  if (metric === 'success') return 'Success';
+  return 'Credits';
+}
+
+function getTrendMetricValue(run: PlatformTaskRunRecord, metric: TrendMetric) {
+  if (metric === 'success') return run.status === 'succeeded' ? 100 : run.status === 'failed' ? 24 : 56;
+  if (metric === 'duration') {
+    const started = Date.parse(run.startedAt || '');
+    const finished = Date.parse(run.finishedAt || '');
+    return Number.isNaN(started) || Number.isNaN(finished) ? 0 : Math.max(0, finished - started) / 1000;
+  }
+  return run.actualCredits || 0;
+}
+
+function formatTrendMetricValue(run: PlatformTaskRunRecord, metric: TrendMetric) {
+  if (metric === 'success') return run.status === 'succeeded' ? 'Pass' : run.status === 'failed' ? 'Fail' : 'Live';
+  if (metric === 'duration') return formatCompactDuration(
+    Number.isNaN(Date.parse(run.startedAt || '')) || Number.isNaN(Date.parse(run.finishedAt || ''))
+      ? undefined
+      : Math.max(0, Date.parse(run.finishedAt || '') - Date.parse(run.startedAt || ''))
+  );
+  return run.actualCredits ? `${formatCredits(run.actualCredits)} cr` : '—';
+}
+
+function getExperimentTags(
+  experiment: StudioExperimentRecord,
+  stats?: { count: number; successRate: number; averageCredits: number },
+  winning = false,
+) {
+  const tags = [getScenarioLabelFromId(experiment.scenarioId), getPresetLabelFromId(experiment.previewPresetId)];
+  const directiveCount = Object.keys(experiment.roleDirectives || {}).length;
+  if (directiveCount > 0) tags.push(`${directiveCount} directed role${directiveCount === 1 ? '' : 's'}`);
+  if (winning) tags.push('Winning setup');
+  if ((stats?.count || 0) >= 3) tags.push('Observed');
+  if ((stats?.successRate || 0) >= 0.8 && (stats?.count || 0) >= 2) tags.push('Reliable');
+  if ((stats?.averageCredits || 0) > 0 && (stats?.averageCredits || 0) <= 45) tags.push('Lean spend');
+  return tags.slice(0, 4);
+}
+
 function normalizeDirectivePhases(value: unknown): WorkflowBlockKind[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const phases = value
@@ -1099,6 +1168,7 @@ export default function AgentStudio() {
   const [selectedScenarioId, setSelectedScenarioId] = useState<ScenarioPresetId>('baseline');
   const [selectedDirectivePhase, setSelectedDirectivePhase] = useState<'all' | WorkflowBlockKind>('all');
   const [selectedComparisonExperimentId, setSelectedComparisonExperimentId] = useState<string>('');
+  const [trendMetric, setTrendMetric] = useState<TrendMetric>('credits');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<AgentStudioRow[]>([]);
@@ -1284,13 +1354,15 @@ export default function AgentStudio() {
   const selectedRunTrend = useMemo(() => {
     if (!selectedRow) return [];
     const recentRuns = selectedRow.runs.slice(0, 6).reverse();
-    const maxCredits = Math.max(...recentRuns.map((run) => run.actualCredits || 0), 1);
+    const maxValue = Math.max(...recentRuns.map((run) => getTrendMetricValue(run, trendMetric)), 1);
 
     return recentRuns.map((run, index) => ({
       id: run.id,
       label: recentRuns.length === 1 ? 'Latest' : `Run ${index + 1}`,
       credits: run.actualCredits || 0,
-      height: `${Math.max(18, ((run.actualCredits || 0) / maxCredits) * 100)}%`,
+      metricValue: getTrendMetricValue(run, trendMetric),
+      metricLabel: formatTrendMetricValue(run, trendMetric),
+      height: `${Math.max(18, (getTrendMetricValue(run, trendMetric) / maxValue) * 100)}%`,
       status: run.status,
       statusTone: getStatusTone(run.status),
       duration: formatCompactDuration(
@@ -1299,7 +1371,7 @@ export default function AgentStudio() {
           : Math.max(0, Date.parse(run.finishedAt || '') - Date.parse(run.startedAt || ''))
       ),
     }));
-  }, [selectedRow]);
+  }, [selectedRow, trendMetric]);
 
 
   const presetComparisons = useMemo(() => {
@@ -1443,39 +1515,124 @@ export default function AgentStudio() {
 
   const optimizationRecommendations = useMemo(() => {
     if (!selectedRow) return [];
-    const items: Array<{ title: string; body: string }> = [];
+    const items: Array<{ title: string; body: string; action: 'lean_ops' | 'raise_review' | 'match_lanes' | 'trim_lanes' | 'none' }> = [];
     if (selectedRow.successRate > 0 && selectedRow.successRate < 0.7) {
       items.push({
         title: 'Increase review pressure',
         body: 'This workflow is missing too often. Move review toward Standard or Strict so heavier reasoning is only added where it reduces failures.',
+        action: 'raise_review',
       });
     }
     if (selectedMath.toolCalls >= 3 && selectedPolicy.optimizationGoal !== 'cost_saver') {
       items.push({
         title: 'Route tool-heavy work down-market',
-        body: 'Most of the work here is tool orchestration. Cost Saver will keep delivery and watch tasks on cheaper lanes without sacrificing output quality.',
+        body: 'Most of the work here is tool orchestration. Cost Saver keeps scheduling and delivery steps cheap without flattening the whole workflow.',
+        action: 'lean_ops',
       });
     }
     if (selectedPolicy.mode === 'custom' && selectedPolicy.maxElasticLanes < selectedMath.recommendedElasticLanes) {
       items.push({
         title: 'Raise lane cap for this workflow',
-        body: `The current workflow math wants ${selectedMath.recommendedElasticLanes} elastic lanes. Your cap is constraining parallel work and likely slowing completion.`,
+        body: `The workflow math wants ${selectedMath.recommendedElasticLanes} elastic lanes. Your cap is probably slowing completion and creating avoidable queues.`,
+        action: 'match_lanes',
       });
     }
     if (selectedPolicy.mode === 'custom' && selectedPolicy.maxElasticLanes > selectedMath.recommendedElasticLanes + 1) {
       items.push({
         title: 'Trim excess elastic capacity',
-        body: 'This workflow does not justify the current lane cap. Reducing it should lower spend without hurting reliability.',
+        body: 'The current lane cap is richer than this workflow needs. Reducing it should lower spend without hurting reliability.',
+        action: 'trim_lanes',
       });
     }
     if (items.length === 0) {
       items.push({
         title: 'Current configuration is healthy',
-        body: 'This workflow is aligned with its complexity. The next gains will come from tightening the workflow itself, not from more agent complexity.',
+        body: 'This workflow is aligned with its complexity. The next gains will come from tightening the workflow itself, not from adding more agent structure.',
+        action: 'none',
       });
     }
-    return items.slice(0, 3);
+    return items.slice(0, 4);
   }, [selectedMath, selectedPolicy, selectedRow]);
+
+  const workflowDiagnostics = useMemo(() => {
+    const riskItems: Array<{ title: string; body: string; severity: 'low' | 'medium' | 'high'; action: 'raise_review' | 'none' }> = [];
+    const wasteItems: Array<{ title: string; body: string; severity: 'low' | 'medium' | 'high'; action: 'lean_ops' | 'trim_lanes' | 'match_lanes' | 'none' }> = [];
+
+    if (selectedRow) {
+      if (selectedRow.successRate > 0 && selectedRow.successRate < 0.7) {
+        riskItems.push({
+          title: 'Reliability is below target',
+          body: 'Recent runs are failing often enough that this workflow is under-protected. The fix is stricter review where the final reasoning happens, not more lanes everywhere.',
+          severity: 'high',
+          action: 'raise_review',
+        });
+      }
+      const expensiveDelivery = (selectedRow.stepExecutions || []).find((step) => step.kind === 'deliver' && (step.actualCredits || 0) >= 20);
+      if (expensiveDelivery) {
+        wasteItems.push({
+          title: 'Delivery is too expensive',
+          body: `${expensiveDelivery.title} is burning strong-model budget on work that should usually live on cheaper operational lanes.`,
+          severity: 'medium',
+          action: 'lean_ops',
+        });
+      }
+      if (selectedPolicy.maxElasticLanes > selectedMath.recommendedElasticLanes + 1) {
+        wasteItems.push({
+          title: 'Elastic capacity is over-provisioned',
+          body: `Live cap is ${selectedPolicy.maxElasticLanes}, but the workflow math only justifies about ${selectedMath.recommendedElasticLanes}.`,
+          severity: 'medium',
+          action: 'trim_lanes',
+        });
+      }
+      if (selectedPolicy.maxElasticLanes < selectedMath.recommendedElasticLanes) {
+        riskItems.push({
+          title: 'Parallel depth is constrained',
+          body: 'The workflow needs more elastic headroom than the current cap allows, which can create slower runs and overloaded core roles.',
+          severity: 'medium',
+          action: 'none',
+        });
+        wasteItems.push({
+          title: 'Queueing is likely hurting throughput',
+          body: 'This is one of the few workflows where spending a bit more on lane capacity is likely to return better cycle time.',
+          severity: 'low',
+          action: 'match_lanes',
+        });
+      }
+      if (riskItems.length === 0) {
+        riskItems.push({
+          title: 'No dominant risk signal',
+          body: 'Nothing here is screaming for heavier review. Preserve speed and focus on workflow quality or experiment learning.',
+          severity: 'low',
+          action: 'none',
+        });
+      }
+      if (wasteItems.length === 0) {
+        wasteItems.push({
+          title: 'Spend profile looks disciplined',
+          body: 'The current setup is not obviously wasting tokens or elastic capacity. Improvements will likely come from sharper experiments, not blanket cost cutting.',
+          severity: 'low',
+          action: 'none',
+        });
+      }
+    }
+
+    return { riskItems: riskItems.slice(0, 3), wasteItems: wasteItems.slice(0, 3) };
+  }, [selectedMath.recommendedElasticLanes, selectedPolicy.maxElasticLanes, selectedRow, selectedRow?.successRate]);
+
+  const optimizationScorecard = useMemo(() => {
+    const spendPressure = clampNumber(Math.round((currentSpendIndex * 0.55) + (selectedMath.toolCalls * 6) + (selectedMath.activeElasticLanes * 5)), 10, 99);
+    const riskPressure = clampNumber(Math.round((100 - Math.round(selectedRow?.successRate ? selectedRow.successRate * 100 : 72)) * 0.55 + currentAssuranceIndex * 0.35), 10, 99);
+    const leverageScore = clampNumber(Math.round(currentFitIndex + Math.max(0, 18 - spendPressure / 6) + (selectedMath.recommendedElasticLanes >= selectedMath.activeElasticLanes ? 6 : -4)), 10, 99);
+    const verdict = leverageScore >= 78 ? 'Strong operating setup' : leverageScore >= 58 ? 'Good with room to tune' : 'Needs a sharper policy';
+    const nextMove = workflowDiagnostics.riskItems[0]?.severity === 'high'
+      ? 'Tighten review around the highest-risk phase.'
+      : workflowDiagnostics.wasteItems[0]?.action === 'lean_ops'
+        ? 'Route more operational work down-market.'
+        : workflowDiagnostics.wasteItems[0]?.action === 'trim_lanes'
+          ? 'Trim elastic capacity before adding more logic.'
+          : 'Keep testing saved experiments and promote only what consistently wins.';
+    return { spendPressure, riskPressure, leverageScore, verdict, nextMove };
+  }, [currentAssuranceIndex, currentFitIndex, currentSpendIndex, selectedMath.activeElasticLanes, selectedMath.recommendedElasticLanes, selectedMath.toolCalls, selectedRow?.successRate, workflowDiagnostics.riskItems, workflowDiagnostics.wasteItems]);
 
   const studioStats = useMemo(() => {
     const completedRuns = rows.flatMap((row) => row.runs).filter((run) => run.status === 'succeeded' || run.status === 'failed');
@@ -1759,6 +1916,11 @@ export default function AgentStudio() {
     [experimentPerformance]
   );
 
+  const winningExperimentPhases = useMemo(
+    () => (winningExperiment ? getExperimentPhaseList(winningExperiment.experiment) : []),
+    [winningExperiment]
+  );
+
   const selectedExperimentPerformance = useMemo(
     () => experimentPerformance.find((item) => item.experiment.id === selectedComparisonExperimentId),
     [experimentPerformance, selectedComparisonExperimentId]
@@ -2030,6 +2192,40 @@ export default function AgentStudio() {
     }, { successMessage: `Promoted this lane for ${formatDirectivePhaseScope(directivePhases)}.` });
   }, [patchAutomationConfig, selectedDirectivePhase, selectedMath.recommendedElasticLanes, selectedPolicy, selectedStudioState, selectedWorkerDetail.worker?.role]);
 
+  const applyRecommendationAction = useCallback((action: 'lean_ops' | 'raise_review' | 'match_lanes' | 'trim_lanes' | 'none') => {
+    if (action === 'none') return;
+    if (action === 'lean_ops') {
+      void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', optimizationGoal: 'cost_saver', reviewPolicy: selectedPolicy.reviewPolicy === 'strict' ? 'standard' : selectedPolicy.reviewPolicy, maxElasticLanes: Math.min(selectedPolicy.maxElasticLanes, Math.max(1, selectedMath.recommendedElasticLanes)) });
+      return;
+    }
+    if (action === 'raise_review') {
+      void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', optimizationGoal: selectedPolicy.optimizationGoal === 'cost_saver' ? 'balanced' : selectedPolicy.optimizationGoal, reviewPolicy: 'strict' });
+      return;
+    }
+    if (action === 'match_lanes') {
+      void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', maxElasticLanes: selectedMath.recommendedElasticLanes });
+      return;
+    }
+    if (action === 'trim_lanes') {
+      void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', maxElasticLanes: Math.max(0, selectedMath.recommendedElasticLanes) });
+    }
+  }, [patchExecutionPolicy, selectedMath.recommendedElasticLanes, selectedPolicy]);
+
+  const handlePromoteExperimentPhase = useCallback((experiment: StudioExperimentRecord, phase: WorkflowBlockKind) => {
+    const phaseDirectives = extractPhaseDirectiveSnapshot(experiment.roleDirectives, phase);
+    if (!phaseDirectives) {
+      setNotice({ tone: 'error', message: `No saved steering for ${formatDirectivePhaseScope([phase])} in this experiment.` });
+      return;
+    }
+    setSelectedComparisonExperimentId(experiment.id);
+    void updateStudioState({
+      ...selectedStudioState,
+      selectedScenarioId: experiment.scenarioId,
+      previewPresetId: experiment.previewPresetId,
+      roleDirectives: mergeRoleDirectiveSnapshots(selectedStudioState.roleDirectives, phaseDirectives),
+    }, `Promoted ${formatDirectivePhaseScope([phase])} steering from this experiment.`);
+  }, [selectedStudioState, updateStudioState]);
+
   const handleSaveExperiment = useCallback(() => {
     const nextHistory = [
       {
@@ -2037,7 +2233,7 @@ export default function AgentStudio() {
         scenarioId: selectedScenarioId,
         previewPresetId,
         createdAt: new Date().toISOString(),
-        notes: `${selectedScenario.label} -> ${previewPreset.label}`,
+        notes: `${selectedScenario.label} · ${previewPreset.label}${countDirectiveEntries(selectedStudioState.roleDirectives) ? ` · ${countDirectiveEntries(selectedStudioState.roleDirectives)} steering signals` : ''}`,
         roleDirectives: cloneRoleDirectives(selectedStudioState.roleDirectives),
       },
       ...(selectedStudioState.experimentHistory || []),
@@ -2481,7 +2677,7 @@ export default function AgentStudio() {
                                 </span>
                               </div>
                               <p className="mt-3 text-sm leading-relaxed text-slate-400">{selectedWorkerDetail.worker.reason}</p>
-                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
                                 <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
                                   <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Steps handled</p>
                                   <p className="mt-1 text-lg font-semibold text-white">{selectedWorkerDetail.performance?.steps || 0}</p>
@@ -2778,6 +2974,16 @@ export default function AgentStudio() {
                             <div key={item.title} className="rounded-2xl border border-violet-500/14 bg-violet-500/6 p-4">
                               <p className="text-sm font-medium text-white">{item.title}</p>
                               <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.body}</p>
+                              {item.action !== 'none' ? (
+                                <button
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => applyRecommendationAction(item.action)}
+                                  className="mt-3 ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-violet-100 disabled:opacity-60"
+                                >
+                                  Apply recommendation
+                                </button>
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -2788,6 +2994,94 @@ export default function AgentStudio() {
 
                 {activeRoom === 'optimize' ? (
                   <>
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr),minmax(0,0.95fr)]">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
+                          <Gauge className="h-4 w-4 text-emerald-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Optimization scorecard</p>
+                            <h3 className="text-sm font-semibold text-white">How healthy this operating setup is</h3>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-400">This is the compact read: how much pressure the workflow is putting on spend and risk, and whether the current policy is actually earning its complexity.</p>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          {[
+                            { label: 'Spend pressure', value: optimizationScorecard.spendPressure, tone: 'text-amber-300' },
+                            { label: 'Risk pressure', value: optimizationScorecard.riskPressure, tone: 'text-rose-300' },
+                            { label: 'Leverage score', value: optimizationScorecard.leverageScore, tone: 'text-emerald-300' },
+                          ].map((item) => (
+                            <div key={item.label} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
+                              <p className={`mt-1 text-xl font-semibold ${item.tone}`}>{item.value}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-4 rounded-2xl border border-emerald-500/16 bg-emerald-500/8 p-4">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-100/80">Verdict</p>
+                          <p className="mt-1 text-sm font-semibold text-white">{optimizationScorecard.verdict}</p>
+                          <p className="mt-2 text-sm leading-relaxed text-slate-300">{optimizationScorecard.nextMove}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4">
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Flame className="h-4 w-4 text-amber-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Waste diagnostics</p>
+                              <h3 className="text-sm font-semibold text-white">Where the setup is overspending</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-3">
+                            {workflowDiagnostics.wasteItems.map((item) => (
+                              <div key={item.title} className="rounded-2xl border border-amber-500/14 bg-amber-500/6 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{item.title}</p>
+                                    <p className="mt-2 text-sm leading-relaxed text-slate-300">{item.body}</p>
+                                  </div>
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-amber-200">{item.severity}</span>
+                                </div>
+                                {item.action !== 'none' ? (
+                                  <button type="button" disabled={actionBusy} onClick={() => applyRecommendationAction(item.action)} className="mt-3 ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-amber-100 disabled:opacity-60">
+                                    Apply fix
+                                  </button>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Target className="h-4 w-4 text-rose-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Risk diagnostics</p>
+                              <h3 className="text-sm font-semibold text-white">Where the workflow needs protection</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-3">
+                            {workflowDiagnostics.riskItems.map((item) => (
+                              <div key={item.title} className="rounded-2xl border border-rose-500/14 bg-rose-500/6 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{item.title}</p>
+                                    <p className="mt-2 text-sm leading-relaxed text-slate-300">{item.body}</p>
+                                  </div>
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-rose-200">{item.severity}</span>
+                                </div>
+                                {item.action !== 'none' ? (
+                                  <button type="button" disabled={actionBusy} onClick={() => applyRecommendationAction(item.action)} className="mt-3 ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-rose-100 disabled:opacity-60">
+                                    Tighten policy
+                                  </button>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                       <div className="flex items-center gap-2">
                         <Sparkles className="h-4 w-4 text-cyan-300" />
@@ -3163,6 +3457,16 @@ export default function AgentStudio() {
                             <div key={item.title} className="rounded-2xl border border-violet-500/14 bg-violet-500/6 p-4">
                               <p className="text-sm font-medium text-white">{item.title}</p>
                               <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.body}</p>
+                              {item.action !== 'none' ? (
+                                <button
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => applyRecommendationAction(item.action)}
+                                  className="mt-3 ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-violet-100 disabled:opacity-60"
+                                >
+                                  Apply recommendation
+                                </button>
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -3332,8 +3636,13 @@ export default function AgentStudio() {
                               >
                                 <div className="flex items-start justify-between gap-3">
                                   <div>
-                                    <p className="text-sm font-medium text-white">{getScenarioPreset(experiment.scenarioId as ScenarioPresetId).label}</p>
+                                    <p className="text-sm font-medium text-white">{getExperimentDisplayLabel(experiment)}</p>
                                     <p className="mt-1 text-[11px] text-slate-500">{POLICY_PRESETS.find((preset) => preset.id === experiment.previewPresetId)?.label || experiment.previewPresetId}</p>
+                                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                      {getExperimentTags(experiment).map((tag) => (
+                                        <span key={`${experiment.id}-${tag}`} className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{tag}</span>
+                                      ))}
+                                    </div>
                                   </div>
                                   <span className="rounded-full border border-navy-700 bg-navy-900 px-2 py-0.5 text-[10px] text-slate-300">
                                     {formatRelativeTimeFromIso(experiment.createdAt)}
@@ -3515,6 +3824,18 @@ export default function AgentStudio() {
                               <h3 className="text-sm font-semibold text-white">Current vs selected experiment over time</h3>
                             </div>
                           </div>
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {(['credits', 'duration', 'success'] as TrendMetric[]).map((metric) => (
+                              <button
+                                key={metric}
+                                type="button"
+                                onClick={() => setTrendMetric(metric)}
+                                className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${trendMetric === metric ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
+                              >
+                                {getTrendMetricLabel(metric)}
+                              </button>
+                            ))}
+                          </div>
                           <div className="mt-4 grid gap-3 sm:grid-cols-2">
                             {[{
                               label: 'Current',
@@ -3533,14 +3854,15 @@ export default function AgentStudio() {
                                 {series.items.length > 0 ? (
                                   <div className="mt-3 flex h-24 items-end gap-2">
                                     {series.items.slice(0, 6).reverse().map((run, idx, arr) => {
-                                      const maxCredits = Math.max(...arr.map((item) => item.actualCredits || 0), 1);
-                                      const height = `${Math.max(18, ((run.actualCredits || 0) / maxCredits) * 100)}%`;
+                                      const maxMetric = Math.max(...arr.map((item) => getTrendMetricValue(item, trendMetric)), 1);
+                                      const height = `${Math.max(18, (getTrendMetricValue(run, trendMetric) / maxMetric) * 100)}%`;
                                       return (
                                         <div key={run.id} className="flex min-w-0 flex-1 flex-col items-center">
                                           <div className="flex h-20 w-full items-end">
                                             <div className={`w-full rounded-t-2xl border border-white/8 bg-gradient-to-t ${series.tone}`} style={{ height }} />
                                           </div>
                                           <p className="mt-1 text-[10px] text-slate-500">R{idx + 1}</p>
+                                          <p className="mt-1 text-[10px] text-slate-400">{formatTrendMetricValue(run, trendMetric)}</p>
                                         </div>
                                       );
                                     })}
@@ -3624,7 +3946,7 @@ export default function AgentStudio() {
                           </div>
                           {winningExperiment ? (
                             <>
-                              <p className="mt-3 text-sm font-medium text-white">{winningExperiment.experiment.notes || `${getScenarioLabelFromId(winningExperiment.experiment.scenarioId)} · ${getPresetLabelFromId(winningExperiment.experiment.previewPresetId)}`}</p>
+                              <p className="mt-3 text-sm font-medium text-white">{getExperimentDisplayLabel(winningExperiment.experiment)}</p>
                               <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{winningExperiment.stats.count} runs</span>
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{Math.round(winningExperiment.stats.successRate * 100)}% success</span>
@@ -3665,6 +3987,30 @@ export default function AgentStudio() {
                                   Promote full setup
                                 </button>
                               </div>
+                              {winningExperimentPhases.length > 0 ? (
+                                <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Phase-level adoption</p>
+                                      <p className="mt-1 text-sm font-medium text-white">Promote only the part that is winning</p>
+                                    </div>
+                                    <span className="text-[11px] text-slate-500">Useful when one phase is clearly better than the rest</span>
+                                  </div>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {winningExperimentPhases.map((phase) => (
+                                      <button
+                                        key={`winning-${phase}`}
+                                        type="button"
+                                        disabled={actionBusy}
+                                        onClick={() => handlePromoteExperimentPhase(winningExperiment.experiment, phase)}
+                                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
+                                      >
+                                        Adopt {formatDirectivePhaseScope([phase])}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
                             </>
                           ) : (
                             <div className="mt-4 rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
@@ -3686,8 +4032,13 @@ export default function AgentStudio() {
                               <div key={entry.experiment.id} className={`rounded-2xl border p-3 ${selectedComparisonExperimentId === entry.experiment.id ? 'border-cyan-500/24 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/45'}`}>
                                 <div className="flex items-start justify-between gap-3">
                                   <div>
-                                    <p className="text-sm font-medium text-white">{entry.experiment.notes || `${getScenarioLabelFromId(entry.experiment.scenarioId)} · ${getPresetLabelFromId(entry.experiment.previewPresetId)}`}</p>
+                                    <p className="text-sm font-medium text-white">{getExperimentDisplayLabel(entry.experiment)}</p>
                                     <p className="mt-1 text-[11px] text-slate-500">Saved {formatRelativeTimeFromIso(entry.experiment.createdAt)}</p>
+                                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                      {getExperimentTags(entry.experiment, { count: entry.stats.count, successRate: entry.stats.successRate, averageCredits: entry.stats.averageCredits }, winningExperiment?.experiment.id === entry.experiment.id).map((tag) => (
+                                        <span key={`${entry.experiment.id}-${tag}`} className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{tag}</span>
+                                      ))}
+                                    </div>
                                   </div>
                                   <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {entry.score}</span>
                                 </div>
