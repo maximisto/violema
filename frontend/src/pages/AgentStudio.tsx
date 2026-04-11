@@ -5661,9 +5661,10 @@ export default function AgentStudio() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[22rem,minmax(0,1fr)]">
+        <div className="mt-6 space-y-6">
           <aside className="space-y-4">
-            <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/52 to-navy-950/84 p-4">
+            <div className="grid gap-4 xl:grid-cols-[19rem,minmax(0,1fr)] xl:items-start">
+              <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/52 to-navy-950/84 p-4">
               <div className="flex items-center gap-2">
                 <Workflow className="h-4 w-4 text-violet-300" />
                 <div>
@@ -5672,59 +5673,60 @@ export default function AgentStudio() {
                 </div>
               </div>
               <p className="mt-2 text-sm leading-relaxed text-slate-400">Choose a workflow here, then tune or inspect the agent system without losing the scheduling context.</p>
-            </div>
+              </div>
 
-            <div className="space-y-2">
-              {loading ? (
-                <div className="rounded-[1.6rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-4 py-8 text-sm text-slate-500">
-                  Loading workflows…
-                </div>
-              ) : rows.length === 0 ? (
-                <div className="rounded-[1.6rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-4 py-8 text-sm text-slate-500">
-                  No scheduled workflows yet. Create one from the dashboard, then come back here to tune the agent system.
-                </div>
-              ) : rows.map((row) => {
-                const isSelected = row.automation.id === selectedRow?.automation.id;
-                const latestStatus = row.latestRun?.status || row.automation.last_run_status || row.automation.status;
-                return (
-                  <button
-                    key={row.automation.id}
-                    type="button"
-                    onClick={() => setSelectedAutomationId(row.automation.id)}
-                    className={`w-full rounded-[1.4rem] border p-4 text-left transition-all ${
-                      isSelected
-                        ? 'border-violet-500/30 bg-gradient-to-br from-violet-500/12 to-cyan-500/6 shadow-[0_18px_44px_rgba(76,29,149,0.18)]'
-                        : 'border-navy-700/80 bg-navy-950/45 hover:border-violet-500/18 hover:bg-navy-900/60'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white">{row.automation.name}</p>
-                        <p className="mt-1 text-xs text-slate-500">{row.automation.schedule}</p>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {loading ? (
+                  <div className="rounded-[1.6rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-4 py-8 text-sm text-slate-500 xl:col-span-3">
+                    Loading workflows…
+                  </div>
+                ) : rows.length === 0 ? (
+                  <div className="rounded-[1.6rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-4 py-8 text-sm text-slate-500 xl:col-span-3">
+                    No scheduled workflows yet. Create one from the dashboard, then come back here to tune the agent system.
+                  </div>
+                ) : rows.map((row) => {
+                  const isSelected = row.automation.id === selectedRow?.automation.id;
+                  const latestStatus = row.latestRun?.status || row.automation.last_run_status || row.automation.status;
+                  return (
+                    <button
+                      key={row.automation.id}
+                      type="button"
+                      onClick={() => setSelectedAutomationId(row.automation.id)}
+                      className={`w-full rounded-[1.4rem] border p-4 text-left transition-all ${
+                        isSelected
+                          ? 'border-violet-500/30 bg-gradient-to-br from-violet-500/12 to-cyan-500/6 shadow-[0_18px_44px_rgba(76,29,149,0.18)]'
+                          : 'border-navy-700/80 bg-navy-950/45 hover:border-violet-500/18 hover:bg-navy-900/60'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-white">{row.automation.name}</p>
+                          <p className="mt-1 text-xs text-slate-500">{row.automation.schedule}</p>
+                        </div>
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(latestStatus)}`}>
+                          {latestStatus}
+                        </span>
                       </div>
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(latestStatus)}`}>
-                        {latestStatus}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
-                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                        {row.automation.authoring_mode === 'describe' ? 'Describe it' : 'Guided steps'}
-                      </span>
-                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                        {row.workflowSteps.length} steps
-                      </span>
-                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                        {Math.round(row.successRate * 100)}% success
-                      </span>
-                    </div>
+                      <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                          {row.automation.authoring_mode === 'describe' ? 'Describe it' : 'Guided steps'}
+                        </span>
+                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                          {row.workflowSteps.length} steps
+                        </span>
+                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                          {Math.round(row.successRate * 100)}% success
+                        </span>
+                      </div>
                       <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
-                      {formatSummaryPreview(readString(row.latestRun?.metadata?.summary), 120)
-                        || row.automation.description
-                        || 'No recent summary yet.'}
+                        {formatSummaryPreview(readString(row.latestRun?.metadata?.summary), 120)
+                          || row.automation.description
+                          || 'No recent summary yet.'}
                       </p>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </aside>
 
