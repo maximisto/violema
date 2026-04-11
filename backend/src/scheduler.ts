@@ -3,6 +3,26 @@ import path from 'path';
 import cron, { ScheduledTask } from 'node-cron';
 import type { AutomationExecutionPolicy, PersistedAutomationStep } from './platform/types';
 
+export interface AutomationStudioExperimentRecord {
+  id: string;
+  scenarioId: string;
+  previewPresetId: string;
+  createdAt: string;
+  notes?: string;
+}
+
+export interface AutomationRoleDirective {
+  mode: 'cheaper' | 'review' | 'promote';
+  updatedAt: string;
+}
+
+export interface AutomationStudioState {
+  selectedScenarioId?: string;
+  previewPresetId?: string;
+  experimentHistory?: AutomationStudioExperimentRecord[];
+  roleDirectives?: Record<string, AutomationRoleDirective>;
+}
+
 export interface AutomationRecord {
   id: string;
   version?: 2;
@@ -16,6 +36,7 @@ export interface AutomationRecord {
   actions: string[];
   steps?: PersistedAutomationStep[];
   execution_policy?: AutomationExecutionPolicy;
+  studio_state?: AutomationStudioState;
   notify?: string;
   condition?: string;
   status: 'active' | 'paused';

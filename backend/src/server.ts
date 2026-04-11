@@ -14,7 +14,16 @@ import {
 } from './auth';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } from './integrations';
-import { createAutomation, deleteAutomation, getAutomationById, listAutomations, loadPersistedAutomations, triggerAutomationNow, updateAutomation } from './scheduler';
+import {
+  createAutomation,
+  deleteAutomation,
+  getAutomationById,
+  listAutomations,
+  loadPersistedAutomations,
+  triggerAutomationNow,
+  updateAutomation,
+  type AutomationStudioState,
+} from './scheduler';
 import {
   addLedgerEntry,
   applyWorkerRuntimeActivity,
@@ -1838,6 +1847,69 @@ function normalizeAutomationExecutionPolicy(value: unknown): AutomationExecution
     optimizationGoal,
     reviewPolicy,
     maxElasticLanes,
+  };
+}
+
+function normalizeAutomationStudioState(value: unknown): AutomationStudioState | undefined {
+  if (!isObjectRecord(value)) return undefined;
+
+  const selectedScenarioId =
+    typeof value.selectedScenarioId === 'string' && value.selectedScenarioId.trim()
+      ? value.selectedScenarioId.trim()
+      : undefined;
+  const previewPresetId =
+    typeof value.previewPresetId === 'string' && value.previewPresetId.trim()
+      ? value.previewPresetId.trim()
+      : undefined;
+
+  const experimentHistory = Array.isArray(value.experimentHistory)
+    ? value.experimentHistory
+        .map((item) => {
+          if (!isObjectRecord(item)) return null;
+          const id = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : undefined;
+          const scenarioId = typeof item.scenarioId === 'string' && item.scenarioId.trim() ? item.scenarioId.trim() : undefined;
+          const previewId = typeof item.previewPresetId === 'string' && item.previewPresetId.trim() ? item.previewPresetId.trim() : undefined;
+          const createdAt = typeof item.createdAt === 'string' && item.createdAt.trim() ? item.createdAt.trim() : undefined;
+          if (!id || !scenarioId || !previewId || !createdAt) return null;
+          return {
+            id,
+            scenarioId,
+            previewPresetId: previewId,
+            createdAt,
+            notes: typeof item.notes === 'string' && item.notes.trim() ? item.notes.trim() : undefined,
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        .slice(0, 8)
+    : undefined;
+
+  const roleDirectives = isObjectRecord(value.roleDirectives)
+    ? Object.fromEntries(
+        Object.entries(value.roleDirectives)
+          .map(([role, directive]) => {
+            if (!isObjectRecord(directive)) return null;
+            const mode = directive.mode === 'cheaper' || directive.mode === 'review' || directive.mode === 'promote'
+              ? directive.mode
+              : undefined;
+            const updatedAt = typeof directive.updatedAt === 'string' && directive.updatedAt.trim()
+              ? directive.updatedAt.trim()
+              : undefined;
+            if (!role.trim() || !mode || !updatedAt) return null;
+            return [role.trim(), { mode, updatedAt }];
+          })
+          .filter((entry): entry is [string, { mode: 'cheaper' | 'review' | 'promote'; updatedAt: string }] => Boolean(entry))
+      )
+    : undefined;
+
+  if (!selectedScenarioId && !previewPresetId && !experimentHistory?.length && !roleDirectives) {
+    return undefined;
+  }
+
+  return {
+    selectedScenarioId,
+    previewPresetId,
+    experimentHistory,
+    roleDirectives,
   };
 }
 
@@ -4144,6 +4216,7 @@ app.post('/api/automations', async (req: Request, res: Response) => {
     actions?: unknown[];
     steps?: unknown[];
     executionPolicy?: unknown;
+    studioState?: unknown;
     notify?: string | null;
     condition?: string | null;
   };
@@ -4174,6 +4247,7 @@ app.post('/api/automations', async (req: Request, res: Response) => {
       actions: normalizedActions,
       steps: normalizedSteps.length > 0 ? normalizedSteps : undefined,
       execution_policy: normalizeAutomationExecutionPolicy(body.executionPolicy),
+      studio_state: normalizeAutomationStudioState(body.studioState),
       notify: typeof body.notify === 'string' ? body.notify.trim() || undefined : undefined,
       condition: typeof body.condition === 'string' ? body.condition.trim() || undefined : undefined,
     }, runAutomation);
@@ -4215,6 +4289,9 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
   if (typeof req.body.condition === 'string') patch.condition = req.body.condition.trim();
   if (typeof req.body.executionPolicy !== 'undefined') {
     patch.execution_policy = normalizeAutomationExecutionPolicy(req.body.executionPolicy);
+  }
+  if (typeof req.body.studioState !== 'undefined') {
+    patch.studio_state = normalizeAutomationStudioState(req.body.studioState);
   }
   if (Array.isArray(req.body.steps)) {
     const normalizedSteps = normalizePersistedAutomationSteps(req.body.steps);
