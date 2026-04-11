@@ -32,6 +32,7 @@ type ReviewPolicy = 'lean' | 'standard' | 'strict';
 type StudioRoom = 'live' | 'optimize' | 'replay';
 type ScenarioPresetId = 'baseline' | 'rush' | 'deep_research' | 'monitoring' | 'high_stakes';
 type TrendMetric = 'credits' | 'duration' | 'success';
+type GateLearningWindow = 'recent' | 'deep' | 'all';
 
 interface StudioExperimentRecord {
   id: string;
@@ -51,10 +52,15 @@ interface StudioRoleDirective {
 }
 
 interface AutomationStudioStateDraft {
+  activeRoom?: StudioRoom;
   selectedScenarioId?: string;
   previewPresetId?: string;
+  selectedComparisonExperimentId?: string;
+  selectedCohortRunId?: string;
   selectedBranchRootId?: string;
   comparedBranchRootId?: string;
+  trendMetric?: TrendMetric;
+  gateLearningWindow?: GateLearningWindow;
   experimentHistory?: StudioExperimentRecord[];
   roleDirectives?: Record<string, StudioRoleDirective>;
   promotionHistory?: StudioPromotionRecord[];
@@ -1376,10 +1382,23 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
     : undefined;
 
   return {
+    activeRoom: value.activeRoom === 'live' || value.activeRoom === 'optimize' || value.activeRoom === 'replay'
+      ? value.activeRoom
+      : undefined,
     selectedScenarioId: readString(value.selectedScenarioId),
     previewPresetId: readString(value.previewPresetId),
+    selectedComparisonExperimentId: readString(value.selectedComparisonExperimentId),
+    selectedCohortRunId: readString(value.selectedCohortRunId),
     selectedBranchRootId: readString(value.selectedBranchRootId),
     comparedBranchRootId: readString(value.comparedBranchRootId),
+    trendMetric:
+      value.trendMetric === 'credits' || value.trendMetric === 'duration' || value.trendMetric === 'success'
+        ? value.trendMetric
+        : undefined,
+    gateLearningWindow:
+      value.gateLearningWindow === 'recent' || value.gateLearningWindow === 'deep' || value.gateLearningWindow === 'all'
+        ? value.gateLearningWindow
+        : undefined,
     experimentHistory,
     roleDirectives,
     promotionHistory,
@@ -1441,6 +1460,7 @@ export default function AgentStudio() {
   const [selectedBranchRootId, setSelectedBranchRootId] = useState<string>('');
   const [comparedBranchRootId, setComparedBranchRootId] = useState<string>('');
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('credits');
+  const [gateLearningWindow, setGateLearningWindow] = useState<GateLearningWindow>('deep');
   const [selectedCohortRunId, setSelectedCohortRunId] = useState<string>('');
   const [hoveredCohortRunId, setHoveredCohortRunId] = useState<string>('');
   const [phaseSimulation, setPhaseSimulation] = useState<{ phase: WorkflowBlockKind; mode: 'cheaper' | 'review' | 'promote' } | null>(null);
@@ -1683,12 +1703,17 @@ export default function AgentStudio() {
   }, [activePresetId, selectedRow?.automation.id]);
 
   useEffect(() => {
+    setActiveRoom(selectedStudioState.activeRoom || 'live');
     setSelectedWorkerRole('nexus');
     setSelectedDirectivePhase('all');
     setHoveredCohortRunId('');
     setPhaseSimulation(null);
+    setSelectedComparisonExperimentId(selectedStudioState.selectedComparisonExperimentId || '');
+    setSelectedCohortRunId(selectedStudioState.selectedCohortRunId || '');
     setSelectedBranchRootId(selectedStudioState.selectedBranchRootId || '');
     setComparedBranchRootId(selectedStudioState.comparedBranchRootId || '');
+    setTrendMetric(selectedStudioState.trendMetric || 'credits');
+    setGateLearningWindow(selectedStudioState.gateLearningWindow || 'deep');
     setSelectedScenarioId(
       selectedStudioState.selectedScenarioId && SCENARIO_PRESETS.some((scenario) => scenario.id === selectedStudioState.selectedScenarioId)
         ? selectedStudioState.selectedScenarioId as ScenarioPresetId
@@ -1698,11 +1723,16 @@ export default function AgentStudio() {
       setPreviewPresetId(selectedStudioState.previewPresetId);
     }
   }, [
+    selectedStudioState.activeRoom,
+    selectedStudioState.gateLearningWindow,
+    selectedStudioState.selectedComparisonExperimentId,
+    selectedStudioState.selectedCohortRunId,
     selectedRow?.automation.id,
     selectedStudioState.comparedBranchRootId,
     selectedStudioState.previewPresetId,
     selectedStudioState.selectedBranchRootId,
     selectedStudioState.selectedScenarioId,
+    selectedStudioState.trendMetric,
   ]);
 
   const previewPreset = useMemo(
@@ -2824,10 +2854,18 @@ export default function AgentStudio() {
 
   const gateProfileLearning = useMemo(() => {
     const scopedRows = rows.filter((row) => classifyWorkflowArchetype(row.workflowSteps).id === selectedArchetype.id);
+    const now = Date.now();
+    const maxAgeDays = gateLearningWindow === 'recent' ? 14 : gateLearningWindow === 'deep' ? 45 : Infinity;
     const runRecords = scopedRows.flatMap((row) => {
       const rowStudioState = normalizeStudioState(row.automation.studio_state);
       return row.runs
         .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+        .filter((run) => {
+          if (!Number.isFinite(maxAgeDays)) return true;
+          const runAt = Date.parse(run.finishedAt || run.startedAt || '');
+          if (Number.isNaN(runAt)) return false;
+          return ((now - runAt) / 86400000) <= maxAgeDays;
+        })
         .map((run) => {
           const attribution = getRunExperimentAttribution(run);
           const scenarioId = attribution.scenarioId || rowStudioState.selectedScenarioId || 'baseline';
@@ -2878,10 +2916,11 @@ export default function AgentStudio() {
       scopeLabel: scenarioScopedRuns.length >= 3
         ? `${selectedArchetype.label.toLowerCase()} in ${selectedScenario.label.toLowerCase()}`
         : selectedArchetype.label.toLowerCase(),
+      windowLabel: gateLearningWindow === 'recent' ? 'last 14 days' : gateLearningWindow === 'deep' ? 'last 45 days' : 'all observed history',
       items: items.slice(0, 3),
       recommendedProfile: items[0]?.profile,
     };
-  }, [rows, selectedArchetype.id, selectedArchetype.label, selectedScenario.id, selectedScenario.label]);
+  }, [gateLearningWindow, rows, selectedArchetype.id, selectedArchetype.label, selectedScenario.id, selectedScenario.label]);
 
   const rollbackSuggestion = useMemo(() => {
     const weak = promotionAudit.find((entry) => entry.outcome === 'Weak');
@@ -3067,6 +3106,44 @@ export default function AgentStudio() {
     selectedRow?.automation.id,
     selectedScenarioId,
     selectedStudioState,
+    updateStudioState,
+  ]);
+
+  useEffect(() => {
+    if (!selectedRow?.automation.id) return undefined;
+    const nextRoom = activeRoom || undefined;
+    const nextExperimentId = selectedComparisonExperimentId || undefined;
+    const nextRunId = selectedCohortRunId || undefined;
+    const nextMetric = trendMetric || undefined;
+    const nextGateWindow = gateLearningWindow || undefined;
+    if (
+      (selectedStudioState.activeRoom || undefined) === nextRoom &&
+      (selectedStudioState.selectedComparisonExperimentId || undefined) === nextExperimentId &&
+      (selectedStudioState.selectedCohortRunId || undefined) === nextRunId &&
+      (selectedStudioState.trendMetric || undefined) === nextMetric &&
+      (selectedStudioState.gateLearningWindow || undefined) === nextGateWindow
+    ) {
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => {
+      void updateStudioState({
+        ...selectedStudioState,
+        activeRoom: nextRoom,
+        selectedComparisonExperimentId: nextExperimentId,
+        selectedCohortRunId: nextRunId,
+        trendMetric: nextMetric,
+        gateLearningWindow: nextGateWindow,
+      });
+    }, 450);
+    return () => window.clearTimeout(timeout);
+  }, [
+    activeRoom,
+    gateLearningWindow,
+    selectedComparisonExperimentId,
+    selectedCohortRunId,
+    selectedRow?.automation.id,
+    selectedStudioState,
+    trendMetric,
     updateStudioState,
   ]);
 
@@ -5493,6 +5570,8 @@ export default function AgentStudio() {
                               <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">gate {autoPromotionSuggestion.threshold}% confidence</span>
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{evidenceFreshness.confidence}</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{winningExperiment?.stats.count || 0} observed runs</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{gateProfileLearning.windowLabel}</span>
                               </div>
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <button
@@ -5567,6 +5646,25 @@ export default function AgentStudio() {
                                   <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
                                     {gateProfileLearning.scopeLabel}
                                   </span>
+                                </div>
+                                <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-slate-300">
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                    {gateProfileLearning.windowLabel}
+                                  </span>
+                                  {(['recent', 'deep', 'all'] as GateLearningWindow[]).map((windowId) => (
+                                    <button
+                                      key={`gate-window-${windowId}`}
+                                      type="button"
+                                      onClick={() => setGateLearningWindow(windowId)}
+                                      className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${
+                                        gateLearningWindow === windowId
+                                          ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
+                                          : 'text-slate-300'
+                                      }`}
+                                    >
+                                      {windowId === 'recent' ? 'Recent' : windowId === 'deep' ? 'Deep' : 'All'}
+                                    </button>
+                                  ))}
                                 </div>
                                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
                                   {gateProfileLearning.items.map((item) => (
@@ -6123,6 +6221,22 @@ export default function AgentStudio() {
                               <p className="mt-2 text-sm leading-relaxed text-slate-300">{rollbackSuggestion.body}</p>
                               {rollbackSuggestion.restoreExperiment ? (
                                 <div className="mt-3 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={actionBusy}
+                                    onClick={() => handlePromoteExperimentPreset(rollbackSuggestion.restoreExperiment!)}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-emerald-200 disabled:opacity-60"
+                                  >
+                                    Restore preset only
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={actionBusy}
+                                    onClick={() => handlePromoteExperimentSteering(rollbackSuggestion.restoreExperiment!)}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
+                                  >
+                                    Restore steering only
+                                  </button>
                                   <button
                                     type="button"
                                     disabled={actionBusy}
