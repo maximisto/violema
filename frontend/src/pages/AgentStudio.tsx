@@ -1866,6 +1866,7 @@ export default function AgentStudio() {
   const location = useLocation();
   const workspace = useMemo(() => resolveWorkspaceContext(), []);
   const [activeRoom, setActiveRoom] = useState<StudioRoom>('live');
+  const [showOptimizeAdvanced, setShowOptimizeAdvanced] = useState(false);
   const [selectedWorkerRole, setSelectedWorkerRole] = useState<string>('nexus');
   const [selectedScenarioId, setSelectedScenarioId] = useState<ScenarioPresetId>('baseline');
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
@@ -6890,6 +6891,28 @@ export default function AgentStudio() {
                       </div>
                     </div>
 
+                    <div className="rounded-[1.8rem] border border-white/6 bg-white/[0.03] p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Strategy lab</p>
+                          <h3 className="mt-1 text-sm font-semibold text-white">Keep optimize focused on scenarios, presets, and the preview first</h3>
+                          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
+                            Plans, branches, graduation, rollback, and deeper policy analysis are still here. They just should not compete with the primary decision path on first read.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowOptimizeAdvanced((current) => !current)}
+                          className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${
+                            showOptimizeAdvanced ? 'border-violet-500/30 bg-violet-500/12 text-violet-200' : 'text-slate-300'
+                          }`}
+                        >
+                          {showOptimizeAdvanced ? 'Hide advanced optimize' : 'Show advanced optimize'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {showOptimizeAdvanced ? (
                     <div className="grid gap-6">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
@@ -8710,6 +8733,7 @@ export default function AgentStudio() {
                         </div>
                       </div>
                     </div>
+                    ) : null}
                   </>
                 ) : null}
 
@@ -10351,8 +10375,8 @@ export default function AgentStudio() {
                               No role performance data yet.
                             </div>
                           )}
-                        </div>
                       </div>
+                    </div>
                     </div>
 
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
