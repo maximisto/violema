@@ -33,6 +33,7 @@ type StudioRoom = 'live' | 'optimize' | 'replay';
 type ScenarioPresetId = 'baseline' | 'rush' | 'deep_research' | 'monitoring' | 'high_stakes';
 type TrendMetric = 'credits' | 'duration' | 'success';
 type GateLearningWindow = 'recent' | 'deep' | 'all';
+type BranchRunFilter = 'all' | 'succeeded' | 'failed';
 
 interface StudioExperimentRecord {
   id: string;
@@ -55,12 +56,19 @@ interface AutomationStudioStateDraft {
   activeRoom?: StudioRoom;
   selectedScenarioId?: string;
   previewPresetId?: string;
+  selectedWorkerRole?: string;
+  selectedDirectivePhase?: 'all' | WorkflowBlockKind;
   selectedComparisonExperimentId?: string;
   selectedCohortRunId?: string;
   selectedBranchRootId?: string;
   comparedBranchRootId?: string;
   trendMetric?: TrendMetric;
   gateLearningWindow?: GateLearningWindow;
+  branchRunFilter?: BranchRunFilter;
+  phaseSimulation?: {
+    phase: WorkflowBlockKind;
+    mode: 'cheaper' | 'review' | 'promote';
+  };
   experimentHistory?: StudioExperimentRecord[];
   roleDirectives?: Record<string, StudioRoleDirective>;
   promotionHistory?: StudioPromotionRecord[];
@@ -1387,6 +1395,18 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
       : undefined,
     selectedScenarioId: readString(value.selectedScenarioId),
     previewPresetId: readString(value.previewPresetId),
+    selectedWorkerRole: readString(value.selectedWorkerRole),
+    selectedDirectivePhase:
+      value.selectedDirectivePhase === 'all' ||
+      value.selectedDirectivePhase === 'search' ||
+      value.selectedDirectivePhase === 'query' ||
+      value.selectedDirectivePhase === 'capture' ||
+      value.selectedDirectivePhase === 'analyze' ||
+      value.selectedDirectivePhase === 'summarize' ||
+      value.selectedDirectivePhase === 'deliver' ||
+      value.selectedDirectivePhase === 'note'
+        ? value.selectedDirectivePhase
+        : undefined,
     selectedComparisonExperimentId: readString(value.selectedComparisonExperimentId),
     selectedCohortRunId: readString(value.selectedCohortRunId),
     selectedBranchRootId: readString(value.selectedBranchRootId),
@@ -1398,6 +1418,22 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
     gateLearningWindow:
       value.gateLearningWindow === 'recent' || value.gateLearningWindow === 'deep' || value.gateLearningWindow === 'all'
         ? value.gateLearningWindow
+        : undefined,
+    branchRunFilter:
+      value.branchRunFilter === 'all' || value.branchRunFilter === 'succeeded' || value.branchRunFilter === 'failed'
+        ? value.branchRunFilter
+        : undefined,
+    phaseSimulation:
+      isRecord(value.phaseSimulation) &&
+      (value.phaseSimulation.phase === 'search' ||
+        value.phaseSimulation.phase === 'query' ||
+        value.phaseSimulation.phase === 'capture' ||
+        value.phaseSimulation.phase === 'analyze' ||
+        value.phaseSimulation.phase === 'summarize' ||
+        value.phaseSimulation.phase === 'deliver' ||
+        value.phaseSimulation.phase === 'note') &&
+      (value.phaseSimulation.mode === 'cheaper' || value.phaseSimulation.mode === 'review' || value.phaseSimulation.mode === 'promote')
+        ? { phase: value.phaseSimulation.phase, mode: value.phaseSimulation.mode }
         : undefined,
     experimentHistory,
     roleDirectives,
@@ -1461,6 +1497,7 @@ export default function AgentStudio() {
   const [comparedBranchRootId, setComparedBranchRootId] = useState<string>('');
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('credits');
   const [gateLearningWindow, setGateLearningWindow] = useState<GateLearningWindow>('deep');
+  const [branchRunFilter, setBranchRunFilter] = useState<BranchRunFilter>('all');
   const [selectedCohortRunId, setSelectedCohortRunId] = useState<string>('');
   const [hoveredCohortRunId, setHoveredCohortRunId] = useState<string>('');
   const [phaseSimulation, setPhaseSimulation] = useState<{ phase: WorkflowBlockKind; mode: 'cheaper' | 'review' | 'promote' } | null>(null);
@@ -1704,16 +1741,17 @@ export default function AgentStudio() {
 
   useEffect(() => {
     setActiveRoom(selectedStudioState.activeRoom || 'live');
-    setSelectedWorkerRole('nexus');
-    setSelectedDirectivePhase('all');
+    setSelectedWorkerRole(selectedStudioState.selectedWorkerRole || 'nexus');
+    setSelectedDirectivePhase(selectedStudioState.selectedDirectivePhase || 'all');
     setHoveredCohortRunId('');
-    setPhaseSimulation(null);
+    setPhaseSimulation(selectedStudioState.phaseSimulation || null);
     setSelectedComparisonExperimentId(selectedStudioState.selectedComparisonExperimentId || '');
     setSelectedCohortRunId(selectedStudioState.selectedCohortRunId || '');
     setSelectedBranchRootId(selectedStudioState.selectedBranchRootId || '');
     setComparedBranchRootId(selectedStudioState.comparedBranchRootId || '');
     setTrendMetric(selectedStudioState.trendMetric || 'credits');
     setGateLearningWindow(selectedStudioState.gateLearningWindow || 'deep');
+    setBranchRunFilter(selectedStudioState.branchRunFilter || 'all');
     setSelectedScenarioId(
       selectedStudioState.selectedScenarioId && SCENARIO_PRESETS.some((scenario) => scenario.id === selectedStudioState.selectedScenarioId)
         ? selectedStudioState.selectedScenarioId as ScenarioPresetId
@@ -1724,14 +1762,18 @@ export default function AgentStudio() {
     }
   }, [
     selectedStudioState.activeRoom,
+    selectedStudioState.branchRunFilter,
     selectedStudioState.gateLearningWindow,
+    selectedStudioState.phaseSimulation,
     selectedStudioState.selectedComparisonExperimentId,
     selectedStudioState.selectedCohortRunId,
+    selectedStudioState.selectedDirectivePhase,
     selectedRow?.automation.id,
     selectedStudioState.comparedBranchRootId,
     selectedStudioState.previewPresetId,
     selectedStudioState.selectedBranchRootId,
     selectedStudioState.selectedScenarioId,
+    selectedStudioState.selectedWorkerRole,
     selectedStudioState.trendMetric,
   ]);
 
@@ -2758,6 +2800,13 @@ export default function AgentStudio() {
       .sort((a, b) => b.score - a.score || b.stats.count - a.stats.count);
   }, [experimentPerformance, selectedBranchFamily]);
 
+  const filteredBranchRuns = useMemo(() => {
+    if (!selectedBranchFamily) return [];
+    return selectedBranchFamily.runs
+      .filter((run) => branchRunFilter === 'all' || run.status === branchRunFilter)
+      .slice(0, 6);
+  }, [branchRunFilter, selectedBranchFamily]);
+
   const selectedBranchCausalReport = useMemo(() => {
     if (!selectedBranchFamily) return [] as Array<{ title: string; body: string; tone: string }>;
     const items: Array<{ title: string; body: string; tone: string }> = [];
@@ -2942,6 +2991,149 @@ export default function AgentStudio() {
     };
   }, [experimentHistory, experimentPerformance, promotionAudit, winningExperiment]);
 
+  const replayWeakSpot = useMemo(() => {
+    const failingPhase = phaseEvidence
+      .filter((phase) => phase.runs >= 2)
+      .sort((left, right) => left.successRate - right.successRate || right.runs - left.runs)[0];
+    if (!failingPhase) return null;
+    const recommendedMode: 'review' | 'cheaper' | 'promote' =
+      failingPhase.successRate < 0.65 ? 'review' : failingPhase.averageCredits > 18 ? 'cheaper' : 'promote';
+    return {
+      phase: failingPhase.phase,
+      title: `${formatDirectivePhaseScope([failingPhase.phase])} is the weak link`,
+      body: `${formatDirectivePhaseScope([failingPhase.phase])} is only landing ${Math.round(failingPhase.successRate * 100)}% of the time across ${failingPhase.runs} observed steps. Best next move is ${getDirectiveModeLabel(recommendedMode).toLowerCase()} on ${getPreferredRoleForPhase(failingPhase.phase)}.`,
+      recommendedMode,
+    };
+  }, [phaseEvidence]);
+
+  const nextExperimentQueue = useMemo(() => {
+    const queue: Array<{
+      id: string;
+      title: string;
+      body: string;
+      phase?: WorkflowBlockKind;
+      mode?: 'cheaper' | 'review' | 'promote';
+      action?: 'simulate_phase' | 'focus_phase' | 'apply_policy';
+      policyAction?: 'lean_ops' | 'raise_review' | 'match_lanes' | 'trim_lanes' | 'none';
+    }> = [];
+
+    if (replayWeakSpot) {
+      queue.push({
+        id: `weak-${replayWeakSpot.phase}`,
+        title: `Stress-test ${formatDirectivePhaseScope([replayWeakSpot.phase])}`,
+        body: replayWeakSpot.body,
+        phase: replayWeakSpot.phase,
+        mode: replayWeakSpot.recommendedMode,
+        action: 'simulate_phase',
+      });
+    }
+
+    workflowDiagnostics.wasteItems
+      .filter((item) => item.action !== 'none')
+      .slice(0, 1)
+      .forEach((item, index) => {
+        queue.push({
+          id: `waste-${index}`,
+          title: item.title,
+          body: item.body,
+          action: 'apply_policy',
+          policyAction: item.action,
+        });
+      });
+
+    workflowDiagnostics.riskItems
+      .filter((item) => item.action !== 'none')
+      .slice(0, 1)
+      .forEach((item, index) => {
+        queue.push({
+          id: `risk-${index}`,
+          title: item.title,
+          body: item.body,
+          action: 'apply_policy',
+          policyAction: item.action,
+        });
+      });
+
+    phaseLearningByArchetype
+      .filter((item) => item.mode !== 'baseline')
+      .slice(0, 2)
+      .forEach((item) => {
+        queue.push({
+          id: `learn-${item.phase}-${item.mode}`,
+          title: `Replay-test ${formatDirectivePhaseScope([item.phase])}`,
+          body: `${getDirectiveModeLabel(item.mode as 'cheaper' | 'review' | 'promote')} is outperforming baseline for this workflow class with ${item.confidence}% confidence.`,
+          phase: item.phase,
+          mode: item.mode as 'cheaper' | 'review' | 'promote',
+          action: 'focus_phase',
+        });
+      });
+
+    return queue.slice(0, 5);
+  }, [phaseLearningByArchetype, replayWeakSpot, workflowDiagnostics.riskItems, workflowDiagnostics.wasteItems]);
+
+  const gateLearningComparison = useMemo(() => {
+    const windows: GateLearningWindow[] = ['recent', 'deep', 'all'];
+    const computeWindow = (window: GateLearningWindow) => {
+      const now = Date.now();
+      const maxAgeDays = window === 'recent' ? 14 : window === 'deep' ? 45 : Infinity;
+      const scopedRows = rows.filter((row) => classifyWorkflowArchetype(row.workflowSteps).id === selectedArchetype.id);
+      const runs = scopedRows.flatMap((row) => {
+        const rowStudioState = normalizeStudioState(row.automation.studio_state);
+        return row.runs
+          .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+          .filter((run) => {
+            if (!Number.isFinite(maxAgeDays)) return true;
+            const runAt = Date.parse(run.finishedAt || run.startedAt || '');
+            return !Number.isNaN(runAt) && ((now - runAt) / 86400000) <= maxAgeDays;
+          })
+          .map((run) => {
+            const attribution = getRunExperimentAttribution(run);
+            const scenarioId = attribution.scenarioId || rowStudioState.selectedScenarioId || 'baseline';
+            const profileId = inferPromotionGateProfileId(rowStudioState, scenarioId, selectedArchetype.id);
+            return { profileId, run, workflowId: row.automation.id, scenarioId };
+          });
+      });
+      const scenarioScoped = runs.filter((item) => item.scenarioId === selectedScenario.id);
+      const active = scenarioScoped.length >= 3 ? scenarioScoped : runs;
+      const aggregate = new Map<string, { runs: PlatformTaskRunRecord[]; workflows: Set<string>; latestAt?: string }>();
+      active.forEach((item) => {
+        const current = aggregate.get(item.profileId) || { runs: [], workflows: new Set<string>(), latestAt: undefined };
+        current.runs.push(item.run);
+        current.workflows.add(item.workflowId);
+        const candidateAt = item.run.finishedAt || item.run.startedAt;
+        if (candidateAt && (!current.latestAt || Date.parse(candidateAt) > Date.parse(current.latestAt))) {
+          current.latestAt = candidateAt;
+        }
+        aggregate.set(item.profileId, current);
+      });
+      const leader = Array.from(aggregate.entries())
+        .map(([profileId, value]) => {
+          const profile = getPromotionGateProfileById(profileId);
+          if (!profile) return null;
+          return {
+            profile,
+            workflowCount: value.workflows.size,
+            stats: summarizeRunCollection(value.runs),
+            ...scoreObservedPerformance(summarizeRunCollection(value.runs), value.latestAt),
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        .sort((left, right) => right.score - left.score || right.confidence - left.confidence)[0];
+      return {
+        window,
+        label: window === 'recent' ? 'Recent' : window === 'deep' ? 'Deep' : 'All',
+        leader,
+      };
+    };
+
+    const windowsResult = windows.map(computeWindow);
+    const uniqueLeaders = [...new Set(windowsResult.map((item) => item.leader?.profile.id).filter(Boolean))];
+    return {
+      windows: windowsResult,
+      stability: uniqueLeaders.length <= 1 ? 'Stable' : uniqueLeaders.length === 2 ? 'Mixed' : 'Diverging',
+    };
+  }, [rows, selectedArchetype.id, selectedScenario.id]);
+
   const recommendedGateProfile = useMemo(() => {
     if (gateProfileLearning.recommendedProfile && gateProfileLearning.items[0]?.stats.count >= 2) {
       return gateProfileLearning.recommendedProfile;
@@ -3112,16 +3304,24 @@ export default function AgentStudio() {
   useEffect(() => {
     if (!selectedRow?.automation.id) return undefined;
     const nextRoom = activeRoom || undefined;
+    const nextWorkerRole = selectedWorkerRole || undefined;
+    const nextDirectivePhase = selectedDirectivePhase || undefined;
+    const nextPhaseSimulation = phaseSimulation || undefined;
     const nextExperimentId = selectedComparisonExperimentId || undefined;
     const nextRunId = selectedCohortRunId || undefined;
     const nextMetric = trendMetric || undefined;
     const nextGateWindow = gateLearningWindow || undefined;
+    const nextBranchFilter = branchRunFilter || undefined;
     if (
       (selectedStudioState.activeRoom || undefined) === nextRoom &&
+      (selectedStudioState.selectedWorkerRole || undefined) === nextWorkerRole &&
+      (selectedStudioState.selectedDirectivePhase || undefined) === nextDirectivePhase &&
+      JSON.stringify(selectedStudioState.phaseSimulation || undefined) === JSON.stringify(nextPhaseSimulation) &&
       (selectedStudioState.selectedComparisonExperimentId || undefined) === nextExperimentId &&
       (selectedStudioState.selectedCohortRunId || undefined) === nextRunId &&
       (selectedStudioState.trendMetric || undefined) === nextMetric &&
-      (selectedStudioState.gateLearningWindow || undefined) === nextGateWindow
+      (selectedStudioState.gateLearningWindow || undefined) === nextGateWindow &&
+      (selectedStudioState.branchRunFilter || undefined) === nextBranchFilter
     ) {
       return undefined;
     }
@@ -3129,19 +3329,27 @@ export default function AgentStudio() {
       void updateStudioState({
         ...selectedStudioState,
         activeRoom: nextRoom,
+        selectedWorkerRole: nextWorkerRole,
+        selectedDirectivePhase: nextDirectivePhase,
+        phaseSimulation: nextPhaseSimulation,
         selectedComparisonExperimentId: nextExperimentId,
         selectedCohortRunId: nextRunId,
         trendMetric: nextMetric,
         gateLearningWindow: nextGateWindow,
+        branchRunFilter: nextBranchFilter,
       });
     }, 450);
     return () => window.clearTimeout(timeout);
   }, [
     activeRoom,
+    branchRunFilter,
     gateLearningWindow,
+    phaseSimulation,
     selectedComparisonExperimentId,
     selectedCohortRunId,
+    selectedDirectivePhase,
     selectedRow?.automation.id,
+    selectedWorkerRole,
     selectedStudioState,
     trendMetric,
     updateStudioState,
@@ -3273,6 +3481,22 @@ export default function AgentStudio() {
     }, { successMessage: `Promoted this lane for ${formatDirectivePhaseScope(directivePhases)}.` });
   }, [patchAutomationConfig, selectedDirectivePhase, selectedMath.recommendedElasticLanes, selectedPolicy, selectedStudioState, selectedWorkerDetail.worker?.role]);
 
+  const handleClearRoleDirective = useCallback(() => {
+    const role = selectedWorkerDetail.worker?.role;
+    if (!role || !selectedStudioState.roleDirectives?.[role]) return;
+    const nextDirectives = { ...(selectedStudioState.roleDirectives || {}) };
+    delete nextDirectives[role];
+    void updateStudioState({
+      ...selectedStudioState,
+      roleDirectives: Object.keys(nextDirectives).length > 0 ? nextDirectives : undefined,
+      promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+        mode: 'learning',
+        summary: `Cleared steering on ${role}.`,
+        phase: selectedDirectivePhase === 'all' ? undefined : selectedDirectivePhase,
+      }),
+    }, `Cleared steering on ${role}.`);
+  }, [selectedDirectivePhase, selectedStudioState, selectedWorkerDetail.worker?.role, updateStudioState]);
+
   const applyRecommendationAction = useCallback((action: 'lean_ops' | 'raise_review' | 'match_lanes' | 'trim_lanes' | 'none') => {
     if (action === 'none') return;
     if (action === 'lean_ops') {
@@ -3391,6 +3615,23 @@ export default function AgentStudio() {
       successMessage: `Applied ${getDirectiveModeLabel(mode).toLowerCase()} to ${formatDirectivePhaseScope([phase])} on ${role}.`,
     });
   }, [patchAutomationConfig, selectedMath.recommendedElasticLanes, selectedPolicy, selectedStudioState]);
+
+  const handleExecuteNextExperiment = useCallback((item: NonNullable<typeof nextExperimentQueue[number]>) => {
+    if (item.action === 'simulate_phase' && item.phase && item.mode) {
+      setPhaseSimulation({ phase: item.phase, mode: item.mode });
+      setActiveRoom('optimize');
+      return;
+    }
+    if (item.action === 'focus_phase' && item.phase) {
+      setSelectedDirectivePhase(item.phase);
+      setSelectedWorkerRole(getPreferredRoleForPhase(item.phase));
+      setActiveRoom('live');
+      return;
+    }
+    if (item.action === 'apply_policy' && item.policyAction) {
+      applyRecommendationAction(item.policyAction);
+    }
+  }, [applyRecommendationAction, nextExperimentQueue]);
 
   const handleSaveExperiment = useCallback(() => {
     const nextHistory = [
@@ -3938,15 +4179,27 @@ export default function AgentStudio() {
                               </div>
                               {selectedRoleDirective ? (
                                 <div className="mt-4 rounded-2xl border border-cyan-500/16 bg-cyan-500/8 p-3">
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-200/80">Active directive</p>
-                                  <p className="mt-1 text-sm font-medium text-white">
-                                    {selectedRoleDirective.mode === 'cheaper'
-                                      ? 'Favor cheaper routing'
-                                      : selectedRoleDirective.mode === 'review'
-                                        ? 'Escalate review'
-                                        : 'Promote stronger lane'}
-                                  </p>
-                                  <p className="mt-1 text-[12px] text-slate-400">Set {formatRelativeTimeFromIso(selectedRoleDirective.updatedAt)} for {formatDirectivePhaseScope(selectedRoleDirective.phases)}.</p>
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-200/80">Active directive</p>
+                                      <p className="mt-1 text-sm font-medium text-white">
+                                        {selectedRoleDirective.mode === 'cheaper'
+                                          ? 'Favor cheaper routing'
+                                          : selectedRoleDirective.mode === 'review'
+                                            ? 'Escalate review'
+                                            : 'Promote stronger lane'}
+                                      </p>
+                                      <p className="mt-1 text-[12px] text-slate-400">Set {formatRelativeTimeFromIso(selectedRoleDirective.updatedAt)} for {formatDirectivePhaseScope(selectedRoleDirective.phases)}.</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      disabled={actionBusy}
+                                      onClick={handleClearRoleDirective}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300 disabled:opacity-60"
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
                                 </div>
                               ) : null}
                               <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
@@ -4002,6 +4255,21 @@ export default function AgentStudio() {
                                       className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedDirectivePhase === option.value ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
                                     >
                                       {option.label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {phaseEvidence.slice(0, 3).map((phase) => (
+                                    <button
+                                      key={`focus-${phase.phase}`}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedDirectivePhase(phase.phase);
+                                        setSelectedWorkerRole(getPreferredRoleForPhase(phase.phase));
+                                      }}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                    >
+                                      Focus {formatDirectivePhaseScope([phase.phase])}
                                     </button>
                                   ))}
                                 </div>
@@ -4277,6 +4545,49 @@ export default function AgentStudio() {
                                   Apply recommendation
                                 </button>
                               ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-emerald-300" />
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Next experiments</p>
+                            <h3 className="text-sm font-semibold text-white">Best next moves from live evidence</h3>
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {nextExperimentQueue.map((item) => (
+                            <div key={item.id} className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                              <p className="text-sm font-medium text-white">{item.title}</p>
+                              <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.body}</p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleExecuteNextExperiment(item)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                >
+                                  {item.action === 'simulate_phase'
+                                    ? 'Simulate first'
+                                    : item.action === 'focus_phase'
+                                      ? 'Open in node inspector'
+                                      : 'Apply now'}
+                                </button>
+                                {item.phase ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedDirectivePhase(item.phase!);
+                                      setActiveRoom('replay');
+                                    }}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                  >
+                                    View evidence
+                                  </button>
+                                ) : null}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -5554,6 +5865,36 @@ export default function AgentStudio() {
                                 <p className="mt-2 text-sm leading-relaxed text-slate-200/90">{item.body}</p>
                               </div>
                             ))}
+                            {replayWeakSpot ? (
+                              <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/8 p-4">
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Weak spot spotlight</p>
+                                <p className="mt-2 text-sm font-medium text-white">{replayWeakSpot.title}</p>
+                                <p className="mt-2 text-sm leading-relaxed text-slate-300">{replayWeakSpot.body}</p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setPhaseSimulation({ phase: replayWeakSpot.phase, mode: replayWeakSpot.recommendedMode });
+                                      setActiveRoom('optimize');
+                                    }}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                  >
+                                    Simulate fix
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedDirectivePhase(replayWeakSpot.phase);
+                                      setSelectedWorkerRole(getPreferredRoleForPhase(replayWeakSpot.phase));
+                                      setActiveRoom('live');
+                                    }}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                  >
+                                    Open in node inspector
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -5696,6 +6037,44 @@ export default function AgentStudio() {
                                 </div>
                               </div>
                             ) : null}
+                            <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Window comparison</p>
+                                  <p className="mt-1 text-sm font-medium text-white">How stable the gate recommendation is</p>
+                                </div>
+                                <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${
+                                  gateLearningComparison.stability === 'Stable'
+                                    ? 'text-emerald-200'
+                                    : gateLearningComparison.stability === 'Mixed'
+                                      ? 'text-cyan-200'
+                                      : 'text-amber-200'
+                                }`}>
+                                  {gateLearningComparison.stability}
+                                </span>
+                              </div>
+                              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                                {gateLearningComparison.windows.map((window) => (
+                                  <div key={`window-compare-${window.window}`} className={`rounded-xl border px-3 py-3 ${gateLearningWindow === window.window ? 'border-cyan-500/24 bg-cyan-500/8' : 'border-white/6 bg-white/[0.02]'}`}>
+                                    <div className="flex items-center justify-between gap-3">
+                                      <p className="text-sm font-medium text-white">{window.label}</p>
+                                      <button
+                                        type="button"
+                                        onClick={() => setGateLearningWindow(window.window)}
+                                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                      >
+                                        Use
+                                      </button>
+                                    </div>
+                                    <p className="mt-2 text-sm text-white">{window.leader?.profile.label || 'No leader yet'}</p>
+                                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{window.leader?.stats.count || 0} runs</span>
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{window.leader ? `${Math.round(window.leader.stats.successRate * 100)}% success` : '—'}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                             <div className="mt-3 grid gap-3 sm:grid-cols-3">
                               {PROMOTION_GATE_PROFILES.map((profile) => (
                                 <button
@@ -6022,9 +6401,21 @@ export default function AgentStudio() {
                                     +{selectedBranchFamily.experiments.length - 5} more
                                   </span>
                                 ) : null}
+                                {(['all', 'succeeded', 'failed'] as BranchRunFilter[]).map((filter) => (
+                                  <button
+                                    key={`branch-filter-${filter}`}
+                                    type="button"
+                                    onClick={() => setBranchRunFilter(filter)}
+                                    className={`ui-pill px-2 py-0.5 text-[10px] normal-case tracking-normal ${
+                                      branchRunFilter === filter ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'
+                                    }`}
+                                  >
+                                    {filter === 'all' ? 'All runs' : filter === 'succeeded' ? 'Succeeded' : 'Failed'}
+                                  </button>
+                                ))}
                               </div>
                               <div className="mt-3 space-y-2">
-                                {selectedBranchFamily.runs.slice(0, 6).map((run, index) => (
+                                {filteredBranchRuns.slice(0, 6).map((run, index) => (
                                   <button
                                     key={`branch-run-${run.id}`}
                                     type="button"
@@ -6044,6 +6435,11 @@ export default function AgentStudio() {
                                     </div>
                                   </button>
                                 ))}
+                                {filteredBranchRuns.length === 0 ? (
+                                  <div className="rounded-xl border border-dashed border-white/6 bg-white/[0.02] px-3 py-3 text-sm text-slate-500">
+                                    No branch runs match this filter yet.
+                                  </div>
+                                ) : null}
                               </div>
                               <div className="mt-4 grid gap-3 sm:grid-cols-3 text-[11px]">
                                 <div className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
