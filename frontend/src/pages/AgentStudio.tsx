@@ -72,6 +72,8 @@ interface AutomationStudioStateDraft {
   selectedScenarioId?: string;
   previewPresetId?: string;
   selectedPlanId?: string;
+  selectedPlanCompareId?: string;
+  selectedPlanIntentFilter?: string;
   selectedReplayPhase?: 'all' | WorkflowBlockKind;
   selectedWorkerRole?: string;
   selectedDirectivePhase?: 'all' | WorkflowBlockKind;
@@ -1480,6 +1482,8 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
     selectedScenarioId: readString(value.selectedScenarioId),
     previewPresetId: readString(value.previewPresetId),
     selectedPlanId: readString(value.selectedPlanId),
+    selectedPlanCompareId: readString(value.selectedPlanCompareId),
+    selectedPlanIntentFilter: readString(value.selectedPlanIntentFilter),
     selectedReplayPhase:
       value.selectedReplayPhase === 'all' ||
       value.selectedReplayPhase === 'search' ||
@@ -1589,6 +1593,8 @@ export default function AgentStudio() {
   const [selectedWorkerRole, setSelectedWorkerRole] = useState<string>('nexus');
   const [selectedScenarioId, setSelectedScenarioId] = useState<ScenarioPresetId>('baseline');
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+  const [selectedPlanCompareId, setSelectedPlanCompareId] = useState<string>('');
+  const [selectedPlanIntentFilter, setSelectedPlanIntentFilter] = useState<string>('all');
   const [selectedReplayPhase, setSelectedReplayPhase] = useState<'all' | WorkflowBlockKind>('all');
   const [selectedDirectivePhase, setSelectedDirectivePhase] = useState<'all' | WorkflowBlockKind>('all');
   const [selectedComparisonExperimentId, setSelectedComparisonExperimentId] = useState<string>('');
@@ -1841,6 +1847,8 @@ export default function AgentStudio() {
   useEffect(() => {
     setActiveRoom(selectedStudioState.activeRoom || 'live');
     setSelectedPlanId(selectedStudioState.selectedPlanId || '');
+    setSelectedPlanCompareId(selectedStudioState.selectedPlanCompareId || '');
+    setSelectedPlanIntentFilter(selectedStudioState.selectedPlanIntentFilter || 'all');
     setSelectedReplayPhase(selectedStudioState.selectedReplayPhase || 'all');
     setSelectedWorkerRole(selectedStudioState.selectedWorkerRole || 'nexus');
     setSelectedDirectivePhase(selectedStudioState.selectedDirectivePhase || 'all');
@@ -1867,6 +1875,8 @@ export default function AgentStudio() {
     selectedStudioState.gateLearningWindow,
     selectedStudioState.phaseSimulation,
     selectedStudioState.selectedPlanId,
+    selectedStudioState.selectedPlanCompareId,
+    selectedStudioState.selectedPlanIntentFilter,
     selectedStudioState.selectedComparisonExperimentId,
     selectedStudioState.selectedCohortRunId,
     selectedStudioState.selectedDirectivePhase,
@@ -2465,6 +2475,13 @@ export default function AgentStudio() {
       return savedOperatingPlans[0]?.id || '';
     });
   }, [savedOperatingPlans, selectedRow?.automation.id]);
+
+  useEffect(() => {
+    setSelectedPlanCompareId((current) => {
+      if (current && savedOperatingPlans.some((plan) => plan.id === current)) return current;
+      return savedOperatingPlans.find((plan) => plan.id !== selectedPlanId)?.id || '';
+    });
+  }, [savedOperatingPlans, selectedPlanId, selectedRow?.automation.id]);
 
   useEffect(() => {
     const candidate = currentCohortPerformance?.runs[0]?.id || selectedExperimentPerformance?.runs[0]?.id || '';
@@ -3409,14 +3426,65 @@ export default function AgentStudio() {
         stats,
         score: scoring.score,
         confidence: scoring.confidence,
+        familyRootId: (() => {
+          let current = plan;
+          const visited = new Set<string>();
+          const byId = new Map(savedOperatingPlans.map((item) => [item.id, item] as const));
+          while (current.parentPlanId && !visited.has(current.parentPlanId)) {
+            visited.add(current.id);
+            const parent = byId.get(current.parentPlanId);
+            if (!parent) break;
+            current = parent;
+          }
+          return current.id;
+        })(),
       };
     });
   }, [experimentHistory, savedOperatingPlans, selectedRow?.runs, selectedRow?.workflowSteps]);
 
-  const activeSavedPlan = useMemo(
-    () => savedPlanSummaries.find((entry) => entry.plan.id === selectedPlanId) || savedPlanSummaries[0],
-    [savedPlanSummaries, selectedPlanId]
+  const filteredSavedPlans = useMemo(
+    () => savedPlanSummaries.filter((entry) => selectedPlanIntentFilter === 'all' || entry.plan.intentLabel === selectedPlanIntentFilter),
+    [savedPlanSummaries, selectedPlanIntentFilter]
   );
+
+  const activeSavedPlan = useMemo(
+    () => filteredSavedPlans.find((entry) => entry.plan.id === selectedPlanId) || filteredSavedPlans[0] || savedPlanSummaries[0],
+    [filteredSavedPlans, savedPlanSummaries, selectedPlanId]
+  );
+
+  const comparedSavedPlan = useMemo(
+    () =>
+      filteredSavedPlans.find((entry) => entry.plan.id === selectedPlanCompareId)
+      || filteredSavedPlans.find((entry) => entry.plan.id !== activeSavedPlan?.plan.id)
+      || savedPlanSummaries.find((entry) => entry.plan.id === selectedPlanCompareId),
+    [activeSavedPlan?.plan.id, filteredSavedPlans, savedPlanSummaries, selectedPlanCompareId]
+  );
+
+  const planFamilies = useMemo(() => {
+    const grouped = new Map<string, typeof filteredSavedPlans>();
+    filteredSavedPlans.forEach((entry) => {
+      const bucket = grouped.get(entry.familyRootId) || [];
+      bucket.push(entry);
+      grouped.set(entry.familyRootId, bucket);
+    });
+    return Array.from(grouped.values()).map((entries) => ({
+      root: entries.slice().sort((left, right) => right.score - left.score || right.confidence - left.confidence)[0],
+      entries: entries.slice().sort((left, right) => right.score - left.score || right.confidence - left.confidence),
+    }));
+  }, [filteredSavedPlans]);
+
+  const planComparison = useMemo(() => {
+    if (!activeSavedPlan || !comparedSavedPlan) return null;
+    return {
+      primary: activeSavedPlan,
+      compared: comparedSavedPlan,
+      spendDelta: activeSavedPlan.spendIndex - comparedSavedPlan.spendIndex,
+      assuranceDelta: activeSavedPlan.assuranceIndex - comparedSavedPlan.assuranceIndex,
+      fitDelta: activeSavedPlan.fitIndex - comparedSavedPlan.fitIndex,
+      successDelta: Math.round((activeSavedPlan.stats.successRate - comparedSavedPlan.stats.successRate) * 100),
+      creditsDelta: Math.round((activeSavedPlan.stats.averageCredits || 0) - (comparedSavedPlan.stats.averageCredits || 0)),
+    };
+  }, [activeSavedPlan, comparedSavedPlan]);
 
   const savedPlanAudit = useMemo(() => {
     return savedPlanSummaries
@@ -3434,6 +3502,56 @@ export default function AgentStudio() {
       .sort((left, right) => right.score - left.score || right.confidence - left.confidence || right.stats.count - left.stats.count)
       .slice(0, 5);
   }, [savedPlanSummaries]);
+
+  const recommendedPlan = useMemo(
+    () => savedPlanAudit.find((entry) => entry.outcome === 'Compounding') || savedPlanAudit.find((entry) => entry.outcome === 'Promising') || savedPlanAudit[0],
+    [savedPlanAudit]
+  );
+
+  const planRollbackSuggestion = useMemo(() => {
+    if (!activeSavedPlan) return null;
+    const activeAudit = savedPlanAudit.find((entry) => entry.plan.id === activeSavedPlan.plan.id);
+    if (!activeAudit || activeAudit.outcome !== 'Weak') return null;
+    const restoreTarget = savedPlanAudit.find((entry) => entry.plan.id !== activeSavedPlan.plan.id && (entry.outcome === 'Compounding' || entry.outcome === 'Promising'));
+    return restoreTarget ? { active: activeAudit, restoreTarget } : null;
+  }, [activeSavedPlan, savedPlanAudit]);
+
+  const planActionQueue = useMemo(() => {
+    const queue: Array<{ id: string; title: string; body: string; action: 'restore_recommended' | 'rollback' | 'compare' | 'save_phase_plan' }> = [];
+    if (recommendedPlan && activeSavedPlan && recommendedPlan.plan.id !== activeSavedPlan.plan.id) {
+      queue.push({
+        id: 'recommended-plan',
+        title: `Promote ${recommendedPlan.plan.name}`,
+        body: 'This is the strongest saved operating plan right now based on live evidence and confidence.',
+        action: 'restore_recommended',
+      });
+    }
+    if (planRollbackSuggestion) {
+      queue.push({
+        id: 'rollback-plan',
+        title: `Rollback ${planRollbackSuggestion.active.plan.name}`,
+        body: `Follow-through is weak. ${planRollbackSuggestion.restoreTarget.plan.name} is the best restore target right now.`,
+        action: 'rollback',
+      });
+    }
+    if (planComparison) {
+      queue.push({
+        id: 'compare-plans',
+        title: `Compare ${planComparison.primary.plan.name} vs ${planComparison.compared.plan.name}`,
+        body: 'Use the plan comparison lab to decide which operating posture should become the default.',
+        action: 'compare',
+      });
+    }
+    if (selectedReplayPhaseDelta && Math.abs(selectedReplayPhaseDelta.creditsDelta) >= 8) {
+      queue.push({
+        id: 'save-phase-plan',
+        title: `Capture ${formatDirectivePhaseScope([selectedReplayPhaseDetail?.phase || 'analyze'])} as a plan`,
+        body: 'This phase is deviating enough from baseline that it is worth saving as a named operating strategy.',
+        action: 'save_phase_plan',
+      });
+    }
+    return queue.slice(0, 4);
+  }, [activeSavedPlan, planComparison, planRollbackSuggestion, recommendedPlan, selectedReplayPhaseDelta, selectedReplayPhaseDetail?.phase]);
 
   const patchAutomationConfig = useCallback(async (patch: {
     executionPolicy?: AutomationExecutionPolicyDraft;
@@ -3573,6 +3691,8 @@ export default function AgentStudio() {
     if (!selectedRow?.automation.id) return undefined;
     const nextRoom = activeRoom || undefined;
     const nextPlanId = selectedPlanId || undefined;
+    const nextPlanCompareId = selectedPlanCompareId || undefined;
+    const nextPlanIntentFilter = selectedPlanIntentFilter || undefined;
     const nextReplayPhase = selectedReplayPhase || undefined;
     const nextWorkerRole = selectedWorkerRole || undefined;
     const nextDirectivePhase = selectedDirectivePhase || undefined;
@@ -3585,6 +3705,8 @@ export default function AgentStudio() {
     if (
       (selectedStudioState.activeRoom || undefined) === nextRoom &&
       (selectedStudioState.selectedPlanId || undefined) === nextPlanId &&
+      (selectedStudioState.selectedPlanCompareId || undefined) === nextPlanCompareId &&
+      (selectedStudioState.selectedPlanIntentFilter || undefined) === nextPlanIntentFilter &&
       (selectedStudioState.selectedReplayPhase || undefined) === nextReplayPhase &&
       (selectedStudioState.selectedWorkerRole || undefined) === nextWorkerRole &&
       (selectedStudioState.selectedDirectivePhase || undefined) === nextDirectivePhase &&
@@ -3602,6 +3724,8 @@ export default function AgentStudio() {
         ...selectedStudioState,
         activeRoom: nextRoom,
         selectedPlanId: nextPlanId,
+        selectedPlanCompareId: nextPlanCompareId,
+        selectedPlanIntentFilter: nextPlanIntentFilter,
         selectedReplayPhase: nextReplayPhase,
         selectedWorkerRole: nextWorkerRole,
         selectedDirectivePhase: nextDirectivePhase,
@@ -3620,6 +3744,8 @@ export default function AgentStudio() {
     gateLearningWindow,
     phaseSimulation,
     selectedPlanId,
+    selectedPlanCompareId,
+    selectedPlanIntentFilter,
     selectedComparisonExperimentId,
     selectedCohortRunId,
     selectedDirectivePhase,
@@ -3998,8 +4124,44 @@ export default function AgentStudio() {
     }, { successMessage: `Restored ${plan.name}.` });
   }, [patchAutomationConfig, selectedStudioState]);
 
-  const handleComparePlan = useCallback((plan: StudioOperatingPlan) => {
+  const handleRestorePlanPresetOnly = useCallback((plan: StudioOperatingPlan) => {
     setSelectedPlanId(plan.id);
+    setSelectedScenarioId(plan.scenarioId as ScenarioPresetId);
+    setPreviewPresetId(plan.previewPresetId);
+    void patchAutomationConfig({
+      executionPolicy: plan.executionPolicy,
+      studioState: {
+        ...selectedStudioState,
+        selectedPlanId: plan.id,
+        selectedScenarioId: plan.scenarioId,
+        previewPresetId: plan.previewPresetId,
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'preset',
+          summary: `Restored preset only from ${plan.name}.`,
+          sourceExperimentId: plan.sourceExperimentId,
+          sourceExperimentLabel: plan.sourceExperimentLabel || plan.name,
+        }),
+      },
+    }, { successMessage: `Restored preset only from ${plan.name}.` });
+  }, [patchAutomationConfig, selectedStudioState]);
+
+  const handleRestorePlanSteeringOnly = useCallback((plan: StudioOperatingPlan) => {
+    setSelectedPlanId(plan.id);
+    void updateStudioState({
+      ...selectedStudioState,
+      selectedPlanId: plan.id,
+      roleDirectives: cloneRoleDirectives(plan.roleDirectives),
+      promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+        mode: 'steering',
+        summary: `Restored steering only from ${plan.name}.`,
+        sourceExperimentId: plan.sourceExperimentId,
+        sourceExperimentLabel: plan.sourceExperimentLabel || plan.name,
+      }),
+    }, `Restored steering only from ${plan.name}.`);
+  }, [selectedStudioState, updateStudioState]);
+
+  const handleComparePlan = useCallback((plan: StudioOperatingPlan) => {
+    setSelectedPlanCompareId(plan.id);
     if (plan.sourceExperimentId) {
       setSelectedComparisonExperimentId(plan.sourceExperimentId);
     }
@@ -4046,6 +4208,21 @@ export default function AgentStudio() {
     setActiveRoom('replay');
     setNotice({ tone: 'success', message: `Opened the exact run in replay from ${sourceLabel}.` });
   }, []);
+
+  const handleOpenPlanSourceReplay = useCallback((plan: StudioOperatingPlan) => {
+    const run = (selectedRow?.runs || [])
+      .filter((candidate) => candidate.status === 'succeeded' || candidate.status === 'failed')
+      .find((candidate) => {
+        const attribution = getRunExperimentAttribution(candidate);
+        if (plan.sourceExperimentId && attribution.experimentId) return attribution.experimentId === plan.sourceExperimentId;
+        return attribution.scenarioId === plan.scenarioId && attribution.previewPresetId === plan.previewPresetId;
+      });
+    if (run) {
+      handleOpenRunInReplay(run, `plan ${plan.name}`);
+    } else {
+      setNotice({ tone: 'error', message: `No matching run yet for ${plan.name}.` });
+    }
+  }, [handleOpenRunInReplay, selectedRow?.runs]);
 
   const handleForkCurrentSetup = useCallback(() => {
     const sourceLabel = getPresetLabelFromId(previewPresetId);
@@ -5584,8 +5761,27 @@ export default function AgentStudio() {
                             </button>
                           ))}
                         </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPlanIntentFilter('all')}
+                            className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedPlanIntentFilter === 'all' ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
+                          >
+                            All intents
+                          </button>
+                          {OPERATING_PLAN_INTENTS.map((intent) => (
+                            <button
+                              key={`filter-${intent}`}
+                              type="button"
+                              onClick={() => setSelectedPlanIntentFilter(intent)}
+                              className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedPlanIntentFilter === intent ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
+                            >
+                              {intent}
+                            </button>
+                          ))}
+                        </div>
                         <div className="mt-4 space-y-3">
-                          {savedPlanSummaries.length > 0 ? savedPlanSummaries.map((entry) => (
+                          {filteredSavedPlans.length > 0 ? filteredSavedPlans.map((entry) => (
                             <div
                               key={entry.plan.id}
                               className={`rounded-2xl border p-4 ${activeSavedPlan?.plan.id === entry.plan.id ? 'border-cyan-500/22 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/45'}`}
@@ -5636,6 +5832,13 @@ export default function AgentStudio() {
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <button
                                   type="button"
+                                  onClick={() => setSelectedPlanId(entry.plan.id)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Make active
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => handleComparePlan(entry.plan)}
                                   className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
                                 >
@@ -5651,10 +5854,33 @@ export default function AgentStudio() {
                                 </button>
                                 <button
                                   type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => handleRestorePlanPresetOnly(entry.plan)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300 disabled:opacity-60"
+                                >
+                                  Preset only
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => handleRestorePlanSteeringOnly(entry.plan)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300 disabled:opacity-60"
+                                >
+                                  Steering only
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => handleForkOperatingPlan(entry.plan)}
                                   className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
                                 >
                                   Branch
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenPlanSourceReplay(entry.plan)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Open replay
                                 </button>
                                 {entry.sourceExperiment ? (
                                   <button
@@ -5672,6 +5898,69 @@ export default function AgentStudio() {
                               Save a live setup or a winning experiment and it will show up here as a reusable operating plan.
                             </div>
                           )}
+                        </div>
+                        <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plan comparison lab</p>
+                              <p className="mt-1 text-sm font-medium text-white">Primary vs compared plan</p>
+                            </div>
+                            {comparedSavedPlan ? (
+                              <select
+                                value={comparedSavedPlan.plan.id}
+                                onChange={(event) => setSelectedPlanCompareId(event.target.value)}
+                                className="rounded-full border border-white/10 bg-navy-950/70 px-3 py-1.5 text-xs text-slate-200"
+                              >
+                                {filteredSavedPlans.filter((entry) => entry.plan.id !== activeSavedPlan?.plan.id).map((entry) => (
+                                  <option key={`compare-plan-${entry.plan.id}`} value={entry.plan.id}>
+                                    {entry.plan.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
+                          </div>
+                          {planComparison ? (
+                            <div className="mt-4 space-y-3">
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-2xl border border-cyan-500/18 bg-cyan-500/8 p-3">
+                                  <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/80">Primary</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{planComparison.primary.plan.name}</p>
+                                  <p className="mt-1 text-[11px] text-slate-300">{planComparison.primary.plan.intentLabel || 'No named intent'}</p>
+                                </div>
+                                <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-3">
+                                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Compared</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{planComparison.compared.plan.name}</p>
+                                  <p className="mt-1 text-[11px] text-slate-400">{planComparison.compared.plan.intentLabel || 'No named intent'}</p>
+                                </div>
+                              </div>
+                              <div className="grid gap-3 sm:grid-cols-4 text-[11px]">
+                                <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Spend delta</p><p className={`mt-1 ${planComparison.spendDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(planComparison.spendDelta)}</p></div>
+                                <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Assurance delta</p><p className={`mt-1 ${planComparison.assuranceDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(planComparison.assuranceDelta)}</p></div>
+                                <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Fit delta</p><p className={`mt-1 ${planComparison.fitDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(planComparison.fitDelta)}</p></div>
+                                <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Observed success</p><p className={`mt-1 ${planComparison.successDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(planComparison.successDelta)} pts</p></div>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-sm text-slate-500">Save at least two plans to compare them side by side.</p>
+                          )}
+                        </div>
+                        <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plan families</p>
+                          <div className="mt-3 space-y-3">
+                            {planFamilies.length > 0 ? planFamilies.map((family) => (
+                              <div key={`plan-family-${family.root.plan.id}`} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{family.root.plan.name}</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">{family.entries.length} plans in this line</p>
+                                  </div>
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {family.root.score}</span>
+                                </div>
+                              </div>
+                            )) : (
+                              <p className="text-sm text-slate-500">Branch a plan and its family will appear here.</p>
+                            )}
+                          </div>
                         </div>
                         <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plan performance audit</p>
@@ -5693,6 +5982,111 @@ export default function AgentStudio() {
                             )}
                           </div>
                         </div>
+                        {recommendedPlan ? (
+                          <div className="mt-4 rounded-2xl border border-emerald-500/16 bg-emerald-500/8 p-4">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-100/80">Recommended plan</p>
+                            <p className="mt-1 text-sm font-medium text-white">{recommendedPlan.plan.name}</p>
+                            <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                              Best current saved operating setup for this workflow based on observed runs, confidence, and spend discipline.
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={actionBusy}
+                                onClick={() => handleRestoreOperatingPlan(recommendedPlan.plan)}
+                                className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-emerald-100 disabled:opacity-60"
+                              >
+                                Restore recommended
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleComparePlan(recommendedPlan.plan)}
+                                className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                              >
+                                Compare recommended
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {planRollbackSuggestion ? (
+                          <div className="mt-4 rounded-2xl border border-amber-500/16 bg-amber-500/8 p-4">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-amber-100/80">Plan rollback suggestion</p>
+                            <p className="mt-1 text-sm font-medium text-white">{planRollbackSuggestion.active.plan.name} is underperforming</p>
+                            <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                              Best restore target right now is {planRollbackSuggestion.restoreTarget.plan.name}.
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={actionBusy}
+                                onClick={() => handleRestoreOperatingPlan(planRollbackSuggestion.restoreTarget.plan)}
+                                className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-amber-100 disabled:opacity-60"
+                              >
+                                Restore target
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleComparePlan(planRollbackSuggestion.restoreTarget.plan)}
+                                className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                              >
+                                Compare rollback
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {planActionQueue.length > 0 ? (
+                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Plan action queue</p>
+                            <div className="mt-3 space-y-3">
+                              {planActionQueue.map((item) => (
+                                <div key={item.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                  <p className="text-sm font-medium text-white">{item.title}</p>
+                                  <p className="mt-1 text-[12px] leading-relaxed text-slate-400">{item.body}</p>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {item.action === 'restore_recommended' && recommendedPlan ? (
+                                      <button
+                                        type="button"
+                                        disabled={actionBusy}
+                                        onClick={() => handleRestoreOperatingPlan(recommendedPlan.plan)}
+                                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
+                                      >
+                                        Restore recommended
+                                      </button>
+                                    ) : null}
+                                    {item.action === 'rollback' && planRollbackSuggestion ? (
+                                      <button
+                                        type="button"
+                                        disabled={actionBusy}
+                                        onClick={() => handleRestoreOperatingPlan(planRollbackSuggestion.restoreTarget.plan)}
+                                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-amber-100 disabled:opacity-60"
+                                      >
+                                        Roll back now
+                                      </button>
+                                    ) : null}
+                                    {item.action === 'compare' && comparedSavedPlan ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleComparePlan(comparedSavedPlan.plan)}
+                                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                      >
+                                        Open comparison
+                                      </button>
+                                    ) : null}
+                                    {item.action === 'save_phase_plan' && selectedReplayPhaseDetail ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveOperatingPlan({ namePrefix: `Phase ${formatDirectivePhaseScope([selectedReplayPhaseDetail.phase])}` })}
+                                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                      >
+                                        Save phase plan
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
@@ -6353,6 +6747,47 @@ export default function AgentStudio() {
                                   </div>
                                 </div>
                               ) : null}
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDirectivePhase(selectedReplayPhaseDetail.phase);
+                                    setSelectedWorkerRole(getPreferredRoleForPhase(selectedReplayPhaseDetail.phase));
+                                    setActiveRoom('live');
+                                  }}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Open phase in node inspector
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPhaseSimulation({
+                                    phase: selectedReplayPhaseDetail.phase,
+                                    mode: selectedReplayPhaseDelta && selectedReplayPhaseDelta.creditsDelta > 10 ? 'cheaper' : selectedReplayPhaseDelta?.actualStatus === 'failed' ? 'review' : 'promote',
+                                  })}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                >
+                                  Simulate best fix
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => handleApplyPhaseLearning(
+                                    selectedReplayPhaseDetail.phase,
+                                    selectedReplayPhaseDelta && selectedReplayPhaseDelta.creditsDelta > 10 ? 'cheaper' : selectedReplayPhaseDelta?.actualStatus === 'failed' ? 'review' : 'promote'
+                                  )}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300 disabled:opacity-60"
+                                >
+                                  Apply best fix
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveOperatingPlan({ namePrefix: `Phase ${formatDirectivePhaseScope([selectedReplayPhaseDetail.phase])}` })}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Save phase plan
+                                </button>
+                              </div>
                             </div>
                           ) : null}
                         </div>
