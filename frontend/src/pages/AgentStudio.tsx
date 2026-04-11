@@ -1014,6 +1014,13 @@ function normalizeThresholdMap(value: unknown) {
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
+function omitThresholdKey(map: Record<string, number> | undefined, key: string) {
+  if (!map) return undefined;
+  const next = { ...map };
+  delete next[key];
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
 function mergeRoleDirectiveSnapshots(
   base?: Record<string, StudioRoleDirective>,
   incoming?: Record<string, StudioRoleDirective>
@@ -2641,6 +2648,91 @@ export default function AgentStudio() {
     return buildTrendSeries(orderedRuns, trendMetric, 360, 140, 12);
   }, [selectedBranchFamily, trendMetric]);
 
+  const selectedBranchMemberPerformance = useMemo(() => {
+    if (!selectedBranchFamily) return [];
+    return selectedBranchFamily.experiments
+      .map((experiment) => {
+        const matched = experimentPerformance.find((entry) => entry.experiment.id === experiment.id);
+        if (matched) return matched;
+        const matchedRuns = selectedBranchFamily.runs.filter((run) => matchesExperimentRun(run, experiment));
+        const stats = summarizeRunCollection(matchedRuns);
+        const latestAt = matchedRuns[0]?.finishedAt || matchedRuns[0]?.startedAt;
+        const scoring = scoreObservedPerformance(stats, latestAt);
+        return {
+          experiment,
+          stats,
+          latestAt,
+          ...scoring,
+        };
+      })
+      .sort((a, b) => b.score - a.score || b.stats.count - a.stats.count);
+  }, [experimentPerformance, selectedBranchFamily]);
+
+  const selectedBranchCausalReport = useMemo(() => {
+    if (!selectedBranchFamily) return [] as Array<{ title: string; body: string; tone: string }>;
+    const items: Array<{ title: string; body: string; tone: string }> = [];
+    const stats = selectedBranchFamily.stats;
+    if (stats.successRate >= 0.8 && stats.count >= 3) {
+      items.push({
+        title: 'This branch family is reliably converting',
+        body: `${getExperimentDisplayLabel(selectedBranchFamily.rootExperiment)} is holding ${Math.round(stats.successRate * 100)}% success across ${stats.count} observed runs, which is enough to treat it as a meaningful operating line.`,
+        tone: 'border-emerald-500/18 bg-emerald-500/8 text-emerald-100',
+      });
+    }
+    if ((stats.averageCredits || 0) > 0 && selectedRow?.averageCredits && stats.averageCredits < selectedRow.averageCredits) {
+      items.push({
+        title: 'This line is outperforming the workflow average on spend',
+        body: `${formatCredits(stats.averageCredits)} credits on average versus ${formatCredits(selectedRow.averageCredits)} across the workflow means this branch is compounding more efficiently than the baseline path.`,
+        tone: 'border-cyan-500/18 bg-cyan-500/8 text-cyan-100',
+      });
+    }
+    const strongestMember = selectedBranchMemberPerformance[0];
+    if (strongestMember && strongestMember.stats.count >= 2) {
+      items.push({
+        title: `${getExperimentDisplayLabel(strongestMember.experiment)} is carrying the line`,
+        body: `This member currently leads the branch with score ${strongestMember.score}, ${Math.round(strongestMember.stats.successRate * 100)}% success, and ${strongestMember.confidence}% confidence.`,
+        tone: 'border-violet-500/18 bg-violet-500/8 text-violet-100',
+      });
+    }
+    if (items.length === 0) {
+      items.push({
+        title: 'This branch still needs more evidence',
+        body: 'The structure is there, but there are not enough branch-specific runs yet to say what is truly compounding. Keep the line alive and compare a few more runs before promoting it.',
+        tone: 'border-amber-500/18 bg-amber-500/8 text-amber-100',
+      });
+    }
+    return items.slice(0, 3);
+  }, [selectedBranchFamily, selectedBranchMemberPerformance, selectedRow?.averageCredits]);
+
+  const branchFamilyComparison = useMemo(() => {
+    if (branchFamilyPerformance.length < 2) return null;
+    const [leader, challenger] = branchFamilyPerformance;
+    return {
+      leader,
+      challenger,
+      successDelta: Math.round((leader.stats.successRate - challenger.stats.successRate) * 100),
+      creditsDelta: Math.round((leader.stats.averageCredits || 0) - (challenger.stats.averageCredits || 0)),
+      confidenceDelta: leader.confidence - challenger.confidence,
+    };
+  }, [branchFamilyPerformance]);
+
+  const activeGateScope = useMemo(() => {
+    if (selectedStudioState.autoPromotionScenarioThresholds?.[selectedScenario.id]) {
+      return { scope: 'Scenario gate', label: selectedScenario.label };
+    }
+    if (selectedStudioState.autoPromotionArchetypeThresholds?.[selectedArchetype.id]) {
+      return { scope: 'Workflow-class gate', label: selectedArchetype.label };
+    }
+    return { scope: 'Global gate', label: 'All workflows' };
+  }, [
+    selectedArchetype.id,
+    selectedArchetype.label,
+    selectedScenario.id,
+    selectedScenario.label,
+    selectedStudioState.autoPromotionArchetypeThresholds,
+    selectedStudioState.autoPromotionScenarioThresholds,
+  ]);
+
   const patchAutomationConfig = useCallback(async (patch: {
     executionPolicy?: AutomationExecutionPolicyDraft;
     studioState?: AutomationStudioStateDraft;
@@ -2710,6 +2802,31 @@ export default function AgentStudio() {
 
     void updateStudioState(nextState, message);
   }, [selectedArchetype.id, selectedArchetype.label, selectedScenario.id, selectedScenario.label, selectedStudioState, updateStudioState]);
+
+  const handleClearScopedAutoPromotionThreshold = useCallback((scope: 'global' | 'scenario' | 'archetype') => {
+    const nextState: AutomationStudioStateDraft = { ...selectedStudioState };
+    let message = 'Reset auto-promotion gate.';
+
+    if (scope === 'scenario') {
+      nextState.autoPromotionScenarioThresholds = omitThresholdKey(selectedStudioState.autoPromotionScenarioThresholds, selectedScenario.id);
+      message = `Reset ${selectedScenario.label} back to the inherited gate.`;
+    } else if (scope === 'archetype') {
+      nextState.autoPromotionArchetypeThresholds = omitThresholdKey(selectedStudioState.autoPromotionArchetypeThresholds, selectedArchetype.id);
+      message = `Reset ${selectedArchetype.label} back to the inherited gate.`;
+    } else {
+      nextState.autoPromotionMinConfidence = undefined;
+      message = 'Reset the global auto-promotion gate to the default.';
+    }
+
+    void updateStudioState(nextState, message);
+  }, [
+    selectedArchetype.id,
+    selectedArchetype.label,
+    selectedScenario.id,
+    selectedScenario.label,
+    selectedStudioState,
+    updateStudioState,
+  ]);
 
   useEffect(() => {
     if (!selectedRow?.automation.id) return undefined;
@@ -5142,6 +5259,10 @@ export default function AgentStudio() {
                               </div>
                               <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{autoPromotionThreshold}%</span>
                             </div>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{activeGateScope.scope}</span>
+                              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{activeGateScope.label}</span>
+                            </div>
                             <div className="mt-3 space-y-3">
                               {[
                                 { scope: 'global' as const, label: 'Global default', value: selectedStudioState.autoPromotionMinConfidence ?? 55 },
@@ -5165,6 +5286,16 @@ export default function AgentStudio() {
                                         {threshold}% confidence
                                       </button>
                                     ))}
+                                  </div>
+                                  <div className="mt-3">
+                                    <button
+                                      type="button"
+                                      disabled={studioBusy}
+                                      onClick={() => handleClearScopedAutoPromotionThreshold(scopeItem.scope)}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300 disabled:opacity-60"
+                                    >
+                                      Reset {scopeItem.label}
+                                    </button>
                                   </div>
                                 </div>
                               ))}
@@ -5278,6 +5409,26 @@ export default function AgentStudio() {
                               <h3 className="text-sm font-semibold text-white">Which experiment lines are compounding</h3>
                             </div>
                           </div>
+                          {branchFamilyComparison ? (
+                            <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Branch vs branch</p>
+                              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-xl border border-emerald-500/16 bg-emerald-500/8 px-3 py-3">
+                                  <p className="text-[11px] text-slate-400">Leader</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{getExperimentDisplayLabel(branchFamilyComparison.leader.rootExperiment)}</p>
+                                </div>
+                                <div className="rounded-xl border border-cyan-500/16 bg-cyan-500/8 px-3 py-3">
+                                  <p className="text-[11px] text-slate-400">Challenger</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{getExperimentDisplayLabel(branchFamilyComparison.challenger.rootExperiment)}</p>
+                                </div>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{branchFamilyComparison.successDelta >= 0 ? '+' : ''}{branchFamilyComparison.successDelta} pts success</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{branchFamilyComparison.creditsDelta <= 0 ? '' : '+'}{branchFamilyComparison.creditsDelta} credits</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{branchFamilyComparison.confidenceDelta >= 0 ? '+' : ''}{branchFamilyComparison.confidenceDelta}% confidence</span>
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="mt-4 space-y-3">
                             {branchFamilyPerformance.length > 0 ? branchFamilyPerformance.map((family) => (
                               <div
@@ -5357,15 +5508,38 @@ export default function AgentStudio() {
                               </div>
                               <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
                                 {selectedBranchFamily.experiments.slice(0, 5).map((experiment) => (
-                                  <span key={`member-${experiment.id}`} className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                  <button
+                                    key={`member-${experiment.id}`}
+                                    type="button"
+                                    onClick={() => handleCompareExperiment(experiment)}
+                                    className={`ui-pill px-2 py-0.5 text-[10px] normal-case tracking-normal ${selectedComparisonExperimentId === experiment.id ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
+                                  >
                                     {getExperimentDisplayLabel(experiment)}
-                                  </span>
+                                  </button>
                                 ))}
                                 {selectedBranchFamily.experiments.length > 5 ? (
                                   <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
                                     +{selectedBranchFamily.experiments.length - 5} more
                                   </span>
                                 ) : null}
+                              </div>
+                              <div className="mt-4 grid gap-3 sm:grid-cols-3 text-[11px]">
+                                <div className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                  <p className="text-slate-500">Branch score</p>
+                                  <p className="mt-1 text-white">{selectedBranchFamily.score}</p>
+                                </div>
+                                <div className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                  <p className="text-slate-500">Avg duration</p>
+                                  <p className="mt-1 text-white">{formatCompactDuration(selectedBranchFamily.stats.averageDurationMs)}</p>
+                                </div>
+                                <div className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                  <p className="text-slate-500">Vs workflow spend</p>
+                                  <p className="mt-1 text-white">
+                                    {selectedRow?.averageCredits
+                                      ? `${Math.round(selectedBranchFamily.stats.averageCredits - selectedRow.averageCredits)} cr`
+                                      : '—'}
+                                  </p>
+                                </div>
                               </div>
                               {branchTrendSeries ? (
                                 <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.02] px-3 py-4">
@@ -5397,6 +5571,49 @@ export default function AgentStudio() {
                                   </div>
                                 </div>
                               ) : null}
+                              <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.02] p-4">
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Branch member leaderboard</p>
+                                <div className="mt-3 space-y-3">
+                                  {selectedBranchMemberPerformance.slice(0, 4).map((member) => (
+                                    <div key={`branch-member-${member.experiment.id}`} className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                          <p className="text-sm font-medium text-white">{getExperimentDisplayLabel(member.experiment)}</p>
+                                          <p className="mt-1 text-[11px] text-slate-500">{member.stats.count} runs · {Math.round(member.stats.successRate * 100)}% success</p>
+                                        </div>
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {member.score}</span>
+                                      </div>
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCompareExperiment(member.experiment)}
+                                          className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                        >
+                                          Compare member
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRestoreExperiment(member.experiment)}
+                                          className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                        >
+                                          Restore member
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.02] p-4">
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Branch causal report</p>
+                                <div className="mt-3 space-y-3">
+                                  {selectedBranchCausalReport.map((item) => (
+                                    <div key={`branch-causal-${item.title}`} className={`rounded-2xl border p-4 ${item.tone}`}>
+                                      <p className="text-sm font-medium text-white">{item.title}</p>
+                                      <p className="mt-2 text-sm leading-relaxed text-slate-200/90">{item.body}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
                           ) : null}
                         </div>
