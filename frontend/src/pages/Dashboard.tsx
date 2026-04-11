@@ -1691,6 +1691,27 @@ export default function Dashboard() {
     });
   }, []);
 
+  const closeAutomationEditor = useCallback(() => {
+    setAutomationEditor(null);
+    setAutomationEditorSection('setup');
+    setDraggedStepIndex(null);
+    setActionBusy((current) => (current === 'save' || current === 'edit' ? null : current));
+
+    const params = new URLSearchParams(location.search);
+    const hadEditState = params.has('edit') || params.has('panel') || params.has('automation');
+    if (!hadEditState) return;
+
+    params.delete('edit');
+    const nextSearch = params.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : '',
+      },
+      { replace: true }
+    );
+  }, [location.pathname, location.search, navigate]);
+
   const handleAutomationEditorSave = useCallback(async () => {
     if (!automationEditor) return;
     setActionBusy('save');
@@ -1737,14 +1758,14 @@ export default function Dashboard() {
       if (automationEditor.mode === 'create' && payload.item?.id) {
         setSelectedTaskId(payload.item.id);
       }
-      setAutomationEditor(null);
+      closeAutomationEditor();
       showNotice('success', `${automationEditor.mode === 'create' ? 'Created' : 'Updated'} "${automationEditor.name.trim() || 'automation'}"`);
     } catch {
       showNotice('error', automationEditor.mode === 'create' ? 'Could not create automation' : 'Could not save automation changes');
     } finally {
       setActionBusy(null);
     }
-  }, [automationEditor, refreshAutomations, showNotice]);
+  }, [automationEditor, closeAutomationEditor, refreshAutomations, showNotice]);
 
   const handleMessagesChange = useCallback(
     (messages: Message[]) => {
@@ -3285,7 +3306,7 @@ export default function Dashboard() {
           <button
             type="button"
             aria-label="Close automation editor"
-            onClick={() => setAutomationEditor(null)}
+            onClick={closeAutomationEditor}
             className="absolute inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
           />
             <aside className="absolute right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col border-l border-navy-700/80 bg-gradient-to-b from-navy-900/98 via-navy-900/96 to-navy-950/98 shadow-[0_24px_64px_rgba(2,6,23,0.58)] [touch-action:pan-y]">
@@ -3297,7 +3318,7 @@ export default function Dashboard() {
                 </h3>
               </div>
               <button
-                onClick={() => setAutomationEditor(null)}
+                onClick={closeAutomationEditor}
                 className="rounded-xl border border-navy-700/80 bg-navy-900/55 p-2 text-slate-400 transition-colors hover:text-white"
                 aria-label="Close automation editor"
               >
@@ -3955,7 +3976,7 @@ export default function Dashboard() {
               </div>
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
-                  onClick={() => setAutomationEditor(null)}
+                  onClick={closeAutomationEditor}
                   className="ui-button-ghost"
                 >
                   Cancel
