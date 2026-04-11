@@ -90,6 +90,9 @@ interface AutomationStudioStateDraft {
   autoGraduateScenarioThresholds?: Record<string, number>;
   autoGraduateArchetypeThresholds?: Record<string, number>;
   lastAutoGraduatedPlanId?: string;
+  autoRollbackEnabled?: boolean;
+  autoRollbackWeaknessThreshold?: number;
+  lastAutoRolledBackPlanId?: string;
   trendMetric?: TrendMetric;
   gateLearningWindow?: GateLearningWindow;
   branchRunFilter?: BranchRunFilter;
@@ -109,7 +112,7 @@ interface AutomationStudioStateDraft {
 interface StudioPromotionRecord {
   id: string;
   appliedAt: string;
-  mode: 'preset' | 'steering' | 'full' | 'phase' | 'preset_phase' | 'learning' | 'graduation';
+  mode: 'preset' | 'steering' | 'full' | 'phase' | 'preset_phase' | 'learning' | 'graduation' | 'rollback';
   summary: string;
   actor: 'manual';
   sourceExperimentId?: string;
@@ -267,6 +270,32 @@ interface AgentStudioRow {
   averageDurationMs: number;
 }
 
+interface AgentStudioSettingsPayload {
+  workspaceId: string;
+  settings?: {
+    agentStudio?: {
+      autoGraduationProfiles?: Record<string, string>;
+    };
+  };
+}
+
+interface ReplayPhaseOverlayEntry {
+  phase: WorkflowBlockKind;
+  steps: DashboardTaskStepExecution[];
+  credits: number;
+  durationMs: number;
+  tokens: number;
+  failed: boolean;
+  succeeded: boolean;
+  primaryRole: string;
+  modelSource?: string;
+  directiveMode?: 'cheaper' | 'review' | 'promote';
+  baselineCredits: number;
+  baselineDurationMs: number;
+  baselineSuccessRate: number;
+  costWidth: string;
+}
+
 const VIOLEMA_MARK = '/po-logo.png';
 
 const DEFAULT_EXECUTION_POLICY: AutomationExecutionPolicyDraft = {
@@ -340,8 +369,6 @@ const AUTO_GRADUATION_PROFILES = [
     scenario: 60,
   },
 ] as const;
-
-const AUTO_GRADUATION_WORKSPACE_KEY_PREFIX = 'violema_agentstudio_auto_graduation_profiles_';
 
 const WORKER_DEFINITIONS: Array<{
   role: string;
@@ -1187,14 +1214,10 @@ function getRecommendedAutoGraduationProfileId(
   return 'balanced';
 }
 
-function getWorkspaceAutoGraduationStorageKey(workspaceId: string) {
-  return `${AUTO_GRADUATION_WORKSPACE_KEY_PREFIX}${workspaceId}`;
-}
-
-function readWorkspaceAutoGraduationProfiles(workspaceId: string) {
+function readWorkspaceAutoGraduationProfilesFallback(workspaceId: string) {
   if (typeof window === 'undefined') return {};
   try {
-    const raw = localStorage.getItem(getWorkspaceAutoGraduationStorageKey(workspaceId));
+    const raw = localStorage.getItem(`violema_agentstudio_auto_graduation_profiles_${workspaceId}`);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
@@ -1206,15 +1229,6 @@ function readWorkspaceAutoGraduationProfiles(workspaceId: string) {
     }, {});
   } catch {
     return {};
-  }
-}
-
-function writeWorkspaceAutoGraduationProfiles(workspaceId: string, value: Record<string, string>) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(getWorkspaceAutoGraduationStorageKey(workspaceId), JSON.stringify(value));
-  } catch {
-    // Ignore localStorage write failures.
   }
 }
 
@@ -1233,6 +1247,50 @@ function omitThresholdKey(map: Record<string, number> | undefined, key: string) 
   const next = { ...map };
   delete next[key];
   return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function buildReplayPhaseOverlay(
+  run: PlatformTaskRunRecord | null | undefined,
+  phaseEvidence: Array<{ phase: WorkflowBlockKind; runs: number; successRate: number; averageCredits: number; averageDurationMs: number; directiveModes: string[] }>,
+): ReplayPhaseOverlayEntry[] {
+  if (!run) return [];
+  const phaseOrder: WorkflowBlockKind[] = ['search', 'query', 'capture', 'analyze', 'summarize', 'deliver', 'note'];
+  const grouped = phaseOrder
+    .map((phase) => {
+      const steps = readStepExecutions(run.metadata?.stepExecutions).filter((step) => step.kind === phase);
+      if (steps.length === 0) return null;
+      const credits = steps.reduce((sum, step) => sum + (step.actualCredits || 0), 0);
+      const durationMs = steps.reduce((sum, step) => sum + (step.durationMs || 0), 0);
+      const tokens = steps.reduce((sum, step) => sum + (step.tokenUsage?.totalTokens || 0), 0);
+      const failed = steps.some((step) => step.status === 'failed');
+      const succeeded = steps.some((step) => step.status === 'succeeded');
+      const primaryStep = steps
+        .slice()
+        .sort((left, right) => (right.actualCredits || 0) - (left.actualCredits || 0))[0];
+      const baseline = phaseEvidence.find((entry) => entry.phase === phase);
+      return {
+        phase,
+        steps,
+        credits,
+        durationMs,
+        tokens,
+        failed,
+        succeeded,
+        primaryRole: primaryStep?.assignedRole || getPreferredRoleForPhase(phase),
+        modelSource: primaryStep?.modelSource,
+        directiveMode: primaryStep?.directiveMode,
+        baselineCredits: baseline?.averageCredits || 0,
+        baselineDurationMs: baseline?.averageDurationMs || 0,
+        baselineSuccessRate: baseline?.successRate || 0,
+      };
+    })
+    .filter(Boolean) as Array<Omit<ReplayPhaseOverlayEntry, 'costWidth'>>;
+
+  const maxCredits = Math.max(...grouped.map((item) => item.credits || 0), 1);
+  return grouped.map((item) => ({
+    ...item,
+    costWidth: `${Math.max(16, ((item.credits || 0) / maxCredits) * 100)}%`,
+  }));
 }
 
 function mergeRoleDirectiveSnapshots(
@@ -1399,6 +1457,8 @@ function getPromotionModeLabel(mode: StudioPromotionRecord['mode']) {
       return 'Learning action';
     case 'graduation':
       return 'Branch graduated';
+    case 'rollback':
+      return 'Branch rolled back';
   }
 }
 
@@ -1414,6 +1474,8 @@ function getPromotionModeTone(mode: StudioPromotionRecord['mode']) {
       return 'border-violet-500/18 bg-violet-500/8 text-violet-100';
     case 'graduation':
       return 'border-emerald-500/18 bg-emerald-500/8 text-emerald-100';
+    case 'rollback':
+      return 'border-red-500/18 bg-red-500/8 text-red-100';
     case 'learning':
     default:
       return 'border-amber-500/18 bg-amber-500/8 text-amber-100';
@@ -1716,6 +1778,12 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
     autoGraduateScenarioThresholds: normalizeThresholdMap(value.autoGraduateScenarioThresholds),
     autoGraduateArchetypeThresholds: normalizeThresholdMap(value.autoGraduateArchetypeThresholds),
     lastAutoGraduatedPlanId: readString(value.lastAutoGraduatedPlanId),
+    autoRollbackEnabled: value.autoRollbackEnabled === true ? true : undefined,
+    autoRollbackWeaknessThreshold:
+      typeof value.autoRollbackWeaknessThreshold === 'number'
+        ? clampNumber(Math.round(value.autoRollbackWeaknessThreshold), 4, 30)
+        : undefined,
+    lastAutoRolledBackPlanId: readString(value.lastAutoRolledBackPlanId),
     trendMetric:
       value.trendMetric === 'credits' || value.trendMetric === 'duration' || value.trendMetric === 'success'
         ? value.trendMetric
@@ -1831,15 +1899,22 @@ export default function AgentStudio() {
         'X-Workspace-Name': workspace.workspaceName,
       };
 
-      const [automationPayload, taskPayload, runPayload] = await Promise.all([
+      const [automationPayload, taskPayload, runPayload, settingsPayload] = await Promise.all([
         fetch('/api/automations', { headers }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('automations')))),
         fetch(`/api/platform/tasks?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, { headers }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('tasks')))),
         fetch(`/api/platform/task-runs?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, { headers }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('runs')))),
+        fetch(`/api/settings?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, { headers }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('settings')))),
       ]);
 
       const automations = Array.isArray(automationPayload?.items) ? automationPayload.items as AutomationApiRecord[] : [];
       const tasks = Array.isArray(taskPayload?.items) ? taskPayload.items as PlatformTaskRecord[] : [];
       const runs = Array.isArray(runPayload?.items) ? runPayload.items as PlatformTaskRunRecord[] : [];
+      const settings = settingsPayload as AgentStudioSettingsPayload;
+      const backendProfiles = settings?.settings?.agentStudio?.autoGraduationProfiles || {};
+      const nextWorkspaceProfiles = Object.keys(backendProfiles).length > 0
+        ? backendProfiles
+        : readWorkspaceAutoGraduationProfilesFallback(workspace.workspaceId);
+      setWorkspaceAutoGraduationProfiles(nextWorkspaceProfiles);
 
       const taskByAutomationId = new Map<string, PlatformTaskRecord>();
       const automationIdByTaskId = new Map<string, string>();
@@ -1934,14 +2009,6 @@ export default function AgentStudio() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
-
-  useEffect(() => {
-    setWorkspaceAutoGraduationProfiles(readWorkspaceAutoGraduationProfiles(workspace.workspaceId));
-  }, [workspace.workspaceId]);
-
-  useEffect(() => {
-    writeWorkspaceAutoGraduationProfiles(workspace.workspaceId, workspaceAutoGraduationProfiles);
-  }, [workspace.workspaceId, workspaceAutoGraduationProfiles]);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -3541,52 +3608,31 @@ export default function AgentStudio() {
     selectedStudioState.autoPromotionScenarioThresholds,
   ]);
 
-  const replayPhaseOverlay = useMemo(() => {
-    const run = focusedCohortRun || selectedCohortRun;
-    if (!run) return [];
-    const phaseOrder: WorkflowBlockKind[] = ['search', 'query', 'capture', 'analyze', 'summarize', 'deliver', 'note'];
-    const grouped = phaseOrder
-      .map((phase) => {
-        const steps = readStepExecutions(run.metadata?.stepExecutions).filter((step) => step.kind === phase);
-        if (steps.length === 0) return null;
-        const credits = steps.reduce((sum, step) => sum + (step.actualCredits || 0), 0);
-        const durationMs = steps.reduce((sum, step) => sum + (step.durationMs || 0), 0);
-        const tokens = steps.reduce((sum, step) => sum + (step.tokenUsage?.totalTokens || 0), 0);
-        const failed = steps.some((step) => step.status === 'failed');
-        const succeeded = steps.some((step) => step.status === 'succeeded');
-        const primaryStep = steps
-          .slice()
-          .sort((left, right) => (right.actualCredits || 0) - (left.actualCredits || 0))[0];
-        const baseline = phaseEvidence.find((entry) => entry.phase === phase);
-        return {
-          phase,
-          steps,
-          credits,
-          durationMs,
-          tokens,
-          failed,
-          succeeded,
-          primaryRole: primaryStep?.assignedRole || getPreferredRoleForPhase(phase),
-          modelSource: primaryStep?.modelSource,
-          directiveMode: primaryStep?.directiveMode,
-          baselineCredits: baseline?.averageCredits || 0,
-          baselineDurationMs: baseline?.averageDurationMs || 0,
-          baselineSuccessRate: baseline?.successRate || 0,
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const replayBaseRun = focusedCohortRun || selectedCohortRun;
 
-    const maxCredits = Math.max(...grouped.map((item) => item.credits || 0), 1);
-    return grouped.map((item) => ({
-      ...item,
-      costWidth: `${Math.max(16, ((item.credits || 0) / maxCredits) * 100)}%`,
-    }));
-  }, [focusedCohortRun, phaseEvidence, selectedCohortRun]);
+  const replayPhaseOverlay = useMemo(() => {
+    return buildReplayPhaseOverlay(replayBaseRun, phaseEvidence);
+  }, [phaseEvidence, replayBaseRun]);
+
+  const replayComparedRun = useMemo(() => {
+    if (!runComparison?.previous?.id || !selectedRow) return null;
+    return selectedRow.runs.find((run) => run.id === runComparison.previous?.id) || null;
+  }, [runComparison?.previous?.id, selectedRow]);
+
+  const replayComparedPhaseOverlay = useMemo(
+    () => buildReplayPhaseOverlay(replayComparedRun, phaseEvidence),
+    [phaseEvidence, replayComparedRun],
+  );
 
   const selectedReplayPhaseDetail = useMemo(() => {
     if (selectedReplayPhase === 'all') return replayPhaseOverlay[0];
     return replayPhaseOverlay.find((entry) => entry.phase === selectedReplayPhase) || replayPhaseOverlay[0];
   }, [replayPhaseOverlay, selectedReplayPhase]);
+
+  const selectedReplayComparedPhaseDetail = useMemo(() => {
+    if (selectedReplayPhase === 'all') return replayComparedPhaseOverlay[0];
+    return replayComparedPhaseOverlay.find((entry) => entry.phase === selectedReplayPhase) || replayComparedPhaseOverlay[0];
+  }, [replayComparedPhaseOverlay, selectedReplayPhase]);
 
   const selectedReplayPhaseDelta = useMemo(() => {
     if (!selectedReplayPhaseDetail) return null;
@@ -3597,6 +3643,50 @@ export default function AgentStudio() {
       actualStatus: selectedReplayPhaseDetail.failed ? 'failed' : selectedReplayPhaseDetail.succeeded ? 'succeeded' : 'unknown',
     };
   }, [selectedReplayPhaseDetail]);
+
+  const replayDualRunDiff = useMemo(() => {
+    if (!selectedReplayPhaseDetail || !selectedReplayComparedPhaseDetail || !runComparison?.previous) return null;
+    return {
+      comparedRunLabel: runComparison.previous.experimentLabel || `${runComparison.previous.scenarioLabel} · ${runComparison.previous.presetLabel}`,
+      creditsDelta: (selectedReplayPhaseDetail.credits || 0) - (selectedReplayComparedPhaseDetail.credits || 0),
+      durationDelta: (selectedReplayPhaseDetail.durationMs || 0) - (selectedReplayComparedPhaseDetail.durationMs || 0),
+      tokensDelta: (selectedReplayPhaseDetail.tokens || 0) - (selectedReplayComparedPhaseDetail.tokens || 0),
+      directiveShift:
+        selectedReplayPhaseDetail.directiveMode === selectedReplayComparedPhaseDetail.directiveMode
+          ? null
+          : {
+              current: selectedReplayPhaseDetail.directiveMode,
+              compared: selectedReplayComparedPhaseDetail.directiveMode,
+            },
+      statusPair: {
+        current: selectedReplayPhaseDetail.failed ? 'failed' : selectedReplayPhaseDetail.succeeded ? 'succeeded' : 'unknown',
+        compared: selectedReplayComparedPhaseDetail.failed ? 'failed' : selectedReplayComparedPhaseDetail.succeeded ? 'succeeded' : 'unknown',
+      },
+    };
+  }, [runComparison?.previous, selectedReplayComparedPhaseDetail, selectedReplayPhaseDetail]);
+
+  const replayPhaseComparisonRows = useMemo(() => {
+    if (!replayComparedPhaseOverlay.length) return [];
+    const phaseOrder: WorkflowBlockKind[] = ['search', 'query', 'capture', 'analyze', 'summarize', 'deliver', 'note'];
+    return phaseOrder
+      .map((phase) => {
+        const current = replayPhaseOverlay.find((entry) => entry.phase === phase);
+        const compared = replayComparedPhaseOverlay.find((entry) => entry.phase === phase);
+        if (!current && !compared) return null;
+        return {
+          phase,
+          currentCredits: current?.credits || 0,
+          comparedCredits: compared?.credits || 0,
+          creditsDelta: (current?.credits || 0) - (compared?.credits || 0),
+          currentDurationMs: current?.durationMs || 0,
+          comparedDurationMs: compared?.durationMs || 0,
+          durationDelta: (current?.durationMs || 0) - (compared?.durationMs || 0),
+          currentStatus: current ? (current.failed ? 'failed' : current.succeeded ? 'succeeded' : 'unknown') : 'not_used',
+          comparedStatus: compared ? (compared.failed ? 'failed' : compared.succeeded ? 'succeeded' : 'unknown') : 'not_used',
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  }, [replayComparedPhaseOverlay, replayPhaseOverlay]);
 
   const branchOpportunityMap = useMemo(() => {
     const baselineCredits = selectedRow?.averageCredits || 0;
@@ -3984,6 +4074,9 @@ export default function AgentStudio() {
     workspaceAutoGraduationProfile,
   ]);
 
+  const autoRollbackEnabled = selectedStudioState.autoRollbackEnabled === true;
+  const autoRollbackWeaknessThreshold = selectedStudioState.autoRollbackWeaknessThreshold ?? 12;
+
   const autoGraduateScope = useMemo(() => {
     if (selectedStudioState.autoGraduateScenarioThresholds?.[selectedScenario.id]) {
       return { scope: 'Scenario gate', label: selectedScenario.label };
@@ -4077,6 +4170,15 @@ export default function AgentStudio() {
           successDelta,
           creditsDelta,
           durationDelta,
+          currentSuccessDelta: childSummary && parentSummary
+            ? Math.round((childSummary.stats.successRate - parentSummary.stats.successRate) * 100)
+            : undefined,
+          currentCreditsDelta: childSummary && parentSummary
+            ? Math.round((childSummary.stats.averageCredits || 0) - (parentSummary.stats.averageCredits || 0))
+            : undefined,
+          currentDurationDelta: childSummary && parentSummary
+            ? Math.round(((childSummary.stats.averageDurationMs || 0) - (parentSummary.stats.averageDurationMs || 0)) / 1000)
+            : undefined,
           childRun,
           parentRun,
           dominantPhase,
@@ -4100,6 +4202,10 @@ export default function AgentStudio() {
       .slice(0, 8);
     const parentWindowStats = summarizeRunCollection(parentWindowRuns);
     const childWindowStats = summarizeRunCollection(childWindowRuns);
+    const weaknessScore =
+      Math.max(0, (parentWindowStats.successRate - childWindowStats.successRate) * 100)
+      + Math.max(0, (childWindowStats.averageCredits || 0) - (parentWindowStats.averageCredits || 0))
+      + Math.max(0, ((childWindowStats.averageDurationMs || 0) - (parentWindowStats.averageDurationMs || 0)) / 5000);
     return {
       child: activeBranchParentComparison.child,
       parent: activeBranchParentComparison.parent,
@@ -4110,6 +4216,7 @@ export default function AgentStudio() {
       durationDelta: activeBranchParentComparison.durationDelta,
       parentWindowStats,
       childWindowStats,
+      weaknessScore: Math.round(weaknessScore),
     };
   }, [activeBranchParentComparison, graduationHistory, selectedRow?.runs, selectedStudioState.lastAutoGraduatedPlanId]);
 
@@ -4255,6 +4362,43 @@ export default function AgentStudio() {
     autoGraduateEnabled,
     autoGraduateMinConfidence,
     patchAutomationConfig,
+    selectedStudioState,
+  ]);
+
+  useEffect(() => {
+    if (!autoRollbackEnabled || !autoGraduationRollbackSuggestion) return;
+    if (autoGraduationRollbackSuggestion.weaknessScore < autoRollbackWeaknessThreshold) return;
+    if (selectedStudioState.lastAutoRolledBackPlanId === autoGraduationRollbackSuggestion.child.plan.id) return;
+    void patchAutomationConfig({
+      executionPolicy: autoGraduationRollbackSuggestion.parent.plan.executionPolicy,
+      studioState: {
+        ...selectedStudioState,
+        selectedPlanId: autoGraduationRollbackSuggestion.parent.plan.id,
+        selectedPlanCompareId: autoGraduationRollbackSuggestion.child.plan.id,
+        selectedPlanFamilyRootId: savedPlanSummaries.find((entry) => entry.plan.id === autoGraduationRollbackSuggestion.parent.plan.id)?.familyRootId,
+        roleDirectives: cloneRoleDirectives(autoGraduationRollbackSuggestion.parent.plan.roleDirectives),
+        lastAutoRolledBackPlanId: autoGraduationRollbackSuggestion.child.plan.id,
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'rollback',
+          summary: `Auto-rolled back ${autoGraduationRollbackSuggestion.child.plan.name} to ${autoGraduationRollbackSuggestion.parent.plan.name}.`,
+          sourceExperimentId: autoGraduationRollbackSuggestion.child.plan.sourceExperimentId,
+          sourceExperimentLabel: autoGraduationRollbackSuggestion.child.plan.sourceExperimentLabel || autoGraduationRollbackSuggestion.child.plan.name,
+          planId: autoGraduationRollbackSuggestion.parent.plan.id,
+          parentPlanId: autoGraduationRollbackSuggestion.child.plan.id,
+          autoApplied: true,
+          confidence: autoGraduationRollbackSuggestion.latestAutoGraduation?.confidence,
+          successDelta: autoGraduationRollbackSuggestion.successDelta,
+          creditsDelta: autoGraduationRollbackSuggestion.creditsDelta,
+          durationDelta: autoGraduationRollbackSuggestion.durationDelta,
+        }),
+      },
+    }, { successMessage: `Auto-rolled back to ${autoGraduationRollbackSuggestion.parent.plan.name}.`, suppressBusy: true });
+  }, [
+    autoGraduationRollbackSuggestion,
+    autoRollbackEnabled,
+    autoRollbackWeaknessThreshold,
+    patchAutomationConfig,
+    savedPlanSummaries,
     selectedStudioState,
   ]);
 
@@ -4978,6 +5122,14 @@ export default function AgentStudio() {
     }, patch.enabled === false ? 'Automatic branch graduation disabled.' : patch.enabled === true ? 'Automatic branch graduation enabled.' : `Automatic graduation gate set to ${patch.confidence}%.`);
   }, [autoGraduateEnabled, autoGraduateMinConfidence, selectedStudioState, updateStudioState]);
 
+  const handleUpdateAutoRollback = useCallback((patch: { enabled?: boolean; weakness?: number }) => {
+    void updateStudioState({
+      ...selectedStudioState,
+      autoRollbackEnabled: patch.enabled ?? autoRollbackEnabled,
+      autoRollbackWeaknessThreshold: patch.weakness ?? autoRollbackWeaknessThreshold,
+    }, patch.enabled === false ? 'Automatic rollback disabled.' : patch.enabled === true ? 'Automatic rollback enabled.' : `Automatic rollback threshold set to ${patch.weakness}.`);
+  }, [autoRollbackEnabled, autoRollbackWeaknessThreshold, selectedStudioState, updateStudioState]);
+
   const handleSetScopedAutoGraduateThreshold = useCallback((scope: 'global' | 'scenario' | 'archetype', threshold: number) => {
     const nextState: AutomationStudioStateDraft = { ...selectedStudioState };
     let message = `Automatic graduation gate set to ${threshold}% confidence.`;
@@ -5036,29 +5188,55 @@ export default function AgentStudio() {
     void updateStudioState(nextState, `Applied the ${profile.label.toLowerCase()} graduation profile to the ${scope === 'global' ? 'global' : scope === 'archetype' ? 'workflow class' : 'scenario'} gate.`);
   }, [selectedArchetype.id, selectedScenario.id, selectedStudioState, updateStudioState]);
 
+  const patchWorkspaceAutoGraduationProfiles = useCallback(async (
+    nextProfiles: Record<string, string>,
+    successMessage: string,
+  ) => {
+    setActionBusy(true);
+    try {
+      const response = await fetch(`/api/settings?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Workspace-Id': workspace.workspaceId,
+          'X-Workspace-Name': workspace.workspaceName,
+        },
+        body: JSON.stringify({
+          agentStudio: {
+            autoGraduationProfiles: nextProfiles,
+          },
+        }),
+      });
+      if (!response.ok) throw new Error('Could not save workspace graduation defaults');
+      setWorkspaceAutoGraduationProfiles(nextProfiles);
+      setNotice({ tone: 'success', message: successMessage });
+    } catch (error) {
+      setNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not save workspace graduation defaults.' });
+    } finally {
+      setActionBusy(false);
+    }
+  }, [workspace.workspaceId, workspace.workspaceName]);
+
   const handleRememberWorkspaceAutoGraduationProfile = useCallback((profileId: typeof AUTO_GRADUATION_PROFILES[number]['id']) => {
-    setWorkspaceAutoGraduationProfiles((current) => ({
-      ...current,
+    const nextProfiles = {
+      ...workspaceAutoGraduationProfiles,
       [selectedArchetype.id]: profileId,
-    }));
+    };
     const profile = getAutoGraduationProfileById(profileId);
-    setNotice({
-      tone: 'success',
-      message: `Remembered ${profile?.label.toLowerCase() || 'this'} graduation profile as the workspace default for ${selectedArchetype.label.toLowerCase()}.`,
-    });
-  }, [selectedArchetype.id, selectedArchetype.label]);
+    void patchWorkspaceAutoGraduationProfiles(
+      nextProfiles,
+      `Remembered ${profile?.label.toLowerCase() || 'this'} graduation profile as the workspace default for ${selectedArchetype.label.toLowerCase()}.`,
+    );
+  }, [patchWorkspaceAutoGraduationProfiles, selectedArchetype.id, selectedArchetype.label, workspaceAutoGraduationProfiles]);
 
   const handleClearWorkspaceAutoGraduationProfile = useCallback(() => {
-    setWorkspaceAutoGraduationProfiles((current) => {
-      const next = { ...current };
-      delete next[selectedArchetype.id];
-      return next;
-    });
-    setNotice({
-      tone: 'success',
-      message: `Cleared the workspace graduation default for ${selectedArchetype.label.toLowerCase()}.`,
-    });
-  }, [selectedArchetype.id, selectedArchetype.label]);
+    const nextProfiles = { ...workspaceAutoGraduationProfiles };
+    delete nextProfiles[selectedArchetype.id];
+    void patchWorkspaceAutoGraduationProfiles(
+      nextProfiles,
+      `Cleared the workspace graduation default for ${selectedArchetype.label.toLowerCase()}.`,
+    );
+  }, [patchWorkspaceAutoGraduationProfiles, selectedArchetype.id, selectedArchetype.label, workspaceAutoGraduationProfiles]);
 
   const handleRestoreExperiment = useCallback((experiment: StudioExperimentRecord) => {
     if (SCENARIO_PRESETS.some((scenario) => scenario.id === experiment.scenarioId)) {
@@ -7477,6 +7655,33 @@ export default function AgentStudio() {
                                           </span>
                                         ) : null}
                                       </div>
+                                      {(typeof item.currentSuccessDelta === 'number' || typeof item.currentCreditsDelta === 'number') ? (
+                                        <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Outcome drift</p>
+                                          <p className="mt-1 text-sm text-white">
+                                            {typeof item.currentSuccessDelta === 'number' && typeof item.successDelta === 'number' && item.currentSuccessDelta < item.successDelta
+                                              ? 'This branch has weakened since it graduated.'
+                                              : 'This branch is holding or improving after graduation.'}
+                                          </p>
+                                          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                            {typeof item.currentSuccessDelta === 'number' ? (
+                                              <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${item.currentSuccessDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                                now {formatSignedDelta(item.currentSuccessDelta)} pts
+                                              </span>
+                                            ) : null}
+                                            {typeof item.currentCreditsDelta === 'number' ? (
+                                              <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${item.currentCreditsDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                                now {formatSignedDelta(item.currentCreditsDelta)} cr
+                                              </span>
+                                            ) : null}
+                                            {typeof item.currentDurationDelta === 'number' ? (
+                                              <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${item.currentDurationDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                                now {formatSignedDelta(item.currentDurationDelta)}s
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      ) : null}
                                       {item.reasons.length > 0 ? (
                                         <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
                                           <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Why this graduated</p>
@@ -7542,6 +7747,34 @@ export default function AgentStudio() {
                               <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
                                 {autoGraduationRollbackSuggestion.childRunCount} child runs observed
                               </span>
+                              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-red-100">
+                                weakness {autoGraduationRollbackSuggestion.weaknessScore}
+                              </span>
+                            </div>
+                            <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Automatic rollback</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateAutoRollback({ enabled: !autoRollbackEnabled })}
+                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${autoRollbackEnabled ? 'text-red-100' : 'text-slate-300'}`}
+                                >
+                                  {autoRollbackEnabled ? 'Enabled' : 'Enable automatic rollback'}
+                                </button>
+                                {[8, 12, 16].map((threshold) => (
+                                  <button
+                                    key={`auto-rollback-threshold-${threshold}`}
+                                    type="button"
+                                    onClick={() => handleUpdateAutoRollback({ weakness: threshold })}
+                                    className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${autoRollbackWeaknessThreshold === threshold ? 'border-red-500/30 bg-red-500/12 text-red-100' : 'text-slate-300'}`}
+                                  >
+                                    Trigger at {threshold}
+                                  </button>
+                                ))}
+                              </div>
+                              <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+                                If enabled, Studio will restore the parent automatically when weakness clears the active threshold and the child keeps degrading after auto-graduation.
+                              </p>
                             </div>
                             <div className="mt-3 grid gap-3 sm:grid-cols-2 text-[11px]">
                               <div className="rounded-xl border border-red-500/16 bg-red-500/8 px-3 py-3">
@@ -8294,6 +8527,90 @@ export default function AgentStudio() {
                                       {formatSignedDelta(Math.round(((runComparison.current.durationMs || 0) - (runComparison.previous.durationMs || 0)) / 1000))}s
                                     </p>
                                   </div>
+                                </div>
+                              ) : null}
+                              {replayDualRunDiff && replayComparedRun ? (
+                                <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Dual-run phase diff</p>
+                                      <p className="mt-1 text-sm font-medium text-white">
+                                        {selectedReplayPhase === 'all'
+                                          ? 'Comparing the dominant phase across both runs'
+                                          : `${formatDirectivePhaseScope([selectedReplayPhase])} across both runs`}
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => replayBaseRun ? handleOpenRunPairInReplay(replayBaseRun, replayComparedRun, selectedReplayPhase === 'all' ? selectedReplayPhaseDetail?.phase : selectedReplayPhase, 'dual-run diff') : undefined}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                    >
+                                      Open before / after
+                                    </button>
+                                  </div>
+                                  <div className="mt-3 grid gap-3 sm:grid-cols-3 text-[11px]">
+                                    <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-3">
+                                      <p className="text-slate-500">Credits vs pair</p>
+                                      <p className={`mt-1 text-white ${replayDualRunDiff.creditsDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(Math.round(replayDualRunDiff.creditsDelta))} cr</p>
+                                    </div>
+                                    <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-3">
+                                      <p className="text-slate-500">Duration vs pair</p>
+                                      <p className={`mt-1 text-white ${replayDualRunDiff.durationDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(Math.round(replayDualRunDiff.durationDelta / 1000))}s</p>
+                                    </div>
+                                    <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-3">
+                                      <p className="text-slate-500">Tokens vs pair</p>
+                                      <p className={`mt-1 text-white ${replayDualRunDiff.tokensDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(Math.round(replayDualRunDiff.tokensDelta))}</p>
+                                    </div>
+                                  </div>
+                                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-cyan-200">
+                                      current {replayDualRunDiff.statusPair.current}
+                                    </span>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                      compared {replayDualRunDiff.statusPair.compared}
+                                    </span>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                      {replayDualRunDiff.comparedRunLabel}
+                                    </span>
+                                    {replayDualRunDiff.directiveShift ? (
+                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-violet-200">
+                                        {replayDualRunDiff.directiveShift.compared || 'baseline'} {'->'} {replayDualRunDiff.directiveShift.current || 'baseline'}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {replayPhaseComparisonRows.length > 0 ? (
+                                    <div className="mt-3 grid gap-2">
+                                      {replayPhaseComparisonRows.map((row) => (
+                                        <button
+                                          key={`phase-compare-${row.phase}`}
+                                          type="button"
+                                          onClick={() => setSelectedReplayPhase(row.phase)}
+                                          className={`grid w-full gap-2 rounded-xl border px-3 py-3 text-left text-[11px] transition sm:grid-cols-[minmax(0,1fr),repeat(4,minmax(0,auto))] ${selectedReplayPhase === row.phase ? 'border-cyan-500/24 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/45 hover:border-cyan-500/16'}`}
+                                        >
+                                          <div>
+                                            <p className="font-medium text-white">{formatDirectivePhaseScope([row.phase])}</p>
+                                            <p className="mt-1 text-slate-500">{row.currentStatus} vs {row.comparedStatus}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-slate-500">Credits</p>
+                                            <p className={`mt-1 ${row.creditsDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(Math.round(row.creditsDelta))} cr</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-slate-500">Duration</p>
+                                            <p className={`mt-1 ${row.durationDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(Math.round(row.durationDelta / 1000))}s</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-slate-500">Current</p>
+                                            <p className="mt-1 text-white">{row.currentCredits ? `${formatCredits(row.currentCredits)} cr` : '—'}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-slate-500">Compared</p>
+                                            <p className="mt-1 text-white">{row.comparedCredits ? `${formatCredits(row.comparedCredits)} cr` : '—'}</p>
+                                          </div>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : null}
                                 </div>
                               ) : null}
                               <div className="mt-3 grid gap-3 sm:grid-cols-2">

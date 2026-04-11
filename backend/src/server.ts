@@ -3601,6 +3601,9 @@ app.patch('/api/settings', (req: Request, res: Response) => {
   const body = (req.body || {}) as {
     providerTokens?: Record<string, string | null>;
     modelOverrides?: Record<string, { provider?: string; model?: string; baseUrl?: string; reasoningEffort?: string } | null>;
+    agentStudio?: {
+      autoGraduationProfiles?: Record<string, string | null> | null;
+    };
   };
 
   const allowedProviders = new Set(['anthropic', 'openai', 'openrouter', 'mistral', 'minimax']);
@@ -3637,10 +3640,25 @@ app.patch('/api/settings', (req: Request, res: Response) => {
       )
     : undefined;
 
+  const agentStudio = body.agentStudio
+    ? {
+        autoGraduationProfiles: body.agentStudio.autoGraduationProfiles
+          ? Object.fromEntries(
+              Object.entries(body.agentStudio.autoGraduationProfiles)
+                .filter(([archetypeId, profileId]) => typeof archetypeId === 'string' && typeof profileId === 'string' && profileId.trim().length > 0)
+                .map(([archetypeId, profileId]) => [archetypeId, profileId!.trim()]),
+            )
+          : body.agentStudio.autoGraduationProfiles === null
+            ? null
+            : undefined,
+      }
+    : undefined;
+
   const settings = upsertWorkspaceSettings({
     workspaceId,
     providerTokens,
     modelOverrides,
+    agentStudio,
   });
 
   res.json({

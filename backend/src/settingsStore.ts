@@ -19,11 +19,16 @@ export interface WorkspaceModelOverride {
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 }
 
+export interface WorkspaceAgentStudioSettings {
+  autoGraduationProfiles?: Record<string, string>;
+}
+
 export interface WorkspaceSettingsRecord {
   workspaceId: string;
   updatedAt: string;
   providerTokens?: Partial<Record<Provider, EncryptedSecret>>;
   modelOverrides?: Partial<Record<TextProfile | EmbeddingProfile, WorkspaceModelOverride>>;
+  agentStudio?: WorkspaceAgentStudioSettings;
 }
 
 export interface WorkspaceSettingsView {
@@ -38,6 +43,7 @@ export interface WorkspaceSettingsView {
     activeSourceLabel: string;
   }>;
   modelOverrides: Partial<Record<TextProfile | EmbeddingProfile, WorkspaceModelOverride>>;
+  agentStudio?: WorkspaceAgentStudioSettings;
 }
 
 const SETTINGS_FILE = path.join(process.cwd(), 'workspace-settings.json');
@@ -136,6 +142,7 @@ export function getWorkspaceSettingsView(workspaceId: string): WorkspaceSettings
       }),
     ) as WorkspaceSettingsView['providers'],
     modelOverrides: record?.modelOverrides || {},
+    agentStudio: record?.agentStudio || {},
   };
 }
 
@@ -153,6 +160,9 @@ export function upsertWorkspaceSettings(input: {
   workspaceId: string;
   providerTokens?: Partial<Record<Provider, string | null>>;
   modelOverrides?: Partial<Record<TextProfile | EmbeddingProfile, WorkspaceModelOverride | null>>;
+  agentStudio?: {
+    autoGraduationProfiles?: Record<string, string> | null;
+  };
 }): WorkspaceSettingsView {
   const records = readStore();
   const existing = records.find((record) => record.workspaceId === input.workspaceId);
@@ -194,6 +204,21 @@ export function upsertWorkspaceSettings(input: {
       };
     }
     next.modelOverrides = modelOverrides;
+  }
+
+  if (input.agentStudio) {
+    const current = { ...(next.agentStudio || {}) };
+    if ('autoGraduationProfiles' in input.agentStudio) {
+      const incoming = input.agentStudio.autoGraduationProfiles;
+      current.autoGraduationProfiles = incoming
+        ? Object.entries(incoming).reduce<Record<string, string>>((acc, [archetypeId, profileId]) => {
+            if (!archetypeId || !profileId) return acc;
+            acc[archetypeId] = profileId;
+            return acc;
+          }, {})
+        : undefined;
+    }
+    next.agentStudio = current;
   }
 
   next.updatedAt = new Date().toISOString();
