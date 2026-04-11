@@ -91,6 +91,11 @@ import {
   type TextProfile,
 } from './models';
 import { getWorkspaceProviderToken, getWorkspaceSettingsView, upsertWorkspaceSettings } from './settingsStore';
+import {
+  buildAutomationExperimentAttribution,
+  buildAutomationScenarioTelemetry,
+} from './agent-studio/automationStudio';
+import { registerAgentStudioSettingsRoutes } from './agent-studio/settingsRoutes';
 
 dotenv.config();
 
@@ -2639,77 +2644,6 @@ function ensureAutomationDeliveryStep(
   ] as AutomationStepDefinition[];
 }
 
-function getAutomationScenarioLabel(id?: string) {
-  switch (id) {
-    case 'rush':
-      return 'Rush mode';
-    case 'deep_research':
-      return 'Deep research';
-    case 'monitoring':
-      return 'Watch loop';
-    case 'high_stakes':
-      return 'High stakes';
-    default:
-      return 'Current workflow';
-  }
-}
-
-function getAutomationPresetLabel(id?: string) {
-  switch (id) {
-    case 'lean_ops':
-      return 'Lean ops';
-    case 'balanced':
-      return 'Balanced';
-    case 'high_assurance':
-      return 'High assurance';
-    case 'recommended':
-    default:
-      return 'System recommended';
-  }
-}
-
-function buildAutomationExperimentAttribution(studioState?: AutomationStudioState) {
-  const scenarioId = studioState?.selectedScenarioId || 'baseline';
-  const previewPresetId = studioState?.previewPresetId || 'recommended';
-  const matchedExperiment = (studioState?.experimentHistory || [])
-    .filter((experiment) => experiment.scenarioId === scenarioId && experiment.previewPresetId === previewPresetId)
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))[0];
-
-  return {
-    scenarioId,
-    scenarioLabel: getAutomationScenarioLabel(scenarioId),
-    previewPresetId,
-    previewPresetLabel: getAutomationPresetLabel(previewPresetId),
-    experimentId: matchedExperiment?.id,
-    experimentCreatedAt: matchedExperiment?.createdAt,
-    experimentNotes: matchedExperiment?.notes,
-    matchedSavedExperiment: Boolean(matchedExperiment),
-  };
-}
-
-function buildAutomationScenarioTelemetry(
-  studioState: AutomationStudioState | undefined,
-  executionPlan: AutomationExecutionPlan,
-  experimentAttribution: ReturnType<typeof buildAutomationExperimentAttribution>,
-) {
-  return {
-    scenarioId: experimentAttribution.scenarioId,
-    scenarioLabel: experimentAttribution.scenarioLabel,
-    previewPresetId: experimentAttribution.previewPresetId,
-    previewPresetLabel: experimentAttribution.previewPresetLabel,
-    matchedSavedExperiment: experimentAttribution.matchedSavedExperiment,
-    experimentId: experimentAttribution.experimentId,
-    workflowStepCount: executionPlan.steps.length,
-    estimatedToolCalls: executionPlan.estimatedToolCalls,
-    complexity: executionPlan.complexity,
-    directedRoles: Object.entries(studioState?.roleDirectives || {}).map(([role, directive]) => ({
-      role,
-      mode: directive.mode,
-      phases: directive.phases || [],
-    })),
-  };
-}
-
 function buildAutomationExecutionPlan(automation: {
   id: string;
   name: string;
@@ -3587,153 +3521,13 @@ app.post('/api/summarize', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/settings', (req: Request, res: Response) => {
-  const { workspaceId } = resolveWorkspaceContext(req);
-  res.json({
-    workspaceId,
-    settings: getWorkspaceSettingsView(workspaceId),
-    modelRouting: getModelRoutingStatus(workspaceId),
-  });
-});
-
-app.patch('/api/settings', (req: Request, res: Response) => {
-  const { workspaceId } = resolveWorkspaceContext(req);
-  const body = (req.body || {}) as {
-    providerTokens?: Record<string, string | null>;
-    modelOverrides?: Record<string, { provider?: string; model?: string; baseUrl?: string; reasoningEffort?: string } | null>;
-    agentStudio?: {
-      autoGraduationProfiles?: Record<string, string | null> | null;
-      autoRollbackEnabled?: boolean | null;
-      autoRollbackWeaknessThreshold?: number | null;
-      autoRollbackMomentumThreshold?: number | null;
-    };
-  };
-
-  const allowedProviders = new Set(['anthropic', 'openai', 'openrouter', 'mistral', 'minimax']);
-  const allowedProfiles = new Set(['micro', 'default', 'hard', 'critical', 'ops', 'memory_text', 'memory_code']);
-  const allowedReasoning = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
-
-  const providerTokens = body.providerTokens
-    ? Object.fromEntries(
-        Object.entries(body.providerTokens)
-          .filter(([provider]) => allowedProviders.has(provider))
-          .map(([provider, token]) => [provider, typeof token === 'string' ? token.trim() : null]),
-      )
-    : undefined;
-
-  const modelOverrides = body.modelOverrides
-    ? Object.fromEntries(
-        Object.entries(body.modelOverrides)
-          .filter(([profile]) => allowedProfiles.has(profile))
-          .map(([profile, override]) => {
-            if (!override) return [profile, null];
-            const provider = typeof override.provider === 'string' && allowedProviders.has(override.provider)
-              ? override.provider
-              : undefined;
-            const reasoningEffort = typeof override.reasoningEffort === 'string' && allowedReasoning.has(override.reasoningEffort)
-              ? override.reasoningEffort as 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
-              : undefined;
-            return [profile, {
-              provider,
-              model: typeof override.model === 'string' ? override.model.trim() : undefined,
-              baseUrl: typeof override.baseUrl === 'string' ? override.baseUrl.trim() : undefined,
-              reasoningEffort,
-            }];
-          }),
-      )
-    : undefined;
-
-  const agentStudio = body.agentStudio
-    ? {
-        autoGraduationProfiles: body.agentStudio.autoGraduationProfiles
-          ? Object.fromEntries(
-              Object.entries(body.agentStudio.autoGraduationProfiles)
-                .filter(([archetypeId, profileId]) => typeof archetypeId === 'string' && typeof profileId === 'string' && profileId.trim().length > 0)
-                .map(([archetypeId, profileId]) => [archetypeId, profileId!.trim()]),
-            )
-          : body.agentStudio.autoGraduationProfiles === null
-            ? null
-            : undefined,
-        autoRollbackEnabled: body.agentStudio.autoRollbackEnabled === true ? true : body.agentStudio.autoRollbackEnabled === null ? null : undefined,
-        autoRollbackWeaknessThreshold: typeof body.agentStudio.autoRollbackWeaknessThreshold === 'number'
-          ? body.agentStudio.autoRollbackWeaknessThreshold
-          : body.agentStudio.autoRollbackWeaknessThreshold === null
-            ? null
-            : undefined,
-        autoRollbackMomentumThreshold: typeof body.agentStudio.autoRollbackMomentumThreshold === 'number'
-          ? body.agentStudio.autoRollbackMomentumThreshold
-          : body.agentStudio.autoRollbackMomentumThreshold === null
-            ? null
-            : undefined,
-      }
-    : undefined;
-
-  const settings = upsertWorkspaceSettings({
-    workspaceId,
-    providerTokens,
-    modelOverrides,
-    agentStudio,
-  });
-
-  res.json({
-    workspaceId,
-    settings,
-    modelRouting: getModelRoutingStatus(workspaceId),
-  });
-});
-
-app.post('/api/settings/test-provider', async (req: Request, res: Response) => {
-  const { workspaceId } = resolveWorkspaceContext(req);
-  const body = (req.body || {}) as { provider?: string; token?: string };
-  const provider = body.provider;
-  if (provider !== 'anthropic' && provider !== 'openai' && provider !== 'openrouter' && provider !== 'mistral' && provider !== 'minimax') {
-    res.status(400).json({ error: 'Unsupported provider' });
-    return;
-  }
-
-  try {
-    const result = await testProviderConnection({
-      workspaceId,
-      provider,
-      tokenOverride: typeof body.token === 'string' ? body.token : undefined,
-    });
-    res.json(result);
-  } catch (error) {
-    res.status(400).json({
-      ok: false,
-      provider,
-      detail: error instanceof Error ? error.message : 'Provider test failed',
-    });
-  }
-});
-
-app.post('/api/settings/test-profile', async (req: Request, res: Response) => {
-  const { workspaceId } = resolveWorkspaceContext(req);
-  const body = (req.body || {}) as { profile?: string };
-  const profile = body.profile;
-  if (
-    profile !== 'micro' &&
-    profile !== 'default' &&
-    profile !== 'hard' &&
-    profile !== 'critical' &&
-    profile !== 'ops' &&
-    profile !== 'memory_text' &&
-    profile !== 'memory_code'
-  ) {
-    res.status(400).json({ error: 'Unsupported profile' });
-    return;
-  }
-
-  try {
-    const result = await testModelProfileConnection({ workspaceId, profile });
-    res.json(result);
-  } catch (error) {
-    res.status(400).json({
-      ok: false,
-      profile,
-      detail: error instanceof Error ? error.message : 'Profile test failed.',
-    });
-  }
+registerAgentStudioSettingsRoutes(app, {
+  resolveWorkspaceContext,
+  getWorkspaceSettingsView,
+  getModelRoutingStatus,
+  upsertWorkspaceSettings,
+  testProviderConnection,
+  testModelProfileConnection,
 });
 
 // ── Waitlist ──────────────────────────────────────────────────────────────────

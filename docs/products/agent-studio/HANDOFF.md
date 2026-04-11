@@ -23,6 +23,19 @@ It already contains real product energy:
 
 That is enough to justify a separate product.
 
+## Current split assets
+
+The first clean split assets now exist:
+
+- product setup:
+  - `/Users/maximisto/Documents/New project/docs/products/agent-studio/SETUP.md`
+- integration contract:
+  - `/Users/maximisto/Documents/New project/docs/products/agent-studio/INTEGRATION_CONTRACT.md`
+- backend contract types:
+  - `/Users/maximisto/Documents/New project/backend/src/agent-studio/contract.ts`
+- first-party Violema adapter:
+  - `/Users/maximisto/Documents/New project/backend/src/agent-studio/adapters/violema.ts`
+
 ## What has to happen
 
 Agent Studio needs to stop behaving like “advanced settings for Violema.”

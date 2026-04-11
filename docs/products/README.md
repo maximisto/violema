@@ -89,3 +89,4 @@ Violema should receive back:
 - [Violema handoff](/Users/maximisto/Documents/New%20project/docs/products/violema/HANDOFF.md)
 - [Agent Studio setup](/Users/maximisto/Documents/New%20project/docs/products/agent-studio/SETUP.md)
 - [Agent Studio handoff](/Users/maximisto/Documents/New%20project/docs/products/agent-studio/HANDOFF.md)
+- [Agent Studio integration contract](/Users/maximisto/Documents/New%20project/docs/products/agent-studio/INTEGRATION_CONTRACT.md)
