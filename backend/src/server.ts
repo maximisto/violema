@@ -1850,41 +1850,9 @@ function normalizeAutomationExecutionPolicy(value: unknown): AutomationExecution
   };
 }
 
-function normalizeAutomationStudioState(value: unknown): AutomationStudioState | undefined {
-  if (!isObjectRecord(value)) return undefined;
-
-  const selectedScenarioId =
-    typeof value.selectedScenarioId === 'string' && value.selectedScenarioId.trim()
-      ? value.selectedScenarioId.trim()
-      : undefined;
-  const previewPresetId =
-    typeof value.previewPresetId === 'string' && value.previewPresetId.trim()
-      ? value.previewPresetId.trim()
-      : undefined;
-
-  const experimentHistory = Array.isArray(value.experimentHistory)
-    ? value.experimentHistory
-        .map((item) => {
-          if (!isObjectRecord(item)) return null;
-          const id = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : undefined;
-          const scenarioId = typeof item.scenarioId === 'string' && item.scenarioId.trim() ? item.scenarioId.trim() : undefined;
-          const previewId = typeof item.previewPresetId === 'string' && item.previewPresetId.trim() ? item.previewPresetId.trim() : undefined;
-          const createdAt = typeof item.createdAt === 'string' && item.createdAt.trim() ? item.createdAt.trim() : undefined;
-          if (!id || !scenarioId || !previewId || !createdAt) return null;
-          return {
-            id,
-            scenarioId,
-            previewPresetId: previewId,
-            createdAt,
-            notes: typeof item.notes === 'string' && item.notes.trim() ? item.notes.trim() : undefined,
-          };
-        })
-        .filter((item): item is NonNullable<typeof item> => Boolean(item))
-        .slice(0, 8)
-    : undefined;
-
-  const roleDirectives = isObjectRecord(value.roleDirectives)
-    ? Object.entries(value.roleDirectives).reduce<Record<string, { mode: 'cheaper' | 'review' | 'promote'; updatedAt: string; phases?: AutomationStepKind[] }>>((acc, [role, directive]) => {
+function normalizeAutomationRoleDirectives(value: unknown) {
+  return isObjectRecord(value)
+    ? Object.entries(value).reduce<Record<string, { mode: 'cheaper' | 'review' | 'promote'; updatedAt: string; phases?: AutomationStepKind[] }>>((acc, [role, directive]) => {
         if (!isObjectRecord(directive)) return acc;
         const mode = directive.mode === 'cheaper' || directive.mode === 'review' || directive.mode === 'promote'
           ? directive.mode
@@ -1910,6 +1878,44 @@ function normalizeAutomationStudioState(value: unknown): AutomationStudioState |
         return acc;
       }, {})
     : undefined;
+}
+
+function normalizeAutomationStudioState(value: unknown): AutomationStudioState | undefined {
+  if (!isObjectRecord(value)) return undefined;
+
+  const selectedScenarioId =
+    typeof value.selectedScenarioId === 'string' && value.selectedScenarioId.trim()
+      ? value.selectedScenarioId.trim()
+      : undefined;
+  const previewPresetId =
+    typeof value.previewPresetId === 'string' && value.previewPresetId.trim()
+      ? value.previewPresetId.trim()
+      : undefined;
+
+  const experimentHistory = Array.isArray(value.experimentHistory)
+    ? value.experimentHistory
+        .map((item) => {
+          if (!isObjectRecord(item)) return null;
+          const id = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : undefined;
+          const scenarioId = typeof item.scenarioId === 'string' && item.scenarioId.trim() ? item.scenarioId.trim() : undefined;
+          const previewId = typeof item.previewPresetId === 'string' && item.previewPresetId.trim() ? item.previewPresetId.trim() : undefined;
+          const createdAt = typeof item.createdAt === 'string' && item.createdAt.trim() ? item.createdAt.trim() : undefined;
+          if (!id || !scenarioId || !previewId || !createdAt) return null;
+          const roleDirectives = normalizeAutomationRoleDirectives(item.roleDirectives);
+          return {
+            id,
+            scenarioId,
+            previewPresetId: previewId,
+            createdAt,
+            notes: typeof item.notes === 'string' && item.notes.trim() ? item.notes.trim() : undefined,
+            roleDirectives,
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        .slice(0, 8)
+    : undefined;
+
+  const roleDirectives = normalizeAutomationRoleDirectives(value.roleDirectives);
 
   if (!selectedScenarioId && !previewPresetId && !experimentHistory?.length && !roleDirectives) {
     return undefined;

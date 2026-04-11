@@ -38,6 +38,7 @@ interface StudioExperimentRecord {
   previewPresetId: string;
   createdAt: string;
   notes?: string;
+  roleDirectives?: Record<string, StudioRoleDirective>;
 }
 
 interface StudioRoleDirective {
@@ -822,6 +823,69 @@ function summarizeRunCollection(runs: PlatformTaskRunRecord[]) {
   };
 }
 
+function countDirectiveEntries(roleDirectives?: Record<string, StudioRoleDirective>) {
+  return Object.values(roleDirectives || {}).reduce((sum, directive) => sum + (directive.phases?.length || 1), 0);
+}
+
+function cloneRoleDirectives(roleDirectives?: Record<string, StudioRoleDirective>) {
+  if (!roleDirectives) return undefined;
+  return Object.entries(roleDirectives).reduce<Record<string, StudioRoleDirective>>((acc, [role, directive]) => {
+    acc[role] = {
+      mode: directive.mode,
+      phases: directive.phases ? [...directive.phases] : undefined,
+      updatedAt: directive.updatedAt,
+    };
+    return acc;
+  }, {});
+}
+
+function mergeRoleDirectiveSnapshots(
+  base?: Record<string, StudioRoleDirective>,
+  incoming?: Record<string, StudioRoleDirective>
+) {
+  return {
+    ...(cloneRoleDirectives(base) || {}),
+    ...(cloneRoleDirectives(incoming) || {}),
+  };
+}
+
+function buildPhaseActivitySeries(runs: PlatformTaskRunRecord[], role: string) {
+  const relevantRuns = runs.filter((run) => run.status === 'succeeded' || run.status === 'failed').slice(0, 8).reverse();
+  const phaseOrder: WorkflowBlockKind[] = ['search', 'query', 'capture', 'analyze', 'summarize', 'deliver'];
+  const series = relevantRuns.map((run, index) => {
+    const stepExecutions = readStepExecutions(run.metadata?.stepExecutions).filter((step) => step.assignedRole === role);
+    const phases = phaseOrder.map((phase) => {
+      const phaseSteps = stepExecutions.filter((step) => step.kind === phase);
+      const credits = phaseSteps.reduce((sum, step) => sum + (step.actualCredits || 0), 0);
+      return {
+        phase,
+        count: phaseSteps.length,
+        failed: phaseSteps.some((step) => step.status === 'failed'),
+        succeeded: phaseSteps.some((step) => step.status === 'succeeded'),
+        credits,
+      };
+    }).filter((phase) => phase.count > 0);
+    return {
+      id: run.id,
+      label: `R${index + 1}`,
+      phases,
+    };
+  });
+  return series;
+}
+
+function getDirectiveModeLabel(mode: 'cheaper' | 'review' | 'promote') {
+  if (mode === 'cheaper') return 'Cheaper bias';
+  if (mode === 'review') return 'Review bias';
+  return 'Promoted lane';
+}
+
+function getDirectiveActionLabel(mode: 'cheaper' | 'review' | 'promote') {
+  if (mode === 'cheaper') return 'Promote steering only';
+  if (mode === 'review') return 'Promote steering only';
+  return 'Promote steering only';
+}
+
 function getRunExperimentAttribution(run?: PlatformTaskRunRecord): RunExperimentAttribution {
   const raw = isRecord(run?.metadata?.experimentAttribution) ? run?.metadata?.experimentAttribution : undefined;
   const fallbackStudioState = getRunStudioState(run);
@@ -955,6 +1019,16 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
             previewPresetId,
             createdAt,
             notes: readString(item.notes),
+            roleDirectives: isRecord(item.roleDirectives)
+              ? Object.entries(item.roleDirectives).reduce<Record<string, StudioRoleDirective>>((directiveAcc, [role, directive]) => {
+                  if (!isRecord(directive)) return directiveAcc;
+                  if (directive.mode !== 'cheaper' && directive.mode !== 'review' && directive.mode !== 'promote') return directiveAcc;
+                  const updatedAt = readString(directive.updatedAt);
+                  if (!updatedAt) return directiveAcc;
+                  directiveAcc[role] = { mode: directive.mode, phases: normalizeDirectivePhases(directive.phases), updatedAt };
+                  return directiveAcc;
+                }, {})
+              : undefined,
           };
         })
         .filter((item): item is NonNullable<typeof item> => Boolean(item))
@@ -1608,6 +1682,11 @@ export default function AgentStudio() {
     [selectedStudioState.roleDirectives, selectedWorkerDetail.worker?.role]
   );
 
+  const workerPhaseActivity = useMemo(
+    () => buildPhaseActivitySeries(selectedRow?.runs || [], selectedWorkerDetail.worker?.assignedRole || selectedWorkerDetail.worker?.role || ''),
+    [selectedRow?.runs, selectedWorkerDetail.worker?.assignedRole, selectedWorkerDetail.worker?.role]
+  );
+
   const liveScenarioTelemetry = useMemo(() => {
     const telemetry = getRunScenarioTelemetry(liveRun);
     const directedRoles = telemetry.directedRoles && telemetry.directedRoles.length > 0
@@ -1959,6 +2038,7 @@ export default function AgentStudio() {
         previewPresetId,
         createdAt: new Date().toISOString(),
         notes: `${selectedScenario.label} -> ${previewPreset.label}`,
+        roleDirectives: cloneRoleDirectives(selectedStudioState.roleDirectives),
       },
       ...(selectedStudioState.experimentHistory || []),
     ].slice(0, 8);
@@ -1979,8 +2059,14 @@ export default function AgentStudio() {
       setPreviewPresetId(experiment.previewPresetId);
     }
     setSelectedComparisonExperimentId(experiment.id);
+    void updateStudioState({
+      ...selectedStudioState,
+      selectedScenarioId: experiment.scenarioId,
+      previewPresetId: experiment.previewPresetId,
+      roleDirectives: cloneRoleDirectives(experiment.roleDirectives) || selectedStudioState.roleDirectives,
+    });
     setNotice({ tone: 'success', message: 'Restored saved experiment.' });
-  }, []);
+  }, [selectedStudioState, updateStudioState]);
 
   const handleCompareExperiment = useCallback((experiment: StudioExperimentRecord) => {
     setSelectedComparisonExperimentId(experiment.id);
@@ -1988,7 +2074,7 @@ export default function AgentStudio() {
     setNotice({ tone: 'success', message: 'Loaded this experiment into the comparison lab.' });
   }, []);
 
-  const handlePromoteExperiment = useCallback((experiment: StudioExperimentRecord) => {
+  const handlePromoteExperimentPreset = useCallback((experiment: StudioExperimentRecord) => {
     const preset = POLICY_PRESETS.find((item) => item.id === experiment.previewPresetId);
     if (!preset) {
       setNotice({ tone: 'error', message: 'This experiment no longer matches an available preset.' });
@@ -2004,7 +2090,39 @@ export default function AgentStudio() {
         selectedScenarioId: experiment.scenarioId,
         previewPresetId: experiment.previewPresetId,
       },
-    }, { successMessage: 'Promoted this saved setup into the live policy.' });
+    }, { successMessage: 'Promoted the winning preset into the live policy.' });
+  }, [patchAutomationConfig, selectedStudioState]);
+
+  const handlePromoteExperimentSteering = useCallback((experiment: StudioExperimentRecord) => {
+    setSelectedScenarioId(experiment.scenarioId as ScenarioPresetId);
+    setPreviewPresetId(experiment.previewPresetId);
+    setSelectedComparisonExperimentId(experiment.id);
+    void updateStudioState({
+      ...selectedStudioState,
+      selectedScenarioId: experiment.scenarioId,
+      previewPresetId: experiment.previewPresetId,
+      roleDirectives: mergeRoleDirectiveSnapshots(selectedStudioState.roleDirectives, experiment.roleDirectives),
+    }, 'Promoted steering from this saved experiment.');
+  }, [selectedStudioState, updateStudioState]);
+
+  const handlePromoteExperimentFull = useCallback((experiment: StudioExperimentRecord) => {
+    const preset = POLICY_PRESETS.find((item) => item.id === experiment.previewPresetId);
+    if (!preset) {
+      setNotice({ tone: 'error', message: 'This experiment no longer matches an available preset.' });
+      return;
+    }
+    setSelectedScenarioId(experiment.scenarioId as ScenarioPresetId);
+    setPreviewPresetId(experiment.previewPresetId);
+    setSelectedComparisonExperimentId(experiment.id);
+    void patchAutomationConfig({
+      executionPolicy: preset.policy,
+      studioState: {
+        ...selectedStudioState,
+        selectedScenarioId: experiment.scenarioId,
+        previewPresetId: experiment.previewPresetId,
+        roleDirectives: mergeRoleDirectiveSnapshots(selectedStudioState.roleDirectives, experiment.roleDirectives),
+      },
+    }, { successMessage: 'Promoted the full winning setup into the live policy.' });
   }, [patchAutomationConfig, selectedStudioState]);
 
   return (
@@ -2394,6 +2512,30 @@ export default function AgentStudio() {
                                   <p className="mt-1 text-[12px] text-slate-400">Set {formatRelativeTimeFromIso(selectedRoleDirective.updatedAt)} for {formatDirectivePhaseScope(selectedRoleDirective.phases)}.</p>
                                 </div>
                               ) : null}
+                              <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Phase drilldown</p>
+                                  <span className="text-[11px] text-slate-500">Last {workerPhaseActivity.length} runs</span>
+                                </div>
+                                <div className="mt-3 space-y-3">
+                                  {workerPhaseActivity.length > 0 ? workerPhaseActivity.map((run) => (
+                                    <div key={run.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                      <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">{run.label}</p>
+                                      <div className="mt-2 flex flex-wrap gap-2">
+                                        {run.phases.map((phase) => (
+                                          <span key={`${run.id}-${phase.phase}`} className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${phase.failed ? 'text-red-200' : phase.succeeded ? 'text-emerald-200' : 'text-slate-300'}`}>
+                                            {formatDirectivePhaseScope([phase.phase])} · {phase.count} · {phase.credits ? `${formatCredits(phase.credits)} cr` : '—'}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )) : (
+                                    <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-3 text-sm text-slate-500">
+                                      No phase-specific run history for this worker yet.
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                               <div className="mt-4">
                                 <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Recent work</p>
                                 <div className="mt-2 space-y-2">
@@ -3367,6 +3509,54 @@ export default function AgentStudio() {
 
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
+                            <BarChart3 className="h-4 w-4 text-cyan-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Cohort trend</p>
+                              <h3 className="text-sm font-semibold text-white">Current vs selected experiment over time</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            {[{
+                              label: 'Current',
+                              items: currentCohortPerformance?.runs || [],
+                              tone: 'from-cyan-400/18 to-cyan-300/75',
+                            }, {
+                              label: 'Experiment',
+                              items: selectedExperimentPerformance?.runs || [],
+                              tone: 'from-violet-400/18 to-violet-300/75',
+                            }].map((series) => (
+                              <div key={series.label} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-sm font-medium text-white">{series.label}</p>
+                                  <span className="text-[11px] text-slate-500">{series.items.length} runs</span>
+                                </div>
+                                {series.items.length > 0 ? (
+                                  <div className="mt-3 flex h-24 items-end gap-2">
+                                    {series.items.slice(0, 6).reverse().map((run, idx, arr) => {
+                                      const maxCredits = Math.max(...arr.map((item) => item.actualCredits || 0), 1);
+                                      const height = `${Math.max(18, ((run.actualCredits || 0) / maxCredits) * 100)}%`;
+                                      return (
+                                        <div key={run.id} className="flex min-w-0 flex-1 flex-col items-center">
+                                          <div className="flex h-20 w-full items-end">
+                                            <div className={`w-full rounded-t-2xl border border-white/8 bg-gradient-to-t ${series.tone}`} style={{ height }} />
+                                          </div>
+                                          <p className="mt-1 text-[10px] text-slate-500">R{idx + 1}</p>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="mt-3 rounded-xl border border-dashed border-navy-700/70 bg-navy-950/35 p-3 text-sm text-slate-500">
+                                    No run cohort yet for this setup.
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
                             <Clock3 className="h-4 w-4 text-amber-300" />
                             <div>
                               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Experiment history</p>
@@ -3453,10 +3643,26 @@ export default function AgentStudio() {
                                 <button
                                   type="button"
                                   disabled={actionBusy}
-                                  onClick={() => handlePromoteExperiment(winningExperiment.experiment)}
+                                  onClick={() => handlePromoteExperimentPreset(winningExperiment.experiment)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-emerald-200"
+                                >
+                                  Promote preset
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => handlePromoteExperimentSteering(winningExperiment.experiment)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                >
+                                  Promote steering
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => handlePromoteExperimentFull(winningExperiment.experiment)}
                                   className="rounded-xl border border-emerald-500/24 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/14 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                  Promote to live policy
+                                  Promote full setup
                                 </button>
                               </div>
                             </>
@@ -3492,7 +3698,9 @@ export default function AgentStudio() {
                                 </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   <button type="button" onClick={() => handleCompareExperiment(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300">Compare</button>
-                                  <button type="button" disabled={actionBusy} onClick={() => handlePromoteExperiment(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-emerald-200">Promote</button>
+                                  <button type="button" disabled={actionBusy} onClick={() => handlePromoteExperimentPreset(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-emerald-200">Preset</button>
+                                  <button type="button" disabled={actionBusy} onClick={() => handlePromoteExperimentSteering(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200">Steering</button>
+                                  <button type="button" disabled={actionBusy} onClick={() => handlePromoteExperimentFull(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300">Full</button>
                                 </div>
                               </div>
                             )) : (

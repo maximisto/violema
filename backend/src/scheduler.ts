@@ -3,18 +3,19 @@ import path from 'path';
 import cron, { ScheduledTask } from 'node-cron';
 import type { AutomationExecutionPolicy, AutomationStepKind, PersistedAutomationStep } from './platform/types';
 
+export interface AutomationRoleDirective {
+  mode: 'cheaper' | 'review' | 'promote';
+  phases?: AutomationStepKind[];
+  updatedAt: string;
+}
+
 export interface AutomationStudioExperimentRecord {
   id: string;
   scenarioId: string;
   previewPresetId: string;
   createdAt: string;
   notes?: string;
-}
-
-export interface AutomationRoleDirective {
-  mode: 'cheaper' | 'review' | 'promote';
-  phases?: AutomationStepKind[];
-  updatedAt: string;
+  roleDirectives?: Record<string, AutomationRoleDirective>;
 }
 
 export interface AutomationStudioState {
