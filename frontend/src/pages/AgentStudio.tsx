@@ -84,6 +84,9 @@ interface AutomationStudioStateDraft {
   comparedBranchRootId?: string;
   pinnedSuggestedPlanId?: string;
   dismissedSuggestedPlanId?: string;
+  autoGraduateEnabled?: boolean;
+  autoGraduateMinConfidence?: number;
+  lastAutoGraduatedPlanId?: string;
   trendMetric?: TrendMetric;
   gateLearningWindow?: GateLearningWindow;
   branchRunFilter?: BranchRunFilter;
@@ -103,7 +106,7 @@ interface AutomationStudioStateDraft {
 interface StudioPromotionRecord {
   id: string;
   appliedAt: string;
-  mode: 'preset' | 'steering' | 'full' | 'phase' | 'preset_phase' | 'learning';
+  mode: 'preset' | 'steering' | 'full' | 'phase' | 'preset_phase' | 'learning' | 'graduation';
   summary: string;
   actor: 'manual';
   sourceExperimentId?: string;
@@ -1287,6 +1290,8 @@ function getPromotionModeLabel(mode: StudioPromotionRecord['mode']) {
     case 'learning':
     default:
       return 'Learning action';
+    case 'graduation':
+      return 'Branch graduated';
   }
 }
 
@@ -1300,6 +1305,8 @@ function getPromotionModeTone(mode: StudioPromotionRecord['mode']) {
       return 'border-cyan-500/18 bg-cyan-500/8 text-cyan-100';
     case 'steering':
       return 'border-violet-500/18 bg-violet-500/8 text-violet-100';
+    case 'graduation':
+      return 'border-emerald-500/18 bg-emerald-500/8 text-emerald-100';
     case 'learning':
     default:
       return 'border-amber-500/18 bg-amber-500/8 text-amber-100';
@@ -1515,7 +1522,7 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
             !summary ||
             actor !== 'manual' ||
             !mode ||
-            !['preset', 'steering', 'full', 'phase', 'preset_phase', 'learning'].includes(mode)
+            !['preset', 'steering', 'full', 'phase', 'preset_phase', 'learning', 'graduation'].includes(mode)
           ) {
             return null;
           }
@@ -1586,6 +1593,12 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
     comparedBranchRootId: readString(value.comparedBranchRootId),
     pinnedSuggestedPlanId: readString(value.pinnedSuggestedPlanId),
     dismissedSuggestedPlanId: readString(value.dismissedSuggestedPlanId),
+    autoGraduateEnabled: value.autoGraduateEnabled === true ? true : undefined,
+    autoGraduateMinConfidence:
+      typeof value.autoGraduateMinConfidence === 'number'
+        ? clampNumber(Math.round(value.autoGraduateMinConfidence), 40, 95)
+        : undefined,
+    lastAutoGraduatedPlanId: readString(value.lastAutoGraduatedPlanId),
     trendMetric:
       value.trendMetric === 'credits' || value.trendMetric === 'duration' || value.trendMetric === 'success'
         ? value.trendMetric
@@ -3620,6 +3633,33 @@ export default function AgentStudio() {
     };
   }, [comparedPlanFamily, selectedPlanFamily]);
 
+  const planFamilyPhaseComparison = useMemo(() => {
+    if (!planFamilyReplayComparison?.primaryRun || !planFamilyReplayComparison.comparedRun) return null;
+    const primarySteps = readStepExecutions(planFamilyReplayComparison.primaryRun.metadata?.stepExecutions);
+    const comparedSteps = readStepExecutions(planFamilyReplayComparison.comparedRun.metadata?.stepExecutions);
+    const candidatePhase = selectedReplayPhase !== 'all'
+      ? selectedReplayPhase
+      : (primarySteps.filter((step) => step.kind !== 'note').sort((left, right) => (right.actualCredits || 0) - (left.actualCredits || 0))[0]?.kind as WorkflowBlockKind | undefined)
+        || (comparedSteps.filter((step) => step.kind !== 'note').sort((left, right) => (right.actualCredits || 0) - (left.actualCredits || 0))[0]?.kind as WorkflowBlockKind | undefined);
+    if (!candidatePhase || candidatePhase === 'note') return null;
+    const summarizePhase = (steps: DashboardTaskStepExecution[]) => {
+      const phaseSteps = steps.filter((step) => step.kind === candidatePhase);
+      return {
+        phase: candidatePhase,
+        count: phaseSteps.length,
+        credits: phaseSteps.reduce((sum, step) => sum + (step.actualCredits || 0), 0),
+        durationMs: phaseSteps.reduce((sum, step) => sum + (step.durationMs || 0), 0),
+        failed: phaseSteps.some((step) => step.status === 'failed'),
+        succeeded: phaseSteps.some((step) => step.status === 'succeeded'),
+      };
+    };
+    return {
+      phase: candidatePhase,
+      primary: summarizePhase(primarySteps),
+      compared: summarizePhase(comparedSteps),
+    };
+  }, [planFamilyReplayComparison, selectedReplayPhase]);
+
   const planComparison = useMemo(() => {
     if (!activeSavedPlan || !comparedSavedPlan) return null;
     return {
@@ -3776,6 +3816,9 @@ export default function AgentStudio() {
     return 'auto' as const;
   }, [archetypeRecommendedPlan]);
 
+  const autoGraduateEnabled = selectedStudioState.autoGraduateEnabled === true;
+  const autoGraduateMinConfidence = selectedStudioState.autoGraduateMinConfidence ?? 72;
+
   const planActionQueue = useMemo(() => {
     const queue: Array<{ id: string; title: string; body: string; action: 'restore_recommended' | 'rollback' | 'compare' | 'save_phase_plan' }> = [];
     if (recommendedPlan && activeSavedPlan && recommendedPlan.plan.id !== activeSavedPlan.plan.id) {
@@ -3883,6 +3926,36 @@ export default function AgentStudio() {
   const updateStudioState = useCallback(async (next: AutomationStudioStateDraft, successMessage?: string) => {
     await patchAutomationConfig({ studioState: next }, { successMessage, suppressBusy: !successMessage });
   }, [patchAutomationConfig]);
+
+  useEffect(() => {
+    if (!autoGraduateEnabled || !activeBranchParentComparison?.graduationReady) return;
+    if (activeBranchParentComparison.childScoring.confidence < autoGraduateMinConfidence) return;
+    if (selectedStudioState.lastAutoGraduatedPlanId === activeBranchParentComparison.child.plan.id) return;
+    void patchAutomationConfig({
+      executionPolicy: activeBranchParentComparison.child.plan.executionPolicy,
+      studioState: {
+        ...selectedStudioState,
+        selectedPlanId: activeBranchParentComparison.child.plan.id,
+        selectedPlanCompareId: activeBranchParentComparison.parent.plan.id,
+        selectedPlanFamilyRootId: activeSavedPlan?.familyRootId,
+        roleDirectives: cloneRoleDirectives(activeBranchParentComparison.child.plan.roleDirectives),
+        lastAutoGraduatedPlanId: activeBranchParentComparison.child.plan.id,
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'graduation',
+          summary: `Auto-graduated ${activeBranchParentComparison.child.plan.name} above ${activeBranchParentComparison.parent.plan.name}.`,
+          sourceExperimentId: activeBranchParentComparison.child.plan.sourceExperimentId,
+          sourceExperimentLabel: activeBranchParentComparison.child.plan.sourceExperimentLabel || activeBranchParentComparison.child.plan.name,
+        }),
+      },
+    }, { successMessage: `Auto-graduated ${activeBranchParentComparison.child.plan.name}.`, suppressBusy: true });
+  }, [
+    activeBranchParentComparison,
+    activeSavedPlan?.familyRootId,
+    autoGraduateEnabled,
+    autoGraduateMinConfidence,
+    patchAutomationConfig,
+    selectedStudioState,
+  ]);
 
   const handleSetScopedAutoPromotionThreshold = useCallback((
     scope: 'global' | 'scenario' | 'archetype',
@@ -4550,8 +4623,48 @@ export default function AgentStudio() {
   const handleGraduateBranchPlan = useCallback(() => {
     if (!activeBranchParentComparison) return;
     setSelectedPlanCompareId(activeBranchParentComparison.parent.plan.id);
-    void handleRestoreOperatingPlan(activeBranchParentComparison.child.plan);
-  }, [activeBranchParentComparison, handleRestoreOperatingPlan]);
+    void patchAutomationConfig({
+      executionPolicy: activeBranchParentComparison.child.plan.executionPolicy,
+      studioState: {
+        ...selectedStudioState,
+        selectedPlanId: activeBranchParentComparison.child.plan.id,
+        selectedPlanCompareId: activeBranchParentComparison.parent.plan.id,
+        selectedPlanFamilyRootId: activeSavedPlan?.familyRootId,
+        roleDirectives: cloneRoleDirectives(activeBranchParentComparison.child.plan.roleDirectives),
+        lastAutoGraduatedPlanId: activeBranchParentComparison.child.plan.id,
+        promotionHistory: appendPromotionHistory(selectedStudioState.promotionHistory, {
+          mode: 'graduation',
+          summary: `Graduated ${activeBranchParentComparison.child.plan.name} above ${activeBranchParentComparison.parent.plan.name}.`,
+          sourceExperimentId: activeBranchParentComparison.child.plan.sourceExperimentId,
+          sourceExperimentLabel: activeBranchParentComparison.child.plan.sourceExperimentLabel || activeBranchParentComparison.child.plan.name,
+        }),
+      },
+    }, { successMessage: `Graduated ${activeBranchParentComparison.child.plan.name}.` });
+  }, [activeBranchParentComparison, activeSavedPlan?.familyRootId, patchAutomationConfig, selectedStudioState]);
+
+  const handleClearPinnedSuggestion = useCallback(() => {
+    if (!selectedStudioState.pinnedSuggestedPlanId) return;
+    void updateStudioState({
+      ...selectedStudioState,
+      pinnedSuggestedPlanId: undefined,
+    }, 'Cleared the pinned suggested plan.');
+  }, [selectedStudioState, updateStudioState]);
+
+  const handleUndoDismissedSuggestion = useCallback(() => {
+    if (!selectedStudioState.dismissedSuggestedPlanId) return;
+    void updateStudioState({
+      ...selectedStudioState,
+      dismissedSuggestedPlanId: undefined,
+    }, 'Restored the last dismissed suggestion.');
+  }, [selectedStudioState, updateStudioState]);
+
+  const handleUpdateAutoGraduate = useCallback((patch: { enabled?: boolean; confidence?: number }) => {
+    void updateStudioState({
+      ...selectedStudioState,
+      autoGraduateEnabled: patch.enabled ?? autoGraduateEnabled,
+      autoGraduateMinConfidence: patch.confidence ?? autoGraduateMinConfidence,
+    }, patch.enabled === false ? 'Automatic branch graduation disabled.' : patch.enabled === true ? 'Automatic branch graduation enabled.' : `Automatic graduation gate set to ${patch.confidence}%.`);
+  }, [autoGraduateEnabled, autoGraduateMinConfidence, selectedStudioState, updateStudioState]);
 
   const handleRestoreExperiment = useCallback((experiment: StudioExperimentRecord) => {
     if (SCENARIO_PRESETS.some((scenario) => scenario.id === experiment.scenarioId)) {
@@ -6604,6 +6717,24 @@ export default function AgentStudio() {
                                 </div>
                               </div>
                             ) : null}
+                            {planFamilyPhaseComparison ? (
+                              <div className="mt-3 rounded-2xl border border-white/6 bg-white/[0.02] p-3">
+                                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Matched phase comparison</p>
+                                <p className="mt-1 text-sm font-medium text-white">{formatDirectivePhaseScope([planFamilyPhaseComparison.phase])}</p>
+                                <div className="mt-3 grid gap-3 sm:grid-cols-2 text-[11px]">
+                                  <div className="rounded-xl border border-cyan-500/18 bg-cyan-500/8 px-3 py-3">
+                                    <p className="text-slate-400">Primary phase</p>
+                                    <p className="mt-1 text-white">{planFamilyPhaseComparison.primary.count} steps · {planFamilyPhaseComparison.primary.credits ? `${formatCredits(planFamilyPhaseComparison.primary.credits)} cr` : '—'}</p>
+                                    <p className="mt-1 text-slate-300">{formatCompactDuration(planFamilyPhaseComparison.primary.durationMs)}</p>
+                                  </div>
+                                  <div className="rounded-xl border border-white/6 bg-white/[0.03] px-3 py-3">
+                                    <p className="text-slate-400">Compared phase</p>
+                                    <p className="mt-1 text-white">{planFamilyPhaseComparison.compared.count} steps · {planFamilyPhaseComparison.compared.credits ? `${formatCredits(planFamilyPhaseComparison.compared.credits)} cr` : '—'}</p>
+                                    <p className="mt-1 text-slate-300">{formatCompactDuration(planFamilyPhaseComparison.compared.durationMs)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                         <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
@@ -6689,6 +6820,33 @@ export default function AgentStudio() {
                                   Graduation ready
                                 </span>
                               ) : null}
+                            </div>
+                            <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Automatic graduation gate</p>
+                                  <p className="mt-1 text-sm font-medium text-white">Promote strong child branches without manual review</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateAutoGraduate({ enabled: !autoGraduateEnabled })}
+                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${autoGraduateEnabled ? 'text-emerald-200' : 'text-slate-300'}`}
+                                >
+                                  {autoGraduateEnabled ? 'Enabled' : 'Disabled'}
+                                </button>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {[60, 72, 85].map((threshold) => (
+                                  <button
+                                    key={`auto-graduate-${threshold}`}
+                                    type="button"
+                                    onClick={() => handleUpdateAutoGraduate({ confidence: threshold })}
+                                    className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${autoGraduateMinConfidence === threshold ? 'border-emerald-500/30 bg-emerald-500/12 text-emerald-200' : 'text-slate-300'}`}
+                                  >
+                                    {threshold}%
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                             <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
                               <div className="rounded-xl border border-violet-500/18 bg-violet-500/8 px-3 py-2">
@@ -6865,6 +7023,26 @@ export default function AgentStudio() {
                                     </button>
                                   </div>
                                 ) : null}
+                                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                  {selectedStudioState.pinnedSuggestedPlanId ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleClearPinnedSuggestion()}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                    >
+                                      Clear pinned suggestion
+                                    </button>
+                                  ) : null}
+                                  {selectedStudioState.dismissedSuggestedPlanId ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUndoDismissedSuggestion()}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                    >
+                                      Undo dismissal
+                                    </button>
+                                  ) : null}
+                                </div>
                               </div>
                             ) : null}
                             {archetypePlanLearning.length > 0 ? archetypePlanLearning.map((entry, index) => (
