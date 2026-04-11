@@ -663,13 +663,30 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2">
                 <Shield className="h-4 w-4 text-cyan-300" />
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Agent Studio defaults</p>
-                  <h2 className="text-sm font-semibold text-white">Workspace Studio policy</h2>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Agent Studio governance</p>
+                  <h2 className="text-sm font-semibold text-white">Workspace Studio governance</h2>
                 </div>
               </div>
               <p className="mt-2 text-sm leading-relaxed text-slate-400">
                 These defaults apply before a workflow overrides them inside Agent Studio. Use them to keep self-correction behavior consistent across the workspace.
               </p>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Graduation posture</p>
+                  <p className="mt-1 text-sm font-medium text-white">{Object.keys(agentStudioSettings.autoGraduationProfiles).length} archetype defaults set</p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">Use this to control how aggressively strong child branches replace their parents.</p>
+                </div>
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Rollback guardrail</p>
+                  <p className="mt-1 text-sm font-medium text-white">{agentStudioSettings.autoRollbackEnabled ? 'Enabled' : 'Disabled'} at {agentStudioSettings.autoRollbackWeaknessThreshold}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">Weakness alone is not enough. The child also has to show fresh deterioration.</p>
+                </div>
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Momentum gate</p>
+                  <p className="mt-1 text-sm font-medium text-white">{agentStudioSettings.autoRollbackMomentumThreshold}+ point recent drop</p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">Lower values react faster. Higher values wait for a clearer recent collapse before rollback.</p>
+                </div>
+              </div>
               <div className="mt-4 grid gap-4">
                 <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
                   <p className="text-sm font-medium text-white">Workspace graduation defaults</p>

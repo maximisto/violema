@@ -3727,14 +3727,39 @@ export default function AgentStudio() {
         const currentSteps = replayTimeline.filter((step) => step.kind === phase);
         const comparedSteps = replayComparedTimeline.filter((step) => step.kind === phase);
         if (currentSteps.length === 0 && comparedSteps.length === 0) return null;
+        const currentCredits = currentSteps.reduce((sum, step) => sum + (step.actualCredits || 0), 0);
+        const comparedCredits = comparedSteps.reduce((sum, step) => sum + (step.actualCredits || 0), 0);
+        const currentDurationMs = currentSteps.reduce((sum, step) => sum + (step.durationMs || 0), 0);
+        const comparedDurationMs = comparedSteps.reduce((sum, step) => sum + (step.durationMs || 0), 0);
+        const currentFailed = currentSteps.some((step) => step.status === 'failed');
+        const comparedFailed = comparedSteps.some((step) => step.status === 'failed');
+        const currentSucceeded = currentSteps.some((step) => step.status === 'succeeded');
+        const comparedSucceeded = comparedSteps.some((step) => step.status === 'succeeded');
+        let verdict = 'Both runs used this phase with similar weight.';
+        if (currentFailed && !comparedFailed) {
+          verdict = 'Current run regressed here. This phase introduced a failure the comparison avoided.';
+        } else if (!currentFailed && comparedFailed) {
+          verdict = 'Current run recovered this phase cleanly and removed a failure from the comparison.';
+        } else if (currentCredits < comparedCredits && currentDurationMs <= comparedDurationMs) {
+          verdict = 'Current run handled this phase more efficiently: lower spend with equal or better speed.';
+        } else if (currentCredits > comparedCredits && currentDurationMs > comparedDurationMs) {
+          verdict = 'Current run is heavier here on both spend and time. This phase is driving extra drag.';
+        } else if (currentCredits > comparedCredits && currentSucceeded && !comparedSucceeded) {
+          verdict = 'Current run is spending more here, but it may be buying reliability the comparison missed.';
+        } else if (currentDurationMs > comparedDurationMs) {
+          verdict = 'Current run is slower in this phase even though the result quality does not clearly improve.';
+        } else if (currentCredits < comparedCredits) {
+          verdict = 'Current run trimmed cost in this phase without obviously weakening the outcome.';
+        }
         return {
           phase,
           currentSteps,
           comparedSteps,
-          currentCredits: currentSteps.reduce((sum, step) => sum + (step.actualCredits || 0), 0),
-          comparedCredits: comparedSteps.reduce((sum, step) => sum + (step.actualCredits || 0), 0),
-          currentDurationMs: currentSteps.reduce((sum, step) => sum + (step.durationMs || 0), 0),
-          comparedDurationMs: comparedSteps.reduce((sum, step) => sum + (step.durationMs || 0), 0),
+          currentCredits,
+          comparedCredits,
+          currentDurationMs,
+          comparedDurationMs,
+          verdict,
         };
       })
       .filter((item): item is NonNullable<typeof item> => Boolean(item));
@@ -6271,7 +6296,7 @@ export default function AgentStudio() {
                     </div>
 
                     <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr),minmax(0,1.08fr)]">
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
                         <div className="flex items-center gap-2">
                           <Cpu className="h-4 w-4 text-violet-300" />
                           <div>
@@ -6304,7 +6329,7 @@ export default function AgentStudio() {
                         </div>
                       </div>
 
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
                         <div className="flex items-center gap-2">
                           <Sparkles className="h-4 w-4 text-violet-300" />
                           <div>
@@ -6332,7 +6357,7 @@ export default function AgentStudio() {
                         </div>
                       </div>
 
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
                         <div className="flex items-center gap-2">
                           <Sparkles className="h-4 w-4 text-emerald-300" />
                           <div>
@@ -6391,7 +6416,7 @@ export default function AgentStudio() {
                 {activeRoom === 'optimize' ? (
                   <>
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr),minmax(0,0.95fr)]">
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
                         <div className="flex items-center gap-2">
                           <Gauge className="h-4 w-4 text-emerald-300" />
                           <div>
@@ -6557,7 +6582,7 @@ export default function AgentStudio() {
                     </div>
 
                     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr),minmax(22rem,0.95fr)]">
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
                         <div className="flex items-center gap-2">
                           <Target className="h-4 w-4 text-cyan-300" />
                           <div>
@@ -6818,8 +6843,8 @@ export default function AgentStudio() {
                       </div>
                     </div>
 
-                    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr),minmax(0,1.05fr)] xl:items-start">
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                    <div className="space-y-6 xl:columns-2 xl:gap-6 xl:space-y-0">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
                         <div className="flex items-center gap-2">
                           <Gauge className="h-4 w-4 text-amber-300" />
                           <div>
@@ -6868,7 +6893,7 @@ export default function AgentStudio() {
                         </div>
                       </div>
 
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
                         <div className="flex items-center gap-2">
                           <Brain className="h-4 w-4 text-violet-300" />
                           <div>
@@ -6966,7 +6991,7 @@ export default function AgentStudio() {
                         </div>
                       </div>
 
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5 xl:mb-6 xl:[break-inside:avoid]">
                         <div className="flex items-center gap-2">
                           <Layers3 className="h-4 w-4 text-cyan-300" />
                           <div>
@@ -7252,7 +7277,7 @@ export default function AgentStudio() {
                           )}
                         </div>
                       </div>
-                        <div className="mt-4 space-y-4">
+                        <div className="space-y-4 xl:mb-6 xl:[break-inside:avoid]">
                         {selectedPlanFamilyReplay ? (
                           <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                             <div className="flex items-start justify-between gap-3">
@@ -7557,7 +7582,7 @@ export default function AgentStudio() {
                         ) : null}
                         </div>
                         {activeBranchParentComparison ? (
-                          <div className="mt-4 rounded-2xl border border-violet-500/16 bg-violet-500/8 p-4">
+                          <div className="mt-4 rounded-2xl border border-violet-500/16 bg-violet-500/8 p-4 xl:mt-0 xl:mb-6 xl:[break-inside:avoid]">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-violet-100/80">Branch vs parent</p>
                             <p className="mt-1 text-sm font-medium text-white">{activeBranchParentComparison.child.plan.name} vs {activeBranchParentComparison.parent.plan.name}</p>
                             <p className="mt-2 text-sm leading-relaxed text-slate-300">
@@ -7739,7 +7764,7 @@ export default function AgentStudio() {
                           </div>
                         ) : null}
                         {graduationHistory.length > 0 ? (
-                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4 xl:mt-0 xl:mb-6 xl:[break-inside:avoid]">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Graduation history</p>
                             <div className="mt-3 space-y-3">
                               {graduationTimeline.map((item, index) => (
@@ -7855,7 +7880,7 @@ export default function AgentStudio() {
                           </div>
                         ) : null}
                         {autoGraduationRollbackSuggestion ? (
-                          <div className="mt-4 rounded-2xl border border-red-500/16 bg-red-500/8 p-4">
+                          <div className="mt-4 rounded-2xl border border-red-500/16 bg-red-500/8 p-4 xl:mt-0 xl:mb-6 xl:[break-inside:avoid]">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-red-100/80">Auto-graduation rollback</p>
                             <p className="mt-1 text-sm font-medium text-white">{autoGraduationRollbackSuggestion.child.plan.name} lost momentum after auto-graduation</p>
                             <p className="mt-2 text-sm leading-relaxed text-slate-300">
@@ -7962,7 +7987,7 @@ export default function AgentStudio() {
                           </div>
                         ) : null}
                         {rollbackTimeline.length > 0 ? (
-                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4 xl:mt-0 xl:mb-6 xl:[break-inside:avoid]">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Rollback history</p>
                             <div className="mt-3 space-y-3">
                               {rollbackTimeline.map((item) => (
@@ -9015,16 +9040,17 @@ export default function AgentStudio() {
                                             {row.currentSteps.length} current steps · {row.comparedSteps.length} compared steps
                                           </p>
                                         </div>
-                                        <div className="flex flex-wrap gap-2 text-[10px] text-slate-300">
-                                          <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${row.currentCredits <= row.comparedCredits ? 'text-emerald-200' : 'text-amber-200'}`}>
-                                            {formatSignedDelta(Math.round(row.currentCredits - row.comparedCredits))} cr
-                                          </span>
-                                          <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${row.currentDurationMs <= row.comparedDurationMs ? 'text-emerald-200' : 'text-amber-200'}`}>
-                                            {formatSignedDelta(Math.round((row.currentDurationMs - row.comparedDurationMs) / 1000))}s
-                                          </span>
-                                        </div>
+                                      <div className="flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                        <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${row.currentCredits <= row.comparedCredits ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                          {formatSignedDelta(Math.round(row.currentCredits - row.comparedCredits))} cr
+                                        </span>
+                                        <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${row.currentDurationMs <= row.comparedDurationMs ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                          {formatSignedDelta(Math.round((row.currentDurationMs - row.comparedDurationMs) / 1000))}s
+                                        </span>
                                       </div>
-                                      <div className="mt-4 grid gap-3 xl:grid-cols-2 xl:items-start">
+                                    </div>
+                                    <p className="mt-2 text-sm leading-relaxed text-slate-400">{row.verdict}</p>
+                                    <div className="mt-4 grid gap-3 xl:grid-cols-2 xl:items-start">
                                         <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/8 p-4">
                                           <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/80">Current run</p>
                                           <div className="mt-3 space-y-2">
