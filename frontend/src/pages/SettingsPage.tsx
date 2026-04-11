@@ -6,6 +6,8 @@ import { resolveWorkspaceContext } from '../lib/workspace';
 type Provider = 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax';
 type Profile = 'micro' | 'default' | 'hard' | 'critical' | 'ops' | 'memory_text' | 'memory_code';
 type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+type AutoGraduationProfileId = 'cautious' | 'balanced' | 'fast_learning';
+type WorkflowArchetypeId = 'briefing' | 'research' | 'analysis' | 'ops' | 'general';
 
 interface ProviderStatus {
   configured: boolean;
@@ -81,6 +83,22 @@ const PROFILE_COPY: Array<{ id: Profile; label: string; help: string }> = [
 const REASONING_OPTIONS: ReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
 const PROVIDER_OPTIONS: Provider[] = ['anthropic', 'openai', 'openrouter', 'mistral', 'minimax'];
 const VIOLEMA_MARK = '/po-logo.png';
+const WORKFLOW_ARCHETYPES: Array<{ id: WorkflowArchetypeId; label: string; help: string }> = [
+  { id: 'briefing', label: 'Briefing and delivery', help: 'Research-heavy workflows that still need polished output and final delivery.' },
+  { id: 'research', label: 'Research and monitoring', help: 'Source gathering, scanning, and current-state intelligence work.' },
+  { id: 'analysis', label: 'Analysis and diagnosis', help: 'Comparison, synthesis, diagnosis, and reasoning-heavy workflows.' },
+  { id: 'ops', label: 'Ops and follow-through', help: 'Alerts, follow-through loops, and delivery-heavy recurring work.' },
+  { id: 'general', label: 'General execution', help: 'Mixed work that does not fit one dominant archetype.' },
+];
+const AUTO_GRADUATION_PROFILES: Array<{
+  id: AutoGraduationProfileId;
+  label: string;
+  help: string;
+}> = [
+  { id: 'cautious', label: 'Cautious', help: 'Graduates only after stronger evidence. Better for high-stakes or noisy workflows.' },
+  { id: 'balanced', label: 'Balanced', help: 'Good default. Promotes clear winners without overreacting to short runs.' },
+  { id: 'fast_learning', label: 'Fast learning', help: 'Promotes sooner. Better when speed matters more than avoiding reversals.' },
+];
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -121,9 +139,11 @@ export default function SettingsPage() {
     memory_code: { tone: 'idle' },
   });
   const [agentStudioSettings, setAgentStudioSettings] = useState<{
+    autoGraduationProfiles: Partial<Record<WorkflowArchetypeId, AutoGraduationProfileId>>;
     autoRollbackEnabled: boolean;
     autoRollbackWeaknessThreshold: number;
   }>({
+    autoGraduationProfiles: {},
     autoRollbackEnabled: false,
     autoRollbackWeaknessThreshold: 12,
   });
@@ -142,6 +162,7 @@ export default function SettingsPage() {
       setData(payload);
       setModelOverrides(payload.settings.modelOverrides || {});
       setAgentStudioSettings({
+        autoGraduationProfiles: (payload.settings.agentStudio?.autoGraduationProfiles || {}) as Partial<Record<WorkflowArchetypeId, AutoGraduationProfileId>>,
         autoRollbackEnabled: payload.settings.agentStudio?.autoRollbackEnabled === true,
         autoRollbackWeaknessThreshold: payload.settings.agentStudio?.autoRollbackWeaknessThreshold ?? 12,
       });
@@ -223,6 +244,7 @@ export default function SettingsPage() {
           providerTokens,
           modelOverrides: serializedOverrides,
           agentStudio: {
+            autoGraduationProfiles: agentStudioSettings.autoGraduationProfiles,
             autoRollbackEnabled: agentStudioSettings.autoRollbackEnabled,
             autoRollbackWeaknessThreshold: agentStudioSettings.autoRollbackWeaknessThreshold,
           },
@@ -232,6 +254,11 @@ export default function SettingsPage() {
       const payload = await response.json() as SettingsPayload;
       setData(payload);
       setModelOverrides(payload.settings.modelOverrides || {});
+      setAgentStudioSettings({
+        autoGraduationProfiles: (payload.settings.agentStudio?.autoGraduationProfiles || {}) as Partial<Record<WorkflowArchetypeId, AutoGraduationProfileId>>,
+        autoRollbackEnabled: payload.settings.agentStudio?.autoRollbackEnabled === true,
+        autoRollbackWeaknessThreshold: payload.settings.agentStudio?.autoRollbackWeaknessThreshold ?? 12,
+      });
       setProviderInputs({
         anthropic: '',
         openai: '',
@@ -631,12 +658,71 @@ export default function SettingsPage() {
                 <Shield className="h-4 w-4 text-cyan-300" />
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Agent Studio defaults</p>
-                  <h2 className="text-sm font-semibold text-white">Workspace rollback policy</h2>
+                  <h2 className="text-sm font-semibold text-white">Workspace Studio policy</h2>
                 </div>
               </div>
               <p className="mt-2 text-sm leading-relaxed text-slate-400">
                 These defaults apply before a workflow overrides them inside Agent Studio. Use them to keep self-correction behavior consistent across the workspace.
               </p>
+              <div className="mt-4 grid gap-4">
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
+                  <p className="text-sm font-medium text-white">Workspace graduation defaults</p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                    Pick how aggressively each workflow archetype should promote winning child branches. These are workspace defaults only. A workflow can still override them inside Agent Studio.
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    {WORKFLOW_ARCHETYPES.map((archetype) => (
+                      <div key={archetype.id} className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-white">{archetype.label}</p>
+                            <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{archetype.help}</p>
+                          </div>
+                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                            {AUTO_GRADUATION_PROFILES.find((profile) => profile.id === agentStudioSettings.autoGraduationProfiles[archetype.id])?.label || 'Inherited inside workflow'}
+                          </span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {AUTO_GRADUATION_PROFILES.map((profile) => (
+                            <button
+                              key={`${archetype.id}-${profile.id}`}
+                              type="button"
+                              onClick={() => setAgentStudioSettings((current) => ({
+                                ...current,
+                                autoGraduationProfiles: {
+                                  ...current.autoGraduationProfiles,
+                                  [archetype.id]: profile.id,
+                                },
+                              }))}
+                              className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${
+                                agentStudioSettings.autoGraduationProfiles[archetype.id] === profile.id
+                                  ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
+                                  : 'text-slate-300'
+                              }`}
+                            >
+                              {profile.label}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setAgentStudioSettings((current) => {
+                              const nextProfiles = { ...current.autoGraduationProfiles };
+                              delete nextProfiles[archetype.id];
+                              return {
+                                ...current,
+                                autoGraduationProfiles: nextProfiles,
+                              };
+                            })}
+                            className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
               <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.92fr),minmax(0,1.08fr)]">
                 <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
                   <p className="text-sm font-medium text-white">Automatic rollback</p>

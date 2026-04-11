@@ -1693,7 +1693,7 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
             !summary ||
             actor !== 'manual' ||
             !mode ||
-            !['preset', 'steering', 'full', 'phase', 'preset_phase', 'learning', 'graduation'].includes(mode)
+            !['preset', 'steering', 'full', 'phase', 'preset_phase', 'learning', 'graduation', 'rollback'].includes(mode)
           ) {
             return null;
           }
@@ -3629,6 +3629,25 @@ export default function AgentStudio() {
     return selectedRow.runs.find((run) => run.id === runComparison.previous?.id) || null;
   }, [runComparison?.previous?.id, selectedRow]);
 
+  const replayComparedTimeline = useMemo(() => {
+    if (!replayComparedRun) return [] as Array<DashboardTaskStepExecution & { marker: number; duration: string; tokens: string }>;
+    return readStepExecutions(replayComparedRun.metadata?.stepExecutions).map((step, index) => ({
+      ...step,
+      marker: index + 1,
+      duration: formatCompactDuration(step.durationMs),
+      tokens: formatTokenCount(step.tokenUsage?.totalTokens),
+    }));
+  }, [replayComparedRun]);
+
+  const pairedReplayTimeline = useMemo(() => {
+    const length = Math.max(replayTimeline.length, replayComparedTimeline.length);
+    return Array.from({ length }, (_, index) => ({
+      index,
+      current: replayTimeline[index],
+      compared: replayComparedTimeline[index],
+    }));
+  }, [replayComparedTimeline, replayTimeline]);
+
   const replayComparedPhaseOverlay = useMemo(
     () => buildReplayPhaseOverlay(replayComparedRun, phaseEvidence),
     [phaseEvidence, replayComparedRun],
@@ -4224,6 +4243,15 @@ export default function AgentStudio() {
           rolledBackLabel: rolledBackSummary?.plan.name || 'Rolled-back child',
           restoredRun,
           rolledBackRun,
+          currentSuccessDelta: restoredSummary && rolledBackSummary
+            ? Math.round((restoredSummary.stats.successRate - rolledBackSummary.stats.successRate) * 100)
+            : undefined,
+          currentCreditsDelta: restoredSummary && rolledBackSummary
+            ? Math.round((restoredSummary.stats.averageCredits || 0) - (rolledBackSummary.stats.averageCredits || 0))
+            : undefined,
+          currentDurationDelta: restoredSummary && rolledBackSummary
+            ? Math.round(((restoredSummary.stats.averageDurationMs || 0) - (rolledBackSummary.stats.averageDurationMs || 0)) / 1000)
+            : undefined,
         };
       })
       .slice(0, 6);
@@ -4245,6 +4273,14 @@ export default function AgentStudio() {
     const childWindowStats = summarizeRunCollection(childWindowRuns);
     const parentRecentStats = summarizeRunCollection(parentWindowRuns.slice(0, 4));
     const childRecentStats = summarizeRunCollection(childWindowRuns.slice(0, 4));
+    const freshNegativeMomentum =
+      childRecentStats.count >= 2 &&
+      parentRecentStats.count >= 2 &&
+      childRecentStats.successRate + 0.04 < parentRecentStats.successRate &&
+      (
+        (childRecentStats.averageCredits || 0) > (parentRecentStats.averageCredits || 0)
+        || (childRecentStats.averageDurationMs || 0) > (parentRecentStats.averageDurationMs || 0)
+      );
     const weaknessScore =
       Math.max(0, (parentWindowStats.successRate - childWindowStats.successRate) * 100)
       + Math.max(0, (childWindowStats.averageCredits || 0) - (parentWindowStats.averageCredits || 0))
@@ -4261,6 +4297,7 @@ export default function AgentStudio() {
       childWindowStats,
       parentRecentStats,
       childRecentStats,
+      freshNegativeMomentum,
       weaknessScore: Math.round(weaknessScore),
     };
   }, [activeBranchParentComparison, graduationHistory, selectedRow?.runs, selectedStudioState.lastAutoGraduatedPlanId]);
@@ -4413,6 +4450,7 @@ export default function AgentStudio() {
   useEffect(() => {
     if (!autoRollbackEnabled || !autoGraduationRollbackSuggestion) return;
     if (autoGraduationRollbackSuggestion.weaknessScore < autoRollbackWeaknessThreshold) return;
+    if (!autoGraduationRollbackSuggestion.freshNegativeMomentum) return;
     if (selectedStudioState.lastAutoRolledBackPlanId === autoGraduationRollbackSuggestion.child.plan.id) return;
     void patchAutomationConfig({
       executionPolicy: autoGraduationRollbackSuggestion.parent.plan.executionPolicy,
@@ -7795,6 +7833,9 @@ export default function AgentStudio() {
                               <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-red-100">
                                 weakness {autoGraduationRollbackSuggestion.weaknessScore}
                               </span>
+                              <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${autoGraduationRollbackSuggestion.freshNegativeMomentum ? 'text-red-100' : 'text-slate-300'}`}>
+                                {autoGraduationRollbackSuggestion.freshNegativeMomentum ? 'fresh negative momentum' : 'momentum not negative enough yet'}
+                              </span>
                             </div>
                             <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
                               <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Automatic rollback</p>
@@ -7830,7 +7871,7 @@ export default function AgentStudio() {
                                 ))}
                               </div>
                               <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-                                If enabled, Studio will restore the parent automatically when weakness clears the active threshold and the child keeps degrading after auto-graduation.
+                                If enabled, Studio will restore the parent automatically only when both signals are true: weakness clears the active threshold and the child keeps showing fresh negative momentum after auto-graduation.
                               </p>
                             </div>
                             <div className="mt-3 grid gap-3 sm:grid-cols-2 text-[11px]">
@@ -7844,6 +7885,14 @@ export default function AgentStudio() {
                                 <p className="mt-1 text-white">{Math.round(autoGraduationRollbackSuggestion.parentWindowStats.successRate * 100)}% success · {autoGraduationRollbackSuggestion.parentWindowStats.averageCredits ? `${formatCredits(autoGraduationRollbackSuggestion.parentWindowStats.averageCredits)} cr avg` : '—'}</p>
                                 <p className="mt-1 text-[10px] text-slate-400">Recent 4 runs: {Math.round(autoGraduationRollbackSuggestion.parentRecentStats.successRate * 100)}% · {autoGraduationRollbackSuggestion.parentRecentStats.averageCredits ? `${formatCredits(autoGraduationRollbackSuggestion.parentRecentStats.averageCredits)} cr avg` : '—'}</p>
                               </div>
+                            </div>
+                            <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Guardrail</p>
+                              <p className="mt-1 text-sm text-white">
+                                {autoGraduationRollbackSuggestion.freshNegativeMomentum
+                                  ? 'Fresh run momentum is negative enough to justify an automatic restore if the weakness threshold is also cleared.'
+                                  : 'The child has weakened overall, but recent runs are not negative enough yet to justify automatic rollback.'}
+                              </p>
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
                               <button
@@ -7891,6 +7940,33 @@ export default function AgentStudio() {
                                       </span>
                                     ) : null}
                                   </div>
+                                  {(typeof item.currentSuccessDelta === 'number' || typeof item.currentCreditsDelta === 'number' || typeof item.currentDurationDelta === 'number') ? (
+                                    <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Rollback drift</p>
+                                      <p className="mt-1 text-sm text-white">
+                                        {typeof item.currentSuccessDelta === 'number' && item.currentSuccessDelta >= 0
+                                          ? 'The restored parent is holding or improving after rollback.'
+                                          : 'The restored parent is not clearly recovering yet.'}
+                                      </p>
+                                      <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                        {typeof item.currentSuccessDelta === 'number' ? (
+                                          <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${item.currentSuccessDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                            now {formatSignedDelta(item.currentSuccessDelta)} pts
+                                          </span>
+                                        ) : null}
+                                        {typeof item.currentCreditsDelta === 'number' ? (
+                                          <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${item.currentCreditsDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                            now {formatSignedDelta(item.currentCreditsDelta)} cr
+                                          </span>
+                                        ) : null}
+                                        {typeof item.currentDurationDelta === 'number' ? (
+                                          <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${item.currentDurationDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                            now {formatSignedDelta(item.currentDurationDelta)}s
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  ) : null}
                                   <p className="mt-3 text-sm leading-relaxed text-slate-300">{item.entry.summary}</p>
                                   {(item.restoredRun && item.rolledBackRun) ? (
                                     <div className="mt-3 flex flex-wrap gap-2">
@@ -8856,6 +8932,62 @@ export default function AgentStudio() {
                                 </div>
                               </div>
                             </div>
+                            {pairedReplayTimeline.length > 0 ? (
+                              <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Paired replay timeline</p>
+                                <p className="mt-1 text-sm text-white">A true side-by-side step view for the current run and its paired comparison.</p>
+                                <div className="mt-4 space-y-3">
+                                  {pairedReplayTimeline.map((row) => (
+                                    <div key={`paired-row-${row.index}`} className="grid gap-3 xl:grid-cols-2">
+                                      <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/8 p-4">
+                                        {row.current ? (
+                                          <>
+                                            <div className="flex items-start justify-between gap-3">
+                                              <div>
+                                                <p className="text-sm font-medium text-white">{row.current.marker}. {row.current.title}</p>
+                                                <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500">{row.current.assignedRole} · {row.current.kind}</p>
+                                              </div>
+                                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(row.current.status)}`}>
+                                                {row.current.status}
+                                              </span>
+                                            </div>
+                                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-200">
+                                              {typeof row.current.actualCredits === 'number' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{formatCredits(row.current.actualCredits)} cr</span> : null}
+                                              {row.current.duration !== '—' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{row.current.duration}</span> : null}
+                                              {row.current.tokens !== '—' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{row.current.tokens}</span> : null}
+                                            </div>
+                                          </>
+                                        ) : (
+                                          <p className="text-sm text-slate-500">No matching current step here.</p>
+                                        )}
+                                      </div>
+                                      <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                                        {row.compared ? (
+                                          <>
+                                            <div className="flex items-start justify-between gap-3">
+                                              <div>
+                                                <p className="text-sm font-medium text-white">{row.compared.marker}. {row.compared.title}</p>
+                                                <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500">{row.compared.assignedRole} · {row.compared.kind}</p>
+                                              </div>
+                                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(row.compared.status)}`}>
+                                                {row.compared.status}
+                                              </span>
+                                            </div>
+                                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                              {typeof row.compared.actualCredits === 'number' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCredits(row.compared.actualCredits)} cr</span> : null}
+                                              {row.compared.duration !== '—' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{row.compared.duration}</span> : null}
+                                              {row.compared.tokens !== '—' ? <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{row.compared.tokens}</span> : null}
+                                            </div>
+                                          </>
+                                        ) : (
+                                          <p className="text-sm text-slate-500">No matching compared step here.</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
 
