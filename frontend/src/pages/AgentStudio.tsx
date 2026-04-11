@@ -166,6 +166,23 @@ interface RunExperimentAttribution {
   previewPresetLabel?: string;
 }
 
+interface RunScenarioTelemetry {
+  scenarioId?: string;
+  scenarioLabel?: string;
+  previewPresetId?: string;
+  previewPresetLabel?: string;
+  matchedSavedExperiment?: boolean;
+  experimentId?: string;
+  workflowStepCount?: number;
+  estimatedToolCalls?: number;
+  complexity?: string;
+  directedRoles?: Array<{
+    role: string;
+    mode: 'cheaper' | 'review' | 'promote';
+    phases?: WorkflowBlockKind[];
+  }>;
+}
+
 interface AgentStudioRow {
   automation: AutomationApiRecord;
   task?: PlatformTaskRecord;
@@ -760,6 +777,51 @@ function formatDirectivePhaseScope(phases?: WorkflowBlockKind[]) {
   return phases.map((phase) => `${phase[0].toUpperCase()}${phase.slice(1)}`).join(' + ');
 }
 
+function formatDirectivePhaseShort(phase: WorkflowBlockKind) {
+  switch (phase) {
+    case 'search': return 'S';
+    case 'query': return 'Q';
+    case 'capture': return 'C';
+    case 'analyze': return 'A';
+    case 'summarize': return 'Sum';
+    case 'deliver': return 'D';
+    case 'note': return 'N';
+    default: return '';
+  }
+}
+
+function matchesExperimentRun(run: PlatformTaskRunRecord, experiment: StudioExperimentRecord) {
+  const attribution = getRunExperimentAttribution(run);
+  if (attribution.experimentId) return attribution.experimentId === experiment.id;
+  return attribution.scenarioId === experiment.scenarioId && attribution.previewPresetId === experiment.previewPresetId;
+}
+
+function summarizeRunCollection(runs: PlatformTaskRunRecord[]) {
+  if (runs.length === 0) {
+    return {
+      count: 0,
+      successRate: 0,
+      averageCredits: 0,
+      averageDurationMs: 0,
+      latestStatus: undefined as string | undefined,
+    };
+  }
+  const succeeded = runs.filter((run) => run.status === 'succeeded').length;
+  const totalCredits = runs.reduce((sum, run) => sum + (run.actualCredits || 0), 0);
+  const totalDuration = runs.reduce((sum, run) => {
+    const started = Date.parse(run.startedAt || '');
+    const finished = Date.parse(run.finishedAt || '');
+    return sum + (Number.isNaN(started) || Number.isNaN(finished) ? 0 : Math.max(0, finished - started));
+  }, 0);
+  return {
+    count: runs.length,
+    successRate: succeeded / runs.length,
+    averageCredits: totalCredits / runs.length,
+    averageDurationMs: totalDuration / runs.length,
+    latestStatus: runs[0]?.status,
+  };
+}
+
 function getRunExperimentAttribution(run?: PlatformTaskRunRecord): RunExperimentAttribution {
   const raw = isRecord(run?.metadata?.experimentAttribution) ? run?.metadata?.experimentAttribution : undefined;
   const fallbackStudioState = getRunStudioState(run);
@@ -774,6 +836,40 @@ function getRunExperimentAttribution(run?: PlatformTaskRunRecord): RunExperiment
     scenarioLabel: readString(raw?.scenarioLabel) || getScenarioLabelFromId(scenarioId),
     previewPresetId,
     previewPresetLabel: readString(raw?.previewPresetLabel) || getPresetLabelFromId(previewPresetId),
+  };
+}
+
+function getRunScenarioTelemetry(run?: PlatformTaskRunRecord): RunScenarioTelemetry {
+  const raw = isRecord(run?.metadata?.scenarioTelemetry) ? run?.metadata?.scenarioTelemetry : undefined;
+  const attribution = getRunExperimentAttribution(run);
+  const directedRoles = Array.isArray(raw?.directedRoles)
+    ? raw.directedRoles
+        .map((item) => {
+          if (!isRecord(item)) return null;
+          const role = readString(item.role);
+          if (!role) return null;
+          const mode = item.mode === 'cheaper' || item.mode === 'review' || item.mode === 'promote' ? item.mode : undefined;
+          if (!mode) return null;
+          return {
+            role,
+            mode: mode as 'cheaper' | 'review' | 'promote',
+            phases: normalizeDirectivePhases(item.phases),
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    : undefined;
+
+  return {
+    scenarioId: readString(raw?.scenarioId) || attribution.scenarioId,
+    scenarioLabel: readString(raw?.scenarioLabel) || attribution.scenarioLabel,
+    previewPresetId: readString(raw?.previewPresetId) || attribution.previewPresetId,
+    previewPresetLabel: readString(raw?.previewPresetLabel) || attribution.previewPresetLabel,
+    matchedSavedExperiment: raw?.matchedSavedExperiment === true || attribution.matchedSavedExperiment,
+    experimentId: readString(raw?.experimentId) || attribution.experimentId,
+    workflowStepCount: typeof raw?.workflowStepCount === 'number' ? raw.workflowStepCount : undefined,
+    estimatedToolCalls: typeof raw?.estimatedToolCalls === 'number' ? raw.estimatedToolCalls : undefined,
+    complexity: readString(raw?.complexity),
+    directedRoles,
   };
 }
 
@@ -1512,6 +1608,37 @@ export default function AgentStudio() {
     [selectedStudioState.roleDirectives, selectedWorkerDetail.worker?.role]
   );
 
+  const liveScenarioTelemetry = useMemo(() => {
+    const telemetry = getRunScenarioTelemetry(liveRun);
+    const directedRoles = telemetry.directedRoles && telemetry.directedRoles.length > 0
+      ? telemetry.directedRoles
+      : Object.entries(selectedStudioState.roleDirectives || {}).map(([role, directive]) => ({
+          role,
+          mode: directive.mode as 'cheaper' | 'review' | 'promote',
+          phases: directive.phases,
+        }));
+
+    return {
+      scenarioLabel: telemetry.scenarioLabel || getScenarioLabelFromId(selectedStudioState.selectedScenarioId || 'baseline'),
+      presetLabel: telemetry.previewPresetLabel || getPresetLabelFromId(selectedStudioState.previewPresetId || activePresetId),
+      complexity: telemetry.complexity || (Number(selectedMath.reasoningLoad) >= 8 ? 'high' : Number(selectedMath.reasoningLoad) >= 5 ? 'moderate' : 'light'),
+      workflowStepCount: telemetry.workflowStepCount || selectedMath.stepCount,
+      estimatedToolCalls: telemetry.estimatedToolCalls || selectedMath.toolCalls,
+      matchedSavedExperiment: telemetry.matchedSavedExperiment,
+      experimentId: telemetry.experimentId,
+      directedRoles,
+    };
+  }, [activePresetId, liveRun, selectedMath.reasoningLoad, selectedMath.stepCount, selectedMath.toolCalls, selectedStudioState.previewPresetId, selectedStudioState.roleDirectives, selectedStudioState.selectedScenarioId]);
+
+  const phaseDirectiveMatrix = useMemo(() => {
+    const source = liveScenarioTelemetry.directedRoles || [];
+    const phases: WorkflowBlockKind[] = ['search', 'query', 'capture', 'analyze', 'summarize', 'deliver'];
+    return phases.map((phase) => ({
+      phase,
+      directives: source.filter((directive) => !directive.phases || directive.phases.includes(phase)),
+    }));
+  }, [liveScenarioTelemetry.directedRoles]);
+
   const experimentHistory = useMemo(
     () => (selectedStudioState.experimentHistory || []).slice().sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)),
     [selectedStudioState.experimentHistory]
@@ -1523,15 +1650,58 @@ export default function AgentStudio() {
     if (!selectedRow) return matches;
     const completedRuns = selectedRow.runs.filter((run) => run.status === 'succeeded' || run.status === 'failed');
     for (const experiment of experimentHistory) {
-      const matchingRun = completedRuns.find((run) => {
-        const attribution = getRunExperimentAttribution(run);
-        if (attribution.experimentId) return attribution.experimentId === experiment.id;
-        return attribution.scenarioId === experiment.scenarioId && attribution.previewPresetId === experiment.previewPresetId;
-      });
+      const matchingRun = completedRuns.find((run) => matchesExperimentRun(run, experiment));
       matches.set(experiment.id, matchingRun);
     }
     return matches;
   }, [experimentHistory, selectedRow]);
+
+  const experimentPerformance = useMemo(() => {
+    if (!selectedRow) return [] as Array<{
+      experiment: StudioExperimentRecord;
+      runs: PlatformTaskRunRecord[];
+      stats: ReturnType<typeof summarizeRunCollection>;
+      score: number;
+    }>;
+
+    const completedRuns = selectedRow.runs.filter((run) => run.status === 'succeeded' || run.status === 'failed');
+    return experimentHistory.map((experiment) => {
+      const runs = completedRuns.filter((run) => matchesExperimentRun(run, experiment));
+      const stats = summarizeRunCollection(runs);
+      const score = runs.length > 0
+        ? Math.round(stats.successRate * 100 - stats.averageCredits / 5 - stats.averageDurationMs / 15000)
+        : 0;
+      return { experiment, runs, stats, score };
+    }).sort((left, right) => right.score - left.score || right.stats.count - left.stats.count);
+  }, [experimentHistory, selectedRow]);
+
+  const winningExperiment = useMemo(
+    () => experimentPerformance.find((item) => item.stats.count > 0),
+    [experimentPerformance]
+  );
+
+  const selectedExperimentPerformance = useMemo(
+    () => experimentPerformance.find((item) => item.experiment.id === selectedComparisonExperimentId),
+    [experimentPerformance, selectedComparisonExperimentId]
+  );
+
+  const currentCohortPerformance = useMemo(() => {
+    if (!selectedRow) return null;
+    const completedRuns = selectedRow.runs.filter((run) => run.status === 'succeeded' || run.status === 'failed');
+    const latest = completedRuns[0];
+    if (!latest) return null;
+    const attribution = getRunExperimentAttribution(latest);
+    const cohortRuns = completedRuns.filter((run) => {
+      const candidate = getRunExperimentAttribution(run);
+      if (attribution.experimentId && candidate.experimentId) return candidate.experimentId === attribution.experimentId;
+      return candidate.scenarioId === attribution.scenarioId && candidate.previewPresetId === attribution.previewPresetId;
+    });
+    return {
+      label: attribution.experimentNotes || `${attribution.scenarioLabel} · ${attribution.previewPresetLabel}`,
+      stats: summarizeRunCollection(cohortRuns),
+      runs: cohortRuns,
+    };
+  }, [selectedRow]);
 
   useEffect(() => {
     setSelectedComparisonExperimentId((current) => {
@@ -1817,6 +1987,25 @@ export default function AgentStudio() {
     setActiveRoom('replay');
     setNotice({ tone: 'success', message: 'Loaded this experiment into the comparison lab.' });
   }, []);
+
+  const handlePromoteExperiment = useCallback((experiment: StudioExperimentRecord) => {
+    const preset = POLICY_PRESETS.find((item) => item.id === experiment.previewPresetId);
+    if (!preset) {
+      setNotice({ tone: 'error', message: 'This experiment no longer matches an available preset.' });
+      return;
+    }
+    setSelectedScenarioId(experiment.scenarioId as ScenarioPresetId);
+    setPreviewPresetId(experiment.previewPresetId);
+    setSelectedComparisonExperimentId(experiment.id);
+    void patchAutomationConfig({
+      executionPolicy: preset.policy,
+      studioState: {
+        ...selectedStudioState,
+        selectedScenarioId: experiment.scenarioId,
+        previewPresetId: experiment.previewPresetId,
+      },
+    }, { successMessage: 'Promoted this saved setup into the live policy.' });
+  }, [patchAutomationConfig, selectedStudioState]);
 
   return (
     <div className="min-h-screen bg-navy-950 text-white">
@@ -2114,13 +2303,25 @@ export default function AgentStudio() {
                               </div>
                               <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{truncateText(worker.reason, 84)}</p>
                               {selectedStudioState.roleDirectives?.[worker.role] ? (
-                                <span className="mt-2 inline-flex rounded-full border border-cyan-500/18 bg-cyan-500/8 px-2 py-0.5 text-[10px] font-medium text-cyan-200">
-                                  {selectedStudioState.roleDirectives[worker.role].mode === 'cheaper'
-                                    ? 'Cheaper'
-                                    : selectedStudioState.roleDirectives[worker.role].mode === 'review'
-                                      ? 'Review'
-                                      : 'Promoted'}
-                                </span>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  <span className="inline-flex rounded-full border border-cyan-500/18 bg-cyan-500/8 px-2 py-0.5 text-[10px] font-medium text-cyan-200">
+                                    {selectedStudioState.roleDirectives[worker.role].mode === 'cheaper'
+                                      ? 'Cheaper'
+                                      : selectedStudioState.roleDirectives[worker.role].mode === 'review'
+                                        ? 'Review'
+                                        : 'Promoted'}
+                                  </span>
+                                  {(selectedStudioState.roleDirectives[worker.role].phases || []).slice(0, 3).map((phase) => (
+                                    <span key={`${worker.role}-${phase}`} className="inline-flex rounded-full border border-white/8 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-medium text-slate-300">
+                                      {formatDirectivePhaseShort(phase)}
+                                    </span>
+                                  ))}
+                                  {(selectedStudioState.roleDirectives[worker.role].phases || []).length > 3 ? (
+                                    <span className="inline-flex rounded-full border border-white/8 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-medium text-slate-300">
+                                      +{(selectedStudioState.roleDirectives[worker.role].phases || []).length - 3}
+                                    </span>
+                                  ) : null}
+                                </div>
                               ) : null}
                             </button>
                           ))}
@@ -2292,6 +2493,67 @@ export default function AgentStudio() {
                           <p className="mt-4 text-sm leading-relaxed text-slate-400">{selectedTopology.summary || 'The manager is routing work based on workflow complexity, tool count, and review pressure.'}</p>
                         </div>
 
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Gauge className="h-4 w-4 text-cyan-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Active scenario</p>
+                              <h3 className="text-sm font-semibold text-white">What policy is live right now</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Scenario</p>
+                              <p className="mt-1 text-sm font-medium text-white">{liveScenarioTelemetry.scenarioLabel}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Preset</p>
+                              <p className="mt-1 text-sm font-medium text-white">{liveScenarioTelemetry.presetLabel}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Complexity</p>
+                              <p className="mt-1 text-sm font-medium capitalize text-white">{liveScenarioTelemetry.complexity}</p>
+                            </div>
+                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Directed roles</p>
+                              <p className="mt-1 text-sm font-medium text-white">{liveScenarioTelemetry.directedRoles.length}</p>
+                            </div>
+                          </div>
+                          <div className="mt-4 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{liveScenarioTelemetry.workflowStepCount} steps</span>
+                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{liveScenarioTelemetry.estimatedToolCalls} tool calls</span>
+                            <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${liveScenarioTelemetry.matchedSavedExperiment ? 'text-cyan-200' : 'text-slate-300'}`}>
+                              {liveScenarioTelemetry.matchedSavedExperiment ? 'Matched saved experiment' : 'Ad hoc live posture'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Layers3 className="h-4 w-4 text-violet-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Phase steering</p>
+                              <h3 className="text-sm font-semibold text-white">Where directives are applied</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 grid gap-2">
+                            {phaseDirectiveMatrix.map((row) => (
+                              <div key={row.phase} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-sm font-medium text-white">{formatDirectivePhaseScope([row.phase])}</p>
+                                  <span className="text-[11px] text-slate-500">{row.directives.length} directive{row.directives.length === 1 ? '' : 's'}</span>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {row.directives.length > 0 ? row.directives.map((directive) => (
+                                    <span key={`${row.phase}-${directive.role}-${directive.mode}`} className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                      {directive.role} · {directive.mode}
+                                    </span>
+                                  )) : <span className="text-[12px] text-slate-500">No steering on this phase.</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
                             <Workflow className="h-4 w-4 text-cyan-300" />
@@ -3075,6 +3337,26 @@ export default function AgentStudio() {
                                   </div>
                                 </div>
                               ) : null}
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/8 p-3">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100/80">Current setup cohort</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{currentCohortPerformance?.label || 'No cohort yet'}</p>
+                                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-200">
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{currentCohortPerformance?.stats.count || 0} runs</span>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{Math.round((currentCohortPerformance?.stats.successRate || 0) * 100)}% success</span>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-200">{currentCohortPerformance?.stats.averageCredits ? `${formatCredits(currentCohortPerformance.stats.averageCredits)} cr avg` : '—'}</span>
+                                  </div>
+                                </div>
+                                <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-3">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Compared experiment cohort</p>
+                                  <p className="mt-1 text-sm font-medium text-white">{selectedExperimentPerformance ? (selectedExperimentPerformance.experiment.notes || `${getScenarioLabelFromId(selectedExperimentPerformance.experiment.scenarioId)} · ${getPresetLabelFromId(selectedExperimentPerformance.experiment.previewPresetId)}`) : 'No saved experiment selected'}</p>
+                                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{selectedExperimentPerformance?.stats.count || 0} runs</span>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{Math.round((selectedExperimentPerformance?.stats.successRate || 0) * 100)}% success</span>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{selectedExperimentPerformance?.stats.averageCredits ? `${formatCredits(selectedExperimentPerformance.stats.averageCredits)} cr avg` : '—'}</span>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           ) : (
                             <div className="mt-4 rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
@@ -3087,7 +3369,7 @@ export default function AgentStudio() {
                           <div className="flex items-center gap-2">
                             <Clock3 className="h-4 w-4 text-amber-300" />
                             <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Run curve</p>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Experiment history</p>
                               <h3 className="text-sm font-semibold text-white">Recent cost and outcome trend</h3>
                             </div>
                           </div>
@@ -3141,15 +3423,95 @@ export default function AgentStudio() {
                     </div>
 
                     <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr),minmax(0,1.08fr)]">
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                        <div className="flex items-center gap-2">
-                          <Brain className="h-4 w-4 text-violet-300" />
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Role heatmap</p>
-                            <h3 className="text-sm font-semibold text-white">Which specialists are earning their keep</h3>
+                      <div className="space-y-6">
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Target className="h-4 w-4 text-emerald-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Best operating setup</p>
+                              <h3 className="text-sm font-semibold text-white">What is actually winning</h3>
+                            </div>
+                          </div>
+                          {winningExperiment ? (
+                            <>
+                              <p className="mt-3 text-sm font-medium text-white">{winningExperiment.experiment.notes || `${getScenarioLabelFromId(winningExperiment.experiment.scenarioId)} · ${getPresetLabelFromId(winningExperiment.experiment.previewPresetId)}`}</p>
+                              <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{winningExperiment.stats.count} runs</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{Math.round(winningExperiment.stats.successRate * 100)}% success</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{winningExperiment.stats.averageCredits ? `${formatCredits(winningExperiment.stats.averageCredits)} cr avg` : '—'}</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {winningExperiment.score}</span>
+                              </div>
+                              <p className="mt-3 text-sm leading-relaxed text-slate-400">This is the strongest observed setup for this workflow right now. Promote it when you want the live policy to match what is already working in practice.</p>
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCompareExperiment(winningExperiment.experiment)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Compare winner
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={actionBusy}
+                                  onClick={() => handlePromoteExperiment(winningExperiment.experiment)}
+                                  className="rounded-xl border border-emerald-500/24 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/14 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Promote to live policy
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="mt-4 rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                              Save and run a few experiments first. This card promotes the strongest observed setup once there is evidence.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Brain className="h-4 w-4 text-violet-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Experiment scorecards</p>
+                              <h3 className="text-sm font-semibold text-white">How saved setups perform over time</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-3">
+                            {experimentPerformance.length > 0 ? experimentPerformance.map((entry) => (
+                              <div key={entry.experiment.id} className={`rounded-2xl border p-3 ${selectedComparisonExperimentId === entry.experiment.id ? 'border-cyan-500/24 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/45'}`}>
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{entry.experiment.notes || `${getScenarioLabelFromId(entry.experiment.scenarioId)} · ${getPresetLabelFromId(entry.experiment.previewPresetId)}`}</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">Saved {formatRelativeTimeFromIso(entry.experiment.createdAt)}</p>
+                                  </div>
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {entry.score}</span>
+                                </div>
+                                <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Runs</p><p className="mt-1 text-white">{entry.stats.count}</p></div>
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Success</p><p className="mt-1 text-white">{Math.round(entry.stats.successRate * 100)}%</p></div>
+                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Avg credits</p><p className="mt-1 text-white">{entry.stats.averageCredits ? `${formatCredits(entry.stats.averageCredits)} cr` : '—'}</p></div>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <button type="button" onClick={() => handleCompareExperiment(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300">Compare</button>
+                                  <button type="button" disabled={actionBusy} onClick={() => handlePromoteExperiment(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-emerald-200">Promote</button>
+                                </div>
+                              </div>
+                            )) : (
+                              <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
+                                No saved experiment performance yet.
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div className="mt-4 space-y-3">
+
+                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+                          <div className="flex items-center gap-2">
+                            <Brain className="h-4 w-4 text-violet-300" />
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Role heatmap</p>
+                              <h3 className="text-sm font-semibold text-white">Which specialists are earning their keep</h3>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-3">
                           {roleHeatmap.length > 0 ? roleHeatmap.map((role) => (
                             <div key={role.role} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
                               <div className="flex items-center justify-between gap-3">
@@ -3173,6 +3535,7 @@ export default function AgentStudio() {
                           )}
                         </div>
                       </div>
+                    </div>
 
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
