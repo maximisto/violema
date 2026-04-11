@@ -80,6 +80,7 @@ interface AutomationStudioStateDraft {
   selectedDirectivePhase?: 'all' | WorkflowBlockKind;
   selectedComparisonExperimentId?: string;
   selectedCohortRunId?: string;
+  selectedReplayCompareRunId?: string;
   selectedBranchRootId?: string;
   comparedBranchRootId?: string;
   pinnedSuggestedPlanId?: string;
@@ -114,6 +115,13 @@ interface StudioPromotionRecord {
   sourceExperimentId?: string;
   sourceExperimentLabel?: string;
   phase?: WorkflowBlockKind;
+  planId?: string;
+  parentPlanId?: string;
+  autoApplied?: boolean;
+  confidence?: number;
+  successDelta?: number;
+  creditsDelta?: number;
+  durationDelta?: number;
 }
 
 interface WorkflowBlockDraft {
@@ -304,6 +312,33 @@ const PROMOTION_GATE_PROFILES = [
   { id: 'conservative', label: 'Conservative', global: 85, archetype: 85, scenario: 85, summary: 'Only promote when evidence is very strong.' },
   { id: 'balanced', label: 'Balanced', global: 70, archetype: 70, scenario: 70, summary: 'Good default when you want measured adaptation.' },
   { id: 'aggressive', label: 'Aggressive', global: 55, archetype: 55, scenario: 55, summary: 'Move faster when the goal is rapid iteration.' },
+] as const;
+
+const AUTO_GRADUATION_PROFILES = [
+  {
+    id: 'cautious',
+    label: 'Cautious',
+    summary: 'Best for sensitive briefings and workflows where a weak branch should almost never replace the parent.',
+    global: 85,
+    archetype: 85,
+    scenario: 90,
+  },
+  {
+    id: 'balanced',
+    label: 'Balanced',
+    summary: 'Good default when you want branch promotion to happen, but only after the edge is clear.',
+    global: 72,
+    archetype: 72,
+    scenario: 78,
+  },
+  {
+    id: 'fast_learning',
+    label: 'Fast learning',
+    summary: 'Use when you want the system to graduate strong child branches sooner and learn faster from ops work.',
+    global: 60,
+    archetype: 66,
+    scenario: 60,
+  },
 ] as const;
 
 const WORKER_DEFINITIONS: Array<{
@@ -1084,6 +1119,10 @@ function getPromotionGateProfileById(id?: string) {
   return PROMOTION_GATE_PROFILES.find((profile) => profile.id === id);
 }
 
+function getAutoGraduationProfileById(id?: string) {
+  return AUTO_GRADUATION_PROFILES.find((profile) => profile.id === id);
+}
+
 function getEffectiveAutoPromotionThreshold(
   studioState: AutomationStudioStateDraft | undefined,
   scenarioId: string,
@@ -1123,6 +1162,20 @@ function getEffectiveAutoGraduateThreshold(
   const archetypeThreshold = studioState?.autoGraduateArchetypeThresholds?.[archetypeId];
   if (typeof archetypeThreshold === 'number') return archetypeThreshold;
   return studioState?.autoGraduateMinConfidence ?? 72;
+}
+
+function getRecommendedAutoGraduationProfileId(
+  archetypeId: string,
+  scenarioId: string,
+  reviewPolicy: ReviewPolicy,
+) {
+  if (scenarioId === 'high_stakes' || reviewPolicy === 'strict' || archetypeId === 'briefing') {
+    return 'cautious';
+  }
+  if (scenarioId === 'monitoring' || archetypeId === 'ops') {
+    return 'fast_learning';
+  }
+  return 'balanced';
 }
 
 function normalizeThresholdMap(value: unknown) {
@@ -1549,6 +1602,13 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
             mode: mode as StudioPromotionRecord['mode'],
             sourceExperimentId: readString(item.sourceExperimentId),
             sourceExperimentLabel: readString(item.sourceExperimentLabel),
+            planId: readString(item.planId),
+            parentPlanId: readString(item.parentPlanId),
+            autoApplied: item.autoApplied === true,
+            confidence: typeof item.confidence === 'number' ? clampNumber(Math.round(item.confidence), 0, 100) : undefined,
+            successDelta: typeof item.successDelta === 'number' ? Math.round(item.successDelta) : undefined,
+            creditsDelta: typeof item.creditsDelta === 'number' ? Math.round(item.creditsDelta) : undefined,
+            durationDelta: typeof item.durationDelta === 'number' ? Math.round(item.durationDelta) : undefined,
             phase: phaseValue && ['search', 'query', 'capture', 'analyze', 'summarize', 'deliver', 'note'].includes(phaseValue)
               ? phaseValue as WorkflowBlockKind
               : undefined,
@@ -1603,6 +1663,7 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
         : undefined,
     selectedComparisonExperimentId: readString(value.selectedComparisonExperimentId),
     selectedCohortRunId: readString(value.selectedCohortRunId),
+    selectedReplayCompareRunId: readString(value.selectedReplayCompareRunId),
     selectedBranchRootId: readString(value.selectedBranchRootId),
     comparedBranchRootId: readString(value.comparedBranchRootId),
     pinnedSuggestedPlanId: readString(value.pinnedSuggestedPlanId),
@@ -1709,6 +1770,7 @@ export default function AgentStudio() {
   const [gateLearningWindow, setGateLearningWindow] = useState<GateLearningWindow>('deep');
   const [branchRunFilter, setBranchRunFilter] = useState<BranchRunFilter>('all');
   const [selectedCohortRunId, setSelectedCohortRunId] = useState<string>('');
+  const [selectedReplayCompareRunId, setSelectedReplayCompareRunId] = useState<string>('');
   const [hoveredCohortRunId, setHoveredCohortRunId] = useState<string>('');
   const [phaseSimulation, setPhaseSimulation] = useState<{ phase: WorkflowBlockKind; mode: 'cheaper' | 'review' | 'promote' } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1962,6 +2024,7 @@ export default function AgentStudio() {
     setPhaseSimulation(selectedStudioState.phaseSimulation || null);
     setSelectedComparisonExperimentId(selectedStudioState.selectedComparisonExperimentId || '');
     setSelectedCohortRunId(selectedStudioState.selectedCohortRunId || '');
+    setSelectedReplayCompareRunId(selectedStudioState.selectedReplayCompareRunId || '');
     setSelectedBranchRootId(selectedStudioState.selectedBranchRootId || '');
     setComparedBranchRootId(selectedStudioState.comparedBranchRootId || '');
     setTrendMetric(selectedStudioState.trendMetric || 'credits');
@@ -1986,6 +2049,7 @@ export default function AgentStudio() {
     selectedStudioState.selectedPlanIntentFilter,
     selectedStudioState.selectedComparisonExperimentId,
     selectedStudioState.selectedCohortRunId,
+    selectedStudioState.selectedReplayCompareRunId,
     selectedStudioState.selectedDirectivePhase,
     selectedStudioState.selectedReplayPhase,
     selectedRow?.automation.id,
@@ -2010,9 +2074,6 @@ export default function AgentStudio() {
   const runComparison = useMemo(() => {
     if (!selectedRow) return null;
     const completedRuns = selectedRow.runs.filter((run) => run.status === 'succeeded' || run.status === 'failed');
-    const current = completedRuns[0];
-    if (!current) return null;
-
     const selectedExperiment = (selectedStudioState.experimentHistory || []).find((experiment) => experiment.id === selectedComparisonExperimentId);
     const matchesExperiment = (run: PlatformTaskRunRecord, experiment: StudioExperimentRecord) => {
       const attribution = getRunExperimentAttribution(run);
@@ -2020,9 +2081,12 @@ export default function AgentStudio() {
       return attribution.scenarioId === experiment.scenarioId && attribution.previewPresetId === experiment.previewPresetId;
     };
 
-    const previous = selectedExperiment
+    const current = completedRuns.find((run) => run.id === selectedCohortRunId) || completedRuns[0];
+    if (!current) return null;
+    const explicitComparedRun = completedRuns.find((run) => run.id === selectedReplayCompareRunId && run.id !== current.id);
+    const previous = explicitComparedRun || (selectedExperiment
       ? completedRuns.find((run) => run.id !== current.id && matchesExperiment(run, selectedExperiment)) || completedRuns[1]
-      : completedRuns[1];
+      : completedRuns[1]);
     const currentAttribution = getRunExperimentAttribution(current);
     const previousAttribution = previous ? getRunExperimentAttribution(previous) : undefined;
     const currentDuration = Number.isNaN(Date.parse(current.startedAt || '')) || Number.isNaN(Date.parse(current.finishedAt || ''))
@@ -2033,10 +2097,10 @@ export default function AgentStudio() {
       : Math.max(0, Date.parse(previous.finishedAt || '') - Date.parse(previous.startedAt || ''));
 
     return {
-      comparisonMode: selectedExperiment ? 'saved_experiment' : 'previous_run',
+      comparisonMode: explicitComparedRun ? 'exact_run_pair' : selectedExperiment ? 'saved_experiment' : 'previous_run',
       comparisonLabel: selectedExperiment
         ? selectedExperiment.notes || `${getScenarioLabelFromId(selectedExperiment.scenarioId)} · ${getPresetLabelFromId(selectedExperiment.previewPresetId)}`
-        : 'Previous run',
+        : explicitComparedRun ? 'Matched replay pair' : 'Previous run',
       current: {
         id: current.id,
         status: current.status,
@@ -2056,7 +2120,7 @@ export default function AgentStudio() {
         experimentLabel: previousAttribution?.experimentNotes,
       } : null,
     };
-  }, [activePresetId, selectedComparisonExperimentId, selectedRow, selectedStudioState.experimentHistory, selectedStudioState.previewPresetId, selectedStudioState.selectedScenarioId]);
+  }, [activePresetId, selectedCohortRunId, selectedComparisonExperimentId, selectedReplayCompareRunId, selectedRow, selectedStudioState.experimentHistory, selectedStudioState.previewPresetId, selectedStudioState.selectedScenarioId]);
 
   const currentSpendIndex = useMemo(
     () => estimatePolicySpendIndex(selectedPolicy, selectedRow?.workflowSteps || []),
@@ -3857,6 +3921,62 @@ export default function AgentStudio() {
     [selectedStudioState.promotionHistory]
   );
 
+  const recommendedAutoGraduationProfile = useMemo(
+    () => getAutoGraduationProfileById(
+      getRecommendedAutoGraduationProfileId(selectedArchetype.id, selectedScenario.id, selectedPolicy.reviewPolicy)
+    ) || AUTO_GRADUATION_PROFILES[1],
+    [selectedArchetype.id, selectedPolicy.reviewPolicy, selectedScenario.id]
+  );
+
+  const graduationTimeline = useMemo(() => {
+    return graduationHistory
+      .map((entry) => {
+        const childSummary = entry.planId ? savedPlanSummaries.find((item) => item.plan.id === entry.planId) : undefined;
+        const parentSummary = entry.parentPlanId ? savedPlanSummaries.find((item) => item.plan.id === entry.parentPlanId) : undefined;
+        const childLabel = childSummary?.plan.name || entry.sourceExperimentLabel || 'Graduated branch';
+        const parentLabel = parentSummary?.plan.name || 'Previous parent';
+        const successDelta = typeof entry.successDelta === 'number'
+          ? entry.successDelta
+          : childSummary && parentSummary
+            ? Math.round((childSummary.stats.successRate - parentSummary.stats.successRate) * 100)
+            : undefined;
+        const creditsDelta = typeof entry.creditsDelta === 'number'
+          ? entry.creditsDelta
+          : childSummary && parentSummary
+            ? Math.round((childSummary.stats.averageCredits || 0) - (parentSummary.stats.averageCredits || 0))
+            : undefined;
+        const durationDelta = typeof entry.durationDelta === 'number'
+          ? entry.durationDelta
+          : childSummary && parentSummary
+            ? Math.round(((childSummary.stats.averageDurationMs || 0) - (parentSummary.stats.averageDurationMs || 0)) / 1000)
+            : undefined;
+        return {
+          entry,
+          childLabel,
+          parentLabel,
+          successDelta,
+          creditsDelta,
+          durationDelta,
+        };
+      })
+      .slice(0, 6);
+  }, [graduationHistory, savedPlanSummaries]);
+
+  const autoGraduationRollbackSuggestion = useMemo(() => {
+    if (!activeBranchParentComparison || selectedStudioState.lastAutoGraduatedPlanId !== activeBranchParentComparison.child.plan.id) return null;
+    if (activeBranchParentComparison.outcome !== 'Weak') return null;
+    const latestAutoGraduation = graduationHistory.find((entry) => entry.planId === activeBranchParentComparison.child.plan.id && entry.autoApplied);
+    return {
+      child: activeBranchParentComparison.child,
+      parent: activeBranchParentComparison.parent,
+      childRunCount: activeBranchParentComparison.childRunCount,
+      latestAutoGraduation,
+      successDelta: activeBranchParentComparison.successDelta,
+      creditsDelta: activeBranchParentComparison.creditsDelta,
+      durationDelta: activeBranchParentComparison.durationDelta,
+    };
+  }, [activeBranchParentComparison, graduationHistory, selectedStudioState.lastAutoGraduatedPlanId]);
+
   const planActionQueue = useMemo(() => {
     const queue: Array<{ id: string; title: string; body: string; action: 'restore_recommended' | 'rollback' | 'compare' | 'save_phase_plan' }> = [];
     if (recommendedPlan && activeSavedPlan && recommendedPlan.plan.id !== activeSavedPlan.plan.id) {
@@ -3983,6 +4103,13 @@ export default function AgentStudio() {
           summary: `Auto-graduated ${activeBranchParentComparison.child.plan.name} above ${activeBranchParentComparison.parent.plan.name}.`,
           sourceExperimentId: activeBranchParentComparison.child.plan.sourceExperimentId,
           sourceExperimentLabel: activeBranchParentComparison.child.plan.sourceExperimentLabel || activeBranchParentComparison.child.plan.name,
+          planId: activeBranchParentComparison.child.plan.id,
+          parentPlanId: activeBranchParentComparison.parent.plan.id,
+          autoApplied: true,
+          confidence: activeBranchParentComparison.childScoring.confidence,
+          successDelta: activeBranchParentComparison.successDelta,
+          creditsDelta: activeBranchParentComparison.creditsDelta,
+          durationDelta: activeBranchParentComparison.durationDelta,
         }),
       },
     }, { successMessage: `Auto-graduated ${activeBranchParentComparison.child.plan.name}.`, suppressBusy: true });
@@ -4099,6 +4226,7 @@ export default function AgentStudio() {
     const nextPhaseSimulation = phaseSimulation || undefined;
     const nextExperimentId = selectedComparisonExperimentId || undefined;
     const nextRunId = selectedCohortRunId || undefined;
+    const nextReplayCompareRunId = selectedReplayCompareRunId || undefined;
     const nextMetric = trendMetric || undefined;
     const nextGateWindow = gateLearningWindow || undefined;
     const nextBranchFilter = branchRunFilter || undefined;
@@ -4114,6 +4242,7 @@ export default function AgentStudio() {
       JSON.stringify(selectedStudioState.phaseSimulation || undefined) === JSON.stringify(nextPhaseSimulation) &&
       (selectedStudioState.selectedComparisonExperimentId || undefined) === nextExperimentId &&
       (selectedStudioState.selectedCohortRunId || undefined) === nextRunId &&
+      (selectedStudioState.selectedReplayCompareRunId || undefined) === nextReplayCompareRunId &&
       (selectedStudioState.trendMetric || undefined) === nextMetric &&
       (selectedStudioState.gateLearningWindow || undefined) === nextGateWindow &&
       (selectedStudioState.branchRunFilter || undefined) === nextBranchFilter
@@ -4134,6 +4263,7 @@ export default function AgentStudio() {
         phaseSimulation: nextPhaseSimulation,
         selectedComparisonExperimentId: nextExperimentId,
         selectedCohortRunId: nextRunId,
+        selectedReplayCompareRunId: nextReplayCompareRunId,
         trendMetric: nextMetric,
         gateLearningWindow: nextGateWindow,
         branchRunFilter: nextBranchFilter,
@@ -4151,6 +4281,7 @@ export default function AgentStudio() {
     selectedPlanIntentFilter,
     selectedComparisonExperimentId,
     selectedCohortRunId,
+    selectedReplayCompareRunId,
     selectedDirectivePhase,
     selectedReplayPhase,
     selectedRow?.automation.id,
@@ -4675,6 +4806,13 @@ export default function AgentStudio() {
           summary: `Graduated ${activeBranchParentComparison.child.plan.name} above ${activeBranchParentComparison.parent.plan.name}.`,
           sourceExperimentId: activeBranchParentComparison.child.plan.sourceExperimentId,
           sourceExperimentLabel: activeBranchParentComparison.child.plan.sourceExperimentLabel || activeBranchParentComparison.child.plan.name,
+          planId: activeBranchParentComparison.child.plan.id,
+          parentPlanId: activeBranchParentComparison.parent.plan.id,
+          autoApplied: false,
+          confidence: activeBranchParentComparison.childScoring.confidence,
+          successDelta: activeBranchParentComparison.successDelta,
+          creditsDelta: activeBranchParentComparison.creditsDelta,
+          durationDelta: activeBranchParentComparison.durationDelta,
         }),
       },
     }, { successMessage: `Graduated ${activeBranchParentComparison.child.plan.name}.` });
@@ -4742,6 +4880,26 @@ export default function AgentStudio() {
     void updateStudioState(nextState, message);
   }, [selectedArchetype.id, selectedArchetype.label, selectedScenario.id, selectedScenario.label, selectedStudioState, updateStudioState]);
 
+  const handleApplyAutoGraduationProfile = useCallback((profileId: typeof AUTO_GRADUATION_PROFILES[number]['id'], scope: 'global' | 'archetype' | 'scenario' = 'archetype') => {
+    const profile = getAutoGraduationProfileById(profileId);
+    if (!profile) return;
+    const nextState: AutomationStudioStateDraft = { ...selectedStudioState };
+    if (scope === 'scenario') {
+      nextState.autoGraduateScenarioThresholds = {
+        ...(selectedStudioState.autoGraduateScenarioThresholds || {}),
+        [selectedScenario.id]: profile.scenario,
+      };
+    } else if (scope === 'archetype') {
+      nextState.autoGraduateArchetypeThresholds = {
+        ...(selectedStudioState.autoGraduateArchetypeThresholds || {}),
+        [selectedArchetype.id]: profile.archetype,
+      };
+    } else {
+      nextState.autoGraduateMinConfidence = profile.global;
+    }
+    void updateStudioState(nextState, `Applied the ${profile.label.toLowerCase()} graduation profile to the ${scope === 'global' ? 'global' : scope === 'archetype' ? 'workflow class' : 'scenario'} gate.`);
+  }, [selectedArchetype.id, selectedScenario.id, selectedStudioState, updateStudioState]);
+
   const handleRestoreExperiment = useCallback((experiment: StudioExperimentRecord) => {
     if (SCENARIO_PRESETS.some((scenario) => scenario.id === experiment.scenarioId)) {
       setSelectedScenarioId(experiment.scenarioId as ScenarioPresetId);
@@ -4784,8 +4942,33 @@ export default function AgentStudio() {
     }
     setHoveredCohortRunId(run.id);
     setSelectedCohortRunId(run.id);
+    setSelectedReplayCompareRunId('');
     setActiveRoom('replay');
     setNotice({ tone: 'success', message: `Opened the exact run in replay from ${sourceLabel}.` });
+  }, [savedPlanSummaries]);
+
+  const handleOpenRunPairInReplay = useCallback((
+    primaryRun: PlatformTaskRunRecord,
+    comparedRun: PlatformTaskRunRecord,
+    phase: WorkflowBlockKind,
+    sourceLabel = 'matched phase comparison',
+  ) => {
+    const comparedAttribution = getRunExperimentAttribution(comparedRun);
+    const matchedPlan = rankRunPlanMatches(primaryRun, savedPlanSummaries.map((entry) => entry.plan))[0];
+    const matchedPlanSummary = matchedPlan ? savedPlanSummaries.find((entry) => entry.plan.id === matchedPlan.plan.id) : undefined;
+    if (matchedPlanSummary) {
+      setSelectedPlanId(matchedPlanSummary.plan.id);
+      setSelectedPlanFamilyRootId(matchedPlanSummary.familyRootId);
+    }
+    if (comparedAttribution.experimentId) {
+      setSelectedComparisonExperimentId(comparedAttribution.experimentId);
+    }
+    setSelectedReplayPhase(phase);
+    setHoveredCohortRunId(primaryRun.id);
+    setSelectedCohortRunId(primaryRun.id);
+    setSelectedReplayCompareRunId(comparedRun.id);
+    setActiveRoom('replay');
+    setNotice({ tone: 'success', message: `Opened the exact run pair in replay from ${sourceLabel}.` });
   }, [savedPlanSummaries]);
 
   const handleOpenPlanSourceReplay = useCallback((plan: StudioOperatingPlan) => {
@@ -6809,6 +6992,36 @@ export default function AgentStudio() {
                                     <p className="mt-1 text-slate-300">{formatCompactDuration(planFamilyPhaseComparison.compared.durationMs)}</p>
                                   </div>
                                 </div>
+                                {planFamilyReplayComparison?.primaryRun && planFamilyReplayComparison.comparedRun ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenRunPairInReplay(
+                                        planFamilyReplayComparison.primaryRun!,
+                                        planFamilyReplayComparison.comparedRun!,
+                                        planFamilyPhaseComparison.phase,
+                                        'matched phase comparison'
+                                      )}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
+                                    >
+                                      Open both in replay
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenRunInReplay(planFamilyReplayComparison.primaryRun!, 'matched phase primary')}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                    >
+                                      Primary only
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenRunInReplay(planFamilyReplayComparison.comparedRun!, 'matched phase compared')}
+                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                    >
+                                      Compared only
+                                    </button>
+                                  </div>
+                                ) : null}
                               </div>
                             ) : null}
                           </div>
@@ -6927,6 +7140,27 @@ export default function AgentStudio() {
                                   </button>
                                 ))}
                               </div>
+                              <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Archetype graduation presets</p>
+                                <p className="mt-1 text-sm font-medium text-white">{selectedArchetype.label} should graduate on its own terms</p>
+                                <p className="mt-2 text-[12px] leading-relaxed text-slate-300">
+                                  {recommendedAutoGraduationProfile.summary}
+                                </p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {AUTO_GRADUATION_PROFILES.map((profile) => (
+                                    <button
+                                      key={`auto-graduation-profile-${profile.id}`}
+                                      type="button"
+                                      onClick={() => handleApplyAutoGraduationProfile(profile.id, 'archetype')}
+                                      className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${
+                                        profile.id === recommendedAutoGraduationProfile.id ? 'border-emerald-500/30 bg-emerald-500/12 text-emerald-200' : 'text-slate-300'
+                                      }`}
+                                    >
+                                      {profile.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <button
                                   type="button"
@@ -7014,19 +7248,92 @@ export default function AgentStudio() {
                           <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
                             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Graduation history</p>
                             <div className="mt-3 space-y-3">
-                              {graduationHistory.slice(0, 5).map((entry) => (
-                                <div key={entry.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                      <p className="text-sm font-medium text-white">{entry.summary}</p>
-                                      <p className="mt-1 text-[11px] text-slate-500">{formatRelativeTimeFromIso(entry.appliedAt)}</p>
+                              {graduationTimeline.map((item, index) => (
+                                <div key={item.entry.id} className="relative rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                  {index < graduationTimeline.length - 1 ? (
+                                    <div className="absolute left-[1.15rem] top-10 h-[calc(100%-1.1rem)] w-px bg-gradient-to-b from-emerald-400/40 to-transparent" />
+                                  ) : null}
+                                  <div className="flex items-start gap-3">
+                                    <div className="mt-0.5 h-4 w-4 rounded-full border border-emerald-400/40 bg-emerald-400/15" />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                          <p className="text-sm font-medium text-white">{item.childLabel}</p>
+                                          <p className="mt-1 text-[11px] text-slate-400">from {item.parentLabel} · {formatRelativeTimeFromIso(item.entry.appliedAt)}</p>
+                                        </div>
+                                        <div className="flex flex-wrap justify-end gap-2">
+                                          <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${getPromotionModeTone(item.entry.mode)}`}>
+                                            {item.entry.autoApplied ? 'Auto graduation' : 'Manual graduation'}
+                                          </span>
+                                          {typeof item.entry.confidence === 'number' ? (
+                                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                              {item.entry.confidence}% confidence
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                      <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                        {typeof item.successDelta === 'number' ? (
+                                          <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${item.successDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                            {formatSignedDelta(item.successDelta)} pts success
+                                          </span>
+                                        ) : null}
+                                        {typeof item.creditsDelta === 'number' ? (
+                                          <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${item.creditsDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                            {formatSignedDelta(item.creditsDelta)} cr
+                                          </span>
+                                        ) : null}
+                                        {typeof item.durationDelta === 'number' ? (
+                                          <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${item.durationDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                            {formatSignedDelta(item.durationDelta)}s
+                                          </span>
+                                        ) : null}
+                                      </div>
                                     </div>
-                                    <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${getPromotionModeTone(entry.mode)}`}>
-                                      {getPromotionModeLabel(entry.mode)}
-                                    </span>
                                   </div>
                                 </div>
                               ))}
+                            </div>
+                          </div>
+                        ) : null}
+                        {autoGraduationRollbackSuggestion ? (
+                          <div className="mt-4 rounded-2xl border border-red-500/16 bg-red-500/8 p-4">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-red-100/80">Auto-graduation rollback</p>
+                            <p className="mt-1 text-sm font-medium text-white">{autoGraduationRollbackSuggestion.child.plan.name} lost momentum after auto-graduation</p>
+                            <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                              The child branch is now grading weak against {autoGraduationRollbackSuggestion.parent.plan.name}. Best move is to restore the parent or compare the lines before the child compounds more debt.
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                              {typeof autoGraduationRollbackSuggestion.successDelta === 'number' ? (
+                                <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${autoGraduationRollbackSuggestion.successDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                  {formatSignedDelta(autoGraduationRollbackSuggestion.successDelta)} pts
+                                </span>
+                              ) : null}
+                              {typeof autoGraduationRollbackSuggestion.creditsDelta === 'number' ? (
+                                <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${autoGraduationRollbackSuggestion.creditsDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                  {formatSignedDelta(autoGraduationRollbackSuggestion.creditsDelta)} cr
+                                </span>
+                              ) : null}
+                              <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                {autoGraduationRollbackSuggestion.childRunCount} child runs observed
+                              </span>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={actionBusy}
+                                onClick={() => handleRestoreOperatingPlan(autoGraduationRollbackSuggestion.parent.plan)}
+                                className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-red-100 disabled:opacity-60"
+                              >
+                                Restore parent now
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleComparePlan(autoGraduationRollbackSuggestion.parent.plan)}
+                                className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                              >
+                                Compare before rollback
+                              </button>
                             </div>
                           </div>
                         ) : null}
@@ -7667,7 +7974,13 @@ export default function AgentStudio() {
                             <Layers3 className="h-4 w-4 text-cyan-300" />
                             <div>
                               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Run comparison lab</p>
-                              <h3 className="text-sm font-semibold text-white">{runComparison?.comparisonMode === 'saved_experiment' ? 'Latest run vs saved experiment' : 'Latest vs previous operating setup'}</h3>
+                              <h3 className="text-sm font-semibold text-white">
+                                {runComparison?.comparisonMode === 'exact_run_pair'
+                                  ? 'Selected run vs matched replay slice'
+                                  : runComparison?.comparisonMode === 'saved_experiment'
+                                    ? 'Latest run vs saved experiment'
+                                    : 'Latest vs previous operating setup'}
+                              </h3>
                             </div>
                           </div>
                           {runComparison ? (
@@ -7702,7 +8015,7 @@ export default function AgentStudio() {
                                   </div>
                                 </div>
                                 <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-                                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{runComparison?.comparisonMode === 'saved_experiment' ? 'Saved experiment' : 'Previous run'}</p>
+                                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{runComparison?.comparisonMode === 'exact_run_pair' ? 'Matched run' : runComparison?.comparisonMode === 'saved_experiment' ? 'Saved experiment' : 'Previous run'}</p>
                                   {runComparison.previous ? (<>
                                     <p className="mt-2 text-sm font-semibold text-white">{runComparison.previous.presetLabel}</p>
                                     <p className="mt-1 text-[12px] text-slate-400">{runComparison.previous.scenarioLabel}</p>
