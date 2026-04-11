@@ -86,6 +86,8 @@ interface AutomationStudioStateDraft {
   dismissedSuggestedPlanId?: string;
   autoGraduateEnabled?: boolean;
   autoGraduateMinConfidence?: number;
+  autoGraduateScenarioThresholds?: Record<string, number>;
+  autoGraduateArchetypeThresholds?: Record<string, number>;
   lastAutoGraduatedPlanId?: string;
   trendMetric?: TrendMetric;
   gateLearningWindow?: GateLearningWindow;
@@ -1111,6 +1113,18 @@ function inferPromotionGateProfileId(
     .sort((left, right) => left.delta - right.delta)[0]?.profile.id || 'balanced';
 }
 
+function getEffectiveAutoGraduateThreshold(
+  studioState: AutomationStudioStateDraft | undefined,
+  scenarioId: string,
+  archetypeId: string,
+) {
+  const scenarioThreshold = studioState?.autoGraduateScenarioThresholds?.[scenarioId];
+  if (typeof scenarioThreshold === 'number') return scenarioThreshold;
+  const archetypeThreshold = studioState?.autoGraduateArchetypeThresholds?.[archetypeId];
+  if (typeof archetypeThreshold === 'number') return archetypeThreshold;
+  return studioState?.autoGraduateMinConfidence ?? 72;
+}
+
 function normalizeThresholdMap(value: unknown) {
   if (!value || typeof value !== 'object') return undefined;
   const next = Object.entries(value as Record<string, unknown>).reduce<Record<string, number>>((acc, [key, raw]) => {
@@ -1598,6 +1612,8 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
       typeof value.autoGraduateMinConfidence === 'number'
         ? clampNumber(Math.round(value.autoGraduateMinConfidence), 40, 95)
         : undefined,
+    autoGraduateScenarioThresholds: normalizeThresholdMap(value.autoGraduateScenarioThresholds),
+    autoGraduateArchetypeThresholds: normalizeThresholdMap(value.autoGraduateArchetypeThresholds),
     lastAutoGraduatedPlanId: readString(value.lastAutoGraduatedPlanId),
     trendMetric:
       value.trendMetric === 'credits' || value.trendMetric === 'duration' || value.trendMetric === 'success'
@@ -3817,7 +3833,29 @@ export default function AgentStudio() {
   }, [archetypeRecommendedPlan]);
 
   const autoGraduateEnabled = selectedStudioState.autoGraduateEnabled === true;
-  const autoGraduateMinConfidence = selectedStudioState.autoGraduateMinConfidence ?? 72;
+  const autoGraduateMinConfidence = getEffectiveAutoGraduateThreshold(selectedStudioState, selectedScenario.id, selectedArchetype.id);
+
+  const autoGraduateScope = useMemo(() => {
+    if (selectedStudioState.autoGraduateScenarioThresholds?.[selectedScenario.id]) {
+      return { scope: 'Scenario gate', label: selectedScenario.label };
+    }
+    if (selectedStudioState.autoGraduateArchetypeThresholds?.[selectedArchetype.id]) {
+      return { scope: 'Workflow-class gate', label: selectedArchetype.label };
+    }
+    return { scope: 'Global default', label: 'All workflows' };
+  }, [
+    selectedArchetype.id,
+    selectedArchetype.label,
+    selectedScenario.id,
+    selectedScenario.label,
+    selectedStudioState.autoGraduateArchetypeThresholds,
+    selectedStudioState.autoGraduateScenarioThresholds,
+  ]);
+
+  const graduationHistory = useMemo(
+    () => (selectedStudioState.promotionHistory || []).filter((entry) => entry.mode === 'graduation'),
+    [selectedStudioState.promotionHistory]
+  );
 
   const planActionQueue = useMemo(() => {
     const queue: Array<{ id: string; title: string; body: string; action: 'restore_recommended' | 'rollback' | 'compare' | 'save_phase_plan' }> = [];
@@ -4662,9 +4700,47 @@ export default function AgentStudio() {
     void updateStudioState({
       ...selectedStudioState,
       autoGraduateEnabled: patch.enabled ?? autoGraduateEnabled,
-      autoGraduateMinConfidence: patch.confidence ?? autoGraduateMinConfidence,
+      autoGraduateMinConfidence: patch.confidence ?? (selectedStudioState.autoGraduateMinConfidence ?? autoGraduateMinConfidence),
     }, patch.enabled === false ? 'Automatic branch graduation disabled.' : patch.enabled === true ? 'Automatic branch graduation enabled.' : `Automatic graduation gate set to ${patch.confidence}%.`);
   }, [autoGraduateEnabled, autoGraduateMinConfidence, selectedStudioState, updateStudioState]);
+
+  const handleSetScopedAutoGraduateThreshold = useCallback((scope: 'global' | 'scenario' | 'archetype', threshold: number) => {
+    const nextState: AutomationStudioStateDraft = { ...selectedStudioState };
+    let message = `Automatic graduation gate set to ${threshold}% confidence.`;
+    if (scope === 'scenario') {
+      nextState.autoGraduateScenarioThresholds = {
+        ...(selectedStudioState.autoGraduateScenarioThresholds || {}),
+        [selectedScenario.id]: threshold,
+      };
+      message = `${selectedScenario.label} graduation gate set to ${threshold}% confidence.`;
+    } else if (scope === 'archetype') {
+      nextState.autoGraduateArchetypeThresholds = {
+        ...(selectedStudioState.autoGraduateArchetypeThresholds || {}),
+        [selectedArchetype.id]: threshold,
+      };
+      message = `${selectedArchetype.label} graduation gate set to ${threshold}% confidence.`;
+    } else {
+      nextState.autoGraduateMinConfidence = threshold;
+      message = `Global automatic graduation gate set to ${threshold}% confidence.`;
+    }
+    void updateStudioState(nextState, message);
+  }, [selectedArchetype.id, selectedArchetype.label, selectedScenario.id, selectedScenario.label, selectedStudioState, updateStudioState]);
+
+  const handleClearScopedAutoGraduateThreshold = useCallback((scope: 'global' | 'scenario' | 'archetype') => {
+    const nextState: AutomationStudioStateDraft = { ...selectedStudioState };
+    let message = 'Reset automatic graduation gate.';
+    if (scope === 'scenario') {
+      nextState.autoGraduateScenarioThresholds = omitThresholdKey(selectedStudioState.autoGraduateScenarioThresholds, selectedScenario.id);
+      message = `Reset ${selectedScenario.label} graduation gate back to the inherited value.`;
+    } else if (scope === 'archetype') {
+      nextState.autoGraduateArchetypeThresholds = omitThresholdKey(selectedStudioState.autoGraduateArchetypeThresholds, selectedArchetype.id);
+      message = `Reset ${selectedArchetype.label} graduation gate back to the inherited value.`;
+    } else {
+      nextState.autoGraduateMinConfidence = undefined;
+      message = 'Reset the global automatic graduation gate.';
+    }
+    void updateStudioState(nextState, message);
+  }, [selectedArchetype.id, selectedArchetype.label, selectedScenario.id, selectedScenario.label, selectedStudioState, updateStudioState]);
 
   const handleRestoreExperiment = useCallback((experiment: StudioExperimentRecord) => {
     if (SCENARIO_PRESETS.some((scenario) => scenario.id === experiment.scenarioId)) {
@@ -6835,18 +6911,61 @@ export default function AgentStudio() {
                                   {autoGraduateEnabled ? 'Enabled' : 'Disabled'}
                                 </button>
                               </div>
+                              <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{autoGraduateScope.scope}</span>
+                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{autoGraduateScope.label}</span>
+                              </div>
                               <div className="mt-3 flex flex-wrap gap-2">
                                 {[60, 72, 85].map((threshold) => (
                                   <button
                                     key={`auto-graduate-${threshold}`}
                                     type="button"
-                                    onClick={() => handleUpdateAutoGraduate({ confidence: threshold })}
+                                    onClick={() => handleSetScopedAutoGraduateThreshold('global', threshold)}
                                     className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${autoGraduateMinConfidence === threshold ? 'border-emerald-500/30 bg-emerald-500/12 text-emerald-200' : 'text-slate-300'}`}
                                   >
                                     {threshold}%
                                   </button>
                                 ))}
                               </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetScopedAutoGraduateThreshold('archetype', 72)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Set workflow-class gate
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetScopedAutoGraduateThreshold('scenario', 72)}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Set scenario gate
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleClearScopedAutoGraduateThreshold('archetype')}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Clear workflow-class gate
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleClearScopedAutoGraduateThreshold('scenario')}
+                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                >
+                                  Clear scenario gate
+                                </button>
+                              </div>
+                            </div>
+                            <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Graduation explainer</p>
+                              <p className="mt-1 text-sm font-medium text-white">Why this branch is ready</p>
+                              <p className="mt-2 text-[12px] leading-relaxed text-slate-300">
+                                {activeBranchParentComparison.graduationReady
+                                  ? `${activeBranchParentComparison.child.plan.name} is beating its parent on success, staying within spend tolerance, and has enough evidence depth to justify graduation.`
+                                  : `${activeBranchParentComparison.child.plan.name} still needs either more confidence, more evidence, or a cleaner edge over its parent before it should graduate.`}
+                              </p>
                             </div>
                             <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
                               <div className="rounded-xl border border-violet-500/18 bg-violet-500/8 px-3 py-2">
@@ -6888,6 +7007,26 @@ export default function AgentStudio() {
                               >
                                 Restore parent
                               </button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {graduationHistory.length > 0 ? (
+                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Graduation history</p>
+                            <div className="mt-3 space-y-3">
+                              {graduationHistory.slice(0, 5).map((entry) => (
+                                <div key={entry.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-medium text-white">{entry.summary}</p>
+                                      <p className="mt-1 text-[11px] text-slate-500">{formatRelativeTimeFromIso(entry.appliedAt)}</p>
+                                    </div>
+                                    <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${getPromotionModeTone(entry.mode)}`}>
+                                      {getPromotionModeLabel(entry.mode)}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ) : null}
