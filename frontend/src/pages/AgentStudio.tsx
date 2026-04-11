@@ -5714,7 +5714,7 @@ export default function AgentStudio() {
             </div>
           </aside>
 
-          <section className="space-y-6">
+          <section className="mx-auto w-full max-w-[1180px] space-y-6">
             {selectedRow ? (
               <>
                 <div className="rounded-[2rem] border border-navy-800/80 bg-gradient-to-br from-navy-900/84 via-navy-900/56 to-navy-950/92 p-5">
