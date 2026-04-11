@@ -53,6 +53,8 @@ interface StudioRoleDirective {
 interface AutomationStudioStateDraft {
   selectedScenarioId?: string;
   previewPresetId?: string;
+  selectedBranchRootId?: string;
+  comparedBranchRootId?: string;
   experimentHistory?: StudioExperimentRecord[];
   roleDirectives?: Record<string, StudioRoleDirective>;
   promotionHistory?: StudioPromotionRecord[];
@@ -1010,6 +1012,39 @@ function buildBranchName(sourceLabel: string, index: number) {
   return `${sourceLabel} branch ${index}`;
 }
 
+function getPromotionGateProfileById(id?: string) {
+  return PROMOTION_GATE_PROFILES.find((profile) => profile.id === id);
+}
+
+function getEffectiveAutoPromotionThreshold(
+  studioState: AutomationStudioStateDraft | undefined,
+  scenarioId: string,
+  archetypeId: string,
+) {
+  const scenarioThreshold = studioState?.autoPromotionScenarioThresholds?.[scenarioId];
+  if (typeof scenarioThreshold === 'number') return scenarioThreshold;
+  const archetypeThreshold = studioState?.autoPromotionArchetypeThresholds?.[archetypeId];
+  if (typeof archetypeThreshold === 'number') return archetypeThreshold;
+  return studioState?.autoPromotionMinConfidence ?? 55;
+}
+
+function inferPromotionGateProfileId(
+  studioState: AutomationStudioStateDraft | undefined,
+  scenarioId: string,
+  archetypeId: string,
+) {
+  const threshold = getEffectiveAutoPromotionThreshold(studioState, scenarioId, archetypeId);
+  return PROMOTION_GATE_PROFILES
+    .map((profile) => ({
+      profile,
+      delta:
+        Math.abs(profile.global - threshold) +
+        Math.abs(profile.archetype - threshold) * 0.6 +
+        Math.abs(profile.scenario - threshold) * 0.9,
+    }))
+    .sort((left, right) => left.delta - right.delta)[0]?.profile.id || 'balanced';
+}
+
 function normalizeThresholdMap(value: unknown) {
   if (!value || typeof value !== 'object') return undefined;
   const next = Object.entries(value as Record<string, unknown>).reduce<Record<string, number>>((acc, [key, raw]) => {
@@ -1343,6 +1378,8 @@ function normalizeStudioState(value: unknown): AutomationStudioStateDraft {
   return {
     selectedScenarioId: readString(value.selectedScenarioId),
     previewPresetId: readString(value.previewPresetId),
+    selectedBranchRootId: readString(value.selectedBranchRootId),
+    comparedBranchRootId: readString(value.comparedBranchRootId),
     experimentHistory,
     roleDirectives,
     promotionHistory,
@@ -1650,8 +1687,8 @@ export default function AgentStudio() {
     setSelectedDirectivePhase('all');
     setHoveredCohortRunId('');
     setPhaseSimulation(null);
-    setSelectedBranchRootId('');
-    setComparedBranchRootId('');
+    setSelectedBranchRootId(selectedStudioState.selectedBranchRootId || '');
+    setComparedBranchRootId(selectedStudioState.comparedBranchRootId || '');
     setSelectedScenarioId(
       selectedStudioState.selectedScenarioId && SCENARIO_PRESETS.some((scenario) => scenario.id === selectedStudioState.selectedScenarioId)
         ? selectedStudioState.selectedScenarioId as ScenarioPresetId
@@ -1660,7 +1697,13 @@ export default function AgentStudio() {
     if (selectedStudioState.previewPresetId && POLICY_PRESETS.some((preset) => preset.id === selectedStudioState.previewPresetId)) {
       setPreviewPresetId(selectedStudioState.previewPresetId);
     }
-  }, [selectedRow?.automation.id, selectedStudioState.previewPresetId, selectedStudioState.selectedScenarioId]);
+  }, [
+    selectedRow?.automation.id,
+    selectedStudioState.comparedBranchRootId,
+    selectedStudioState.previewPresetId,
+    selectedStudioState.selectedBranchRootId,
+    selectedStudioState.selectedScenarioId,
+  ]);
 
   const previewPreset = useMemo(
     () => POLICY_PRESETS.find((preset) => preset.id === previewPresetId) || POLICY_PRESETS[0],
@@ -2779,17 +2822,91 @@ export default function AgentStudio() {
       .slice(0, 8);
   }, [selectedRow?.runs, selectedStudioState.promotionHistory]);
 
+  const gateProfileLearning = useMemo(() => {
+    const scopedRows = rows.filter((row) => classifyWorkflowArchetype(row.workflowSteps).id === selectedArchetype.id);
+    const runRecords = scopedRows.flatMap((row) => {
+      const rowStudioState = normalizeStudioState(row.automation.studio_state);
+      return row.runs
+        .filter((run) => run.status === 'succeeded' || run.status === 'failed')
+        .map((run) => {
+          const attribution = getRunExperimentAttribution(run);
+          const scenarioId = attribution.scenarioId || rowStudioState.selectedScenarioId || 'baseline';
+          const profileId = inferPromotionGateProfileId(rowStudioState, scenarioId, selectedArchetype.id);
+          return {
+            workflowId: row.automation.id,
+            scenarioId,
+            profileId,
+            run,
+          };
+        });
+    });
+
+    const scenarioScopedRuns = runRecords.filter((item) => item.scenarioId === selectedScenario.id);
+    const scopedRecords = scenarioScopedRuns.length >= 3 ? scenarioScopedRuns : runRecords;
+    const aggregate = new Map<string, { runs: PlatformTaskRunRecord[]; workflows: Set<string>; latestAt?: string }>();
+
+    scopedRecords.forEach((item) => {
+      const current = aggregate.get(item.profileId) || { runs: [], workflows: new Set<string>(), latestAt: undefined };
+      current.runs.push(item.run);
+      current.workflows.add(item.workflowId);
+      const candidateAt = item.run.finishedAt || item.run.startedAt;
+      if (candidateAt && (!current.latestAt || Date.parse(candidateAt) > Date.parse(current.latestAt))) {
+        current.latestAt = candidateAt;
+      }
+      aggregate.set(item.profileId, current);
+    });
+
+    const items = Array.from(aggregate.entries())
+      .map(([profileId, value]) => {
+        const profile = getPromotionGateProfileById(profileId);
+        if (!profile) return null;
+        const stats = summarizeRunCollection(value.runs);
+        const scoring = scoreObservedPerformance(stats, value.latestAt);
+        return {
+          profile,
+          stats,
+          latestAt: value.latestAt,
+          workflowCount: value.workflows.size,
+          ...scoring,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .sort((left, right) => right.score - left.score || right.confidence - left.confidence || right.stats.count - left.stats.count);
+
+    return {
+      scenarioMatched: scenarioScopedRuns.length >= 3,
+      scopeLabel: scenarioScopedRuns.length >= 3
+        ? `${selectedArchetype.label.toLowerCase()} in ${selectedScenario.label.toLowerCase()}`
+        : selectedArchetype.label.toLowerCase(),
+      items: items.slice(0, 3),
+      recommendedProfile: items[0]?.profile,
+    };
+  }, [rows, selectedArchetype.id, selectedArchetype.label, selectedScenario.id, selectedScenario.label]);
+
   const rollbackSuggestion = useMemo(() => {
     const weak = promotionAudit.find((entry) => entry.outcome === 'Weak');
     if (!weak) return null;
+    const weakIndex = promotionAudit.findIndex((entry) => entry.id === weak.id);
+    const priorPromotionTarget = promotionAudit
+      .slice(weakIndex + 1)
+      .map((entry) => experimentHistory.find((experiment) => experiment.id === entry.sourceExperimentId))
+      .find((experiment): experiment is StudioExperimentRecord => Boolean(experiment));
+    const alternateWinningTarget = experimentPerformance.find((entry) => entry.experiment.id !== weak.sourceExperimentId && entry.stats.count > 0)?.experiment;
+    const restoreExperiment = priorPromotionTarget || alternateWinningTarget || (winningExperiment?.experiment.id !== weak.sourceExperimentId ? winningExperiment?.experiment : undefined);
     return {
       title: 'Rollback candidate detected',
-      body: `${weak.summary} has weak follow-through across ${weak.subsequentRuns.length} subsequent runs. This is a good candidate to unwind or retest before it hardens into the live policy.`,
+      body: restoreExperiment
+        ? `${weak.summary} has weak follow-through across ${weak.subsequentRuns.length} subsequent runs. Best restore target right now is ${getExperimentDisplayLabel(restoreExperiment)}.`
+        : `${weak.summary} has weak follow-through across ${weak.subsequentRuns.length} subsequent runs. This is a good candidate to unwind or retest before it hardens into the live policy.`,
       entry: weak,
+      restoreExperiment,
     };
-  }, [promotionAudit]);
+  }, [experimentHistory, experimentPerformance, promotionAudit, winningExperiment]);
 
   const recommendedGateProfile = useMemo(() => {
+    if (gateProfileLearning.recommendedProfile && gateProfileLearning.items[0]?.stats.count >= 2) {
+      return gateProfileLearning.recommendedProfile;
+    }
     if (selectedScenario.id === 'high_stakes' || selectedPolicy.reviewPolicy === 'strict') {
       return PROMOTION_GATE_PROFILES.find((item) => item.id === 'conservative');
     }
@@ -2800,7 +2917,7 @@ export default function AgentStudio() {
       return PROMOTION_GATE_PROFILES.find((item) => item.id === 'aggressive');
     }
     return PROMOTION_GATE_PROFILES.find((item) => item.id === 'balanced');
-  }, [evidenceFreshness.tone, selectedPolicy.optimizationGoal, selectedPolicy.reviewPolicy, selectedRow?.successRate, selectedScenario.id]);
+  }, [evidenceFreshness.tone, gateProfileLearning.items, gateProfileLearning.recommendedProfile, selectedPolicy.optimizationGoal, selectedPolicy.reviewPolicy, selectedRow?.successRate, selectedScenario.id]);
 
   const activeGateScope = useMemo(() => {
     if (selectedStudioState.autoPromotionScenarioThresholds?.[selectedScenario.id]) {
@@ -2949,6 +3066,30 @@ export default function AgentStudio() {
     previewPresetId,
     selectedRow?.automation.id,
     selectedScenarioId,
+    selectedStudioState,
+    updateStudioState,
+  ]);
+
+  useEffect(() => {
+    if (!selectedRow?.automation.id) return undefined;
+    const nextPrimary = selectedBranchRootId || undefined;
+    const nextCompared = comparedBranchRootId && comparedBranchRootId !== selectedBranchRootId ? comparedBranchRootId : undefined;
+    if ((selectedStudioState.selectedBranchRootId || undefined) === nextPrimary && (selectedStudioState.comparedBranchRootId || undefined) === nextCompared) {
+      return undefined;
+    }
+    if (!nextPrimary && !nextCompared) return undefined;
+    const timeout = window.setTimeout(() => {
+      void updateStudioState({
+        ...selectedStudioState,
+        selectedBranchRootId: nextPrimary,
+        comparedBranchRootId: nextCompared,
+      });
+    }, 450);
+    return () => window.clearTimeout(timeout);
+  }, [
+    comparedBranchRootId,
+    selectedBranchRootId,
+    selectedRow?.automation.id,
     selectedStudioState,
     updateStudioState,
   ]);
@@ -3216,6 +3357,17 @@ export default function AgentStudio() {
     setSelectedComparisonExperimentId(experiment.id);
     setActiveRoom('replay');
     setNotice({ tone: 'success', message: 'Loaded this experiment into the comparison lab.' });
+  }, []);
+
+  const handleOpenRunInReplay = useCallback((run: PlatformTaskRunRecord, sourceLabel = 'replay') => {
+    const attribution = getRunExperimentAttribution(run);
+    if (attribution.experimentId) {
+      setSelectedComparisonExperimentId(attribution.experimentId);
+    }
+    setHoveredCohortRunId(run.id);
+    setSelectedCohortRunId(run.id);
+    setActiveRoom('replay');
+    setNotice({ tone: 'success', message: `Opened the exact run in replay from ${sourceLabel}.` });
   }, []);
 
   const handleForkCurrentSetup = useCallback(() => {
@@ -5225,7 +5377,7 @@ export default function AgentStudio() {
                                             <button
                                               key={`${series.label}-${point.run.id}-label`}
                                               type="button"
-                                              onClick={() => setSelectedCohortRunId(point.run.id)}
+                                              onClick={() => handleOpenRunInReplay(point.run, `${series.label.toLowerCase()} cohort`)}
                                               onMouseEnter={() => setHoveredCohortRunId(point.run.id)}
                                               onMouseLeave={() => setHoveredCohortRunId('')}
                                               className={`flex flex-1 min-w-0 flex-col rounded-xl border px-2 py-2 text-left transition-colors ${
@@ -5390,6 +5542,60 @@ export default function AgentStudio() {
                                   </button>
                                 </div>
                                 <p className="mt-2 text-[11px] leading-relaxed text-slate-300">{recommendedGateProfile.summary}</p>
+                                {gateProfileLearning.items.length > 0 ? (
+                                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                      Best by {gateProfileLearning.scopeLabel}
+                                    </span>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                      {gateProfileLearning.items[0].stats.count} observed runs
+                                    </span>
+                                    <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                      {gateProfileLearning.items[0].confidence}% confidence
+                                    </span>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                            {gateProfileLearning.items.length > 0 ? (
+                              <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Gate profile learning</p>
+                                    <p className="mt-1 text-sm font-medium text-white">What works best for this workflow class</p>
+                                  </div>
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                                    {gateProfileLearning.scopeLabel}
+                                  </span>
+                                </div>
+                                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                                  {gateProfileLearning.items.map((item) => (
+                                    <div key={`gate-learning-${item.profile.id}`} className={`rounded-xl border px-3 py-3 ${recommendedGateProfile?.id === item.profile.id ? 'border-cyan-500/24 bg-cyan-500/8' : 'border-white/6 bg-white/[0.02]'}`}>
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                          <p className="text-sm font-medium text-white">{item.profile.label}</p>
+                                          <p className="mt-1 text-[11px] text-slate-500">{item.workflowCount} workflows · {item.stats.count} runs</p>
+                                        </div>
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {item.score}</span>
+                                      </div>
+                                      <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{Math.round(item.stats.successRate * 100)}% success</span>
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{item.stats.averageCredits ? `${formatCredits(item.stats.averageCredits)} cr avg` : '—'}</span>
+                                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{item.confidence}% confidence</span>
+                                      </div>
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                          type="button"
+                                          disabled={studioBusy}
+                                          onClick={() => handleApplyGateProfile(item.profile.id)}
+                                          className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
+                                        >
+                                          Apply {item.profile.label}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             ) : null}
                             <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -5595,6 +5801,9 @@ export default function AgentStudio() {
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{branchFamilyComparison.successDelta >= 0 ? '+' : ''}{branchFamilyComparison.successDelta} pts success</span>
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{branchFamilyComparison.creditsDelta <= 0 ? '' : '+'}{branchFamilyComparison.creditsDelta} credits</span>
                                 <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{branchFamilyComparison.confidenceDelta >= 0 ? '+' : ''}{branchFamilyComparison.confidenceDelta}% confidence</span>
+                                {selectedStudioState.selectedBranchRootId || selectedStudioState.comparedBranchRootId ? (
+                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">Saved compare pair</span>
+                                ) : null}
                               </div>
                               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                                 {[
@@ -5721,10 +5930,7 @@ export default function AgentStudio() {
                                   <button
                                     key={`branch-run-${run.id}`}
                                     type="button"
-                                    onClick={() => {
-                                      setSelectedCohortRunId(run.id);
-                                      setActiveRoom('replay');
-                                    }}
+                                    onClick={() => handleOpenRunInReplay(run, 'branch replay')}
                                     className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${selectedCohortRunId === run.id ? 'border-cyan-500/30 bg-cyan-500/10' : 'border-white/6 bg-white/[0.02] hover:border-white/10'}`}
                                   >
                                     <div>
@@ -5779,7 +5985,7 @@ export default function AgentStudio() {
                                         strokeWidth={selectedCohortRunId === point.run.id ? 2 : 1.5}
                                         onMouseEnter={() => setHoveredCohortRunId(point.run.id)}
                                         onMouseLeave={() => setHoveredCohortRunId('')}
-                                        onClick={() => setSelectedCohortRunId(point.run.id)}
+                                        onClick={() => handleOpenRunInReplay(point.run, 'branch trend')}
                                       />
                                     ))}
                                   </svg>
@@ -5915,6 +6121,25 @@ export default function AgentStudio() {
                               <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Rollback suggestion</p>
                               <p className="mt-2 text-sm font-medium text-white">{rollbackSuggestion.title}</p>
                               <p className="mt-2 text-sm leading-relaxed text-slate-300">{rollbackSuggestion.body}</p>
+                              {rollbackSuggestion.restoreExperiment ? (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={actionBusy}
+                                    onClick={() => handlePromoteExperimentFull(rollbackSuggestion.restoreExperiment!)}
+                                    className="rounded-xl border border-amber-500/24 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-100 transition-colors hover:bg-amber-500/14 disabled:opacity-60"
+                                  >
+                                    Restore recommended setup
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCompareExperiment(rollbackSuggestion.restoreExperiment!)}
+                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                                  >
+                                    Review target
+                                  </button>
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
                           {promotionAudit.length > 0 ? (
