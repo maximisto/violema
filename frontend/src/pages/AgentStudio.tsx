@@ -5857,7 +5857,6 @@ export default function AgentStudio() {
                 {activeRoom === 'live' ? (
                   <>
                     <div className="space-y-6">
-                      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] xl:items-start">
                       <div className="space-y-6">
                         <div className="rounded-[1.9rem] border border-cyan-500/15 bg-gradient-to-br from-cyan-500/8 via-navy-900/72 to-navy-950/92 p-5">
                         <div className="flex items-center justify-between gap-3">
@@ -5966,6 +5965,8 @@ export default function AgentStudio() {
                         </div>
                         </div>
 
+                        <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] xl:items-start">
+                        <div className="space-y-6">
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
                             <Cpu className="h-4 w-4 text-violet-300" />
@@ -6222,6 +6223,7 @@ export default function AgentStudio() {
                           ) : null}
                         </div>
                       </div>
+                    </div>
                     </div>
 
                     <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
