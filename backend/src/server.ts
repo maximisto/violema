@@ -96,6 +96,7 @@ import {
   buildAutomationScenarioTelemetry,
 } from './agent-studio/automationStudio';
 import { registerAgentStudioSettingsRoutes } from './agent-studio/settingsRoutes';
+import { registerAgentStudioRoutes } from './agent-studio/violemaStudio';
 
 dotenv.config();
 
@@ -3528,6 +3529,10 @@ registerAgentStudioSettingsRoutes(app, {
   upsertWorkspaceSettings,
   testProviderConnection,
   testModelProfileConnection,
+});
+
+registerAgentStudioRoutes(app, {
+  resolveWorkspaceContext,
 });
 
 // ── Waitlist ──────────────────────────────────────────────────────────────────

@@ -53,6 +53,9 @@ import type {
   WorkflowBlockDraft,
   WorkflowBlockKind,
 } from '../features/agent-studio/types';
+import { LiveRoom } from '../features/agent-studio/rooms/LiveRoom';
+import { OptimizeRoom } from '../features/agent-studio/rooms/OptimizeRoom';
+import { ReplayRoom } from '../features/agent-studio/rooms/ReplayRoom';
 
 const VIOLEMA_MARK = '/po-logo.png';
 
@@ -593,10 +596,6 @@ function readWorkerTopology(value: unknown): DashboardWorkerTopology | undefined
     workers,
     summary: readString(value.summary),
   };
-}
-
-function getTaskAutomationId(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
-  return readString(run?.metadata?.automationId) || readString(task?.metadata?.automationId);
 }
 
 function getTaskModelSource(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
@@ -1674,16 +1673,12 @@ export default function AgentStudio() {
         'X-Workspace-Name': workspace.workspaceName,
       };
 
-      const [automationPayload, taskPayload, runPayload, settingsPayload] = await Promise.all([
-        fetch('/api/automations', { headers }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('automations')))),
-        fetch(`/api/platform/tasks?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, { headers }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('tasks')))),
-        fetch(`/api/platform/task-runs?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, { headers }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('runs')))),
+      const [studioPayload, settingsPayload] = await Promise.all([
+        fetch('/api/studio/workflows', { headers }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('studio')))),
         fetch(`/api/settings?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, { headers }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('settings')))),
       ]);
 
-      const automations = Array.isArray(automationPayload?.items) ? automationPayload.items as AutomationApiRecord[] : [];
-      const tasks = Array.isArray(taskPayload?.items) ? taskPayload.items as PlatformTaskRecord[] : [];
-      const runs = Array.isArray(runPayload?.items) ? runPayload.items as PlatformTaskRunRecord[] : [];
+      const studioItems = Array.isArray(studioPayload?.items) ? studioPayload.items as AgentStudioRow[] : [];
       const settings = settingsPayload as AgentStudioSettingsPayload;
       const backendProfiles = settings?.settings?.agentStudio?.autoGraduationProfiles || {};
       const nextWorkspaceProfiles = Object.keys(backendProfiles).length > 0
@@ -1696,76 +1691,16 @@ export default function AgentStudio() {
       });
       setWorkspaceAutoRollbackMomentumThreshold(settings?.settings?.agentStudio?.autoRollbackMomentumThreshold ?? 6);
 
-      const taskByAutomationId = new Map<string, PlatformTaskRecord>();
-      const automationIdByTaskId = new Map<string, string>();
-      tasks.forEach((task) => {
-        const automationId = getTaskAutomationId(task);
-        if (automationId) {
-          taskByAutomationId.set(automationId, task);
-          automationIdByTaskId.set(task.id, automationId);
-        }
-      });
-
-      const runsByAutomationId = new Map<string, PlatformTaskRunRecord[]>();
-      runs.forEach((run) => {
-        const automationId = readString(run.metadata?.automationId) || automationIdByTaskId.get(run.taskId);
-        if (!automationId) return;
-        const existing = runsByAutomationId.get(automationId) || [];
-        existing.push(run);
-        runsByAutomationId.set(automationId, existing);
-      });
-
-      const nextRows = automations
-        .map((automation) => {
-          const task = taskByAutomationId.get(automation.id);
-          const workflowSteps = Array.isArray(automation.steps) && automation.steps.length > 0
-            ? automation.steps
-            : automation.authoring_mode === 'describe'
-              ? buildWorkflowBlocksFromPrompt(automation.workflow_prompt)
-              : (automation.actions || []).map((action) => parseLegacyActionToWorkflowBlock(action));
-          const runsForAutomation = (runsByAutomationId.get(automation.id) || [])
-            .slice()
-            .sort((a, b) => {
-              const aTime = Date.parse(a.finishedAt || a.startedAt || '');
-              const bTime = Date.parse(b.finishedAt || b.startedAt || '');
-              return bTime - aTime;
-            });
-          const latestRun = runsForAutomation[0];
-          const latestRunSteps = readStepExecutions(latestRun?.metadata?.stepExecutions);
-          const stepExecutions = latestRunSteps.length > 0
-            ? latestRunSteps
-            : readStepExecutions(task?.metadata?.latestStepExecutions);
-          const workerTopology =
-            readWorkerTopology(latestRun?.metadata?.topology) ||
-            readWorkerTopology(latestRun?.metadata?.workerTopology) ||
-            readWorkerTopology(task?.metadata?.workerTopology);
-
-          const completedRuns = runsForAutomation.filter((run) => run.status === 'succeeded' || run.status === 'failed');
-          const succeededRuns = completedRuns.filter((run) => run.status === 'succeeded');
-          const averageCredits = completedRuns.length > 0
-            ? completedRuns.reduce((sum, run) => sum + (run.actualCredits || 0), 0) / completedRuns.length
-            : 0;
-          const averageDurationMs = completedRuns.length > 0
-            ? completedRuns.reduce((sum, run) => {
-                const started = Date.parse(run.startedAt || '');
-                const finished = Date.parse(run.finishedAt || '');
-                return sum + (Number.isNaN(started) || Number.isNaN(finished) ? 0 : Math.max(0, finished - started));
-              }, 0) / completedRuns.length
-            : 0;
-
-          return {
-            automation,
-            task,
-            runs: runsForAutomation,
-            latestRun,
-            workerTopology,
-            stepExecutions,
-            workflowSteps,
-            successRate: completedRuns.length > 0 ? succeededRuns.length / completedRuns.length : 0,
-            averageCredits,
-            averageDurationMs,
-          } satisfies AgentStudioRow;
-        })
+      const nextRows = studioItems
+        .map((row) => ({
+          ...row,
+          runs: Array.isArray(row.runs) ? row.runs : [],
+          stepExecutions: readStepExecutions(row.stepExecutions),
+          workerTopology: readWorkerTopology(row.workerTopology),
+          workflowSteps: Array.isArray(row.workflowSteps) && row.workflowSteps.length > 0
+            ? row.workflowSteps
+            : deriveWorkflowStepsFromAutomation(row.automation),
+        } satisfies AgentStudioRow))
         .sort((a, b) => {
           const aTime = Date.parse(a.automation.next_run_at || a.latestRun?.finishedAt || a.automation.created_at || '');
           const bTime = Date.parse(b.automation.next_run_at || b.latestRun?.finishedAt || b.automation.created_at || '');
@@ -5515,7 +5450,7 @@ export default function AgentStudio() {
                 </div>
 
                 {activeRoom === 'live' ? (
-                  <>
+                  <LiveRoom>
                     <div className="space-y-6">
                       <div className="space-y-6">
                         <div className="rounded-[1.9rem] border border-cyan-500/15 bg-gradient-to-br from-cyan-500/8 via-navy-900/72 to-navy-950/92 p-5">
@@ -6120,11 +6055,11 @@ export default function AgentStudio() {
                           </div>
                         </div>
                     </div>
-                  </>
+                  </LiveRoom>
                 ) : null}
 
                 {activeRoom === 'optimize' ? (
-                  <>
+                  <OptimizeRoom>
                     <div className="grid gap-4">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
@@ -8396,11 +8331,11 @@ export default function AgentStudio() {
                       </div>
                     </div>
                     ) : null}
-                  </>
+                  </OptimizeRoom>
                 ) : null}
 
                 {activeRoom === 'replay' ? (
-                  <>
+                  <ReplayRoom>
                     <div className="grid gap-6">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
@@ -10091,7 +10026,7 @@ export default function AgentStudio() {
                         </div>
                       </div>
                     </div>
-                  </>
+                  </ReplayRoom>
                 ) : null}
               </>
             ) : (
