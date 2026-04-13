@@ -90,3 +90,8 @@ Violema should receive back:
 - [Agent Studio setup](/Users/maximisto/Documents/New%20project/docs/products/agent-studio/SETUP.md)
 - [Agent Studio handoff](/Users/maximisto/Documents/New%20project/docs/products/agent-studio/HANDOFF.md)
 - [Agent Studio integration contract](/Users/maximisto/Documents/New%20project/docs/products/agent-studio/INTEGRATION_CONTRACT.md)
+- [Split execution plan](/Users/maximisto/Documents/New%20project/docs/products/SPLIT_EXECUTION_PLAN.md)
+- [Repo and git plan](/Users/maximisto/Documents/New%20project/docs/products/REPO_AND_GIT_PLAN.md)
+- [Domain and DNS instructions](/Users/maximisto/Documents/New%20project/docs/products/DOMAIN_AND_DNS.md)
+- [Deployment and auth plan](/Users/maximisto/Documents/New%20project/docs/products/DEPLOYMENT_AND_AUTH_PLAN.md)
+- [Rollout checklist](/Users/maximisto/Documents/New%20project/docs/products/ROLLOUT_CHECKLIST.md)
