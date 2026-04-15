@@ -2730,6 +2730,53 @@ function buildAutomationEvidenceBlock(
   ].filter(Boolean).join('\n\n');
 }
 
+function buildAutomationDeliveryFallbackBody(
+  automation: { name: string; description?: string; condition?: string; actions: string[] },
+  artifacts: AutomationExecutionArtifact[],
+  stepExecutions: AutomationStepExecution[],
+  stepErrors: string[],
+) {
+  const artifactSummary = artifacts
+    .filter((artifact) => artifact.kind !== 'delivery')
+    .map((artifact) => `- ${artifact.title}${artifact.kind ? ` (${artifact.kind})` : ''}`)
+    .join('\n');
+  const executedSteps = stepExecutions
+    .filter((step) => step.status === 'succeeded' || step.status === 'failed' || step.status === 'skipped')
+    .map((step) => `- ${step.title}: ${step.status}${step.summary ? ` — ${step.summary}` : ''}${step.error ? ` — ${step.error}` : ''}`)
+    .join('\n');
+
+  return [
+    `Automation: ${automation.name}`,
+    automation.description ? `Description: ${automation.description}` : null,
+    artifactSummary ? `Generated artifacts:\n${artifactSummary}` : null,
+    executedSteps ? `Executed steps:\n${executedSteps}` : null,
+    stepErrors.length > 0 ? `Errors:\n- ${stepErrors.join('\n- ')}` : null,
+  ].filter(Boolean).join('\n\n');
+}
+
+async function ensureAutomationSummaryText(
+  automation: { name: string; description?: string; condition?: string; actions: string[] },
+  plan: AutomationExecutionPlan,
+  artifacts: AutomationExecutionArtifact[],
+  stepExecutions: AutomationStepExecution[],
+  stepErrors: string[],
+) {
+  if (artifacts.length === 0 && stepErrors.length === 0) return '';
+
+  const fallbackSummaryResult = await runAutomationStepWithTimeout(
+    `Fallback summary for "${automation.name}"`,
+    generateTextDetailed(
+      plan.suggestedModelTier,
+      'Summarize the completed automation run in concise markdown. Lead with the highest-value outcome, then note any failure or delivery issue briefly.',
+      [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
+      600,
+      DEFAULT_WORKSPACE_ID,
+    ),
+  );
+
+  return fallbackSummaryResult.text;
+}
+
 async function runAutomationStepWithTimeout<T>(label: string, operation: Promise<T>) {
   let timeoutId: NodeJS.Timeout | undefined;
   try {
@@ -2928,11 +2975,23 @@ async function executeAutomationCore(
           continue;
         }
 
-        const body = summaryText || [
-          `Automation: ${automation.name}`,
-          automation.description ? `Description: ${automation.description}` : null,
-          `Completed steps:\n- ${plan.steps.map((item) => item.title).join('\n- ')}`,
-        ].filter(Boolean).join('\n\n');
+        if (!summaryText && (artifacts.length > 0 || stepErrors.length > 0)) {
+          try {
+            summaryText = await ensureAutomationSummaryText(automation, plan, artifacts, stepExecutions, stepErrors);
+            if (summaryText) {
+              artifacts.push({
+                kind: 'summary',
+                title: `${automation.name} summary`,
+                payload: { markdown: summaryText },
+              });
+            }
+          } catch (error) {
+            const summaryError = error instanceof Error ? error.message : 'Unknown summary generation error';
+            stepErrors.push(`Fallback summary: ${summaryError}`);
+          }
+        }
+
+        const body = summaryText || buildAutomationDeliveryFallbackBody(automation, artifacts, stepExecutions, stepErrors);
         delivery = await runAutomationStepWithTimeout(`Delivery step "${step.title}"`, sendMessage({
           to: deliveryTarget,
           subject: `Automation run: ${automation.name}`,
@@ -2978,17 +3037,7 @@ async function executeAutomationCore(
   }
 
   if (!summaryText && (artifacts.length > 0 || stepErrors.length > 0)) {
-    const fallbackSummaryResult = await runAutomationStepWithTimeout(
-      `Fallback summary for "${automation.name}"`,
-      generateTextDetailed(
-      plan.suggestedModelTier,
-      'Summarize the completed automation run in concise markdown. Lead with the highest-value outcome, then note any failure or delivery issue briefly.',
-      [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
-      600,
-      DEFAULT_WORKSPACE_ID,
-      ),
-    );
-    summaryText = fallbackSummaryResult.text;
+    summaryText = await ensureAutomationSummaryText(automation, plan, artifacts, stepExecutions, stepErrors);
     artifacts.push({
       kind: 'summary',
       title: `${automation.name} summary`,
