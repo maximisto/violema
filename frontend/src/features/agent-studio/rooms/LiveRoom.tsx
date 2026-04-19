@@ -15,9 +15,9 @@ export function LiveRoom({ children, advanced, showAdvanced = false, onToggleAdv
       <RoomSection
         eyebrow="Operator loop"
         title="Operate the workflow first. Intervene only where the run shows pressure."
-        body="Live is for the current system state: the map, the active worker, the handoff trail, and the next action that should actually matter."
+        body="Live is for the current system state: the map, the operator brief, the active worker, the handoff trail, and the next action that should actually matter."
         items={[
-          'Read the map and find the overloaded or underused part of the system.',
+          'Read the map, then let the operator brief tell you what actually deserves attention.',
           'Inspect one worker at a time instead of scanning every panel.',
           'Use the next action queue to intervene locally, then watch the next run.',
         ]}

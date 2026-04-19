@@ -60,6 +60,7 @@ import { LiveNodeInspectorSection } from '../features/agent-studio/components/Li
 import { LiveHandoffsSection } from '../features/agent-studio/components/LiveHandoffsSection';
 import { LiveAdvancedSupportSection } from '../features/agent-studio/components/LiveAdvancedSupportSection';
 import { LiveOptimizationLoopSection } from '../features/agent-studio/components/LiveOptimizationLoopSection';
+import { LiveOperatorBriefSection } from '../features/agent-studio/components/LiveOperatorBriefSection';
 import { LiveSystemMapSection } from '../features/agent-studio/components/LiveSystemMapSection';
 import { OptimizeCurrentReleaseSection } from '../features/agent-studio/components/OptimizeCurrentReleaseSection';
 import { OptimizeDiagnosticsSection } from '../features/agent-studio/components/OptimizeDiagnosticsSection';
@@ -2055,6 +2056,13 @@ export default function AgentStudio() {
     [selectedRow]
   );
 
+  const liveContextReferenceLabel = useMemo(() => {
+    if (!operationalContext?.runId) return 'Waiting for completed run history';
+    if (liveRun?.status === 'running') return 'Grounded in the latest completed run';
+    if (liveRun) return 'Grounded in the latest available run';
+    return 'Waiting for completed run history';
+  }, [liveRun, operationalContext?.runId]);
+
   const liveActivationTrail = useMemo(() => {
     const trail = (selectedRow?.stepExecutions || []).slice(0, 8).map((step, index, source) => ({
       id: step.stepId,
@@ -2512,7 +2520,7 @@ export default function AgentStudio() {
 
   useEffect(() => {
     const workflowId = selectedRow?.automation.id;
-    if (activeRoom !== 'replay' || !workflowId) {
+    if ((activeRoom !== 'live' && activeRoom !== 'replay') || !workflowId) {
       setOperationalContext(null);
       setOperationalContextLoading(false);
       return;
@@ -2523,8 +2531,13 @@ export default function AgentStudio() {
       'X-Workspace-Name': workspace.workspaceName,
     };
     const params = new URLSearchParams();
-    if (selectedCohortRun?.id) {
-      params.set('runId', selectedCohortRun.id);
+    const contextRunId = activeRoom === 'replay'
+      ? selectedCohortRun?.id
+      : liveRun?.status === 'running'
+        ? undefined
+        : liveRun?.id;
+    if (contextRunId) {
+      params.set('runId', contextRunId);
     }
 
     let cancelled = false;
@@ -2548,7 +2561,7 @@ export default function AgentStudio() {
     return () => {
       cancelled = true;
     };
-  }, [activeRoom, selectedCohortRun?.id, selectedRow?.automation.id, workspace.workspaceId, workspace.workspaceName]);
+  }, [activeRoom, liveRun?.id, liveRun?.status, selectedCohortRun?.id, selectedRow?.automation.id, workspace.workspaceId, workspace.workspaceName]);
 
   const cohortTrendSeries = useMemo(
     () => [
@@ -5082,6 +5095,12 @@ export default function AgentStudio() {
     handleOpenRunInReplay(run, 'operational context map');
   }, [handleOpenRunInReplay, selectedRow?.runs]);
 
+  const handleFocusLiveContextPhase = useCallback((phase: WorkflowBlockKind) => {
+    setSelectedDirectivePhase(phase);
+    setSelectedWorkerRole(getPreferredRoleForPhase(phase));
+    setNotice({ tone: 'success', message: `Focused Live on ${formatDirectivePhaseScope([phase])} for ${getPreferredRoleForPhase(phase)}.` });
+  }, [formatDirectivePhaseScope]);
+
   const handleOpenRunPairInReplay = useCallback((
     primaryRun: PlatformTaskRunRecord,
     comparedRun: PlatformTaskRunRecord,
@@ -7310,6 +7329,17 @@ export default function AgentStudio() {
                         onSelectWorker={setSelectedWorkerRole}
                         truncateText={truncateText}
                         formatDirectivePhaseShort={formatDirectivePhaseShort}
+                      />
+
+                      <LiveOperatorBriefSection
+                        context={operationalContext}
+                        loading={operationalContextLoading}
+                        referenceLabel={liveContextReferenceLabel}
+                        onOpenRun={handleOpenContextRun}
+                        onFocusPhase={handleFocusLiveContextPhase}
+                        formatDirectivePhaseScope={formatDirectivePhaseScope}
+                        formatRelativeTimeFromIso={formatRelativeTimeFromIso}
+                        getStatusTone={getStatusTone}
                       />
 
                       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] xl:items-start">
