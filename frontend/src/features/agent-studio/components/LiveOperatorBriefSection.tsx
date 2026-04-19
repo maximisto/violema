@@ -36,7 +36,7 @@ export function LiveOperatorBriefSection({
       : 'Open supporting run in Replay';
 
   return (
-    <div className="rounded-[1.9rem] border border-violet-500/18 bg-gradient-to-br from-violet-500/10 via-navy-900/72 to-navy-950/92 p-5">
+    <div className="rounded-[1.75rem] border border-violet-500/18 bg-gradient-to-br from-violet-500/8 via-navy-900/72 to-navy-950/92 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <Compass className="h-4 w-4 text-violet-200" />
@@ -49,8 +49,8 @@ export function LiveOperatorBriefSection({
           {referenceLabel}
         </span>
       </div>
-      <p className="mt-2 text-sm leading-relaxed text-slate-400">
-        This is why Agent Studio exists: it turns run history into one next move, one relevant comparison, and one place to focus instead of making you read every panel.
+      <p className="mt-2 text-[13px] leading-relaxed text-slate-400">
+        Start here. Studio narrows the room to one next move, one useful comparison, and one place to focus.
       </p>
 
       {loading ? (
@@ -62,12 +62,12 @@ export function LiveOperatorBriefSection({
           Not enough completed history yet. Once this workflow has more finished runs, Studio will start surfacing the best analogue, the last healthy anchor, and the likely next move here.
         </div>
       ) : (
-        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] xl:items-start">
-          <div className="rounded-[1.7rem] border border-violet-400/16 bg-violet-500/6 p-4">
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] xl:items-start">
+          <div className="rounded-[1.45rem] border border-violet-400/16 bg-violet-500/5 p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.18em] text-violet-200/80">Best next move</p>
-                <h4 className="mt-1 text-lg font-semibold text-white">
+                <h4 className="mt-1 text-base font-semibold text-white">
                   {primaryEvidence?.title || 'No strong historical warning surfaced'}
                 </h4>
               </div>
@@ -107,7 +107,7 @@ export function LiveOperatorBriefSection({
           </div>
 
           <div className="space-y-3">
-            <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+            <div className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
               <div className="flex items-center gap-2">
                 <History className="h-4 w-4 text-cyan-300" />
                 <div>
@@ -140,7 +140,7 @@ export function LiveOperatorBriefSection({
               )}
             </div>
 
-            <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+            <div className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-emerald-300" />
                 <div>
