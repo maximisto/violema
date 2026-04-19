@@ -24,6 +24,9 @@ import {
 import { formatCredits } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import type {
+  AgentStudioOperationalContext,
+} from '../features/agent-studio/contract';
+import type {
   AgentStudioRow,
   AgentStudioSettingsPayload,
   AutomationApiRecord,
@@ -63,6 +66,7 @@ import { OptimizeDiagnosticsSection } from '../features/agent-studio/components/
 import { OptimizeReleaseCandidateSection } from '../features/agent-studio/components/OptimizeReleaseCandidateSection';
 import { OptimizeScenarioSimulatorSection } from '../features/agent-studio/components/OptimizeScenarioSimulatorSection';
 import { OptimizeAdvancedControlsSection } from '../features/agent-studio/components/OptimizeAdvancedControlsSection';
+import { OperationalContextMapSection } from '../features/agent-studio/components/OperationalContextMapSection';
 import { ReplayDecisionSupportSection } from '../features/agent-studio/components/ReplayDecisionSupportSection';
 import { ReplayGovernanceSection } from '../features/agent-studio/components/ReplayGovernanceSection';
 import { LiveRoom } from '../features/agent-studio/rooms/LiveRoom';
@@ -1676,6 +1680,8 @@ export default function AgentStudio() {
   const [previewPresetId, setPreviewPresetId] = useState<string>('recommended');
   const [actionBusy, setActionBusy] = useState(false);
   const [experimentSaveBusy, setExperimentSaveBusy] = useState(false);
+  const [operationalContext, setOperationalContext] = useState<AgentStudioOperationalContext | null>(null);
+  const [operationalContextLoading, setOperationalContextLoading] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const hydratedAutomationIdRef = useRef<string>('');
 
@@ -2503,6 +2509,46 @@ export default function AgentStudio() {
       || allRuns.find((run) => run.id === selectedCohortRunId)
       || allRuns[0];
   }, [currentCohortPerformance?.runs, hoveredCohortRunId, selectedCohortRunId, selectedExperimentPerformance?.runs]);
+
+  useEffect(() => {
+    const workflowId = selectedRow?.automation.id;
+    if (activeRoom !== 'replay' || !workflowId) {
+      setOperationalContext(null);
+      setOperationalContextLoading(false);
+      return;
+    }
+
+    const headers = {
+      'X-Workspace-Id': workspace.workspaceId,
+      'X-Workspace-Name': workspace.workspaceName,
+    };
+    const params = new URLSearchParams();
+    if (selectedCohortRun?.id) {
+      params.set('runId', selectedCohortRun.id);
+    }
+
+    let cancelled = false;
+    setOperationalContextLoading(true);
+
+    fetch(`/api/studio/context/${workflowId}${params.toString() ? `?${params.toString()}` : ''}`, { headers })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('context'))))
+      .then((payload) => {
+        if (cancelled) return;
+        setOperationalContext(payload?.item || null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOperationalContext(null);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setOperationalContextLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRoom, selectedCohortRun?.id, selectedRow?.automation.id, workspace.workspaceId, workspace.workspaceName]);
 
   const cohortTrendSeries = useMemo(
     () => [
@@ -5029,6 +5075,12 @@ export default function AgentStudio() {
     setActiveRoom('replay');
     setNotice({ tone: 'success', message: `Opened the exact run in replay from ${sourceLabel}.` });
   }, [savedPlanSummaries]);
+
+  const handleOpenContextRun = useCallback((runId: string) => {
+    const run = selectedRow?.runs.find((candidate) => candidate.id === runId);
+    if (!run) return;
+    handleOpenRunInReplay(run, 'operational context map');
+  }, [handleOpenRunInReplay, selectedRow?.runs]);
 
   const handleOpenRunPairInReplay = useCallback((
     primaryRun: PlatformTaskRunRecord,
@@ -7640,6 +7692,19 @@ export default function AgentStudio() {
                             Fresh, repeated evidence is what makes promotion decisions trustworthy. Thin or stale evidence means simulate more before locking policy.
                           </p>
                         </div>
+
+                        <OperationalContextMapSection
+                          context={operationalContext}
+                          loading={operationalContextLoading}
+                          onOpenRun={handleOpenContextRun}
+                          onFocusPhase={(phase) => setSelectedReplayPhase(phase)}
+                          formatCredits={formatCredits}
+                          formatCompactDuration={formatCompactDuration}
+                          formatRelativeTimeFromIso={formatRelativeTimeFromIso}
+                          formatDirectivePhaseScope={formatDirectivePhaseScope}
+                          formatSignedDelta={formatSignedDelta}
+                          getStatusTone={getStatusTone}
+                        />
 
                         {replayComparedRun ? (
                           <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">

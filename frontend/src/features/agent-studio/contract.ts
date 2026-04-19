@@ -99,3 +99,44 @@ export interface AgentStudioPromotionEvent {
   creditsDelta?: number;
   durationDelta?: number;
 }
+
+export interface AgentStudioOperationalContextSimilarRun {
+  runId: string;
+  label: string;
+  status: string;
+  startedAt: string;
+  finishedAt?: string;
+  actualCredits?: number;
+  durationMs?: number;
+  similarityScore: number;
+  matchedSignals: string[];
+}
+
+export interface AgentStudioOperationalContextHealthyComparison {
+  runId: string;
+  label: string;
+  startedAt: string;
+  finishedAt?: string;
+  creditsDelta?: number;
+  durationDelta?: number;
+  changedSignals: string[];
+  summary: string;
+}
+
+export interface AgentStudioOperationalContextEvidenceItem {
+  evidenceId: string;
+  title: string;
+  body: string;
+  sourceLabel: string;
+  phase?: AgentStudioPhaseKind;
+  relatedRunIds?: string[];
+}
+
+export interface AgentStudioOperationalContext {
+  workflowId: string;
+  runId?: string;
+  generatedAt: string;
+  similarRuns: AgentStudioOperationalContextSimilarRun[];
+  lastHealthyComparison?: AgentStudioOperationalContextHealthyComparison;
+  recommendationEvidence: AgentStudioOperationalContextEvidenceItem[];
+}

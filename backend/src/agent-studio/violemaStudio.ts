@@ -3,11 +3,18 @@ import type { TaskRecord, TaskRunRecord } from '../platform/types';
 import type { AutomationRecord } from '../scheduler';
 import { listAutomations, getAutomationById } from '../scheduler';
 import { listTasks, listTaskRuns } from '../platform/store';
+import { getAutomationPresetLabel, getAutomationScenarioLabel } from './automationStudio';
 import {
   mapViolemaRunToAgentStudioRun,
   mapViolemaWorkflowToAgentStudioWorkflow,
 } from './adapters/violema';
-import type { AgentStudioPhaseKind } from './contract';
+import type {
+  AgentStudioOperationalContext,
+  AgentStudioOperationalContextEvidenceItem,
+  AgentStudioOperationalContextHealthyComparison,
+  AgentStudioOperationalContextSimilarRun,
+  AgentStudioPhaseKind,
+} from './contract';
 
 type WorkflowBlockKind = AgentStudioPhaseKind;
 
@@ -81,6 +88,21 @@ export function registerAgentStudioRoutes(app: Express, deps: StudioRoutesDeps) 
       stepExecutions,
       workerTopology: run.metadata?.topology || run.metadata?.workerTopology || match.task?.metadata?.workerTopology,
       studioState: match.automation.studio_state || {},
+    });
+  });
+
+  app.get('/api/studio/context/:workflowId', (req, res) => {
+    const { workspaceId } = deps.resolveWorkspaceContext(req);
+    const row = buildStudioWorkflowRows(workspaceId).find((item) => item.automation.id === req.params.workflowId);
+    if (!row) {
+      res.status(404).json({ error: 'Workflow not found' });
+      return;
+    }
+
+    const runId = typeof req.query.runId === 'string' ? req.query.runId : undefined;
+    res.json({
+      workspaceId,
+      item: buildStudioOperationalContext(row, runId),
     });
   });
 
@@ -288,4 +310,387 @@ function readStepExecutions(value: unknown) {
       };
     })
     .filter(Boolean) as any[];
+}
+
+function buildStudioOperationalContext(
+  row: StudioRowSummary,
+  selectedRunId?: string,
+): AgentStudioOperationalContext {
+  const completedRuns = row.runs.filter((run) => run.status === 'succeeded' || run.status === 'failed');
+  const selectedRun = completedRuns.find((run) => run.id === selectedRunId) || completedRuns[0];
+
+  if (!selectedRun) {
+    return {
+      workflowId: row.automation.id,
+      runId: selectedRunId,
+      generatedAt: new Date().toISOString(),
+      similarRuns: [],
+      recommendationEvidence: [],
+    };
+  }
+
+  const similarRuns = buildSimilarRuns(completedRuns, selectedRun);
+  const lastHealthyComparison = buildLastHealthyComparison(completedRuns, selectedRun);
+  const recommendationEvidence = buildRecommendationEvidence(row, selectedRun, similarRuns, lastHealthyComparison);
+
+  return {
+    workflowId: row.automation.id,
+    runId: selectedRun.id,
+    generatedAt: new Date().toISOString(),
+    similarRuns,
+    lastHealthyComparison,
+    recommendationEvidence,
+  };
+}
+
+function buildSimilarRuns(
+  completedRuns: TaskRunRecord[],
+  selectedRun: TaskRunRecord,
+): AgentStudioOperationalContextSimilarRun[] {
+  const selectedSignals = buildRunSignals(selectedRun);
+
+  return completedRuns
+    .filter((run) => run.id !== selectedRun.id)
+    .map((run) => {
+      const candidateSignals = buildRunSignals(run);
+      const matchedSignals: string[] = [];
+      let similarityScore = 0;
+
+      if (selectedSignals.failedPhase && candidateSignals.failedPhase === selectedSignals.failedPhase) {
+        matchedSignals.push(`${formatPhaseLabel(selectedSignals.failedPhase)} failed in both runs`);
+        similarityScore += 4;
+      } else if (selectedSignals.phase && candidateSignals.phase === selectedSignals.phase) {
+        matchedSignals.push(`${formatPhaseLabel(selectedSignals.phase)} was the dominant phase in both runs`);
+        similarityScore += 3;
+      }
+
+      if (candidateSignals.status === selectedSignals.status) {
+        matchedSignals.push(`Both runs ${selectedSignals.status}`);
+        similarityScore += 2;
+      }
+
+      if (candidateSignals.scenarioId === selectedSignals.scenarioId) {
+        matchedSignals.push(`Same scenario: ${getAutomationScenarioLabel(selectedSignals.scenarioId)}`);
+        similarityScore += 1;
+      }
+
+      if (candidateSignals.previewPresetId === selectedSignals.previewPresetId) {
+        matchedSignals.push(`Same preset: ${getAutomationPresetLabel(selectedSignals.previewPresetId)}`);
+        similarityScore += 1;
+      }
+
+      const selectedCredits = selectedRun.actualCredits || 0;
+      const candidateCredits = run.actualCredits || 0;
+      const creditsDelta = Math.abs(candidateCredits - selectedCredits);
+      if (creditsDelta <= Math.max(6, selectedCredits * 0.25)) {
+        matchedSignals.push('Similar spend profile');
+        similarityScore += 1;
+      }
+
+      return {
+        run,
+        similarityScore,
+        matchedSignals,
+      };
+    })
+    .filter((item) => item.similarityScore >= 3)
+    .sort((left, right) => right.similarityScore - left.similarityScore || getRunTimestamp(right.run) - getRunTimestamp(left.run))
+    .slice(0, 3)
+    .map(({ run, similarityScore, matchedSignals }) => ({
+      runId: run.id,
+      label: buildRunLabel(run),
+      status: run.status,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      actualCredits: run.actualCredits,
+      durationMs: getRunDurationMs(run),
+      similarityScore,
+      matchedSignals,
+    }));
+}
+
+function buildLastHealthyComparison(
+  completedRuns: TaskRunRecord[],
+  selectedRun: TaskRunRecord,
+): AgentStudioOperationalContextHealthyComparison | undefined {
+  const sortedRuns = completedRuns
+    .slice()
+    .sort((left, right) => getRunTimestamp(right) - getRunTimestamp(left));
+  const selectedIndex = sortedRuns.findIndex((run) => run.id === selectedRun.id);
+  const priorHealthy = (
+    (selectedIndex >= 0 ? sortedRuns.slice(selectedIndex + 1) : sortedRuns)
+      .find((run) => run.status === 'succeeded')
+  ) || sortedRuns.find((run) => run.id !== selectedRun.id && run.status === 'succeeded');
+
+  if (!priorHealthy) return undefined;
+
+  const selectedPhases = new Map(buildRunPhaseSummaries(selectedRun).map((item) => [item.phase, item] as const));
+  const healthyPhases = new Map(buildRunPhaseSummaries(priorHealthy).map((item) => [item.phase, item] as const));
+  const changedSignals: string[] = [];
+
+  const allPhases = new Set<WorkflowBlockKind>([
+    ...selectedPhases.keys(),
+    ...healthyPhases.keys(),
+  ]);
+
+  for (const phase of allPhases) {
+    const current = selectedPhases.get(phase);
+    const healthy = healthyPhases.get(phase);
+    if (current?.status !== healthy?.status && (current || healthy)) {
+      changedSignals.push(`${formatPhaseLabel(phase)} moved from ${healthy?.status || 'not used'} to ${current?.status || 'not used'}`);
+      continue;
+    }
+    const creditsDelta = Math.round((current?.credits || 0) - (healthy?.credits || 0));
+    if (Math.abs(creditsDelta) >= 6) {
+      changedSignals.push(`${formatPhaseLabel(phase)} spend shifted ${formatSignedDelta(creditsDelta)} cr`);
+      continue;
+    }
+    const durationDelta = Math.round(((current?.durationMs || 0) - (healthy?.durationMs || 0)) / 1000);
+    if (Math.abs(durationDelta) >= 15) {
+      changedSignals.push(`${formatPhaseLabel(phase)} timing shifted ${formatSignedDelta(durationDelta)}s`);
+    }
+  }
+
+  const creditsDelta = typeof selectedRun.actualCredits === 'number' && typeof priorHealthy.actualCredits === 'number'
+    ? Math.round(selectedRun.actualCredits - priorHealthy.actualCredits)
+    : undefined;
+  const durationDeltaMs = getRunDurationMs(selectedRun);
+  const healthyDurationMs = getRunDurationMs(priorHealthy);
+  const durationDelta = typeof durationDeltaMs === 'number' && typeof healthyDurationMs === 'number'
+    ? Math.round((durationDeltaMs - healthyDurationMs) / 1000)
+    : undefined;
+
+  const summary = changedSignals[0]
+    || (selectedRun.status !== priorHealthy.status
+      ? `Current run ${selectedRun.status} while the last healthy baseline succeeded.`
+      : 'No single dominant change stood out against the last healthy baseline.');
+
+  return {
+    runId: priorHealthy.id,
+    label: buildRunLabel(priorHealthy),
+    startedAt: priorHealthy.startedAt,
+    finishedAt: priorHealthy.finishedAt,
+    creditsDelta,
+    durationDelta,
+    changedSignals: changedSignals.slice(0, 3),
+    summary,
+  };
+}
+
+function buildRecommendationEvidence(
+  row: StudioRowSummary,
+  selectedRun: TaskRunRecord,
+  similarRuns: AgentStudioOperationalContextSimilarRun[],
+  lastHealthyComparison?: AgentStudioOperationalContextHealthyComparison,
+): AgentStudioOperationalContextEvidenceItem[] {
+  const items: AgentStudioOperationalContextEvidenceItem[] = [];
+  const selectedPhases = buildRunPhaseSummaries(selectedRun);
+  const failedPhase = selectedPhases.find((phase) => phase.status === 'failed');
+  const dominantPhase = failedPhase || selectedPhases.slice().sort((left, right) => right.credits - left.credits)[0];
+  const recentPromotion = readPromotionHistory(row.automation.studio_state)[0];
+
+  if (failedPhase) {
+    items.push({
+      evidenceId: `failed-phase-${failedPhase.phase}`,
+      title: `Protect ${formatPhaseLabel(failedPhase.phase)} more aggressively`,
+      body: similarRuns.length > 0
+        ? `This run failed in ${formatPhaseLabel(failedPhase.phase)}, and ${similarRuns.length} similar run${similarRuns.length === 1 ? '' : 's'} show the same shape. Tighten review or reduce phase complexity before promoting policy changes.`
+        : `This run failed in ${formatPhaseLabel(failedPhase.phase)}. Treat that phase as the first place to tighten review or simplify instructions.`,
+      sourceLabel: 'Phase failure pattern',
+      phase: failedPhase.phase,
+      relatedRunIds: [selectedRun.id, ...similarRuns.map((item) => item.runId)],
+    });
+  } else if (dominantPhase && dominantPhase.credits >= 12) {
+    items.push({
+      evidenceId: `cost-phase-${dominantPhase.phase}`,
+      title: `Look at ${formatPhaseLabel(dominantPhase.phase)} for cheaper routing`,
+      body: `${formatPhaseLabel(dominantPhase.phase)} dominated spend in the selected run at ${Math.round(dominantPhase.credits)} credits. This is the strongest candidate for cheaper routing or tighter instructions before changing the rest of the workflow.`,
+      sourceLabel: 'Run cost concentration',
+      phase: dominantPhase.phase,
+      relatedRunIds: [selectedRun.id],
+    });
+  }
+
+  if (lastHealthyComparison) {
+    items.push({
+      evidenceId: `healthy-diff-${lastHealthyComparison.runId}`,
+      title: 'Compare against the last healthy state before changing policy',
+      body: lastHealthyComparison.summary,
+      sourceLabel: 'Last healthy baseline',
+      relatedRunIds: [selectedRun.id, lastHealthyComparison.runId],
+    });
+  }
+
+  if (recentPromotion) {
+    items.push({
+      evidenceId: `promotion-${recentPromotion.eventId}`,
+      title: `${formatPromotionMode(recentPromotion.mode)} changed the live setup recently`,
+      body: `${recentPromotion.summary} Treat this as a live-system change, not just run noise, when deciding whether to promote again or roll back.`,
+      sourceLabel: 'Promotion history',
+      phase: recentPromotion.phase,
+    });
+  }
+
+  if (items.length === 0) {
+    items.push({
+      evidenceId: `steady-state-${selectedRun.id}`,
+      title: 'No strong historical warning surfaced',
+      body: 'This run does not yet have a strong historical pattern behind it. Keep the next move small, then use the next run window to confirm whether the change actually helped.',
+      sourceLabel: 'Thin historical evidence',
+      relatedRunIds: [selectedRun.id],
+    });
+  }
+
+  return items.slice(0, 3);
+}
+
+function buildRunSignals(run: TaskRunRecord) {
+  const attribution = readRunAttribution(run);
+  const phaseSummaries = buildRunPhaseSummaries(run);
+  const failedPhase = phaseSummaries.find((phase) => phase.status === 'failed')?.phase;
+  const dominantPhase = failedPhase || phaseSummaries.slice().sort((left, right) => right.credits - left.credits)[0]?.phase;
+
+  return {
+    status: run.status,
+    phase: dominantPhase,
+    failedPhase,
+    scenarioId: attribution.scenarioId,
+    previewPresetId: attribution.previewPresetId,
+  };
+}
+
+function buildRunPhaseSummaries(run: TaskRunRecord) {
+  const phaseMap = new Map<WorkflowBlockKind, {
+    phase: WorkflowBlockKind;
+    status: string;
+    credits: number;
+    durationMs: number;
+  }>();
+
+  readStepExecutions(run.metadata?.stepExecutions).forEach((step) => {
+    if (!isWorkflowBlockKind(step.kind)) return;
+    const current = phaseMap.get(step.kind) || {
+      phase: step.kind,
+      status: 'unknown',
+      credits: 0,
+      durationMs: 0,
+    };
+    current.credits += step.actualCredits || 0;
+    current.durationMs += step.durationMs || 0;
+    if (step.status === 'failed') {
+      current.status = 'failed';
+    } else if (current.status !== 'failed' && step.status === 'succeeded') {
+      current.status = 'succeeded';
+    }
+    phaseMap.set(step.kind, current);
+  });
+
+  return Array.from(phaseMap.values());
+}
+
+function readRunAttribution(run: TaskRunRecord) {
+  const raw = isRecord(run.metadata?.experimentAttribution) ? run.metadata?.experimentAttribution : undefined;
+  const fallbackStudioState = isRecord(run.metadata?.studioState) ? run.metadata?.studioState : undefined;
+  const scenarioId = readString(raw?.scenarioId) || readString(fallbackStudioState?.selectedScenarioId) || 'baseline';
+  const previewPresetId = readString(raw?.previewPresetId) || readString(fallbackStudioState?.previewPresetId) || 'recommended';
+  const scenarioLabel = readString(raw?.scenarioLabel) || getAutomationScenarioLabel(scenarioId);
+  const previewPresetLabel = readString(raw?.previewPresetLabel) || getAutomationPresetLabel(previewPresetId);
+  return {
+    scenarioId,
+    previewPresetId,
+    experimentId: readString(raw?.experimentId),
+    label: readString(raw?.experimentNotes) || `${scenarioLabel} · ${previewPresetLabel}`,
+  };
+}
+
+function buildRunLabel(run: TaskRunRecord) {
+  return readRunAttribution(run).label;
+}
+
+function readPromotionHistory(value: unknown) {
+  if (!isRecord(value) || !Array.isArray(value.promotionHistory)) return [];
+  return value.promotionHistory
+    .map((item) => {
+      if (!isRecord(item)) return null;
+      const eventId = readString(item.id);
+      const appliedAt = readString(item.appliedAt);
+      const summary = readString(item.summary);
+      const mode = readString(item.mode);
+      if (!eventId || !appliedAt || !summary || !mode) return null;
+      return {
+        eventId,
+        appliedAt,
+        summary,
+        mode,
+        phase: isWorkflowBlockKind(item.phase) ? item.phase : undefined,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => Date.parse(right!.appliedAt) - Date.parse(left!.appliedAt));
+}
+
+function formatPromotionMode(mode: string) {
+  switch (mode) {
+    case 'full':
+      return 'Full promotion';
+    case 'preset':
+      return 'Preset promotion';
+    case 'steering':
+      return 'Steering promotion';
+    case 'phase':
+    case 'preset_phase':
+      return 'Phase promotion';
+    case 'rollback':
+      return 'Rollback';
+    case 'graduation':
+      return 'Graduation';
+    default:
+      return 'Policy change';
+  }
+}
+
+function formatPhaseLabel(phase: WorkflowBlockKind) {
+  switch (phase) {
+    case 'search':
+      return 'Search';
+    case 'query':
+      return 'Query';
+    case 'capture':
+      return 'Capture';
+    case 'analyze':
+      return 'Analyze';
+    case 'summarize':
+      return 'Summarize';
+    case 'deliver':
+      return 'Deliver';
+    case 'note':
+    default:
+      return 'Note';
+  }
+}
+
+function formatSignedDelta(value: number) {
+  if (value === 0) return 'no change';
+  return `${value > 0 ? '+' : ''}${value}`;
+}
+
+function getRunTimestamp(run: TaskRunRecord) {
+  return Date.parse(run.finishedAt || run.startedAt || '') || 0;
+}
+
+function getRunDurationMs(run: TaskRunRecord) {
+  const startedAt = Date.parse(run.startedAt || '');
+  const finishedAt = Date.parse(run.finishedAt || '');
+  if (Number.isNaN(startedAt) || Number.isNaN(finishedAt)) return undefined;
+  return Math.max(0, finishedAt - startedAt);
+}
+
+function isWorkflowBlockKind(value: unknown): value is WorkflowBlockKind {
+  return value === 'search'
+    || value === 'query'
+    || value === 'capture'
+    || value === 'analyze'
+    || value === 'summarize'
+    || value === 'deliver'
+    || value === 'note';
 }
