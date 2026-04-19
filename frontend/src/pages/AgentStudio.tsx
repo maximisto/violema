@@ -55,6 +55,7 @@ import type {
 import { LiveSupportRailSection } from '../features/agent-studio/components/LiveSupportRailSection';
 import { LiveNodeInspectorSection } from '../features/agent-studio/components/LiveNodeInspectorSection';
 import { LiveHandoffsSection } from '../features/agent-studio/components/LiveHandoffsSection';
+import { LiveAdvancedSupportSection } from '../features/agent-studio/components/LiveAdvancedSupportSection';
 import { LiveOptimizationLoopSection } from '../features/agent-studio/components/LiveOptimizationLoopSection';
 import { LiveSystemMapSection } from '../features/agent-studio/components/LiveSystemMapSection';
 import { OptimizeCurrentReleaseSection } from '../features/agent-studio/components/OptimizeCurrentReleaseSection';
@@ -5408,7 +5409,92 @@ export default function AgentStudio() {
                 </div>
 
                 {activeRoom === 'live' ? (
-                  <LiveRoom>
+                  <LiveRoom
+                    advanced={(
+                      <>
+                        <LiveAdvancedSupportSection
+                          livePulse={{
+                            status: liveRun?.status || selectedRow.automation.last_run_status || 'Standby',
+                            modelSource: getTaskModelSource(selectedRow.task, liveRun) || 'Server default',
+                            currentCost: typeof liveRun?.actualCredits === 'number' ? `${formatCredits(liveRun.actualCredits)} cr` : '—',
+                            elapsed: liveRun
+                              ? formatCompactDuration(Number.isNaN(Date.parse(liveRun.startedAt || '')) ? undefined : Math.max(0, Date.now() - Date.parse(liveRun.startedAt || '')))
+                              : '—',
+                            summary: selectedTopology.summary || 'The manager is routing work based on workflow complexity, tool count, and review pressure.',
+                          }}
+                          scenario={{
+                            scenarioLabel: liveScenarioTelemetry.scenarioLabel,
+                            presetLabel: liveScenarioTelemetry.presetLabel,
+                            complexity: liveScenarioTelemetry.complexity,
+                            directedRoleCount: liveScenarioTelemetry.directedRoles.length,
+                            workflowStepCount: liveScenarioTelemetry.workflowStepCount,
+                            estimatedToolCalls: liveScenarioTelemetry.estimatedToolCalls,
+                            matchedSavedExperiment: Boolean(liveScenarioTelemetry.matchedSavedExperiment),
+                          }}
+                          selectedRun={selectedCohortRun ? {
+                            label: getRunExperimentAttribution(selectedCohortRun).experimentNotes || `${getRunExperimentAttribution(selectedCohortRun).scenarioLabel} · ${getRunExperimentAttribution(selectedCohortRun).previewPresetLabel}`,
+                            timestamp: formatAutomationRunTime(selectedCohortRun.finishedAt || selectedCohortRun.startedAt),
+                            status: selectedCohortRun.status,
+                            credits: selectedCohortRun.actualCredits ? `${formatCredits(selectedCohortRun.actualCredits)} cr` : '—',
+                            duration: formatCompactDuration(Number.isNaN(Date.parse(selectedCohortRun.startedAt || '')) || Number.isNaN(Date.parse(selectedCohortRun.finishedAt || '')) ? undefined : Math.max(0, Date.parse(selectedCohortRun.finishedAt || '') - Date.parse(selectedCohortRun.startedAt || ''))),
+                            trendLabel: getTrendMetricLabel(trendMetric),
+                            trendValue: String(formatTrendMetricValue(selectedCohortRun, trendMetric)),
+                            matchedPlans: selectedRunMatchedPlans.map((entry) => ({
+                              id: entry.plan.id,
+                              name: entry.plan.name,
+                              score: entry.score,
+                              active: selectedPlanId === entry.plan.id,
+                              onSelect: () => {
+                                setSelectedPlanId(entry.plan.id);
+                                if (entry.summary?.familyRootId) setSelectedPlanFamilyRootId(entry.summary.familyRootId);
+                              },
+                            })),
+                            deltas: selectedRunDelta ? [
+                              {
+                                id: 'credits',
+                                label: `vs ${selectedRunDelta.label}`,
+                                value: `${formatSignedDelta(Math.round(selectedRunDelta.creditDelta))} cr`,
+                                tone: selectedRunDelta.creditDelta <= 0 ? 'positive' : 'warning',
+                              },
+                              {
+                                id: 'duration',
+                                label: 'Duration',
+                                value: `${formatSignedDelta(Math.round(selectedRunDelta.durationDelta / 1000))}s`,
+                                tone: selectedRunDelta.durationDelta <= 0 ? 'positive' : 'warning',
+                              },
+                              {
+                                id: 'outcome',
+                                label: 'Outcome',
+                                value: `${formatSignedDelta(selectedRunDelta.successDelta)} pts`,
+                                tone: selectedRunDelta.successDelta >= 0 ? 'positive' : 'warning',
+                              },
+                            ] : undefined,
+                            onOpenReplay: () => setActiveRoom('replay'),
+                            onSyncComparison: () => {
+                              const attribution = getRunExperimentAttribution(selectedCohortRun);
+                              if (attribution.experimentId) setSelectedComparisonExperimentId(attribution.experimentId);
+                            },
+                          } : undefined}
+                          phaseRows={phaseDirectiveMatrix.map((row) => ({
+                            phase: formatDirectivePhaseScope([row.phase]),
+                            directiveCount: row.directives.length,
+                            directives: row.directives.map((directive) => `${directive.role} · ${directive.mode}`),
+                          }))}
+                          getStatusTone={getStatusTone}
+                        />
+
+                        <LiveHandoffsSection items={liveActivationTrail} getStatusTone={getStatusTone} />
+
+                        <LiveOptimizationLoopSection
+                          items={optimizationRecommendations}
+                          actionBusy={actionBusy}
+                          onApplyRecommendation={applyRecommendationAction}
+                        />
+                      </>
+                    )}
+                    showAdvanced={showLiveAdvanced}
+                    onToggleAdvanced={() => setShowLiveAdvanced((current) => !current)}
+                  >
                     <div className="space-y-6">
                       <LiveSystemMapSection
                         liveStatusLabel={liveRun?.status === 'running' ? 'Live now' : 'Preview from latest run'}
@@ -5464,211 +5550,6 @@ export default function AgentStudio() {
                       </div>
                     </div>
                     </div>
-
-                    <div className="rounded-[1.8rem] border border-white/6 bg-white/[0.03] p-5">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="max-w-3xl">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Advanced live controls</p>
-                          <h3 className="mt-1 text-sm font-semibold text-white">Telemetry, steering, and deeper supporting diagnostics</h3>
-                          <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                            Use these when the map, worker inspector, and next actions are not enough. They support live operations, but should not drown the main operating view.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowLiveAdvanced((current) => !current)}
-                          className={`ui-pill inline-flex items-center gap-2 px-3 py-1.5 text-[11px] normal-case tracking-normal ${
-                            showLiveAdvanced ? 'border-violet-500/30 bg-violet-500/12 text-violet-200' : 'text-slate-300'
-                          }`}
-                        >
-                          {showLiveAdvanced ? 'Hide advanced live' : 'Show advanced live'}
-                        </button>
-                      </div>
-                    </div>
-                    {showLiveAdvanced ? (
-                    <>
-                    <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
-                      <div className="space-y-6">
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Activity className="h-4 w-4 text-emerald-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Live pulse</p>
-                              <h3 className="text-sm font-semibold text-white">What the system is doing now</h3>
-                            </div>
-                          </div>
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Status</p>
-                              <p className="mt-1 text-sm font-medium text-white">{liveRun?.status || selectedRow.automation.last_run_status || 'Standby'}</p>
-                            </div>
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Model source</p>
-                              <p className="mt-1 text-sm font-medium text-white">{getTaskModelSource(selectedRow.task, liveRun) || 'Server default'}</p>
-                            </div>
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Current cost</p>
-                              <p className="mt-1 text-sm font-medium text-white">{typeof liveRun?.actualCredits === 'number' ? `${formatCredits(liveRun.actualCredits)} cr` : '—'}</p>
-                            </div>
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Elapsed</p>
-                              <p className="mt-1 text-sm font-medium text-white">
-                                {liveRun
-                                  ? formatCompactDuration(Number.isNaN(Date.parse(liveRun.startedAt || '')) ? undefined : Math.max(0, Date.now() - Date.parse(liveRun.startedAt || '')))
-                                  : '—'}
-                              </p>
-                            </div>
-                          </div>
-                          <p className="mt-4 text-sm leading-relaxed text-slate-400">{selectedTopology.summary || 'The manager is routing work based on workflow complexity, tool count, and review pressure.'}</p>
-                        </div>
-
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Gauge className="h-4 w-4 text-cyan-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Active scenario</p>
-                              <h3 className="text-sm font-semibold text-white">What policy is live right now</h3>
-                            </div>
-                          </div>
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Scenario</p>
-                              <p className="mt-1 text-sm font-medium text-white">{liveScenarioTelemetry.scenarioLabel}</p>
-                            </div>
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Preset</p>
-                              <p className="mt-1 text-sm font-medium text-white">{liveScenarioTelemetry.presetLabel}</p>
-                            </div>
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Complexity</p>
-                              <p className="mt-1 text-sm font-medium capitalize text-white">{liveScenarioTelemetry.complexity}</p>
-                            </div>
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Directed roles</p>
-                              <p className="mt-1 text-sm font-medium text-white">{liveScenarioTelemetry.directedRoles.length}</p>
-                            </div>
-                          </div>
-                          <div className="mt-4 flex flex-wrap gap-2 text-[10px] text-slate-400">
-                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{liveScenarioTelemetry.workflowStepCount} steps</span>
-                            <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{liveScenarioTelemetry.estimatedToolCalls} tool calls</span>
-                            <span className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${liveScenarioTelemetry.matchedSavedExperiment ? 'text-cyan-200' : 'text-slate-300'}`}>
-                              {liveScenarioTelemetry.matchedSavedExperiment ? 'Matched saved experiment' : 'Ad hoc live posture'}
-                            </span>
-                          </div>
-                          {selectedCohortRun ? (
-                            <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Selected run</p>
-                                  <p className="mt-1 text-sm font-medium text-white">{getRunExperimentAttribution(selectedCohortRun).experimentNotes || `${getRunExperimentAttribution(selectedCohortRun).scenarioLabel} · ${getRunExperimentAttribution(selectedCohortRun).previewPresetLabel}`}</p>
-                                  <p className="mt-1 text-[11px] text-slate-500">{formatAutomationRunTime(selectedCohortRun.finishedAt || selectedCohortRun.startedAt)}</p>
-                                </div>
-                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(selectedCohortRun.status)}`}>{selectedCohortRun.status}</span>
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
-                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{selectedCohortRun.actualCredits ? `${formatCredits(selectedCohortRun.actualCredits)} cr` : '—'}</span>
-                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{formatCompactDuration(Number.isNaN(Date.parse(selectedCohortRun.startedAt || '')) || Number.isNaN(Date.parse(selectedCohortRun.finishedAt || '')) ? undefined : Math.max(0, Date.parse(selectedCohortRun.finishedAt || '') - Date.parse(selectedCohortRun.startedAt || '')))}</span>
-                                <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{getTrendMetricLabel(trendMetric)}: {formatTrendMetricValue(selectedCohortRun, trendMetric)}</span>
-                              </div>
-                              {selectedRunMatchedPlans.length > 0 ? (
-                                <div className="mt-3">
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Attributed plans</p>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {selectedRunMatchedPlans.map((entry) => (
-                                      <button
-                                        key={`run-plan-${entry.plan.id}`}
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedPlanId(entry.plan.id);
-                                          if (entry.summary?.familyRootId) setSelectedPlanFamilyRootId(entry.summary.familyRootId);
-                                        }}
-                                        className={`ui-pill px-2 py-0.5 normal-case tracking-normal ${selectedPlanId === entry.plan.id ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'}`}
-                                      >
-                                        {entry.plan.name} <span className="ml-1 text-[10px] text-slate-500">({entry.score})</span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              ) : null}
-                              {selectedRunDelta ? (
-                                <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[11px]">
-                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
-                                    <p className="text-slate-500">vs {selectedRunDelta.label}</p>
-                                    <p className={`mt-1 ${selectedRunDelta.creditDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(Math.round(selectedRunDelta.creditDelta))} cr</p>
-                                  </div>
-                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
-                                    <p className="text-slate-500">Duration</p>
-                                    <p className={`mt-1 ${selectedRunDelta.durationDelta <= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(Math.round(selectedRunDelta.durationDelta / 1000))}s</p>
-                                  </div>
-                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2">
-                                    <p className="text-slate-500">Outcome</p>
-                                    <p className={`mt-1 ${selectedRunDelta.successDelta >= 0 ? 'text-emerald-200' : 'text-amber-200'}`}>{formatSignedDelta(selectedRunDelta.successDelta)} pts</p>
-                                  </div>
-                                </div>
-                              ) : null}
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveRoom('replay')}
-                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
-                                >
-                                  Open in replay
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const attribution = getRunExperimentAttribution(selectedCohortRun);
-                                    if (attribution.experimentId) setSelectedComparisonExperimentId(attribution.experimentId);
-                                  }}
-                                  className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
-                                >
-                                  Sync comparison target
-                                </button>
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Layers3 className="h-4 w-4 text-violet-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Phase steering</p>
-                              <h3 className="text-sm font-semibold text-white">Where directives are applied</h3>
-                            </div>
-                          </div>
-                          <div className="mt-4 grid gap-2">
-                            {phaseDirectiveMatrix.map((row) => (
-                              <div key={row.phase} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                                <div className="flex items-center justify-between gap-3">
-                                  <p className="text-sm font-medium text-white">{formatDirectivePhaseScope([row.phase])}</p>
-                                  <span className="text-[11px] text-slate-500">{row.directives.length} directive{row.directives.length === 1 ? '' : 's'}</span>
-                                </div>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {row.directives.length > 0 ? row.directives.map((directive) => (
-                                    <span key={`${row.phase}-${directive.role}-${directive.mode}`} className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                                      {directive.role} · {directive.mode}
-                                    </span>
-                                  )) : <span className="text-[12px] text-slate-500">No steering on this phase.</span>}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-6">
-                        <LiveHandoffsSection items={liveActivationTrail} getStatusTone={getStatusTone} />
-                      </div>
-                    </div>
-
-                    <LiveOptimizationLoopSection
-                      items={optimizationRecommendations}
-                      actionBusy={actionBusy}
-                      onApplyRecommendation={applyRecommendationAction}
-                    />
-                    </>
-                    ) : null}
                   </LiveRoom>
                 ) : null}
 
