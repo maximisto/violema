@@ -59,8 +59,10 @@ import { LiveAdvancedSupportSection } from '../features/agent-studio/components/
 import { LiveOptimizationLoopSection } from '../features/agent-studio/components/LiveOptimizationLoopSection';
 import { LiveSystemMapSection } from '../features/agent-studio/components/LiveSystemMapSection';
 import { OptimizeCurrentReleaseSection } from '../features/agent-studio/components/OptimizeCurrentReleaseSection';
+import { OptimizeDiagnosticsSection } from '../features/agent-studio/components/OptimizeDiagnosticsSection';
 import { OptimizeReleaseCandidateSection } from '../features/agent-studio/components/OptimizeReleaseCandidateSection';
 import { OptimizeScenarioSimulatorSection } from '../features/agent-studio/components/OptimizeScenarioSimulatorSection';
+import { OptimizeAdvancedControlsSection } from '../features/agent-studio/components/OptimizeAdvancedControlsSection';
 import { LiveRoom } from '../features/agent-studio/rooms/LiveRoom';
 import { OptimizeRoom } from '../features/agent-studio/rooms/OptimizeRoom';
 import { ReplayRoom } from '../features/agent-studio/rooms/ReplayRoom';
@@ -5180,648 +5182,35 @@ export default function AgentStudio() {
     }, { successMessage: 'Promoted the full winning setup into the live policy.' });
   }, [patchAutomationConfig, selectedStudioState]);
 
-  return (
-    <div className="min-h-screen bg-navy-950 text-white">
-      {notice && (
-        <div className="pointer-events-none fixed inset-x-3 top-3 z-50 flex justify-center">
-          <div
-            className={`pointer-events-auto max-w-md rounded-2xl border px-4 py-3 shadow-[0_18px_50px_rgba(2,6,23,0.42)] backdrop-blur-md ${
-              notice.tone === 'success'
-                ? 'border-green-500/20 bg-green-500/12 text-green-100'
-                : 'border-red-500/20 bg-red-500/12 text-red-100'
-            }`}
-          >
-            <p className="text-sm font-medium">{notice.message}</p>
-          </div>
-        </div>
-      )}
-
-      <header className="sticky top-0 z-30 border-b border-navy-800/80 bg-gradient-to-r from-navy-950/96 via-navy-900/92 to-navy-950/96 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-              className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-violet-600/50 hover:text-white"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Dashboard
-            </button>
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.04]">
-              <img src={VIOLEMA_MARK} alt="Violema" className="h-8 w-8 object-contain" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Separate control room</p>
-              <h1 className="truncate text-lg font-semibold tracking-[-0.02em] text-white">Agent Studio</h1>
-              <p className="mt-1 text-sm text-slate-400">Configure worker strategy, inspect performance, and keep the schedule view clean.</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => void loadData()}
-            className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-violet-600/50 hover:text-white"
-          >
-            <RotateCcw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-[1.6rem] border border-violet-500/15 bg-gradient-to-br from-violet-500/10 via-navy-900/84 to-navy-950/94 p-4">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Workflows watched</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{studioStats.workflowCount}</p>
-            <p className="mt-2 text-sm text-slate-400">Dedicated space for orchestration, not hidden inside the schedule rail.</p>
-          </div>
-          <div className="rounded-[1.6rem] border border-cyan-500/15 bg-gradient-to-br from-cyan-500/10 via-navy-900/84 to-navy-950/94 p-4">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/80">Run success rate</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{Math.round(studioStats.runSuccessRate * 100)}%</p>
-            <p className="mt-2 text-sm text-slate-400">Tracks whether the current worker policy is improving reliability or just adding noise.</p>
-          </div>
-          <div className="rounded-[1.6rem] border border-amber-500/15 bg-gradient-to-br from-amber-500/10 via-navy-900/84 to-navy-950/94 p-4">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-amber-300/80">Average run cost</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{studioStats.avgRunCredits ? `${formatCredits(studioStats.avgRunCredits)} cr` : '—'}</p>
-            <p className="mt-2 text-sm text-slate-400">Use custom policy only when the extra spend is justified by real outcome quality.</p>
-          </div>
-          <div className="rounded-[1.6rem] border border-emerald-500/15 bg-gradient-to-br from-emerald-500/10 via-navy-900/84 to-navy-950/94 p-4">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-300/80">Elastic lane usage</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{Math.round(studioStats.elasticCoverage * 100)}%</p>
-            <p className="mt-2 text-sm text-slate-400">Keeps extra lanes available without treating expensive reasoning as the default path.</p>
-          </div>
-        </div>
-
-        <div className="mt-6 space-y-6">
-          <aside className="space-y-4">
-            <div className="grid gap-4 xl:grid-cols-[19rem,minmax(0,1fr)] xl:items-start">
-              <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/52 to-navy-950/84 p-4">
-              <div className="flex items-center gap-2">
-                <Workflow className="h-4 w-4 text-violet-300" />
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow selector</p>
-                  <h2 className="text-sm font-semibold text-white">Connected schedules</h2>
-                </div>
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">Choose a workflow here, then tune or inspect the agent system without losing the scheduling context.</p>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {loading ? (
-                  <div className="rounded-[1.6rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-4 py-8 text-sm text-slate-500 xl:col-span-3">
-                    Loading workflows…
-                  </div>
-                ) : rows.length === 0 ? (
-                  <div className="rounded-[1.6rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-4 py-8 text-sm text-slate-500 xl:col-span-3">
-                    No scheduled workflows yet. Create one from the dashboard, then come back here to tune the agent system.
-                  </div>
-                ) : rows.map((row) => {
-                  const isSelected = row.automation.id === selectedRow?.automation.id;
-                  const latestStatus = row.latestRun?.status || row.automation.last_run_status || row.automation.status;
-                  return (
-                    <button
-                      key={row.automation.id}
-                      type="button"
-                      onClick={() => setSelectedAutomationId(row.automation.id)}
-                      className={`w-full rounded-[1.4rem] border p-4 text-left transition-all ${
-                        isSelected
-                          ? 'border-violet-500/30 bg-gradient-to-br from-violet-500/12 to-cyan-500/6 shadow-[0_18px_44px_rgba(76,29,149,0.18)]'
-                          : 'border-navy-700/80 bg-navy-950/45 hover:border-violet-500/18 hover:bg-navy-900/60'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-white">{row.automation.name}</p>
-                          <p className="mt-1 text-xs text-slate-500">{row.automation.schedule}</p>
-                        </div>
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(latestStatus)}`}>
-                          {latestStatus}
-                        </span>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
-                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                          {row.automation.authoring_mode === 'describe' ? 'Describe it' : 'Guided steps'}
-                        </span>
-                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                          {row.workflowSteps.length} steps
-                        </span>
-                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                          {Math.round(row.successRate * 100)}% success
-                        </span>
-                      </div>
-                      <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
-                        {formatSummaryPreview(readString(row.latestRun?.metadata?.summary), 120)
-                          || row.automation.description
-                          || 'No recent summary yet.'}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </aside>
-
-          <section className="mx-auto w-full max-w-[1180px] space-y-6">
-            {selectedRow ? (
-              <>
-                <div className="rounded-[2rem] border border-navy-800/80 bg-gradient-to-br from-navy-900/84 via-navy-900/56 to-navy-950/92 p-5">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300/80">Agent system for this workflow</p>
-                      <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">{selectedRow.automation.name}</h2>
-                      <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
-                        Agent Studio is now split into Live, Optimize, and Replay so users can understand the system instantly: what is running, what to change, and what actually worked.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/dashboard?automation=${selectedRow.automation.id}&panel=schedules`)}
-                        className="flex items-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-500/12"
-                      >
-                        Open schedule
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/dashboard?automation=${selectedRow.automation.id}&panel=schedules&edit=workflow`)}
-                        className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-cyan-500/30 hover:text-white"
-                      >
-                        Edit workflow
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow shape</p>
-                      <p className="mt-1 text-sm font-medium text-white">{selectedRow.automation.authoring_mode === 'describe' ? 'Natural-language brief' : 'Guided steps'}</p>
-                      <p className="mt-1 text-[11px] text-slate-500">{selectedRow.workflowSteps.length} workflow blocks</p>
-                    </div>
-                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Current policy</p>
-                      <p className="mt-1 text-sm font-medium text-white">
-                        {activePresetId === 'custom_live' ? 'Custom live policy' : POLICY_PRESETS.find((preset) => preset.id === activePresetId)?.label || 'System recommended'}
-                      </p>
-                      <p className="mt-1 text-[11px] text-slate-500">{getReviewPolicyLabel(selectedPolicy.reviewPolicy)}</p>
-                    </div>
-                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Next run</p>
-                      <p className="mt-1 text-sm font-medium text-white">{formatAutomationRunTime(selectedRow.automation.next_run_at)}</p>
-                      <p className="mt-1 text-[11px] text-slate-500">{liveRun?.status === 'running' ? 'Live run in progress' : 'Standing by'}</p>
-                    </div>
-                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Result health</p>
-                      <p className="mt-1 text-sm font-medium text-white">{Math.round(selectedRow.successRate * 100)}% success</p>
-                      <p className="mt-1 text-[11px] text-slate-500">{selectedRow.averageCredits ? `${formatCredits(selectedRow.averageCredits)} cr average spend` : 'No completed runs yet'}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {[
-                      { id: 'live' as const, label: 'Live', summary: 'Operating picture, active lanes, current handoffs', icon: Activity },
-                      { id: 'optimize' as const, label: 'Optimize', summary: 'Preset sandbox, routing math, policy changes', icon: Target },
-                      { id: 'replay' as const, label: 'Replay', summary: 'Run timeline, role heatmap, outcome review', icon: LineChart },
-                    ].map((room) => {
-                      const Icon = room.icon;
-                      const active = activeRoom === room.id;
-                      return (
-                        <button
-                          key={room.id}
-                          type="button"
-                          onClick={() => setActiveRoom(room.id)}
-                          className={`rounded-2xl border px-4 py-3 text-left transition-all ${
-                            active
-                              ? 'border-violet-500/28 bg-violet-500/10 shadow-[0_18px_48px_rgba(76,29,149,0.16)]'
-                              : 'border-navy-700/70 bg-navy-950/36 hover:border-violet-500/20 hover:bg-navy-900/55'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Icon className={`h-4 w-4 ${active ? 'text-violet-200' : 'text-slate-400'}`} />
-                            <p className="text-sm font-medium text-white">{room.label}</p>
-                          </div>
-                          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{room.summary}</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                </div>
-
-                {activeRoom === 'live' ? (
-                  <LiveRoom
-                    advanced={(
-                      <>
-                        <LiveAdvancedSupportSection
-                          livePulse={{
-                            status: liveRun?.status || selectedRow.automation.last_run_status || 'Standby',
-                            modelSource: getTaskModelSource(selectedRow.task, liveRun) || 'Server default',
-                            currentCost: typeof liveRun?.actualCredits === 'number' ? `${formatCredits(liveRun.actualCredits)} cr` : '—',
-                            elapsed: liveRun
-                              ? formatCompactDuration(Number.isNaN(Date.parse(liveRun.startedAt || '')) ? undefined : Math.max(0, Date.now() - Date.parse(liveRun.startedAt || '')))
-                              : '—',
-                            summary: selectedTopology.summary || 'The manager is routing work based on workflow complexity, tool count, and review pressure.',
-                          }}
-                          scenario={{
-                            scenarioLabel: liveScenarioTelemetry.scenarioLabel,
-                            presetLabel: liveScenarioTelemetry.presetLabel,
-                            complexity: liveScenarioTelemetry.complexity,
-                            directedRoleCount: liveScenarioTelemetry.directedRoles.length,
-                            workflowStepCount: liveScenarioTelemetry.workflowStepCount,
-                            estimatedToolCalls: liveScenarioTelemetry.estimatedToolCalls,
-                            matchedSavedExperiment: Boolean(liveScenarioTelemetry.matchedSavedExperiment),
-                          }}
-                          selectedRun={selectedCohortRun ? {
-                            label: getRunExperimentAttribution(selectedCohortRun).experimentNotes || `${getRunExperimentAttribution(selectedCohortRun).scenarioLabel} · ${getRunExperimentAttribution(selectedCohortRun).previewPresetLabel}`,
-                            timestamp: formatAutomationRunTime(selectedCohortRun.finishedAt || selectedCohortRun.startedAt),
-                            status: selectedCohortRun.status,
-                            credits: selectedCohortRun.actualCredits ? `${formatCredits(selectedCohortRun.actualCredits)} cr` : '—',
-                            duration: formatCompactDuration(Number.isNaN(Date.parse(selectedCohortRun.startedAt || '')) || Number.isNaN(Date.parse(selectedCohortRun.finishedAt || '')) ? undefined : Math.max(0, Date.parse(selectedCohortRun.finishedAt || '') - Date.parse(selectedCohortRun.startedAt || ''))),
-                            trendLabel: getTrendMetricLabel(trendMetric),
-                            trendValue: String(formatTrendMetricValue(selectedCohortRun, trendMetric)),
-                            matchedPlans: selectedRunMatchedPlans.map((entry) => ({
-                              id: entry.plan.id,
-                              name: entry.plan.name,
-                              score: entry.score,
-                              active: selectedPlanId === entry.plan.id,
-                              onSelect: () => {
-                                setSelectedPlanId(entry.plan.id);
-                                if (entry.summary?.familyRootId) setSelectedPlanFamilyRootId(entry.summary.familyRootId);
-                              },
-                            })),
-                            deltas: selectedRunDelta ? [
-                              {
-                                id: 'credits',
-                                label: `vs ${selectedRunDelta.label}`,
-                                value: `${formatSignedDelta(Math.round(selectedRunDelta.creditDelta))} cr`,
-                                tone: selectedRunDelta.creditDelta <= 0 ? 'positive' : 'warning',
-                              },
-                              {
-                                id: 'duration',
-                                label: 'Duration',
-                                value: `${formatSignedDelta(Math.round(selectedRunDelta.durationDelta / 1000))}s`,
-                                tone: selectedRunDelta.durationDelta <= 0 ? 'positive' : 'warning',
-                              },
-                              {
-                                id: 'outcome',
-                                label: 'Outcome',
-                                value: `${formatSignedDelta(selectedRunDelta.successDelta)} pts`,
-                                tone: selectedRunDelta.successDelta >= 0 ? 'positive' : 'warning',
-                              },
-                            ] : undefined,
-                            onOpenReplay: () => setActiveRoom('replay'),
-                            onSyncComparison: () => {
-                              const attribution = getRunExperimentAttribution(selectedCohortRun);
-                              if (attribution.experimentId) setSelectedComparisonExperimentId(attribution.experimentId);
-                            },
-                          } : undefined}
-                          phaseRows={phaseDirectiveMatrix.map((row) => ({
-                            phase: formatDirectivePhaseScope([row.phase]),
-                            directiveCount: row.directives.length,
-                            directives: row.directives.map((directive) => `${directive.role} · ${directive.mode}`),
-                          }))}
-                          getStatusTone={getStatusTone}
-                        />
-
-                        <LiveHandoffsSection items={liveActivationTrail} getStatusTone={getStatusTone} />
-
-                        <LiveOptimizationLoopSection
-                          items={optimizationRecommendations}
-                          actionBusy={actionBusy}
-                          onApplyRecommendation={applyRecommendationAction}
-                        />
-                      </>
-                    )}
-                    showAdvanced={showLiveAdvanced}
-                    onToggleAdvanced={() => setShowLiveAdvanced((current) => !current)}
-                  >
-                    <div className="space-y-6">
-                      <LiveSystemMapSection
-                        liveStatusLabel={liveRun?.status === 'running' ? 'Live now' : 'Preview from latest run'}
-                        topology={selectedTopology}
-                        workerMapNodes={workerMapNodes}
-                        selectedWorkerRole={selectedWorkerDetail.worker?.role}
-                        roleDirectives={selectedStudioState.roleDirectives}
-                        optimizationBiasLabel={selectedMath.estimatedBands}
-                        activeCoreCount={selectedTopology.workers.filter((worker) => worker.laneType === 'core' && worker.status === 'active').length}
-                        activeElasticCount={selectedTopology.workers.filter((worker) => worker.laneType === 'elastic' && worker.status === 'active').length}
-                        onSelectWorker={setSelectedWorkerRole}
-                        truncateText={truncateText}
-                        formatDirectivePhaseShort={formatDirectivePhaseShort}
-                      />
-
-                      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] xl:items-start">
-                      <LiveSupportRailSection
-                        workers={selectedTopology.workers}
-                        nextExperimentQueue={nextExperimentQueue}
-                        onExecuteNextExperiment={handleExecuteNextExperiment}
-                        onViewExperimentEvidence={(phase) => {
-                          setSelectedDirectivePhase(phase);
-                          setActiveRoom('replay');
-                        }}
-                        onSavePlan={(namePrefix) => handleSaveOperatingPlan({ namePrefix })}
-                      />
-
-                      <div className="space-y-6">
-                        <LiveNodeInspectorSection
-                          worker={selectedWorkerDetail.worker}
-                          performance={selectedWorkerDetail.performance}
-                          recentSteps={selectedWorkerDetail.recentSteps}
-                          selectedRoleDirective={selectedRoleDirective}
-                          actionBusy={actionBusy}
-                          workerPhaseActivity={workerPhaseActivity}
-                          selectedDirectivePhase={selectedDirectivePhase}
-                          directivePhaseOptions={DIRECTIVE_PHASE_OPTIONS}
-                          phaseEvidence={phaseEvidence}
-                          onClearRoleDirective={handleClearRoleDirective}
-                          onSelectDirectivePhase={setSelectedDirectivePhase}
-                          onFocusPhase={(phase) => {
-                            setSelectedDirectivePhase(phase);
-                            setSelectedWorkerRole(getPreferredRoleForPhase(phase));
-                          }}
-                          onRouteCheaper={handleRouteCheaper}
-                          onIncreaseReview={handleIncreaseReview}
-                          onPromoteLane={handlePromoteLane}
-                          formatCredits={formatCredits}
-                          formatTokenCount={formatTokenCount}
-                          formatRelativeTimeFromIso={formatRelativeTimeFromIso}
-                          formatDirectivePhaseScope={formatDirectivePhaseScope}
-                        />
-                      </div>
-                    </div>
-                    </div>
-                  </LiveRoom>
-                ) : null}
-
-                {activeRoom === 'optimize' ? (
-                  <OptimizeRoom>
-                    <div className="grid gap-4">
-                      <OptimizeCurrentReleaseSection scorecard={optimizationScorecard} />
-
-                      {showOptimizeAdvanced ? (
-                      <div className="grid gap-4">
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Flame className="h-4 w-4 text-amber-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Waste diagnostics</p>
-                              <h3 className="text-sm font-semibold text-white">Where the setup is overspending</h3>
-                            </div>
-                          </div>
-                          <div className="mt-4 space-y-3">
-                            {workflowDiagnostics.wasteItems.map((item) => (
-                              <div key={item.title} className="rounded-2xl border border-amber-500/14 bg-amber-500/6 p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-medium text-white">{item.title}</p>
-                                    <p className="mt-2 text-sm leading-relaxed text-slate-300">{item.body}</p>
-                                  </div>
-                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-amber-200">{item.severity}</span>
-                                </div>
-                                {item.action !== 'none' ? (
-                                  <button type="button" disabled={actionBusy} onClick={() => applyRecommendationAction(item.action)} className="mt-3 ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-amber-100 disabled:opacity-60">
-                                    Apply fix
-                                  </button>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Target className="h-4 w-4 text-rose-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Risk diagnostics</p>
-                              <h3 className="text-sm font-semibold text-white">Where the workflow needs protection</h3>
-                            </div>
-                          </div>
-                          <div className="mt-4 space-y-3">
-                            {workflowDiagnostics.riskItems.map((item) => (
-                              <div key={item.title} className="rounded-2xl border border-rose-500/14 bg-rose-500/6 p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-medium text-white">{item.title}</p>
-                                    <p className="mt-2 text-sm leading-relaxed text-slate-300">{item.body}</p>
-                                  </div>
-                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-rose-200">{item.severity}</span>
-                                </div>
-                                {item.action !== 'none' ? (
-                                  <button type="button" disabled={actionBusy} onClick={() => applyRecommendationAction(item.action)} className="mt-3 ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-rose-100 disabled:opacity-60">
-                                    Tighten policy
-                                  </button>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      ) : null}
-                    </div>
-
-                    <OptimizeScenarioSimulatorSection
-                      scenarios={SCENARIO_PRESETS}
-                      selectedScenarioId={selectedScenario.id}
-                      selectedScenarioLabel={selectedScenario.label}
-                      selectedScenarioSummary={selectedScenario.summary}
-                      previewPresetLabel={previewPreset.label}
-                      scenarioSnapshot={scenarioComparisons[0]?.simulated || selectedMath}
-                      actionBusy={actionBusy}
-                      experimentSaveBusy={experimentSaveBusy}
-                      onSelectScenario={setSelectedScenarioId}
-                      onSaveExperiment={handleSaveExperiment}
-                    />
-
-                    <OptimizeReleaseCandidateSection
-                      candidatePresets={scenarioComparisons}
-                      selectedPresetId={previewPreset.id}
-                      previewPresetLabel={previewPreset.label}
-                      activePresetLabel={activePresetId === 'custom_live' ? 'Custom live policy' : POLICY_PRESETS.find((preset) => preset.id === activePresetId)?.label || 'System recommended'}
-                      previewScenarioComparison={previewScenarioComparison}
-                      currentIndices={{
-                        spend: currentSpendIndex,
-                        assurance: currentAssuranceIndex,
-                        fit: currentFitIndex,
-                      }}
-                      policyDiffRows={policyDiffRows}
-                      policyRadarMetrics={policyRadarMetrics}
-                      frontierPoints={frontierPoints}
-                      actionBusy={actionBusy}
-                      onSelectPreset={setPreviewPresetId}
-                      onApplyPreviewPreset={() => void patchExecutionPolicy(previewPreset.policy)}
-                      formatSignedDelta={formatSignedDelta}
-                      buildRadarPolygon={buildRadarPolygon}
-                    />
-
-                    <div className="rounded-[1.8rem] border border-white/6 bg-white/[0.03] p-5">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="max-w-3xl">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Advanced optimize controls</p>
-                          <h3 className="mt-1 text-sm font-semibold text-white">Strategy lab, plans, branches, and policy governance</h3>
-                          <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                            These controls are still here when you need them. They just should not compete with the core release decision path.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowOptimizeAdvanced((current) => !current)}
-                          className={`ui-pill inline-flex items-center gap-2 px-3 py-1.5 text-[11px] normal-case tracking-normal ${
-                            showOptimizeAdvanced ? 'border-violet-500/30 bg-violet-500/12 text-violet-200' : 'text-slate-300'
-                          }`}
-                        >
-                          {showOptimizeAdvanced ? 'Hide advanced optimize' : 'Show advanced optimize'}
-                        </button>
-                      </div>
-                    </div>
-                    {showOptimizeAdvanced ? (
-                    <>
+  const optimizeAdvancedContent = (
+    <>
+      <OptimizeDiagnosticsSection
+        wasteItems={workflowDiagnostics.wasteItems}
+        riskItems={workflowDiagnostics.riskItems}
+        actionBusy={actionBusy}
+        onApplyRecommendationAction={applyRecommendationAction}
+      />
                     <div className="grid gap-6">
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                        <div className="flex items-center gap-2">
-                          <Gauge className="h-4 w-4 text-amber-300" />
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow fingerprint</p>
-                            <h3 className="text-sm font-semibold text-white">Why the system recommends what it does</h3>
-                          </div>
-                        </div>
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow steps</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.stepCount}</p>
-                          </div>
-                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Tool calls</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.toolCalls}</p>
-                          </div>
-                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Reasoning load</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.reasoningLoad}</p>
-                          </div>
-                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Recommended lanes</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.recommendedElasticLanes}</p>
-                          </div>
-                        </div>
-                        <p className="mt-4 text-sm leading-relaxed text-slate-400">
-                          Harder reasoning should only climb to stronger lanes when workflow complexity and failure risk justify it. Everything else should stay cheap, fast, and operational.
-                        </p>
-                        <div className="mt-4 space-y-3">
-                          {optimizationRecommendations.map((item) => (
-                            <div key={item.title} className="rounded-2xl border border-violet-500/14 bg-violet-500/6 p-4">
-                              <p className="text-sm font-medium text-white">{item.title}</p>
-                              <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.body}</p>
-                              {item.action !== 'none' ? (
-                                <button
-                                  type="button"
-                                  disabled={actionBusy}
-                                  onClick={() => applyRecommendationAction(item.action)}
-                                  className="mt-3 ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-violet-100 disabled:opacity-60"
-                                >
-                                  Apply recommendation
-                                </button>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                        <div className="flex items-center gap-2">
-                          <Brain className="h-4 w-4 text-violet-300" />
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Advanced overrides</p>
-                            <h3 className="text-sm font-semibold text-white">Use only when the preset isn’t enough</h3>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 space-y-4">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Mode</p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {[{ value: 'recommended' as const, label: 'System recommended' }, { value: 'custom' as const, label: 'Custom policy' }].map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  disabled={actionBusy}
-                                  onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: option.value })}
-                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedPolicy.mode === option.value ? 'border-violet-500/30 bg-violet-500/12 text-violet-200' : 'text-slate-300'} disabled:opacity-60`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Optimization goal</p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {[{ value: 'balanced' as const, label: 'Balanced' }, { value: 'cost_saver' as const, label: 'Cost Saver' }, { value: 'quality_first' as const, label: 'Quality First' }].map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  disabled={actionBusy}
-                                  onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', optimizationGoal: option.value })}
-                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedPolicy.optimizationGoal === option.value ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'} disabled:opacity-60`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Review policy</p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {[{ value: 'lean' as const, label: 'Lean' }, { value: 'standard' as const, label: 'Standard' }, { value: 'strict' as const, label: 'Strict' }].map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  disabled={actionBusy}
-                                  onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', reviewPolicy: option.value })}
-                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedPolicy.reviewPolicy === option.value ? 'border-violet-500/30 bg-violet-500/12 text-violet-200' : 'text-slate-300'} disabled:opacity-60`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Elastic lane cap</p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {[0, 1, 2, 3, 4].map((count) => (
-                                <button
-                                  key={count}
-                                  type="button"
-                                  disabled={actionBusy}
-                                  onClick={() => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', maxElasticLanes: count })}
-                                  className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${selectedPolicy.maxElasticLanes === count ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200' : 'text-slate-300'} disabled:opacity-60`}
-                                >
-                                  {count}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Policy snapshot</p>
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                              <div>
-                                <p className="text-sm text-slate-400">Mode</p>
-                                <p className="mt-1 text-sm font-medium text-white">{getExecutionModeLabel(selectedPolicy.mode)}</p>
-                              </div>
-                              <div>
-                                <p className="text-sm text-slate-400">Optimization</p>
-                                <p className="mt-1 text-sm font-medium text-white">{getOptimizationGoalLabel(selectedPolicy.optimizationGoal)}</p>
-                              </div>
-                              <div>
-                                <p className="text-sm text-slate-400">Review</p>
-                                <p className="mt-1 text-sm font-medium text-white">{getReviewPolicyLabel(selectedPolicy.reviewPolicy)}</p>
-                              </div>
-                              <div>
-                                <p className="text-sm text-slate-400">Active lanes</p>
-                                <p className="mt-1 text-sm font-medium text-white">{selectedMath.activeElasticLanes} / {selectedPolicy.maxElasticLanes}</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      <OptimizeAdvancedControlsSection
+                        workflowFingerprint={{
+                          stepCount: selectedMath.stepCount,
+                          toolCalls: selectedMath.toolCalls,
+                          reasoningLoad: selectedMath.reasoningLoad,
+                          recommendedElasticLanes: selectedMath.recommendedElasticLanes,
+                          activeElasticLanes: selectedMath.activeElasticLanes,
+                        }}
+                        optimizationRecommendations={optimizationRecommendations}
+                        selectedPolicy={selectedPolicy}
+                        actionBusy={actionBusy}
+                        onApplyRecommendationAction={applyRecommendationAction}
+                        onSetMode={(mode) => void patchExecutionPolicy({ ...selectedPolicy, mode })}
+                        onSetOptimizationGoal={(optimizationGoal) => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', optimizationGoal })}
+                        onSetReviewPolicy={(reviewPolicy) => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', reviewPolicy })}
+                        onSetMaxElasticLanes={(maxElasticLanes) => void patchExecutionPolicy({ ...selectedPolicy, mode: 'custom', maxElasticLanes })}
+                        getExecutionModeLabel={getExecutionModeLabel}
+                        getOptimizationGoalLabel={getOptimizationGoalLabel}
+                        getReviewPolicyLabel={getReviewPolicyLabel}
+                      />
 
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
@@ -7495,8 +6884,425 @@ export default function AgentStudio() {
                         </div>
                       </div>
                     </div>
-                    </>
-                    ) : null}
+    </>
+  );
+
+  return (
+    <div className="min-h-screen bg-navy-950 text-white">
+      {notice && (
+        <div className="pointer-events-none fixed inset-x-3 top-3 z-50 flex justify-center">
+          <div
+            className={`pointer-events-auto max-w-md rounded-2xl border px-4 py-3 shadow-[0_18px_50px_rgba(2,6,23,0.42)] backdrop-blur-md ${
+              notice.tone === 'success'
+                ? 'border-green-500/20 bg-green-500/12 text-green-100'
+                : 'border-red-500/20 bg-red-500/12 text-red-100'
+            }`}
+          >
+            <p className="text-sm font-medium">{notice.message}</p>
+          </div>
+        </div>
+      )}
+
+      <header className="sticky top-0 z-30 border-b border-navy-800/80 bg-gradient-to-r from-navy-950/96 via-navy-900/92 to-navy-950/96 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-violet-600/50 hover:text-white"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Dashboard
+            </button>
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.04]">
+              <img src={VIOLEMA_MARK} alt="Violema" className="h-8 w-8 object-contain" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Separate control room</p>
+              <h1 className="truncate text-lg font-semibold tracking-[-0.02em] text-white">Agent Studio</h1>
+              <p className="mt-1 text-sm text-slate-400">Configure worker strategy, inspect performance, and keep the schedule view clean.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadData()}
+            className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-violet-600/50 hover:text-white"
+          >
+            <RotateCcw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-[1.6rem] border border-violet-500/15 bg-gradient-to-br from-violet-500/10 via-navy-900/84 to-navy-950/94 p-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/80">Workflows watched</p>
+            <p className="mt-2 text-3xl font-semibold text-white">{studioStats.workflowCount}</p>
+            <p className="mt-2 text-sm text-slate-400">Dedicated space for orchestration, not hidden inside the schedule rail.</p>
+          </div>
+          <div className="rounded-[1.6rem] border border-cyan-500/15 bg-gradient-to-br from-cyan-500/10 via-navy-900/84 to-navy-950/94 p-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/80">Run success rate</p>
+            <p className="mt-2 text-3xl font-semibold text-white">{Math.round(studioStats.runSuccessRate * 100)}%</p>
+            <p className="mt-2 text-sm text-slate-400">Tracks whether the current worker policy is improving reliability or just adding noise.</p>
+          </div>
+          <div className="rounded-[1.6rem] border border-amber-500/15 bg-gradient-to-br from-amber-500/10 via-navy-900/84 to-navy-950/94 p-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-amber-300/80">Average run cost</p>
+            <p className="mt-2 text-3xl font-semibold text-white">{studioStats.avgRunCredits ? `${formatCredits(studioStats.avgRunCredits)} cr` : '—'}</p>
+            <p className="mt-2 text-sm text-slate-400">Use custom policy only when the extra spend is justified by real outcome quality.</p>
+          </div>
+          <div className="rounded-[1.6rem] border border-emerald-500/15 bg-gradient-to-br from-emerald-500/10 via-navy-900/84 to-navy-950/94 p-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-300/80">Elastic lane usage</p>
+            <p className="mt-2 text-3xl font-semibold text-white">{Math.round(studioStats.elasticCoverage * 100)}%</p>
+            <p className="mt-2 text-sm text-slate-400">Keeps extra lanes available without treating expensive reasoning as the default path.</p>
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-6">
+          <aside className="space-y-4">
+            <div className="grid gap-4 xl:grid-cols-[19rem,minmax(0,1fr)] xl:items-start">
+              <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/52 to-navy-950/84 p-4">
+              <div className="flex items-center gap-2">
+                <Workflow className="h-4 w-4 text-violet-300" />
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow selector</p>
+                  <h2 className="text-sm font-semibold text-white">Connected schedules</h2>
+                </div>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">Choose a workflow here, then tune or inspect the agent system without losing the scheduling context.</p>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {loading ? (
+                  <div className="rounded-[1.6rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-4 py-8 text-sm text-slate-500 xl:col-span-3">
+                    Loading workflows…
+                  </div>
+                ) : rows.length === 0 ? (
+                  <div className="rounded-[1.6rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-4 py-8 text-sm text-slate-500 xl:col-span-3">
+                    No scheduled workflows yet. Create one from the dashboard, then come back here to tune the agent system.
+                  </div>
+                ) : rows.map((row) => {
+                  const isSelected = row.automation.id === selectedRow?.automation.id;
+                  const latestStatus = row.latestRun?.status || row.automation.last_run_status || row.automation.status;
+                  return (
+                    <button
+                      key={row.automation.id}
+                      type="button"
+                      onClick={() => setSelectedAutomationId(row.automation.id)}
+                      className={`w-full rounded-[1.4rem] border p-4 text-left transition-all ${
+                        isSelected
+                          ? 'border-violet-500/30 bg-gradient-to-br from-violet-500/12 to-cyan-500/6 shadow-[0_18px_44px_rgba(76,29,149,0.18)]'
+                          : 'border-navy-700/80 bg-navy-950/45 hover:border-violet-500/18 hover:bg-navy-900/60'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-white">{row.automation.name}</p>
+                          <p className="mt-1 text-xs text-slate-500">{row.automation.schedule}</p>
+                        </div>
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(latestStatus)}`}>
+                          {latestStatus}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                          {row.automation.authoring_mode === 'describe' ? 'Describe it' : 'Guided steps'}
+                        </span>
+                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                          {row.workflowSteps.length} steps
+                        </span>
+                        <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                          {Math.round(row.successRate * 100)}% success
+                        </span>
+                      </div>
+                      <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
+                        {formatSummaryPreview(readString(row.latestRun?.metadata?.summary), 120)
+                          || row.automation.description
+                          || 'No recent summary yet.'}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
+
+          <section className="mx-auto w-full max-w-[1180px] space-y-6">
+            {selectedRow ? (
+              <>
+                <div className="rounded-[2rem] border border-navy-800/80 bg-gradient-to-br from-navy-900/84 via-navy-900/56 to-navy-950/92 p-5">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300/80">Agent system for this workflow</p>
+                      <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">{selectedRow.automation.name}</h2>
+                      <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
+                        Agent Studio is now split into Live, Optimize, and Replay so users can understand the system instantly: what is running, what to change, and what actually worked.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/dashboard?automation=${selectedRow.automation.id}&panel=schedules`)}
+                        className="flex items-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-500/12"
+                      >
+                        Open schedule
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/dashboard?automation=${selectedRow.automation.id}&panel=schedules&edit=workflow`)}
+                        className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-cyan-500/30 hover:text-white"
+                      >
+                        Edit workflow
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow shape</p>
+                      <p className="mt-1 text-sm font-medium text-white">{selectedRow.automation.authoring_mode === 'describe' ? 'Natural-language brief' : 'Guided steps'}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{selectedRow.workflowSteps.length} workflow blocks</p>
+                    </div>
+                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Current policy</p>
+                      <p className="mt-1 text-sm font-medium text-white">
+                        {activePresetId === 'custom_live' ? 'Custom live policy' : POLICY_PRESETS.find((preset) => preset.id === activePresetId)?.label || 'System recommended'}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">{getReviewPolicyLabel(selectedPolicy.reviewPolicy)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Next run</p>
+                      <p className="mt-1 text-sm font-medium text-white">{formatAutomationRunTime(selectedRow.automation.next_run_at)}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{liveRun?.status === 'running' ? 'Live run in progress' : 'Standing by'}</p>
+                    </div>
+                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Result health</p>
+                      <p className="mt-1 text-sm font-medium text-white">{Math.round(selectedRow.successRate * 100)}% success</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{selectedRow.averageCredits ? `${formatCredits(selectedRow.averageCredits)} cr average spend` : 'No completed runs yet'}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {[
+                      { id: 'live' as const, label: 'Live', summary: 'Operating picture, active lanes, current handoffs', icon: Activity },
+                      { id: 'optimize' as const, label: 'Optimize', summary: 'Preset sandbox, routing math, policy changes', icon: Target },
+                      { id: 'replay' as const, label: 'Replay', summary: 'Run timeline, role heatmap, outcome review', icon: LineChart },
+                    ].map((room) => {
+                      const Icon = room.icon;
+                      const active = activeRoom === room.id;
+                      return (
+                        <button
+                          key={room.id}
+                          type="button"
+                          onClick={() => setActiveRoom(room.id)}
+                          className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                            active
+                              ? 'border-violet-500/28 bg-violet-500/10 shadow-[0_18px_48px_rgba(76,29,149,0.16)]'
+                              : 'border-navy-700/70 bg-navy-950/36 hover:border-violet-500/20 hover:bg-navy-900/55'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Icon className={`h-4 w-4 ${active ? 'text-violet-200' : 'text-slate-400'}`} />
+                            <p className="text-sm font-medium text-white">{room.label}</p>
+                          </div>
+                          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{room.summary}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                </div>
+
+                {activeRoom === 'live' ? (
+                  <LiveRoom
+                    advanced={(
+                      <>
+                        <LiveAdvancedSupportSection
+                          livePulse={{
+                            status: liveRun?.status || selectedRow.automation.last_run_status || 'Standby',
+                            modelSource: getTaskModelSource(selectedRow.task, liveRun) || 'Server default',
+                            currentCost: typeof liveRun?.actualCredits === 'number' ? `${formatCredits(liveRun.actualCredits)} cr` : '—',
+                            elapsed: liveRun
+                              ? formatCompactDuration(Number.isNaN(Date.parse(liveRun.startedAt || '')) ? undefined : Math.max(0, Date.now() - Date.parse(liveRun.startedAt || '')))
+                              : '—',
+                            summary: selectedTopology.summary || 'The manager is routing work based on workflow complexity, tool count, and review pressure.',
+                          }}
+                          scenario={{
+                            scenarioLabel: liveScenarioTelemetry.scenarioLabel,
+                            presetLabel: liveScenarioTelemetry.presetLabel,
+                            complexity: liveScenarioTelemetry.complexity,
+                            directedRoleCount: liveScenarioTelemetry.directedRoles.length,
+                            workflowStepCount: liveScenarioTelemetry.workflowStepCount,
+                            estimatedToolCalls: liveScenarioTelemetry.estimatedToolCalls,
+                            matchedSavedExperiment: Boolean(liveScenarioTelemetry.matchedSavedExperiment),
+                          }}
+                          selectedRun={selectedCohortRun ? {
+                            label: getRunExperimentAttribution(selectedCohortRun).experimentNotes || `${getRunExperimentAttribution(selectedCohortRun).scenarioLabel} · ${getRunExperimentAttribution(selectedCohortRun).previewPresetLabel}`,
+                            timestamp: formatAutomationRunTime(selectedCohortRun.finishedAt || selectedCohortRun.startedAt),
+                            status: selectedCohortRun.status,
+                            credits: selectedCohortRun.actualCredits ? `${formatCredits(selectedCohortRun.actualCredits)} cr` : '—',
+                            duration: formatCompactDuration(Number.isNaN(Date.parse(selectedCohortRun.startedAt || '')) || Number.isNaN(Date.parse(selectedCohortRun.finishedAt || '')) ? undefined : Math.max(0, Date.parse(selectedCohortRun.finishedAt || '') - Date.parse(selectedCohortRun.startedAt || ''))),
+                            trendLabel: getTrendMetricLabel(trendMetric),
+                            trendValue: String(formatTrendMetricValue(selectedCohortRun, trendMetric)),
+                            matchedPlans: selectedRunMatchedPlans.map((entry) => ({
+                              id: entry.plan.id,
+                              name: entry.plan.name,
+                              score: entry.score,
+                              active: selectedPlanId === entry.plan.id,
+                              onSelect: () => {
+                                setSelectedPlanId(entry.plan.id);
+                                if (entry.summary?.familyRootId) setSelectedPlanFamilyRootId(entry.summary.familyRootId);
+                              },
+                            })),
+                            deltas: selectedRunDelta ? [
+                              {
+                                id: 'credits',
+                                label: `vs ${selectedRunDelta.label}`,
+                                value: `${formatSignedDelta(Math.round(selectedRunDelta.creditDelta))} cr`,
+                                tone: selectedRunDelta.creditDelta <= 0 ? 'positive' : 'warning',
+                              },
+                              {
+                                id: 'duration',
+                                label: 'Duration',
+                                value: `${formatSignedDelta(Math.round(selectedRunDelta.durationDelta / 1000))}s`,
+                                tone: selectedRunDelta.durationDelta <= 0 ? 'positive' : 'warning',
+                              },
+                              {
+                                id: 'outcome',
+                                label: 'Outcome',
+                                value: `${formatSignedDelta(selectedRunDelta.successDelta)} pts`,
+                                tone: selectedRunDelta.successDelta >= 0 ? 'positive' : 'warning',
+                              },
+                            ] : undefined,
+                            onOpenReplay: () => setActiveRoom('replay'),
+                            onSyncComparison: () => {
+                              const attribution = getRunExperimentAttribution(selectedCohortRun);
+                              if (attribution.experimentId) setSelectedComparisonExperimentId(attribution.experimentId);
+                            },
+                          } : undefined}
+                          phaseRows={phaseDirectiveMatrix.map((row) => ({
+                            phase: formatDirectivePhaseScope([row.phase]),
+                            directiveCount: row.directives.length,
+                            directives: row.directives.map((directive) => `${directive.role} · ${directive.mode}`),
+                          }))}
+                          getStatusTone={getStatusTone}
+                        />
+
+                        <LiveHandoffsSection items={liveActivationTrail} getStatusTone={getStatusTone} />
+
+                        <LiveOptimizationLoopSection
+                          items={optimizationRecommendations}
+                          actionBusy={actionBusy}
+                          onApplyRecommendation={applyRecommendationAction}
+                        />
+                      </>
+                    )}
+                    showAdvanced={showLiveAdvanced}
+                    onToggleAdvanced={() => setShowLiveAdvanced((current) => !current)}
+                  >
+                    <div className="space-y-6">
+                      <LiveSystemMapSection
+                        liveStatusLabel={liveRun?.status === 'running' ? 'Live now' : 'Preview from latest run'}
+                        topology={selectedTopology}
+                        workerMapNodes={workerMapNodes}
+                        selectedWorkerRole={selectedWorkerDetail.worker?.role}
+                        roleDirectives={selectedStudioState.roleDirectives}
+                        optimizationBiasLabel={selectedMath.estimatedBands}
+                        activeCoreCount={selectedTopology.workers.filter((worker) => worker.laneType === 'core' && worker.status === 'active').length}
+                        activeElasticCount={selectedTopology.workers.filter((worker) => worker.laneType === 'elastic' && worker.status === 'active').length}
+                        onSelectWorker={setSelectedWorkerRole}
+                        truncateText={truncateText}
+                        formatDirectivePhaseShort={formatDirectivePhaseShort}
+                      />
+
+                      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] xl:items-start">
+                      <LiveSupportRailSection
+                        workers={selectedTopology.workers}
+                        nextExperimentQueue={nextExperimentQueue}
+                        onExecuteNextExperiment={handleExecuteNextExperiment}
+                        onViewExperimentEvidence={(phase) => {
+                          setSelectedDirectivePhase(phase);
+                          setActiveRoom('replay');
+                        }}
+                        onSavePlan={(namePrefix) => handleSaveOperatingPlan({ namePrefix })}
+                      />
+
+                      <div className="space-y-6">
+                        <LiveNodeInspectorSection
+                          worker={selectedWorkerDetail.worker}
+                          performance={selectedWorkerDetail.performance}
+                          recentSteps={selectedWorkerDetail.recentSteps}
+                          selectedRoleDirective={selectedRoleDirective}
+                          actionBusy={actionBusy}
+                          workerPhaseActivity={workerPhaseActivity}
+                          selectedDirectivePhase={selectedDirectivePhase}
+                          directivePhaseOptions={DIRECTIVE_PHASE_OPTIONS}
+                          phaseEvidence={phaseEvidence}
+                          onClearRoleDirective={handleClearRoleDirective}
+                          onSelectDirectivePhase={setSelectedDirectivePhase}
+                          onFocusPhase={(phase) => {
+                            setSelectedDirectivePhase(phase);
+                            setSelectedWorkerRole(getPreferredRoleForPhase(phase));
+                          }}
+                          onRouteCheaper={handleRouteCheaper}
+                          onIncreaseReview={handleIncreaseReview}
+                          onPromoteLane={handlePromoteLane}
+                          formatCredits={formatCredits}
+                          formatTokenCount={formatTokenCount}
+                          formatRelativeTimeFromIso={formatRelativeTimeFromIso}
+                          formatDirectivePhaseScope={formatDirectivePhaseScope}
+                        />
+                      </div>
+                    </div>
+                    </div>
+                  </LiveRoom>
+                ) : null}
+
+                {activeRoom === 'optimize' ? (
+                  <OptimizeRoom
+                    advanced={optimizeAdvancedContent}
+                    showAdvanced={showOptimizeAdvanced}
+                    onToggleAdvanced={() => setShowOptimizeAdvanced((current) => !current)}
+                  >
+                    <div className="grid gap-4">
+                      <OptimizeCurrentReleaseSection scorecard={optimizationScorecard} />
+                    </div>
+
+                    <OptimizeScenarioSimulatorSection
+                      scenarios={SCENARIO_PRESETS}
+                      selectedScenarioId={selectedScenario.id}
+                      selectedScenarioLabel={selectedScenario.label}
+                      selectedScenarioSummary={selectedScenario.summary}
+                      previewPresetLabel={previewPreset.label}
+                      scenarioSnapshot={scenarioComparisons[0]?.simulated || selectedMath}
+                      actionBusy={actionBusy}
+                      experimentSaveBusy={experimentSaveBusy}
+                      onSelectScenario={setSelectedScenarioId}
+                      onSaveExperiment={handleSaveExperiment}
+                    />
+
+                    <OptimizeReleaseCandidateSection
+                      candidatePresets={scenarioComparisons}
+                      selectedPresetId={previewPreset.id}
+                      previewPresetLabel={previewPreset.label}
+                      activePresetLabel={activePresetId === 'custom_live' ? 'Custom live policy' : POLICY_PRESETS.find((preset) => preset.id === activePresetId)?.label || 'System recommended'}
+                      previewScenarioComparison={previewScenarioComparison}
+                      currentIndices={{
+                        spend: currentSpendIndex,
+                        assurance: currentAssuranceIndex,
+                        fit: currentFitIndex,
+                      }}
+                      policyDiffRows={policyDiffRows}
+                      policyRadarMetrics={policyRadarMetrics}
+                      frontierPoints={frontierPoints}
+                      actionBusy={actionBusy}
+                      onSelectPreset={setPreviewPresetId}
+                      onApplyPreviewPreset={() => void patchExecutionPolicy(previewPreset.policy)}
+                      formatSignedDelta={formatSignedDelta}
+                      buildRadarPolygon={buildRadarPolygon}
+                    />
                   </OptimizeRoom>
                 ) : null}
 
