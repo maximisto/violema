@@ -53,6 +53,11 @@ import type {
   WorkflowBlockDraft,
   WorkflowBlockKind,
 } from '../features/agent-studio/types';
+import { LiveSupportRailSection } from '../features/agent-studio/components/LiveSupportRailSection';
+import { LiveSystemMapSection } from '../features/agent-studio/components/LiveSystemMapSection';
+import { OptimizeCurrentReleaseSection } from '../features/agent-studio/components/OptimizeCurrentReleaseSection';
+import { OptimizeReleaseCandidateSection } from '../features/agent-studio/components/OptimizeReleaseCandidateSection';
+import { OptimizeScenarioSimulatorSection } from '../features/agent-studio/components/OptimizeScenarioSimulatorSection';
 import { LiveRoom } from '../features/agent-studio/rooms/LiveRoom';
 import { OptimizeRoom } from '../features/agent-studio/rooms/OptimizeRoom';
 import { ReplayRoom } from '../features/agent-studio/rooms/ReplayRoom';
@@ -5403,202 +5408,31 @@ export default function AgentStudio() {
                 {activeRoom === 'live' ? (
                   <LiveRoom>
                     <div className="space-y-6">
-                      <div className="space-y-6">
-                        <div className="rounded-[1.9rem] border border-cyan-500/15 bg-gradient-to-br from-cyan-500/8 via-navy-900/72 to-navy-950/92 p-5">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <Layers3 className="h-4 w-4 text-cyan-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-300/80">Live system map</p>
-                              <h3 className="text-sm font-semibold text-white">Manager and worker lanes</h3>
-                            </div>
-                          </div>
-                          <span className="rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-300">
-                            {liveRun?.status === 'running' ? 'Live now' : 'Preview from latest run'}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                          One manager in the center, resident specialists around it, and elastic lanes appearing only when the workflow math or live execution justify them.
-                        </p>
-                        <div className="relative mt-5 h-[30rem] overflow-hidden rounded-[1.8rem] border border-white/6 bg-[radial-gradient(circle_at_center,rgba(45,212,191,0.10),transparent_28%),linear-gradient(180deg,rgba(15,23,42,0.74),rgba(2,6,23,0.96))]">
-                          <div className="absolute inset-[14%] rounded-full border border-violet-500/10" />
-                          <div className="absolute inset-[25%] rounded-full border border-cyan-500/10" />
-                          <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.30),rgba(8,47,73,0.04))] blur-2xl" />
-                          <button
-                            type="button"
-                            onClick={() => setSelectedWorkerRole('nexus')}
-                            className={`absolute left-1/2 top-1/2 z-10 w-[12rem] -translate-x-1/2 -translate-y-1/2 rounded-[1.6rem] border bg-navy-950/82 p-4 text-left shadow-[0_24px_80px_rgba(76,29,149,0.28)] transition-colors ${
-                              selectedWorkerDetail.worker?.role === 'nexus' ? 'border-violet-300/34' : 'border-violet-400/24'
-                            }`}
-                          >
-                            {selectedTopology.workers.filter((worker) => worker.role === 'nexus').map((worker) => (
-                              <div key={worker.role}>
-                                <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <p className="text-[10px] uppercase tracking-[0.16em] text-violet-300/80">Manager</p>
-                                    <p className="mt-1 text-sm font-semibold text-white">{worker.label}</p>
-                                  </div>
-                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${worker.status === 'active' ? 'border-violet-500/20 bg-violet-500/10 text-violet-200' : 'border-navy-700 bg-navy-900 text-slate-400'}`}>
-                                    {worker.status}
-                                  </span>
-                                </div>
-                                <p className="mt-3 text-[12px] leading-relaxed text-slate-300">{worker.reason}</p>
-                                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
-                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{selectedTopology.primaryBand} band</span>
-                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{worker.modelLabel}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </button>
-                          {workerMapNodes.map((worker) => (
-                            <button
-                              type="button"
-                              key={worker.role}
-                              onClick={() => setSelectedWorkerRole(worker.role)}
-                              className={`absolute z-[5] w-[10.5rem] rounded-[1.2rem] border p-3 shadow-[0_14px_40px_rgba(2,6,23,0.28)] ${worker.positionClass} ${
-                                worker.status === 'active'
-                                  ? worker.laneType === 'elastic'
-                                    ? 'border-cyan-500/25 bg-cyan-500/10'
-                                    : 'border-violet-500/25 bg-violet-500/10'
-                                  : 'border-navy-700/70 bg-navy-950/72'
-                              } ${selectedWorkerDetail.worker?.role === worker.role ? 'ring-2 ring-violet-400/45' : ''}`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium text-white">{worker.label}</p>
-                                  <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">{worker.band} band</p>
-                                </div>
-                                <span className={`mt-0.5 inline-flex h-2.5 w-2.5 rounded-full ${worker.status === 'active' ? 'animate-pulse bg-emerald-300' : 'bg-slate-600'}`} />
-                              </div>
-                              <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{truncateText(worker.reason, 84)}</p>
-                              {selectedStudioState.roleDirectives?.[worker.role] ? (
-                                <div className="mt-2 flex flex-wrap gap-1.5">
-                                  <span className="inline-flex rounded-full border border-cyan-500/18 bg-cyan-500/8 px-2 py-0.5 text-[10px] font-medium text-cyan-200">
-                                    {selectedStudioState.roleDirectives[worker.role].mode === 'cheaper'
-                                      ? 'Cheaper'
-                                      : selectedStudioState.roleDirectives[worker.role].mode === 'review'
-                                        ? 'Review'
-                                        : 'Promoted'}
-                                  </span>
-                                  {(selectedStudioState.roleDirectives[worker.role].phases || []).slice(0, 3).map((phase) => (
-                                    <span key={`${worker.role}-${phase}`} className="inline-flex rounded-full border border-white/8 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-medium text-slate-300">
-                                      {formatDirectivePhaseShort(phase)}
-                                    </span>
-                                  ))}
-                                  {(selectedStudioState.roleDirectives[worker.role].phases || []).length > 3 ? (
-                                    <span className="inline-flex rounded-full border border-white/8 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-medium text-slate-300">
-                                      +{(selectedStudioState.roleDirectives[worker.role].phases || []).length - 3}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Active specialists</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{selectedTopology.workers.filter((worker) => worker.laneType === 'core' && worker.status === 'active').length}</p>
-                          </div>
-                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Elastic lanes open</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{selectedTopology.workers.filter((worker) => worker.laneType === 'elastic' && worker.status === 'active').length}</p>
-                          </div>
-                          <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Optimization bias</p>
-                            <p className="mt-1 text-lg font-semibold text-white">{selectedMath.estimatedBands}</p>
-                          </div>
-                        </div>
-                        </div>
+                      <LiveSystemMapSection
+                        liveStatusLabel={liveRun?.status === 'running' ? 'Live now' : 'Preview from latest run'}
+                        topology={selectedTopology}
+                        workerMapNodes={workerMapNodes}
+                        selectedWorkerRole={selectedWorkerDetail.worker?.role}
+                        roleDirectives={selectedStudioState.roleDirectives}
+                        optimizationBiasLabel={selectedMath.estimatedBands}
+                        activeCoreCount={selectedTopology.workers.filter((worker) => worker.laneType === 'core' && worker.status === 'active').length}
+                        activeElasticCount={selectedTopology.workers.filter((worker) => worker.laneType === 'elastic' && worker.status === 'active').length}
+                        onSelectWorker={setSelectedWorkerRole}
+                        truncateText={truncateText}
+                        formatDirectivePhaseShort={formatDirectivePhaseShort}
+                      />
 
-                        <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] xl:items-start">
-                        <div className="space-y-6">
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Cpu className="h-4 w-4 text-violet-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Lane roster</p>
-                              <h3 className="text-sm font-semibold text-white">Who is resident vs elastic</h3>
-                            </div>
-                          </div>
-                          <div className="mt-4 space-y-3">
-                            {(['core', 'elastic'] as const).map((laneType) => (
-                              <div key={laneType}>
-                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{laneType === 'core' ? 'Resident specialists' : 'Elastic lanes'}</p>
-                                <div className="mt-2 space-y-2">
-                                  {selectedTopology.workers.filter((worker) => worker.laneType === laneType && worker.role !== 'nexus').map((worker) => (
-                                    <div key={worker.role} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                          <p className="text-sm font-medium text-white">{worker.label}</p>
-                                          <p className="mt-1 text-[11px] text-slate-500">{worker.modelLabel}</p>
-                                        </div>
-                                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${worker.status === 'active' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-navy-700 bg-navy-900 text-slate-400'}`}>
-                                          {worker.status}
-                                        </span>
-                                      </div>
-                                      <p className="mt-2 text-[12px] leading-relaxed text-slate-400">{worker.reason}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="h-4 w-4 text-emerald-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Next experiments</p>
-                              <h3 className="text-sm font-semibold text-white">Best next moves from live evidence</h3>
-                            </div>
-                          </div>
-                          <div className="mt-4 space-y-3">
-                            {nextExperimentQueue.map((item) => (
-                              <div key={item.id} className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <p className="text-sm font-medium text-white">{item.title}</p>
-                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{item.sourceLabel}</span>
-                                </div>
-                                <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.body}</p>
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleExecuteNextExperiment(item)}
-                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200"
-                                  >
-                                    {item.action === 'simulate_phase'
-                                      ? 'Simulate first'
-                                      : item.action === 'focus_phase'
-                                        ? 'Open in node inspector'
-                                        : 'Apply now'}
-                                  </button>
-                                  {item.phase ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedDirectivePhase(item.phase!);
-                                        setActiveRoom('replay');
-                                      }}
-                                      className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
-                                    >
-                                      View evidence
-                                    </button>
-                                  ) : null}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSaveOperatingPlan({ namePrefix: item.sourceLabel })}
-                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
-                                  >
-                                    Save as plan
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
+                      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] xl:items-start">
+                      <LiveSupportRailSection
+                        workers={selectedTopology.workers}
+                        nextExperimentQueue={nextExperimentQueue}
+                        onExecuteNextExperiment={handleExecuteNextExperiment}
+                        onViewExperimentEvidence={(phase) => {
+                          setSelectedDirectivePhase(phase);
+                          setActiveRoom('replay');
+                        }}
+                        onSavePlan={(namePrefix) => handleSaveOperatingPlan({ namePrefix })}
+                      />
 
                       <div className="space-y-6">
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
@@ -6029,43 +5863,13 @@ export default function AgentStudio() {
                         </div>
                     </>
                     ) : null}
-                    </div>
                   </LiveRoom>
                 ) : null}
 
                 {activeRoom === 'optimize' ? (
                   <OptimizeRoom>
                     <div className="grid gap-4">
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                        <div className="flex items-center gap-2">
-                          <Gauge className="h-4 w-4 text-emerald-300" />
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Current release</p>
-                            <h3 className="text-sm font-semibold text-white">How healthy the live setup is</h3>
-                          </div>
-                        </div>
-                        <p className="mt-2 text-sm leading-relaxed text-slate-400">Start from the live release, not from knobs. This is the compact read on whether the current operating setup is earning its complexity.</p>
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                          {[
-                            { label: 'Spend pressure', value: optimizationScorecard.spendPressure, tone: 'text-amber-300' },
-                            { label: 'Risk pressure', value: optimizationScorecard.riskPressure, tone: 'text-rose-300' },
-                            { label: 'Leverage score', value: optimizationScorecard.leverageScore, tone: 'text-emerald-300' },
-                          ].map((item) => (
-                            <div key={item.label} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
-                              <p className={`mt-1 text-xl font-semibold ${item.tone}`}>{item.value}</p>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-4 rounded-2xl border border-emerald-500/16 bg-emerald-500/8 p-4">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-100/80">Verdict</p>
-                          <p className="mt-1 text-sm font-semibold text-white">{optimizationScorecard.verdict}</p>
-                          <p className="mt-2 text-sm leading-relaxed text-slate-300">{optimizationScorecard.nextMove}</p>
-                        </div>
-                        <p className="mt-4 text-[11px] leading-relaxed text-slate-500">
-                          Detailed risk and waste diagnostics live in the advanced optimize controls so the release path stays readable.
-                        </p>
-                      </div>
+                      <OptimizeCurrentReleaseSection scorecard={optimizationScorecard} />
 
                       {showOptimizeAdvanced ? (
                       <div className="grid gap-4">
@@ -6128,345 +5932,39 @@ export default function AgentStudio() {
                       ) : null}
                     </div>
 
-                    <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-cyan-300" />
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Scenario simulator</p>
-                          <h3 className="text-sm font-semibold text-white">Stress-test the policy before you change it</h3>
-                        </div>
-                      </div>
-                      <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                        Simulate the same workflow under different operating conditions. This gives users a reason for the configuration, not just a list of knobs.
-                      </p>
-                      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.95fr),minmax(0,1.05fr)]">
-                        <div className="grid gap-3 md:grid-cols-2">
-                          {SCENARIO_PRESETS.map((scenario) => (
-                            <button
-                              key={scenario.id}
-                              type="button"
-                              onClick={() => setSelectedScenarioId(scenario.id)}
-                              className={`rounded-2xl border p-4 text-left transition-all ${
-                                selectedScenario.id === scenario.id
-                                  ? 'border-cyan-500/28 bg-cyan-500/10 shadow-[0_18px_44px_rgba(8,145,178,0.16)]'
-                                  : 'border-navy-700/70 bg-navy-950/42 hover:border-cyan-500/18 hover:bg-navy-900/55'
-                              }`}
-                            >
-                              <p className="text-sm font-semibold text-white">{scenario.label}</p>
-                              <p className="mt-2 text-[12px] leading-relaxed text-slate-400">{scenario.summary}</p>
-                            </button>
-                          ))}
-                        </div>
-                        <div className="rounded-[1.6rem] border border-white/6 bg-white/[0.03] p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Saved experiment</p>
-                              <p className="mt-1 text-sm font-medium text-white">{selectedScenario.label}</p>
-                            </div>
-                            <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-200">
-                              {previewPreset.label}
-                            </span>
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Scenario steps</p>
-                              <p className="mt-1 text-lg font-semibold text-white">{scenarioComparisons[0]?.simulated.stepCount || selectedMath.stepCount}</p>
-                            </div>
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Scenario tools</p>
-                              <p className="mt-1 text-lg font-semibold text-white">{scenarioComparisons[0]?.simulated.toolCalls || selectedMath.toolCalls}</p>
-                            </div>
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Reasoning load</p>
-                              <p className="mt-1 text-lg font-semibold text-white">{scenarioComparisons[0]?.simulated.reasoningLoad || selectedMath.reasoningLoad}</p>
-                            </div>
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Suggested lanes</p>
-                              <p className="mt-1 text-lg font-semibold text-white">{scenarioComparisons[0]?.simulated.recommendedElasticLanes || selectedMath.recommendedElasticLanes}</p>
-                            </div>
-                          </div>
-                          <p className="mt-4 text-sm leading-relaxed text-slate-400">
-                            {selectedScenario.summary}
-                          </p>
-                          <p className="mt-2 text-[12px] leading-relaxed text-slate-500">
-                            This scenario is remembered per workflow, so when you come back to this automation the same test setup is waiting for you.
-                          </p>
-                          <div className="mt-4 flex flex-wrap items-center gap-3">
-                            <button
-                              type="button"
-                              disabled={actionBusy || experimentSaveBusy}
-                              onClick={handleSaveExperiment}
-                              className="rounded-xl border border-cyan-500/24 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-100 transition-colors hover:bg-cyan-500/14 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {experimentSaveBusy ? 'Saving…' : 'Save experiment snapshot'}
-                            </button>
-                            <p className="text-[11px] leading-relaxed text-slate-500">Save strong scenario and preset pairings so the workflow can be compared and restored later.</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <OptimizeScenarioSimulatorSection
+                      scenarios={SCENARIO_PRESETS}
+                      selectedScenarioId={selectedScenario.id}
+                      selectedScenarioLabel={selectedScenario.label}
+                      selectedScenarioSummary={selectedScenario.summary}
+                      previewPresetLabel={previewPreset.label}
+                      scenarioSnapshot={scenarioComparisons[0]?.simulated || selectedMath}
+                      actionBusy={actionBusy}
+                      experimentSaveBusy={experimentSaveBusy}
+                      onSelectScenario={setSelectedScenarioId}
+                      onSaveExperiment={handleSaveExperiment}
+                    />
 
-                    <div className="grid gap-6">
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                        <div className="flex items-center gap-2">
-                          <Target className="h-4 w-4 text-cyan-300" />
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Release candidate</p>
-                            <h3 className="text-sm font-semibold text-white">Choose the candidate before you apply it</h3>
-                          </div>
-                        </div>
-                        <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                          Compare presets against this workflow first. The goal is to make cost-quality tradeoffs obvious before you commit the system to a new posture.
-                        </p>
-                        <div className="mt-4 grid gap-3 md:grid-cols-2">
-                          {scenarioComparisons.map((preset) => (
-                            <button
-                              key={preset.id}
-                              type="button"
-                              onClick={() => setPreviewPresetId(preset.id)}
-                              className={`rounded-[1.5rem] border p-4 text-left transition-all ${
-                                previewPreset.id === preset.id
-                                  ? 'border-violet-500/30 bg-violet-500/10 shadow-[0_18px_44px_rgba(76,29,149,0.16)]'
-                                  : 'border-navy-700/70 bg-navy-950/42 hover:border-violet-500/20 hover:bg-navy-900/55'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-white">{preset.label}</p>
-                                  <p className="mt-2 text-[12px] leading-relaxed text-slate-400">{preset.summary}</p>
-                                </div>
-                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${preset.isActive ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200' : 'border-navy-700 bg-navy-900 text-slate-400'}`}>
-                                  {preset.isActive ? 'Live' : 'Preview'}
-                                </span>
-                              </div>
-                              <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
-                                <div>
-                                  <p className="text-slate-500">Lanes</p>
-                                  <p className="mt-1 text-white">{preset.math.activeElasticLanes}</p>
-                                </div>
-                                <div>
-                                  <p className="text-slate-500">Review</p>
-                                  <p className="mt-1 text-white">{preset.policy.reviewPolicy}</p>
-                                </div>
-                                <div>
-                                  <p className="text-slate-500">Bias</p>
-                                  <p className="mt-1 text-white">{preset.math.estimatedBands}</p>
-                                </div>
-                              </div>
-                              <div className="mt-3 space-y-2">
-                                {[
-                                  { label: 'Spend', value: preset.scenarioSpend, color: 'from-amber-300 to-violet-400' },
-                                  { label: 'Assurance', value: preset.scenarioAssurance, color: 'from-cyan-300 to-emerald-400' },
-                                  { label: 'Fit', value: preset.scenarioFit, color: 'from-violet-300 to-fuchsia-400' },
-                                ].map((metric) => (
-                                  <div key={metric.label}>
-                                    <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                                      <span>{metric.label}</span>
-                                      <span>{metric.value}</span>
-                                    </div>
-                                    <div className="mt-1 h-1.5 rounded-full bg-navy-950/70">
-                                      <div className={`h-full rounded-full bg-gradient-to-r ${metric.color}`} style={{ width: `${metric.value}%` }} />
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="space-y-6">
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <BarChart3 className="h-4 w-4 text-amber-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Candidate diff</p>
-                              <h3 className="text-sm font-semibold text-white">What changes if you release this setup</h3>
-                            </div>
-                          </div>
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Preview preset</p>
-                              <p className="mt-1 text-sm font-medium text-white">{previewPreset.label}</p>
-                            </div>
-                            <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Active preset</p>
-                              <p className="mt-1 text-sm font-medium text-white">{activePresetId === 'custom_live' ? 'Custom live policy' : POLICY_PRESETS.find((preset) => preset.id === activePresetId)?.label || 'System recommended'}</p>
-                            </div>
-                          </div>
-                          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                            {[
-                              { label: 'Spend', current: currentSpendIndex, next: previewScenarioComparison?.scenarioSpend ?? currentSpendIndex },
-                              { label: 'Assurance', current: currentAssuranceIndex, next: previewScenarioComparison?.scenarioAssurance ?? currentAssuranceIndex },
-                              { label: 'Fit', current: currentFitIndex, next: previewScenarioComparison?.scenarioFit ?? currentFitIndex },
-                            ].map((metric) => (
-                              <div key={metric.label} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{metric.label}</p>
-                                <p className="mt-1 text-lg font-semibold text-white">{metric.next}</p>
-                                <p className={`mt-1 text-[11px] ${metric.next === metric.current ? 'text-slate-500' : metric.next > metric.current ? 'text-emerald-300' : 'text-amber-300'}`}>
-                                  {formatSignedDelta(metric.next - metric.current)} vs live
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="mt-4 flex flex-wrap items-center gap-3">
-                            <button
-                              type="button"
-                              disabled={actionBusy || previewPreset.id === activePresetId}
-                              onClick={() => void patchExecutionPolicy(previewPreset.policy)}
-                              className="rounded-xl border border-violet-500/24 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-100 transition-colors hover:bg-violet-500/14 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {previewPreset.id === activePresetId ? 'Already applied' : `Apply ${previewPreset.label}`}
-                            </button>
-                            <p className="text-[11px] leading-relaxed text-slate-500">Use presets first. Only drop into advanced overrides if you have a real reason to outsmart the system math.</p>
-                          </div>
-                          <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Before / after policy diff</p>
-                            <div className="mt-3 space-y-2">
-                              {policyDiffRows.length > 0 ? policyDiffRows.map((row) => (
-                                <div key={row.label} className="flex items-center justify-between gap-3 rounded-xl border border-navy-700/70 bg-navy-950/45 px-3 py-2 text-sm">
-                                  <span className="text-slate-400">{row.label}</span>
-                                  <div className="flex items-center gap-2 text-white">
-                                    <span className="text-slate-500">{row.current}</span>
-                                    <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
-                                    <span>{row.next}</span>
-                                  </div>
-                                </div>
-                              )) : (
-                                <div className="rounded-xl border border-dashed border-navy-700/70 bg-navy-950/35 px-3 py-2 text-sm text-slate-500">
-                                  This preview matches the active policy.
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Orbit className="h-4 w-4 text-violet-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Live vs candidate</p>
-                              <h3 className="text-sm font-semibold text-white">Release radar</h3>
-                            </div>
-                          </div>
-                          <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                            The preview should earn its extra cost. This chart makes the tradeoff visible before you apply the policy.
-                          </p>
-                          <div className="mt-4 grid gap-4 lg:grid-cols-[13rem,minmax(0,1fr)]">
-                            <div className="flex items-center justify-center rounded-[1.6rem] border border-white/6 bg-white/[0.03] p-4">
-                              <svg viewBox="0 0 220 220" className="h-48 w-48" aria-hidden="true">
-                                {[1, 2, 3, 4].map((ring) => (
-                                  <polygon
-                                    key={ring}
-                                    points={buildRadarPolygon([25 * ring, 25 * ring, 25 * ring], 72, 110, 110)}
-                                    fill="none"
-                                    stroke="rgba(148,163,184,0.14)"
-                                    strokeWidth="1"
-                                  />
-                                ))}
-                                {policyRadarMetrics.map((metric, index) => {
-                                  const angle = (-Math.PI / 2) + (index / policyRadarMetrics.length) * Math.PI * 2;
-                                  const x = 110 + Math.cos(angle) * 84;
-                                  const y = 110 + Math.sin(angle) * 84;
-                                  return (
-                                    <g key={metric.label}>
-                                      <line x1="110" y1="110" x2={x} y2={y} stroke="rgba(148,163,184,0.16)" strokeWidth="1" />
-                                      <text x={x} y={y} fill="rgba(226,232,240,0.88)" fontSize="11" textAnchor="middle" dominantBaseline="middle">
-                                        {metric.label}
-                                      </text>
-                                    </g>
-                                  );
-                                })}
-                                <polygon
-                                  points={buildRadarPolygon(policyRadarMetrics.map((metric) => metric.live), 72, 110, 110)}
-                                  fill="rgba(56,189,248,0.16)"
-                                  stroke="rgba(34,211,238,0.9)"
-                                  strokeWidth="2"
-                                />
-                                <polygon
-                                  points={buildRadarPolygon(policyRadarMetrics.map((metric) => metric.preview), 72, 110, 110)}
-                                  fill="rgba(168,85,247,0.16)"
-                                  stroke="rgba(192,132,252,0.92)"
-                                  strokeWidth="2"
-                                />
-                              </svg>
-                            </div>
-                            <div className="space-y-3">
-                              {policyRadarMetrics.map((metric) => (
-                                <div key={metric.label} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <p className="text-sm font-medium text-white">{metric.label}</p>
-                                    <p className={`text-[11px] ${metric.preview === metric.live ? 'text-slate-500' : metric.preview > metric.live ? 'text-emerald-300' : 'text-amber-300'}`}>
-                                      {formatSignedDelta(metric.preview - metric.live)}
-                                    </p>
-                                  </div>
-                                  <div className="mt-3 grid grid-cols-2 gap-3 text-[11px]">
-                                    <div className="rounded-xl border border-cyan-500/18 bg-cyan-500/8 px-3 py-2">
-                                      <p className="text-slate-400">Live</p>
-                                      <p className="mt-1 text-white">{metric.live}</p>
-                                    </div>
-                                    <div className="rounded-xl border border-violet-500/18 bg-violet-500/8 px-3 py-2">
-                                      <p className="text-slate-400">Preview</p>
-                                      <p className="mt-1 text-white">{metric.preview}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Radar className="h-4 w-4 text-cyan-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Cost-quality frontier</p>
-                              <h3 className="text-sm font-semibold text-white">See the tradeoff, don’t guess it</h3>
-                            </div>
-                          </div>
-                          <div className="relative mt-4 h-72 rounded-[1.6rem] border border-white/6 bg-[linear-gradient(180deg,rgba(15,23,42,0.72),rgba(2,6,23,0.96))]">
-                            <div className="absolute inset-x-4 bottom-4 top-4">
-                              <div className="absolute inset-0 rounded-[1.2rem] border border-dashed border-white/8" />
-                              <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-white/6" />
-                              <div className="absolute left-1/2 inset-y-0 border-l border-dashed border-white/6" />
-                              {frontierPoints.map((point) => (
-                                <button
-                                  key={point.id}
-                                  type="button"
-                                  onClick={() => setPreviewPresetId(point.id)}
-                                  className={`absolute -translate-x-1/2 translate-y-1/2 rounded-full border text-[10px] font-medium text-white transition-transform hover:scale-105 ${
-                                    point.id === previewPreset.id
-                                      ? 'border-violet-200 bg-violet-500/80 shadow-[0_0_30px_rgba(139,92,246,0.45)]'
-                                      : point.isActive
-                                        ? 'border-emerald-200 bg-emerald-500/70'
-                                        : 'border-cyan-200 bg-cyan-500/70'
-                                  }`}
-                                  style={{ left: `${point.x}%`, bottom: `${point.y}%`, width: `${point.size}px`, height: `${point.size}px` }}
-                                  aria-label={point.label}
-                                />
-                              ))}
-                              <div className="absolute -bottom-2 left-0 text-[10px] uppercase tracking-[0.16em] text-slate-500">Lower spend</div>
-                              <div className="absolute -bottom-2 right-0 text-[10px] uppercase tracking-[0.16em] text-slate-500">Higher spend</div>
-                              <div className="absolute left-0 top-0 text-[10px] uppercase tracking-[0.16em] text-slate-500">Higher assurance</div>
-                              <div className="absolute left-0 bottom-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">Lower assurance</div>
-                            </div>
-                          </div>
-                          <div className="mt-4 flex flex-wrap gap-2 text-[10px] text-slate-400">
-                            {frontierPoints.map((point) => (
-                              <span key={`${point.id}-legend`} className={`rounded-full border px-2 py-0.5 ${
-                                point.id === previewPreset.id
-                                  ? 'border-violet-500/20 bg-violet-500/10 text-violet-200'
-                                  : point.isActive
-                                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
-                                    : 'border-navy-700 bg-navy-900 text-slate-300'
-                              }`}>
-                                {point.label}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <OptimizeReleaseCandidateSection
+                      candidatePresets={scenarioComparisons}
+                      selectedPresetId={previewPreset.id}
+                      previewPresetLabel={previewPreset.label}
+                      activePresetLabel={activePresetId === 'custom_live' ? 'Custom live policy' : POLICY_PRESETS.find((preset) => preset.id === activePresetId)?.label || 'System recommended'}
+                      previewScenarioComparison={previewScenarioComparison}
+                      currentIndices={{
+                        spend: currentSpendIndex,
+                        assurance: currentAssuranceIndex,
+                        fit: currentFitIndex,
+                      }}
+                      policyDiffRows={policyDiffRows}
+                      policyRadarMetrics={policyRadarMetrics}
+                      frontierPoints={frontierPoints}
+                      actionBusy={actionBusy}
+                      onSelectPreset={setPreviewPresetId}
+                      onApplyPreviewPreset={() => void patchExecutionPolicy(previewPreset.policy)}
+                      formatSignedDelta={formatSignedDelta}
+                      buildRadarPolygon={buildRadarPolygon}
+                    />
 
                     <div className="rounded-[1.8rem] border border-white/6 bg-white/[0.03] p-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
