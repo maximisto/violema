@@ -1630,7 +1630,9 @@ export default function AgentStudio() {
   const location = useLocation();
   const workspace = useMemo(() => resolveWorkspaceContext(), []);
   const [activeRoom, setActiveRoom] = useState<StudioRoom>('live');
+  const [showLiveAdvanced, setShowLiveAdvanced] = useState(false);
   const [showOptimizeAdvanced, setShowOptimizeAdvanced] = useState(false);
+  const [showReplayAdvanced, setShowReplayAdvanced] = useState(false);
   const [selectedWorkerRole, setSelectedWorkerRole] = useState<string>('nexus');
   const [selectedScenarioId, setSelectedScenarioId] = useState<ScenarioPresetId>('baseline');
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
@@ -5396,57 +5398,6 @@ export default function AgentStudio() {
                     })}
                   </div>
 
-                  <div className="mt-5 rounded-[1.4rem] border border-white/6 bg-white/[0.03] p-4">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Path forward</p>
-                    {activeRoom === 'live' ? (
-                      <>
-                        <p className="mt-1 text-sm font-medium text-white">Inspect the system first, then steer one role at a time.</p>
-                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                          {[
-                            'Read the system map and pick the worker that looks overloaded or underused.',
-                            'Use the node inspector to see recent work, phase history, and any active directive.',
-                            'Only then apply a cheaper, review, or promote move and watch the next run.',
-                          ].map((step) => (
-                            <div key={step} className="rounded-xl border border-navy-700/70 bg-navy-950/45 px-3 py-3 text-sm leading-relaxed text-slate-300">
-                              {step}
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : null}
-                    {activeRoom === 'optimize' ? (
-                      <>
-                        <p className="mt-1 text-sm font-medium text-white">Start with scenarios and presets. Only open the strategy lab when the simple path stops being enough.</p>
-                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                          {[
-                            'Choose the scenario that matches the pressure you expect this workflow to face.',
-                            'Preview presets and compare spend, assurance, and fit before applying anything.',
-                            'Use plans, branches, and advanced overrides only when you have real evidence.',
-                          ].map((step) => (
-                            <div key={step} className="rounded-xl border border-navy-700/70 bg-navy-950/45 px-3 py-3 text-sm leading-relaxed text-slate-300">
-                              {step}
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : null}
-                    {activeRoom === 'replay' ? (
-                      <>
-                        <p className="mt-1 text-sm font-medium text-white">Use replay to understand what happened, then decide whether to branch, promote, or roll back.</p>
-                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                          {[
-                            'Start with the run timeline and paired replay so you understand the exact handoff sequence.',
-                            'Use the findings and dual-run comparison to locate the phase that changed the outcome.',
-                            'Only then open promotion, branch, and rollback history to decide the next policy move.',
-                          ].map((step) => (
-                            <div key={step} className="rounded-xl border border-navy-700/70 bg-navy-950/45 px-3 py-3 text-sm leading-relaxed text-slate-300">
-                              {step}
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
                 </div>
 
                 {activeRoom === 'live' ? (
@@ -5821,6 +5772,28 @@ export default function AgentStudio() {
                     </div>
                     </div>
 
+                    <div className="rounded-[1.8rem] border border-white/6 bg-white/[0.03] p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="max-w-3xl">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Advanced live controls</p>
+                          <h3 className="mt-1 text-sm font-semibold text-white">Telemetry, steering, and deeper supporting diagnostics</h3>
+                          <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                            Use these when the map, worker inspector, and next actions are not enough. They support live operations, but should not drown the main operating view.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowLiveAdvanced((current) => !current)}
+                          className={`ui-pill inline-flex items-center gap-2 px-3 py-1.5 text-[11px] normal-case tracking-normal ${
+                            showLiveAdvanced ? 'border-violet-500/30 bg-violet-500/12 text-violet-200' : 'text-slate-300'
+                          }`}
+                        >
+                          {showLiveAdvanced ? 'Hide advanced live' : 'Show advanced live'}
+                        </button>
+                      </div>
+                    </div>
+                    {showLiveAdvanced ? (
+                    <>
                     <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
                       <div className="space-y-6">
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
@@ -6054,6 +6027,8 @@ export default function AgentStudio() {
                             ))}
                           </div>
                         </div>
+                    </>
+                    ) : null}
                     </div>
                   </LiveRoom>
                 ) : null}
@@ -6065,11 +6040,11 @@ export default function AgentStudio() {
                         <div className="flex items-center gap-2">
                           <Gauge className="h-4 w-4 text-emerald-300" />
                           <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Optimization scorecard</p>
-                            <h3 className="text-sm font-semibold text-white">How healthy this operating setup is</h3>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Current release</p>
+                            <h3 className="text-sm font-semibold text-white">How healthy the live setup is</h3>
                           </div>
                         </div>
-                        <p className="mt-2 text-sm leading-relaxed text-slate-400">This is the compact read: how much pressure the workflow is putting on spend and risk, and whether the current policy is actually earning its complexity.</p>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-400">Start from the live release, not from knobs. This is the compact read on whether the current operating setup is earning its complexity.</p>
                         <div className="mt-4 grid gap-3 sm:grid-cols-3">
                           {[
                             { label: 'Spend pressure', value: optimizationScorecard.spendPressure, tone: 'text-amber-300' },
@@ -6087,8 +6062,12 @@ export default function AgentStudio() {
                           <p className="mt-1 text-sm font-semibold text-white">{optimizationScorecard.verdict}</p>
                           <p className="mt-2 text-sm leading-relaxed text-slate-300">{optimizationScorecard.nextMove}</p>
                         </div>
+                        <p className="mt-4 text-[11px] leading-relaxed text-slate-500">
+                          Detailed risk and waste diagnostics live in the advanced optimize controls so the release path stays readable.
+                        </p>
                       </div>
 
+                      {showOptimizeAdvanced ? (
                       <div className="grid gap-4">
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
@@ -6146,6 +6125,7 @@ export default function AgentStudio() {
                           </div>
                         </div>
                       </div>
+                      ) : null}
                     </div>
 
                     <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
@@ -6231,8 +6211,8 @@ export default function AgentStudio() {
                         <div className="flex items-center gap-2">
                           <Target className="h-4 w-4 text-cyan-300" />
                           <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Preset sandbox</p>
-                            <h3 className="text-sm font-semibold text-white">Preview before you apply</h3>
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Release candidate</p>
+                            <h3 className="text-sm font-semibold text-white">Choose the candidate before you apply it</h3>
                           </div>
                         </div>
                         <p className="mt-2 text-sm leading-relaxed text-slate-400">
@@ -6300,8 +6280,8 @@ export default function AgentStudio() {
                           <div className="flex items-center gap-2">
                             <BarChart3 className="h-4 w-4 text-amber-300" />
                             <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Preset preview</p>
-                              <h3 className="text-sm font-semibold text-white">What changes if you switch</h3>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Candidate diff</p>
+                              <h3 className="text-sm font-semibold text-white">What changes if you release this setup</h3>
                             </div>
                           </div>
                           <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -6365,8 +6345,8 @@ export default function AgentStudio() {
                           <div className="flex items-center gap-2">
                             <Orbit className="h-4 w-4 text-violet-300" />
                             <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Live vs preview</p>
-                              <h3 className="text-sm font-semibold text-white">Policy radar</h3>
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Live vs candidate</p>
+                              <h3 className="text-sm font-semibold text-white">Release radar</h3>
                             </div>
                           </div>
                           <p className="mt-2 text-sm leading-relaxed text-slate-400">
@@ -6490,17 +6470,17 @@ export default function AgentStudio() {
 
                     <div className="rounded-[1.8rem] border border-white/6 bg-white/[0.03] p-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Strategy lab</p>
-                          <h3 className="mt-1 text-sm font-semibold text-white">Keep optimize focused on scenarios, presets, and the preview first</h3>
-                          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
-                            Plans, branches, graduation, rollback, and deeper policy analysis are still here. They just should not compete with the primary decision path on first read.
+                        <div className="max-w-3xl">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Advanced optimize controls</p>
+                          <h3 className="mt-1 text-sm font-semibold text-white">Strategy lab, plans, branches, and policy governance</h3>
+                          <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                            These controls are still here when you need them. They just should not compete with the core release decision path.
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => setShowOptimizeAdvanced((current) => !current)}
-                          className={`ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal ${
+                          className={`ui-pill inline-flex items-center gap-2 px-3 py-1.5 text-[11px] normal-case tracking-normal ${
                             showOptimizeAdvanced ? 'border-violet-500/30 bg-violet-500/12 text-violet-200' : 'text-slate-300'
                           }`}
                         >
@@ -6508,8 +6488,8 @@ export default function AgentStudio() {
                         </button>
                       </div>
                     </div>
-
                     {showOptimizeAdvanced ? (
+                    <>
                     <div className="grid gap-6">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
@@ -8330,6 +8310,7 @@ export default function AgentStudio() {
                         </div>
                       </div>
                     </div>
+                    </>
                     ) : null}
                   </OptimizeRoom>
                 ) : null}
@@ -9767,7 +9748,30 @@ export default function AgentStudio() {
                             </div>
                           ) : null}
                         </div>
+                    </div>
 
+                        <div className="rounded-[1.8rem] border border-white/6 bg-white/[0.03] p-5">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="max-w-3xl">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Advanced replay controls</p>
+                              <h3 className="mt-1 text-sm font-semibold text-white">Governance, promotion, rollback, and branch history</h3>
+                              <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                                Use these after you understand the run. They help you manage the release system, but they should not compete with the core replay story.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowReplayAdvanced((current) => !current)}
+                              className={`ui-pill inline-flex items-center gap-2 px-3 py-1.5 text-[11px] normal-case tracking-normal ${
+                                showReplayAdvanced ? 'border-violet-500/30 bg-violet-500/12 text-violet-200' : 'text-slate-300'
+                              }`}
+                            >
+                              {showReplayAdvanced ? 'Hide advanced replay' : 'Show advanced replay'}
+                            </button>
+                          </div>
+                        </div>
+                        {showReplayAdvanced ? (
+                        <>
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                           <div className="flex items-center gap-2">
                             <Sparkles className="h-4 w-4 text-violet-300" />
@@ -9974,8 +9978,6 @@ export default function AgentStudio() {
                           )}
                       </div>
                     </div>
-                    </div>
-
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="h-4 w-4 text-emerald-300" />
@@ -10025,6 +10027,8 @@ export default function AgentStudio() {
                           ))}
                         </div>
                       </div>
+                        </>
+                        ) : null}
                     </div>
                   </ReplayRoom>
                 ) : null}
