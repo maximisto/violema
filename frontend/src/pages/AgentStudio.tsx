@@ -63,6 +63,8 @@ import { OptimizeDiagnosticsSection } from '../features/agent-studio/components/
 import { OptimizeReleaseCandidateSection } from '../features/agent-studio/components/OptimizeReleaseCandidateSection';
 import { OptimizeScenarioSimulatorSection } from '../features/agent-studio/components/OptimizeScenarioSimulatorSection';
 import { OptimizeAdvancedControlsSection } from '../features/agent-studio/components/OptimizeAdvancedControlsSection';
+import { ReplayDecisionSupportSection } from '../features/agent-studio/components/ReplayDecisionSupportSection';
+import { ReplayGovernanceSection } from '../features/agent-studio/components/ReplayGovernanceSection';
 import { LiveRoom } from '../features/agent-studio/rooms/LiveRoom';
 import { OptimizeRoom } from '../features/agent-studio/rooms/OptimizeRoom';
 import { ReplayRoom } from '../features/agent-studio/rooms/ReplayRoom';
@@ -6883,7 +6885,48 @@ export default function AgentStudio() {
                           )}
                         </div>
                       </div>
-                    </div>
+      </div>
+    </>
+  );
+
+  const replayAdvancedContent = (
+    <>
+      <ReplayDecisionSupportSection
+        winnerCausalReport={winnerCausalReport}
+        experimentPerformance={experimentPerformance}
+        selectedComparisonExperimentId={selectedComparisonExperimentId}
+        winningExperimentId={winningExperiment?.experiment.id}
+        actionBusy={actionBusy}
+        formatCredits={formatCredits}
+        formatRelativeTimeFromIso={formatRelativeTimeFromIso}
+        getExperimentDisplayLabel={getExperimentDisplayLabel}
+        getExperimentTags={getExperimentTags}
+        onCompareExperiment={handleCompareExperiment}
+        onPromotePreset={handlePromoteExperimentPreset}
+        onPromoteSteering={handlePromoteExperimentSteering}
+        onPromoteFull={handlePromoteExperimentFull}
+      />
+
+      <ReplayGovernanceSection
+        rollbackSuggestion={rollbackSuggestion}
+        promotionAudit={promotionAudit}
+        promotionHistory={selectedStudioState.promotionHistory || []}
+        roleHeatmap={roleHeatmap}
+        workflowBenchmarks={workflowBenchmarks}
+        actionBusy={actionBusy}
+        formatCredits={formatCredits}
+        formatTokenCount={formatTokenCount}
+        formatRelativeTimeFromIso={formatRelativeTimeFromIso}
+        formatDirectivePhaseScope={formatDirectivePhaseScope}
+        getPromotionModeLabel={getPromotionModeLabel}
+        getPromotionModeTone={getPromotionModeTone}
+        getStatusTone={getStatusTone}
+        onRestorePreset={handlePromoteExperimentPreset}
+        onRestoreSteering={handlePromoteExperimentSteering}
+        onRestoreFull={handlePromoteExperimentFull}
+        onReviewRestoreTarget={handleCompareExperiment}
+        onSelectBenchmarkWorkflow={setSelectedAutomationId}
+      />
     </>
   );
 
@@ -7307,7 +7350,11 @@ export default function AgentStudio() {
                 ) : null}
 
                 {activeRoom === 'replay' ? (
-                  <ReplayRoom>
+                  <ReplayRoom
+                    advanced={replayAdvancedContent}
+                    showAdvanced={showReplayAdvanced}
+                    onToggleAdvanced={() => setShowReplayAdvanced((current) => !current)}
+                  >
                     <div className="grid gap-6">
                       <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                         <div className="flex items-center gap-2">
@@ -8741,285 +8788,6 @@ export default function AgentStudio() {
                         </div>
                     </div>
 
-                        <div className="rounded-[1.8rem] border border-white/6 bg-white/[0.03] p-5">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="max-w-3xl">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Advanced replay controls</p>
-                              <h3 className="mt-1 text-sm font-semibold text-white">Governance, promotion, rollback, and branch history</h3>
-                              <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                                Use these after you understand the run. They help you manage the release system, but they should not compete with the core replay story.
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setShowReplayAdvanced((current) => !current)}
-                              className={`ui-pill inline-flex items-center gap-2 px-3 py-1.5 text-[11px] normal-case tracking-normal ${
-                                showReplayAdvanced ? 'border-violet-500/30 bg-violet-500/12 text-violet-200' : 'text-slate-300'
-                              }`}
-                            >
-                              {showReplayAdvanced ? 'Hide advanced replay' : 'Show advanced replay'}
-                            </button>
-                          </div>
-                        </div>
-                        {showReplayAdvanced ? (
-                        <>
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="h-4 w-4 text-violet-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Causal report</p>
-                              <h3 className="text-sm font-semibold text-white">Why the current winner is winning</h3>
-                            </div>
-                          </div>
-                          <div className="mt-4 space-y-3">
-                            {winnerCausalReport.map((item) => (
-                              <div key={item.title} className={`rounded-2xl border p-4 ${item.tone}`}>
-                                <p className="text-sm font-medium text-white">{item.title}</p>
-                                <p className="mt-2 text-sm leading-relaxed text-slate-200/90">{item.body}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Brain className="h-4 w-4 text-violet-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Experiment scorecards</p>
-                              <h3 className="text-sm font-semibold text-white">How saved setups perform over time</h3>
-                            </div>
-                          </div>
-                          <div className="mt-4 space-y-3">
-                            {experimentPerformance.length > 0 ? experimentPerformance.map((entry) => (
-                              <div key={entry.experiment.id} className={`rounded-2xl border p-3 ${selectedComparisonExperimentId === entry.experiment.id ? 'border-cyan-500/24 bg-cyan-500/8' : 'border-navy-700/70 bg-navy-950/45'}`}>
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-medium text-white">{getExperimentDisplayLabel(entry.experiment)}</p>
-                                  <p className="mt-1 text-[11px] text-slate-500">Saved {formatRelativeTimeFromIso(entry.experiment.createdAt)}{entry.latestAt ? ` · observed ${formatRelativeTimeFromIso(entry.latestAt)}` : ''}</p>
-                                  <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-300">
-                                      {getExperimentTags(entry.experiment, { count: entry.stats.count, successRate: entry.stats.successRate, averageCredits: entry.stats.averageCredits }, winningExperiment?.experiment.id === entry.experiment.id).map((tag) => (
-                                        <span key={`${entry.experiment.id}-${tag}`} className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{tag}</span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">score {entry.score}</span>
-                                </div>
-                                <div className="mt-3 grid gap-2 sm:grid-cols-4 text-[11px]">
-                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Runs</p><p className="mt-1 text-white">{entry.stats.count}</p></div>
-                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Success</p><p className="mt-1 text-white">{Math.round(entry.stats.successRate * 100)}%</p></div>
-                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Avg credits</p><p className="mt-1 text-white">{entry.stats.averageCredits ? `${formatCredits(entry.stats.averageCredits)} cr` : '—'}</p></div>
-                                  <div className="rounded-xl border border-navy-700/70 bg-navy-950/55 px-3 py-2"><p className="text-slate-500">Confidence</p><p className="mt-1 text-white">{entry.confidence}%</p></div>
-                                </div>
-                                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
-                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">recency +{entry.recencyBoost}</span>
-                                  <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{entry.stats.count >= 4 ? 'Deep evidence' : entry.stats.count >= 2 ? 'Moderate evidence' : 'Thin evidence'}</span>
-                                </div>
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  <button type="button" onClick={() => handleCompareExperiment(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300">Compare</button>
-                                  <button type="button" disabled={actionBusy} onClick={() => handlePromoteExperimentPreset(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-emerald-200">Preset</button>
-                                  <button type="button" disabled={actionBusy} onClick={() => handlePromoteExperimentSteering(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200">Steering</button>
-                                  <button type="button" disabled={actionBusy} onClick={() => handlePromoteExperimentFull(entry.experiment)} className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300">Full</button>
-                                </div>
-                              </div>
-                            )) : (
-                              <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
-                                No saved experiment performance yet.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Clock3 className="h-4 w-4 text-amber-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Promotion history</p>
-                              <h3 className="text-sm font-semibold text-white">How the live policy got here</h3>
-                            </div>
-                          </div>
-                          {rollbackSuggestion ? (
-                            <div className="mt-4 rounded-2xl border border-amber-500/18 bg-amber-500/8 p-4">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Rollback suggestion</p>
-                              <p className="mt-2 text-sm font-medium text-white">{rollbackSuggestion.title}</p>
-                              <p className="mt-2 text-sm leading-relaxed text-slate-300">{rollbackSuggestion.body}</p>
-                              {rollbackSuggestion.restoreExperiment ? (
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  <button
-                                    type="button"
-                                    disabled={actionBusy}
-                                    onClick={() => handlePromoteExperimentPreset(rollbackSuggestion.restoreExperiment!)}
-                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-emerald-200 disabled:opacity-60"
-                                  >
-                                    Restore preset only
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={actionBusy}
-                                    onClick={() => handlePromoteExperimentSteering(rollbackSuggestion.restoreExperiment!)}
-                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-cyan-200 disabled:opacity-60"
-                                  >
-                                    Restore steering only
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={actionBusy}
-                                    onClick={() => handlePromoteExperimentFull(rollbackSuggestion.restoreExperiment!)}
-                                    className="rounded-xl border border-amber-500/24 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-100 transition-colors hover:bg-amber-500/14 disabled:opacity-60"
-                                  >
-                                    Restore recommended setup
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCompareExperiment(rollbackSuggestion.restoreExperiment!)}
-                                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
-                                  >
-                                    Review target
-                                  </button>
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : null}
-                          {promotionAudit.length > 0 ? (
-                            <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Promotion audit</p>
-                              <div className="mt-3 space-y-3">
-                                {promotionAudit.slice(0, 4).map((entry) => (
-                                  <div key={`audit-${entry.id}`} className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-3">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div>
-                                        <p className="text-sm font-medium text-white">{getPromotionModeLabel(entry.mode)}</p>
-                                        <p className="mt-1 text-[11px] text-slate-500">{entry.summary}</p>
-                                      </div>
-                                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${entry.outcome === 'Positive' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : entry.outcome === 'Mixed' ? 'border-amber-500/25 bg-amber-500/10 text-amber-200' : 'border-slate-600 bg-slate-800/60 text-slate-300'}`}>
-                                        {entry.outcome}
-                                      </span>
-                                    </div>
-                                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
-                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{entry.subsequentRuns.length} subsequent runs</span>
-                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{Math.round(entry.stats.successRate * 100)}% success</span>
-                                      <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">{entry.stats.averageCredits ? `${formatCredits(entry.stats.averageCredits)} cr avg` : '—'}</span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null}
-                          <div className="mt-4 space-y-3">
-                            {selectedStudioState.promotionHistory?.length ? selectedStudioState.promotionHistory.map((entry) => (
-                              <div key={entry.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getPromotionModeTone(entry.mode)}`}>
-                                        {getPromotionModeLabel(entry.mode)}
-                                      </span>
-                                      {entry.phase ? (
-                                        <span className="ui-pill px-2 py-0.5 text-[10px] normal-case tracking-normal text-slate-300">
-                                          {formatDirectivePhaseScope([entry.phase])}
-                                        </span>
-                                      ) : null}
-                                      {entry.sourceExperimentLabel ? (
-                                        <span className="ui-pill px-2 py-0.5 text-[10px] normal-case tracking-normal text-slate-300">
-                                          {entry.sourceExperimentLabel}
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                    <p className="mt-3 text-sm leading-relaxed text-slate-300">{entry.summary}</p>
-                                  </div>
-                                  <span className="text-[11px] text-slate-500">{formatRelativeTimeFromIso(entry.appliedAt)}</span>
-                                </div>
-                              </div>
-                            )) : (
-                              <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
-                                No promotions yet. Once you start promoting winners, steering phases, or branching live policy, the decision trail will show up here.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                          <div className="flex items-center gap-2">
-                            <Brain className="h-4 w-4 text-violet-300" />
-                            <div>
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Role heatmap</p>
-                              <h3 className="text-sm font-semibold text-white">Which specialists are earning their keep</h3>
-                            </div>
-                          </div>
-                          <div className="mt-4 space-y-3">
-                          {roleHeatmap.length > 0 ? roleHeatmap.map((role) => (
-                            <div key={role.role} className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-medium capitalize text-white">{role.role}</p>
-                                  <p className="mt-1 text-[11px] text-slate-500">{role.steps} handoffs · {formatCredits(role.credits)} cr</p>
-                                </div>
-                                <div className="text-right text-[11px] text-slate-400">
-                                  <p>{role.failureRate}% fail rate</p>
-                                  <p className="mt-1">{formatTokenCount(role.tokens)} tokens</p>
-                                </div>
-                              </div>
-                              <div className="mt-3 h-2 rounded-full bg-navy-950/70">
-                                <div className="h-full rounded-full bg-gradient-to-r from-violet-400 to-cyan-300" style={{ width: role.activityWidth }} />
-                              </div>
-                            </div>
-                          )) : (
-                            <div className="rounded-2xl border border-dashed border-navy-700/70 bg-navy-950/35 p-4 text-sm text-slate-500">
-                              No role performance data yet.
-                            </div>
-                          )}
-                      </div>
-                    </div>
-                      <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-300" />
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow benchmarks</p>
-                            <h3 className="text-sm font-semibold text-white">How this workflow compares</h3>
-                          </div>
-                        </div>
-                        <div className="mt-4 space-y-3">
-                          {workflowBenchmarks.map((row) => (
-                            <button
-                              key={row.id}
-                              type="button"
-                              onClick={() => setSelectedAutomationId(row.id)}
-                              className={`w-full rounded-2xl border p-3 text-left transition-colors ${row.isSelected ? 'border-violet-500/25 bg-violet-500/8' : 'border-navy-700/70 bg-navy-950/40 hover:border-violet-500/18 hover:bg-navy-900/55'}`}
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium text-white">{row.name}</p>
-                                  <p className="mt-1 text-[11px] text-slate-500">{row.stepCount} steps</p>
-                                </div>
-                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusTone(row.lastStatus)}`}>
-                                  {row.lastStatus}
-                                </span>
-                              </div>
-                              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                <div>
-                                  <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                                    <span>Success</span>
-                                    <span>{row.successRate}%</span>
-                                  </div>
-                                  <div className="mt-1 h-2 rounded-full bg-navy-950/70">
-                                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-300" style={{ width: `${Math.max(10, row.successRate)}%` }} />
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                                    <span>Spend</span>
-                                    <span>{row.averageCredits ? `${formatCredits(row.averageCredits)} cr` : '—'}</span>
-                                  </div>
-                                  <div className="mt-1 h-2 rounded-full bg-navy-950/70">
-                                    <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-violet-400" style={{ width: row.costWidth }} />
-                                  </div>
-                                </div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                        </>
-                        ) : null}
                     </div>
                   </ReplayRoom>
                 ) : null}
