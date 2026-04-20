@@ -4,6 +4,7 @@ This repo currently holds the live `Violema` app and the embedded `Agent Studio`
 
 ## Product split
 
+- [Agent Studio manual](/Users/maximisto/Documents/New%20project/docs/AGENT_STUDIO_MANUAL.md)
 - [Product split overview](/Users/maximisto/Documents/New%20project/docs/products/README.md)
 - [Violema setup](/Users/maximisto/Documents/New%20project/docs/products/violema/SETUP.md)
 - [Violema handoff](/Users/maximisto/Documents/New%20project/docs/products/violema/HANDOFF.md)
