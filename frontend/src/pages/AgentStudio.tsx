@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   BarChart3,
   Brain,
+  BookOpen,
   CheckCircle2,
   ChevronRight,
   Clock3,
@@ -68,6 +69,7 @@ import { OptimizeDiagnosticsSection } from '../features/agent-studio/components/
 import { OptimizeReleaseCandidateSection } from '../features/agent-studio/components/OptimizeReleaseCandidateSection';
 import { OptimizeScenarioSimulatorSection } from '../features/agent-studio/components/OptimizeScenarioSimulatorSection';
 import { OptimizeAdvancedControlsSection } from '../features/agent-studio/components/OptimizeAdvancedControlsSection';
+import { AgentStudioGuidePanel } from '../features/agent-studio/components/AgentStudioGuidePanel';
 import { ControlLoopHandoffStrip } from '../features/agent-studio/components/ControlLoopHandoffStrip';
 import { OperationalContextMapSection } from '../features/agent-studio/components/OperationalContextMapSection';
 import { ReplayDecisionBriefSection } from '../features/agent-studio/components/ReplayDecisionBriefSection';
@@ -78,6 +80,7 @@ import { OptimizeRoom } from '../features/agent-studio/rooms/OptimizeRoom';
 import { ReplayRoom } from '../features/agent-studio/rooms/ReplayRoom';
 
 const VIOLEMA_MARK = '/po-logo.png';
+const AGENT_STUDIO_GUIDE_DISMISSED_KEY = 'violema_agentstudio_guide_dismissed';
 
 const DEFAULT_EXECUTION_POLICY: AutomationExecutionPolicyDraft = {
   mode: 'recommended',
@@ -1013,6 +1016,28 @@ function readWorkspaceAutoGraduationProfilesFallback(workspaceId: string) {
   }
 }
 
+function readAgentStudioGuideDismissed() {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(AGENT_STUDIO_GUIDE_DISMISSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeAgentStudioGuideDismissed(value: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (value) {
+      localStorage.setItem(AGENT_STUDIO_GUIDE_DISMISSED_KEY, '1');
+    } else {
+      localStorage.removeItem(AGENT_STUDIO_GUIDE_DISMISSED_KEY);
+    }
+  } catch {
+    // Ignore storage failures so the guide can still work in-session.
+  }
+}
+
 function normalizeThresholdMap(value: unknown) {
   if (!value || typeof value !== 'object') return undefined;
   const next = Object.entries(value as Record<string, unknown>).reduce<Record<string, number>>((acc, [key, raw]) => {
@@ -1657,6 +1682,7 @@ export default function AgentStudio() {
   const [showLiveAdvanced, setShowLiveAdvanced] = useState(false);
   const [showOptimizeAdvanced, setShowOptimizeAdvanced] = useState(false);
   const [showReplayAdvanced, setShowReplayAdvanced] = useState(false);
+  const [showStudioGuide, setShowStudioGuide] = useState(() => !readAgentStudioGuideDismissed());
   const [selectedWorkerRole, setSelectedWorkerRole] = useState<string>('nexus');
   const [selectedScenarioId, setSelectedScenarioId] = useState<ScenarioPresetId>('baseline');
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
@@ -1692,6 +1718,16 @@ export default function AgentStudio() {
   const [operationalContextLoading, setOperationalContextLoading] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const hydratedAutomationIdRef = useRef<string>('');
+
+  const openStudioGuide = useCallback(() => {
+    setShowStudioGuide(true);
+    writeAgentStudioGuideDismissed(false);
+  }, []);
+
+  const dismissStudioGuide = useCallback(() => {
+    setShowStudioGuide(false);
+    writeAgentStudioGuideDismissed(true);
+  }, []);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
@@ -7352,14 +7388,24 @@ export default function AgentStudio() {
               <p className="mt-1 text-sm text-slate-400">Configure worker strategy, inspect performance, and keep the schedule view clean.</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadData()}
-            className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-violet-600/50 hover:text-white"
-          >
-            <RotateCcw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={showStudioGuide ? dismissStudioGuide : openStudioGuide}
+              className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-violet-600/50 hover:text-white"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              {showStudioGuide ? 'Hide guide' : 'How to use Studio'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-violet-600/50 hover:text-white"
+            >
+              <RotateCcw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
       </header>
 
@@ -7412,6 +7458,13 @@ export default function AgentStudio() {
                     <p className="mt-2 text-sm text-slate-500">
                       Agent Studio becomes useful once it has one real workflow to inspect. Start with a scheduled workflow, then come back here to tune the system behind it.
                     </p>
+                    <div className="mt-4 rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Dashboard vs Studio</p>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                        Use Dashboard to create and schedule the workflow. Use Agent Studio after that to inspect runs, compare policies,
+                        and improve the multi-agent system behind the workflow.
+                      </p>
+                    </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -7572,6 +7625,16 @@ export default function AgentStudio() {
                     secondaryLabel={controlLoopHandoff.secondaryLabel}
                     onSecondary={controlLoopHandoff.onSecondary}
                   />
+
+                  {showStudioGuide ? (
+                    <div className="mt-5">
+                      <AgentStudioGuidePanel
+                        onDismiss={dismissStudioGuide}
+                        onOpenDashboard={() => navigate(`/dashboard?automation=${selectedRow.automation.id}&panel=schedules`)}
+                        onEditWorkflow={() => navigate(`/dashboard?automation=${selectedRow.automation.id}&panel=schedules&edit=workflow`)}
+                      />
+                    </div>
+                  ) : null}
 
                 </div>
 
@@ -9262,6 +9325,13 @@ export default function AgentStudio() {
               <div className="rounded-[1.8rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-5 py-12 text-center">
                 <p className="text-lg font-medium text-white">No workflows available</p>
                 <p className="mt-2 text-sm text-slate-500">Create a scheduled workflow first, then come back here to manage the agent system behind it.</p>
+                <div className="mx-auto mt-4 max-w-2xl rounded-2xl border border-white/6 bg-white/[0.03] p-4 text-left">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">When to use each surface</p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                    Dashboard is where you author the workflow and define the schedule. Agent Studio is where you operate the workflow&apos;s
+                    multi-agent system: inspect runs, understand failures, compare candidates, and improve policy over time.
+                  </p>
+                </div>
                 <div className="mt-5 flex flex-wrap justify-center gap-2">
                   <button
                     type="button"
