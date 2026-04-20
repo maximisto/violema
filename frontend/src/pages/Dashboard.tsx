@@ -26,6 +26,24 @@ function saveConvos(workspaceId: string, convos: Conversation[]) {
   } catch { /* ignore quota errors */ }
 }
 
+function trimConversationText(value: string, limit: number) {
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  if (!normalized) return '';
+  return normalized.length > limit ? `${normalized.slice(0, limit)}…` : normalized;
+}
+
+function deriveConversationTitle(messages: Message[], fallback = 'New conversation') {
+  const primary = messages.find((message) => message.role === 'user' && message.content.trim())
+    ?? messages.find((message) => message.content.trim());
+  const title = primary ? trimConversationText(primary.content, 45) : '';
+  return title || fallback;
+}
+
+function deriveConversationLastMessage(messages: Message[]) {
+  const latest = [...messages].reverse().find((message) => message.content.trim());
+  return latest ? trimConversationText(latest.content, 72) : undefined;
+}
+
 function buildConversationSignature(convo: Conversation) {
   return convo.messages
     .map((message) => `${message.role}:${message.content.trim().replace(/\s+/g, ' ')}`)
@@ -81,6 +99,10 @@ function loadConvos(workspaceId: string): Conversation[] {
     }>;
     return dedupeLoadedConversations(parsed.map((c) => ({
       ...c,
+      title: c.title?.trim().toLowerCase() === 'new conversation'
+        ? deriveConversationTitle(c.messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })))
+        : c.title,
+      lastMessage: c.lastMessage || deriveConversationLastMessage(c.messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) }))),
       pinned: Boolean(c.pinned),
       archived: Boolean(c.archived),
       tags: Array.isArray(c.tags) ? c.tags.filter((tag): tag is string => typeof tag === 'string') : [],
@@ -1821,14 +1843,13 @@ export default function Dashboard() {
         // After first exchange, create a conversation with a Haiku-generated smart title
         if (messages.length === 2) {
           const apiMessages = messages.map((m) => ({ role: m.role, content: m.content }));
-          const fallbackTitle =
-            messages[0]?.content?.slice(0, 45) + (messages[0]?.content?.length > 45 ? '…' : '');
+          const fallbackTitle = deriveConversationTitle(messages);
           const newId = `conv-${Date.now()}`;
 
           const newConvo: Conversation = {
             id: newId,
             title: fallbackTitle,
-            lastMessage: messages[messages.length - 1]?.content?.slice(0, 72),
+            lastMessage: deriveConversationLastMessage(messages),
             timestamp: new Date(),
             messages,
           };
@@ -1837,8 +1858,10 @@ export default function Dashboard() {
 
           // Upgrade title async via Haiku (cheap model)
           fetchSmartTitle(apiMessages).then((smartTitle) => {
+            const upgradedTitle = trimConversationText(smartTitle, 45);
+            if (!upgradedTitle || upgradedTitle.toLowerCase() === 'new conversation') return;
             setConversations((prev) =>
-              prev.map((c) => (c.id === newId ? { ...c, title: smartTitle } : c))
+              prev.map((c) => (c.id === newId ? { ...c, title: upgradedTitle } : c))
             );
           });
         }
@@ -1848,8 +1871,11 @@ export default function Dashboard() {
             c.id === activeConvoId
               ? {
                   ...c,
+                  title: c.title.trim().toLowerCase() === 'new conversation'
+                    ? deriveConversationTitle(messages)
+                    : c.title,
                   messages,
-                  lastMessage: messages[messages.length - 1]?.content?.slice(0, 72),
+                  lastMessage: deriveConversationLastMessage(messages),
                   timestamp: new Date(),
                 }
               : c
