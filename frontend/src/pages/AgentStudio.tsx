@@ -5383,27 +5383,21 @@ export default function AgentStudio() {
       nextRoom: 'live' as const,
       title: phaseSimulationPreview
         ? `Next: validate ${formatDirectivePhaseScope([phaseSimulationPreview.phase])} in Live`
-        : optimizeDecisionBrief.headline,
+        : 'Next: inspect Live before shipping this candidate',
       body: phaseSimulationPreview
         ? `You have a concrete fix preview. Open Live to inspect the target role and watch the next run after you apply it.`
-        : `${optimizeDecisionBrief.nextStep} Live is where you confirm whether the released posture actually improves the operating system.`,
+        : `${optimizeDecisionBrief.nextStep} Live is where you inspect the operating surface this release would affect before you decide to ship it.`,
       signals: compactPresent([
         { label: 'Candidate', value: previewPreset.label },
         { label: 'Scenario', value: selectedScenario.label },
         phaseSimulationPreview ? { label: 'Validate', value: formatDirectivePhaseScope([phaseSimulationPreview.phase]), tone: 'accent' as const } : null,
       ]),
-      actionLabel: 'Open Live',
+      actionLabel: phaseSimulationPreview ? 'Open Live' : 'Inspect Live',
       onAction: handleOpenLiveFromOptimizeLoop,
-      secondaryLabel: phaseSimulationPreview ? `Apply ${getDirectiveModeLabel(phaseSimulationPreview.mode)}` : undefined,
-      onSecondary: phaseSimulationPreview
-        ? () => handleApplyPhaseLearning(phaseSimulationPreview.phase, phaseSimulationPreview.mode)
-        : undefined,
     };
   }, [
     activeRoom,
     formatDirectivePhaseScope,
-    getDirectiveModeLabel,
-    handleApplyPhaseLearning,
     handleFocusLiveContextPhase,
     handleOpenOptimizeFromReplayLoop,
     handleOpenReplayFromLiveLoop,
