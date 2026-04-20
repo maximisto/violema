@@ -1702,6 +1702,7 @@ export default function Dashboard() {
     if (!hadEditState) return;
 
     params.delete('edit');
+    params.delete('create');
     const nextSearch = params.toString();
     navigate(
       {
@@ -2033,9 +2034,15 @@ export default function Dashboard() {
     const automationId = params.get('automation');
     const panel = params.get('panel');
     const editTarget = params.get('edit');
+    const createTarget = params.get('create');
 
     if (panel === 'schedules') {
       setTaskPanelOpen(true);
+    }
+
+    if (createTarget === 'workflow' && !automationEditor) {
+      handleAutomationCreate();
+      return;
     }
 
     if (automationId) {
@@ -2052,7 +2059,7 @@ export default function Dashboard() {
         void handleAutomationEdit(match);
       }
     }
-  }, [automationEditor, handleAutomationEdit, location.search, taskItems]);
+  }, [automationEditor, handleAutomationCreate, handleAutomationEdit, location.search, taskItems]);
 
   const ModeSelector = ({ compact = false }: { compact?: boolean }) => (
     <div className={`ui-input-shell flex items-center gap-1 p-1 ${compact ? 'w-full' : ''}`}>

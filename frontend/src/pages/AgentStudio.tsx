@@ -7407,8 +7407,27 @@ export default function AgentStudio() {
                     Loading workflows…
                   </div>
                 ) : rows.length === 0 ? (
-                  <div className="rounded-[1.6rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-4 py-8 text-sm text-slate-500 xl:col-span-3">
-                    No scheduled workflows yet. Create one from the dashboard, then come back here to tune the agent system.
+                  <div className="rounded-[1.6rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-4 py-8 xl:col-span-3">
+                    <p className="text-sm font-medium text-white">No scheduled workflows yet</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Agent Studio becomes useful once it has one real workflow to inspect. Start with a scheduled workflow, then come back here to tune the system behind it.
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate('/dashboard?panel=schedules&create=workflow')}
+                        className="rounded-xl border border-violet-500/24 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-100 transition-colors hover:bg-violet-500/14"
+                      >
+                        Create test workflow
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/dashboard?panel=schedules')}
+                        className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                      >
+                        Open dashboard
+                      </button>
+                    </div>
                   </div>
                 ) : rows.map((row) => {
                   const isSelected = row.automation.id === selectedRow?.automation.id;
@@ -9243,6 +9262,22 @@ export default function AgentStudio() {
               <div className="rounded-[1.8rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-5 py-12 text-center">
                 <p className="text-lg font-medium text-white">No workflows available</p>
                 <p className="mt-2 text-sm text-slate-500">Create a scheduled workflow first, then come back here to manage the agent system behind it.</p>
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/dashboard?panel=schedules&create=workflow')}
+                    className="rounded-xl border border-violet-500/24 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-100 transition-colors hover:bg-violet-500/14"
+                  >
+                    Create test workflow
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/dashboard?panel=schedules')}
+                    className="ui-pill px-3 py-1.5 text-[11px] normal-case tracking-normal text-slate-300"
+                  >
+                    Open dashboard
+                  </button>
+                </div>
               </div>
             )}
           </section>
