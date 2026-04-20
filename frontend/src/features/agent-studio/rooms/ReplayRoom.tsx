@@ -15,10 +15,10 @@ export function ReplayRoom({ children, advanced, showAdvanced = false, onToggleA
       <RoomSection
         eyebrow="Debug and decide"
         title="Replay should explain the run clearly enough that the next change becomes obvious."
-        body="Start from the exact run, compare phases, find the outcome-changing difference, then decide whether to test, release, or roll back a change."
+        body="Start from the exact run, read the decision brief, compare phases, then decide whether to test, release, or roll back a change."
         items={[
           'Read the run timeline before touching history or governance.',
-          'Use phase overlay and paired replay to isolate the expensive or failing step.',
+          'Use the decision brief to identify the first fix worth testing.',
           'Turn the finding into a candidate change, not just a postmortem note.',
         ]}
       />

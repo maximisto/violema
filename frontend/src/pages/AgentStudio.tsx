@@ -69,6 +69,7 @@ import { OptimizeReleaseCandidateSection } from '../features/agent-studio/compon
 import { OptimizeScenarioSimulatorSection } from '../features/agent-studio/components/OptimizeScenarioSimulatorSection';
 import { OptimizeAdvancedControlsSection } from '../features/agent-studio/components/OptimizeAdvancedControlsSection';
 import { OperationalContextMapSection } from '../features/agent-studio/components/OperationalContextMapSection';
+import { ReplayDecisionBriefSection } from '../features/agent-studio/components/ReplayDecisionBriefSection';
 import { ReplayDecisionSupportSection } from '../features/agent-studio/components/ReplayDecisionSupportSection';
 import { ReplayGovernanceSection } from '../features/agent-studio/components/ReplayGovernanceSection';
 import { LiveRoom } from '../features/agent-studio/rooms/LiveRoom';
@@ -3549,6 +3550,100 @@ export default function AgentStudio() {
       },
     };
   }, [runComparison?.previous, selectedReplayComparedPhaseDetail, selectedReplayPhaseDetail]);
+
+  const recommendedReplayFix = useMemo(() => {
+    const fallbackPhase = selectedReplayPhaseDetail?.phase || replayWeakSpot?.phase;
+    if (!fallbackPhase) return null;
+    const inferredMode: 'cheaper' | 'review' | 'promote' = replayWeakSpot?.recommendedMode
+      || (
+        selectedReplayPhaseDelta && selectedReplayPhaseDelta.creditsDelta > 10
+          ? 'cheaper'
+          : selectedReplayPhaseDelta?.actualStatus === 'failed'
+            ? 'review'
+            : 'promote'
+      );
+    return {
+      phase: fallbackPhase,
+      mode: inferredMode,
+    };
+  }, [replayWeakSpot, selectedReplayPhaseDelta, selectedReplayPhaseDetail?.phase]);
+
+  const replayDecisionBrief = useMemo(() => {
+    const focusPhase = recommendedReplayFix?.phase || selectedReplayPhaseDetail?.phase || replayWeakSpot?.phase;
+    const fixMode = recommendedReplayFix?.mode || 'review';
+    const focusLabel = focusPhase ? formatDirectivePhaseScope([focusPhase]) : 'selected phase';
+    const fixModeLabel = getDirectiveModeLabel(fixMode);
+
+    const headline = replayWeakSpot
+      ? `${focusLabel} is the first fix worth testing`
+      : selectedReplayPhaseDelta?.actualStatus === 'failed'
+        ? `${focusLabel} likely drove the failed outcome`
+        : selectedReplayPhaseDelta && selectedReplayPhaseDelta.creditsDelta > 10
+          ? `${focusLabel} looks like the main cost lever`
+          : `Replay points to ${focusLabel} as the next place to tighten`;
+
+    const rationale = replayWeakSpot
+      ? replayWeakSpot.body
+      : selectedReplayPhaseDelta
+        ? `${focusLabel} came in at ${selectedReplayPhaseDelta.expectedSuccess}% expected success and landed as ${selectedReplayPhaseDelta.actualStatus}. ${selectedReplayPhaseDelta.creditsDelta > 0 ? 'It also spent more than baseline.' : 'Its cost stayed close to or below baseline.'}`
+        : replayInsights[0]?.body || 'Replay has enough signal to focus the next change, but not enough to justify a broad policy move.';
+
+    let promotionReadiness = 'Test once more before promoting.';
+    if (runComparison?.previous) {
+      const creditsBetter = runComparison.current.credits <= runComparison.previous.credits;
+      const durationBetter = (runComparison.current.durationMs || 0) <= (runComparison.previous.durationMs || 0);
+      const outcomeBetter = runComparison.current.status === 'succeeded' && runComparison.previous.status !== 'succeeded';
+      if (outcomeBetter && creditsBetter) {
+        promotionReadiness = 'Promising enough to validate once more before promotion.';
+      } else if (runComparison.current.status === 'failed' || (!creditsBetter && !durationBetter)) {
+        promotionReadiness = 'Not promotion-worthy yet. Fix first, then replay again.';
+      } else {
+        promotionReadiness = 'Promising, but still better treated as a test than a live promotion.';
+      }
+    }
+
+    return {
+      headline,
+      rationale,
+      nextStep: `Test ${fixModeLabel.toLowerCase()} on ${focusLabel.toLowerCase()} first, then come back here to compare the rerun before promoting anything broader.`,
+      promotionReadiness,
+      focusLabel,
+      fixModeLabel,
+      deltas: [
+        {
+          label: 'Credits vs baseline',
+          value: selectedReplayPhaseDelta ? `${formatSignedDelta(Math.round(selectedReplayPhaseDelta.creditsDelta))} cr` : '—',
+          tone: !selectedReplayPhaseDelta ? 'neutral' : selectedReplayPhaseDelta.creditsDelta <= 0 ? 'positive' : 'negative',
+        },
+        {
+          label: 'Duration vs baseline',
+          value: selectedReplayPhaseDelta ? `${formatSignedDelta(Math.round(selectedReplayPhaseDelta.durationDelta / 1000))}s` : '—',
+          tone: !selectedReplayPhaseDelta ? 'neutral' : selectedReplayPhaseDelta.durationDelta <= 0 ? 'positive' : 'negative',
+        },
+        {
+          label: 'Expected success',
+          value: selectedReplayPhaseDelta ? `${selectedReplayPhaseDelta.expectedSuccess}% -> ${selectedReplayPhaseDelta.actualStatus}` : '—',
+          tone: selectedReplayPhaseDelta?.actualStatus === 'failed' ? 'negative' : 'neutral',
+        },
+      ] as Array<{ label: string; value: string; tone: 'positive' | 'negative' | 'neutral' }>,
+    };
+  }, [
+    formatDirectivePhaseScope,
+    formatSignedDelta,
+    getDirectiveModeLabel,
+    replayInsights,
+    replayWeakSpot,
+    recommendedReplayFix,
+    runComparison?.previous,
+    runComparison?.current.credits,
+    runComparison?.current.durationMs,
+    runComparison?.current.status,
+    runComparison?.previous?.credits,
+    runComparison?.previous?.durationMs,
+    runComparison?.previous?.status,
+    selectedReplayPhaseDelta,
+    selectedReplayPhaseDetail?.phase,
+  ]);
 
   const replayPhaseComparisonRows = useMemo(() => {
     if (!replayComparedPhaseOverlay.length) return [];
@@ -7584,6 +7679,21 @@ export default function AgentStudio() {
                           )}
                         </div>
                       </div>
+
+                      {recommendedReplayFix ? (
+                        <ReplayDecisionBriefSection
+                          brief={replayDecisionBrief}
+                          onSimulateFix={() => {
+                            setPhaseSimulation({ phase: recommendedReplayFix.phase, mode: recommendedReplayFix.mode });
+                            setActiveRoom('optimize');
+                          }}
+                          onOpenInLive={() => {
+                            setSelectedDirectivePhase(recommendedReplayFix.phase);
+                            setSelectedWorkerRole(getPreferredRoleForPhase(recommendedReplayFix.phase));
+                            setActiveRoom('live');
+                          }}
+                        />
+                      ) : null}
 
                       <div className="space-y-6">
                         <div className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
