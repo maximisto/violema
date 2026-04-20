@@ -26,6 +26,51 @@ function saveConvos(workspaceId: string, convos: Conversation[]) {
   } catch { /* ignore quota errors */ }
 }
 
+function buildConversationSignature(convo: Conversation) {
+  return convo.messages
+    .map((message) => `${message.role}:${message.content.trim().replace(/\s+/g, ' ')}`)
+    .join('\n');
+}
+
+function dedupeLoadedConversations(convos: Conversation[]) {
+  const seenUntitled = new Map<string, number>();
+  const deduped: Conversation[] = [];
+
+  convos.forEach((convo) => {
+    const hasDefaultTitle = convo.title.trim().toLowerCase() === 'new conversation';
+    if (!hasDefaultTitle || convo.pinned || convo.archived) {
+      deduped.push(convo);
+      return;
+    }
+
+    const signature = buildConversationSignature(convo);
+    const key = `${convo.title.trim().toLowerCase()}::${signature}`;
+    const existingIndex = seenUntitled.get(key);
+
+    if (existingIndex === undefined) {
+      seenUntitled.set(key, deduped.length);
+      deduped.push(convo);
+      return;
+    }
+
+    const existing = deduped[existingIndex];
+    const withinDuplicateWindow =
+      Math.abs(existing.timestamp.getTime() - convo.timestamp.getTime()) <= 2 * 60 * 1000;
+
+    if (!withinDuplicateWindow) {
+      seenUntitled.set(`${key}::${convo.timestamp.getTime()}`, deduped.length);
+      deduped.push(convo);
+      return;
+    }
+
+    if (convo.timestamp.getTime() > existing.timestamp.getTime()) {
+      deduped[existingIndex] = convo;
+    }
+  });
+
+  return deduped;
+}
+
 function loadConvos(workspaceId: string): Conversation[] {
   try {
     const raw = localStorage.getItem(getConversationsStorageKey(workspaceId));
@@ -34,14 +79,14 @@ function loadConvos(workspaceId: string): Conversation[] {
       timestamp: string;
       messages: Array<Message & { timestamp: string }>;
     }>;
-    return parsed.map((c) => ({
+    return dedupeLoadedConversations(parsed.map((c) => ({
       ...c,
       pinned: Boolean(c.pinned),
       archived: Boolean(c.archived),
       tags: Array.isArray(c.tags) ? c.tags.filter((tag): tag is string => typeof tag === 'string') : [],
       timestamp: new Date(c.timestamp),
       messages: c.messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })),
-    }));
+    })));
   } catch { return []; }
 }
 
