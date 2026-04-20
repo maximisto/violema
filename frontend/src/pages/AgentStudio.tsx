@@ -634,6 +634,10 @@ function getStatusTone(status: string) {
   return 'border-violet-500/18 bg-violet-500/8 text-violet-200';
 }
 
+function compactPresent<T>(items: Array<T | null | undefined>): T[] {
+  return items.filter((item): item is T => Boolean(item));
+}
+
 function getExecutionModeLabel(value: ExecutionMode) {
   return value === 'custom' ? 'Custom policy' : 'System recommended';
 }
@@ -5325,6 +5329,11 @@ export default function AgentStudio() {
           : 'Next: verify the strongest signal in Replay',
         body: operationalContext?.recommendationEvidence[0]?.body
           || 'Replay is the next stop when Live shows pressure but you still need to confirm what actually changed outcome.',
+        signals: compactPresent([
+          livePhase ? { label: 'Focus', value: formatDirectivePhaseScope([livePhase]), tone: 'accent' as const } : null,
+          operationalContext?.similarRuns[0]?.label ? { label: 'Seen in', value: operationalContext.similarRuns[0].label } : null,
+          operationalContext?.lastHealthyComparison?.label ? { label: 'Healthy anchor', value: operationalContext.lastHealthyComparison.label } : null,
+        ]),
         actionLabel: 'Open Replay',
         onAction: handleOpenReplayFromLiveLoop,
         secondaryLabel: livePhase ? `Focus ${formatDirectivePhaseScope([livePhase])}` : undefined,
@@ -5339,6 +5348,11 @@ export default function AgentStudio() {
           nextRoom: 'live' as const,
           title: 'Next: inspect the live system before changing policy',
           body: 'Replay has signal, but not enough for a clean targeted fix yet. Use Live to inspect the active role and collect the next run before promoting or simulating broader changes.',
+          signals: compactPresent([
+            replayDecisionBrief.focusLabel ? { label: 'Focus', value: replayDecisionBrief.focusLabel, tone: 'accent' as const } : null,
+            runComparison?.previous ? { label: 'Compared to', value: runComparison.previous.experimentLabel || `${runComparison.previous.scenarioLabel} · ${runComparison.previous.presetLabel}` } : null,
+            operationalContext?.similarRuns[0]?.label ? { label: 'Closest match', value: operationalContext.similarRuns[0].label } : null,
+          ]),
           actionLabel: 'Open Live',
           onAction: () => setActiveRoom('live'),
         };
@@ -5348,6 +5362,11 @@ export default function AgentStudio() {
         nextRoom: 'optimize' as const,
         title: `Next: test ${replayDecisionBrief.fixModeLabel.toLowerCase()} in Optimize`,
         body: replayDecisionBrief.nextStep,
+        signals: compactPresent([
+          { label: 'Fix', value: replayDecisionBrief.fixModeLabel },
+          { label: 'Phase', value: replayDecisionBrief.focusLabel, tone: 'accent' as const },
+          runComparison?.previous ? { label: 'Compared to', value: runComparison.previous.experimentLabel || `${runComparison.previous.scenarioLabel} · ${runComparison.previous.presetLabel}` } : null,
+        ]),
         actionLabel: 'Open Optimize',
         onAction: handleOpenOptimizeFromReplayLoop,
         secondaryLabel: `Open ${replayDecisionBrief.focusLabel} in Live`,
@@ -5368,6 +5387,11 @@ export default function AgentStudio() {
       body: phaseSimulationPreview
         ? `You have a concrete fix preview. Open Live to inspect the target role and watch the next run after you apply it.`
         : `${optimizeDecisionBrief.nextStep} Live is where you confirm whether the released posture actually improves the operating system.`,
+      signals: compactPresent([
+        { label: 'Candidate', value: previewPreset.label },
+        { label: 'Scenario', value: selectedScenario.label },
+        phaseSimulationPreview ? { label: 'Validate', value: formatDirectivePhaseScope([phaseSimulationPreview.phase]), tone: 'accent' as const } : null,
+      ]),
       actionLabel: 'Open Live',
       onAction: handleOpenLiveFromOptimizeLoop,
       secondaryLabel: phaseSimulationPreview ? `Apply ${getDirectiveModeLabel(phaseSimulationPreview.mode)}` : undefined,
@@ -5385,6 +5409,7 @@ export default function AgentStudio() {
     handleOpenReplayFromLiveLoop,
     handleOpenLiveFromOptimizeLoop,
     operationalContext,
+    previewPreset.label,
     optimizeDecisionBrief.headline,
     optimizeDecisionBrief.nextStep,
     phaseSimulationPreview,
@@ -5392,6 +5417,8 @@ export default function AgentStudio() {
     replayDecisionBrief.fixModeLabel,
     replayDecisionBrief.focusLabel,
     replayDecisionBrief.nextStep,
+    runComparison?.previous,
+    selectedScenario.label,
     setActiveRoom,
   ]);
 
@@ -7494,9 +7521,9 @@ export default function AgentStudio() {
 
                   <div className="mt-5 flex flex-wrap gap-2">
                     {[
-                      { id: 'live' as const, label: 'Live', summary: 'Operating picture, active lanes, current handoffs', icon: Activity },
-                      { id: 'optimize' as const, label: 'Optimize', summary: 'Preset sandbox, routing math, policy changes', icon: Target },
-                      { id: 'replay' as const, label: 'Replay', summary: 'Run timeline, role heatmap, outcome review', icon: LineChart },
+                      { id: 'live' as const, label: 'Live', summary: 'Operate the current system', icon: Activity },
+                      { id: 'replay' as const, label: 'Replay', summary: 'Explain the last run', icon: LineChart },
+                      { id: 'optimize' as const, label: 'Optimize', summary: 'Test and release changes', icon: Target },
                     ].map((room) => {
                       const Icon = room.icon;
                       const active = activeRoom === room.id;
@@ -7505,7 +7532,7 @@ export default function AgentStudio() {
                           key={room.id}
                           type="button"
                           onClick={() => setActiveRoom(room.id)}
-                          className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                          className={`rounded-2xl border px-4 py-2.5 text-left transition-all ${
                             active
                               ? 'border-violet-500/28 bg-violet-500/10 shadow-[0_18px_48px_rgba(76,29,149,0.16)]'
                               : 'border-navy-700/70 bg-navy-950/36 hover:border-violet-500/20 hover:bg-navy-900/55'
@@ -7526,6 +7553,7 @@ export default function AgentStudio() {
                     nextRoom={controlLoopHandoff.nextRoom}
                     title={controlLoopHandoff.title}
                     body={controlLoopHandoff.body}
+                    signals={controlLoopHandoff.signals}
                     actionLabel={controlLoopHandoff.actionLabel}
                     onAction={controlLoopHandoff.onAction}
                     secondaryLabel={controlLoopHandoff.secondaryLabel}
