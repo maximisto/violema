@@ -944,6 +944,7 @@ export default function ChatInterface({
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<Message[]>(messages);
   const previousConversationIdRef = useRef(conversationId);
+  const suppressNextMessagesSyncRef = useRef(false);
   const { snapshot } = useCreditSnapshot();
   messagesRef.current = messages;
 
@@ -963,7 +964,13 @@ export default function ChatInterface({
       setAgentStatus('idle');
     }
 
+    // Prevent the parent from seeing one stale render of the previous thread's
+    // messages when we intentionally hydrate a different conversation.
+    suppressNextMessagesSyncRef.current = true;
     setMessages(initialMessages);
+    setInput('');
+    setLastUserInput('');
+    setDraftEstimate(null);
     setError(null);
     setSelectedArtifact(null);
     previousConversationIdRef.current = conversationId;
@@ -982,7 +989,12 @@ export default function ChatInterface({
   }, []);
 
   useEffect(() => {
-    if (onMessagesChange) onMessagesChange(messages);
+    if (!onMessagesChange) return;
+    if (suppressNextMessagesSyncRef.current) {
+      suppressNextMessagesSyncRef.current = false;
+      return;
+    }
+    onMessagesChange(messages);
   }, [messages, onMessagesChange]);
 
   useEffect(() => {
