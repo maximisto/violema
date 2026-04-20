@@ -44,6 +44,22 @@ function deriveConversationLastMessage(messages: Message[]) {
   return latest ? trimConversationText(latest.content, 72) : undefined;
 }
 
+function shouldUpgradeConversationTitle(currentTitle: string, candidateTitle: string) {
+  const current = currentTitle.trim();
+  const candidate = candidateTitle.trim();
+
+  if (!candidate) return false;
+  if (candidate.toLowerCase() === 'new conversation') return false;
+  if (candidate.toLowerCase() === current.toLowerCase()) return false;
+
+  const candidateWords = candidate.split(/\s+/).filter(Boolean);
+  const candidateHasGoodLength = candidate.length >= 12 && candidate.length <= 45;
+  const candidateIsMoreSpecific = candidateWords.length >= 3;
+  const candidateIsMeaningfullyShorter = candidate.length + 6 < current.length;
+
+  return candidateHasGoodLength && candidateIsMoreSpecific && candidateIsMeaningfullyShorter;
+}
+
 function buildConversationSignature(convo: Conversation) {
   return convo.messages
     .map((message) => `${message.role}:${message.content.trim().replace(/\s+/g, ' ')}`)
@@ -1859,7 +1875,7 @@ export default function Dashboard() {
           // Upgrade title async via Haiku (cheap model)
           fetchSmartTitle(apiMessages).then((smartTitle) => {
             const upgradedTitle = trimConversationText(smartTitle, 45);
-            if (!upgradedTitle || upgradedTitle.toLowerCase() === 'new conversation') return;
+            if (!shouldUpgradeConversationTitle(fallbackTitle, upgradedTitle)) return;
             setConversations((prev) =>
               prev.map((c) => (c.id === newId ? { ...c, title: upgradedTitle } : c))
             );
