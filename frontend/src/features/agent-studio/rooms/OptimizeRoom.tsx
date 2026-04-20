@@ -15,10 +15,10 @@ export function OptimizeRoom({ children, advanced, showAdvanced = false, onToggl
       <RoomSection
         eyebrow="Release path"
         title="Choose the operating goal, compare a candidate, then decide whether it should ship."
-        body="Optimize is for release decisions. Start with scenarios and presets, then decide whether the candidate is better enough to apply."
+        body="Optimize is for release decisions. Start with scenarios and presets, read the decision brief, then decide whether the candidate is better enough to apply."
         items={[
           'Set the pressure you expect with a scenario, not a pile of overrides.',
-          'Compare the candidate against the live setup before you touch policy.',
+          'Read the decision brief before diving into detailed candidate diff.',
           'Open the advanced lab only when the simple path stops being enough.',
         ]}
       />

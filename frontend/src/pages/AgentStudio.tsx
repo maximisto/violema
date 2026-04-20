@@ -63,6 +63,7 @@ import { LiveOptimizationLoopSection } from '../features/agent-studio/components
 import { LiveOperatorBriefSection } from '../features/agent-studio/components/LiveOperatorBriefSection';
 import { LiveSystemMapSection } from '../features/agent-studio/components/LiveSystemMapSection';
 import { OptimizeCurrentReleaseSection } from '../features/agent-studio/components/OptimizeCurrentReleaseSection';
+import { OptimizeDecisionBriefSection } from '../features/agent-studio/components/OptimizeDecisionBriefSection';
 import { OptimizeDiagnosticsSection } from '../features/agent-studio/components/OptimizeDiagnosticsSection';
 import { OptimizeReleaseCandidateSection } from '../features/agent-studio/components/OptimizeReleaseCandidateSection';
 import { OptimizeScenarioSimulatorSection } from '../features/agent-studio/components/OptimizeScenarioSimulatorSection';
@@ -2233,6 +2234,13 @@ export default function AgentStudio() {
     [previewPreset.id, scenarioComparisons]
   );
 
+  const activePresetLabel = useMemo(
+    () => activePresetId === 'custom_live'
+      ? 'Custom live policy'
+      : POLICY_PRESETS.find((preset) => preset.id === activePresetId)?.label || 'System recommended',
+    [activePresetId]
+  );
+
   const policyRadarMetrics = useMemo(
     () => ([
       { label: 'Spend', live: currentSpendIndex, preview: previewScenarioComparison?.scenarioSpend ?? currentSpendIndex },
@@ -2692,6 +2700,88 @@ export default function AgentStudio() {
       selectedPolicy.reviewPolicy,
     ]
   );
+
+  const optimizeDecisionBrief = useMemo(() => {
+    const nextSpend = previewScenarioComparison?.scenarioSpend ?? currentSpendIndex;
+    const nextAssurance = previewScenarioComparison?.scenarioAssurance ?? currentAssuranceIndex;
+    const nextFit = previewScenarioComparison?.scenarioFit ?? currentFitIndex;
+    const spendDelta = nextSpend - currentSpendIndex;
+    const assuranceDelta = nextAssurance - currentAssuranceIndex;
+    const fitDelta = nextFit - currentFitIndex;
+    const isActiveCandidate = Boolean(previewScenarioComparison?.isActive);
+    const changedPolicyCount = policyDiffRows.length;
+
+    if (isActiveCandidate) {
+      return {
+        tone: 'neutral' as const,
+        headline: 'Live already matches this candidate',
+        body: `The current release is already operating as ${previewPreset.label} for ${selectedScenario.label.toLowerCase()}. There is nothing to ship right now.`,
+        nextStep: 'Use the detailed diff below only to understand why the live setup is already the right fit, or choose a different scenario to pressure-test a new release.',
+        deltas: {
+          spend: spendDelta,
+          assurance: assuranceDelta,
+          fit: fitDelta,
+        },
+      };
+    }
+
+    const releaseStrength = (fitDelta * 1.2) + assuranceDelta - Math.max(0, spendDelta * 0.65);
+    const liveNeedsHelp = optimizationScorecard.leverageScore < 58 || optimizationScorecard.riskPressure >= 62;
+
+    if ((releaseStrength >= 8 && assuranceDelta >= 0 && fitDelta >= 0) || (liveNeedsHelp && (fitDelta >= 4 || assuranceDelta >= 4) && spendDelta <= 12)) {
+      return {
+        tone: 'positive' as const,
+        headline: `Ship ${previewPreset.label} for this scenario`,
+        body: `${previewPreset.label} improves the operating fit enough to justify release under ${selectedScenario.label.toLowerCase()} pressure. The candidate is earning its complexity instead of just moving knobs around.`,
+        nextStep: `Before applying, confirm the policy diff once. If the lower section still looks clean, this is the right release candidate to promote from ${activePresetLabel}.`,
+        deltas: {
+          spend: spendDelta,
+          assurance: assuranceDelta,
+          fit: fitDelta,
+        },
+      };
+    }
+
+    if (assuranceDelta < 0 || (fitDelta < 0 && spendDelta >= 0)) {
+      return {
+        tone: 'warning' as const,
+        headline: 'Hold this candidate for now',
+        body: `${previewPreset.label} weakens the release story under ${selectedScenario.label.toLowerCase()} pressure. It is not improving the right dimensions enough to justify changing the live setup.`,
+        nextStep: 'Keep the current release, then either choose a better-fitting preset or open the advanced lab only if you have a specific policy hypothesis to test.',
+        deltas: {
+          spend: spendDelta,
+          assurance: assuranceDelta,
+          fit: fitDelta,
+        },
+      };
+    }
+
+    return {
+      tone: 'neutral' as const,
+      headline: 'Promising, but not decisive yet',
+      body: `${previewPreset.label} changes ${changedPolicyCount} parts of the release posture, but the net gain is still marginal. This is a candidate to inspect, not an obvious promotion yet.`,
+      nextStep: 'Read the candidate diff and radar below. If the tradeoff still feels thin, keep live and save this pairing as an experiment instead of shipping it.',
+      deltas: {
+        spend: spendDelta,
+        assurance: assuranceDelta,
+        fit: fitDelta,
+      },
+    };
+  }, [
+    activePresetLabel,
+    currentAssuranceIndex,
+    currentFitIndex,
+    currentSpendIndex,
+    optimizationScorecard.leverageScore,
+    optimizationScorecard.riskPressure,
+    policyDiffRows.length,
+    previewPreset.label,
+    previewScenarioComparison?.isActive,
+    previewScenarioComparison?.scenarioAssurance,
+    previewScenarioComparison?.scenarioFit,
+    previewScenarioComparison?.scenarioSpend,
+    selectedScenario.label,
+  ]);
 
   const phaseLearningByArchetype = useMemo(() => {
     const scopedRows = rows.filter((row) => classifyWorkflowArchetype(row.workflowSteps).id === selectedArchetype.id);
@@ -7410,9 +7500,19 @@ export default function AgentStudio() {
 
                     <OptimizeReleaseCandidateSection
                       candidatePresets={scenarioComparisons}
+                      decisionBrief={(
+                        <OptimizeDecisionBriefSection
+                          scenarioLabel={selectedScenario.label}
+                          previewPresetLabel={previewPreset.label}
+                          activePresetLabel={activePresetLabel}
+                          changedPolicyCount={policyDiffRows.length}
+                          decision={optimizeDecisionBrief}
+                          formatSignedDelta={formatSignedDelta}
+                        />
+                      )}
                       selectedPresetId={previewPreset.id}
                       previewPresetLabel={previewPreset.label}
-                      activePresetLabel={activePresetId === 'custom_live' ? 'Custom live policy' : POLICY_PRESETS.find((preset) => preset.id === activePresetId)?.label || 'System recommended'}
+                      activePresetLabel={activePresetLabel}
                       previewScenarioComparison={previewScenarioComparison}
                       currentIndices={{
                         spend: currentSpendIndex,

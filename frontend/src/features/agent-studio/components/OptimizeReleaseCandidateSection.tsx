@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { BarChart3, ChevronRight, Orbit, Radar, Target } from 'lucide-react';
 import type { AutomationExecutionPolicyDraft } from '../types';
 
@@ -18,6 +19,7 @@ interface CandidatePreset {
 
 interface OptimizeReleaseCandidateSectionProps {
   candidatePresets: CandidatePreset[];
+  decisionBrief?: ReactNode;
   selectedPresetId: string;
   previewPresetLabel: string;
   activePresetLabel: string;
@@ -58,6 +60,7 @@ interface OptimizeReleaseCandidateSectionProps {
 
 export function OptimizeReleaseCandidateSection({
   candidatePresets,
+  decisionBrief,
   selectedPresetId,
   previewPresetLabel,
   activePresetLabel,
@@ -140,6 +143,11 @@ export function OptimizeReleaseCandidateSection({
             </button>
           ))}
         </div>
+        {decisionBrief ? (
+          <div className="mt-4">
+            {decisionBrief}
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-6">
