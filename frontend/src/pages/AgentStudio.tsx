@@ -68,6 +68,7 @@ import { OptimizeDiagnosticsSection } from '../features/agent-studio/components/
 import { OptimizeReleaseCandidateSection } from '../features/agent-studio/components/OptimizeReleaseCandidateSection';
 import { OptimizeScenarioSimulatorSection } from '../features/agent-studio/components/OptimizeScenarioSimulatorSection';
 import { OptimizeAdvancedControlsSection } from '../features/agent-studio/components/OptimizeAdvancedControlsSection';
+import { ControlLoopHandoffStrip } from '../features/agent-studio/components/ControlLoopHandoffStrip';
 import { OperationalContextMapSection } from '../features/agent-studio/components/OperationalContextMapSection';
 import { ReplayDecisionBriefSection } from '../features/agent-studio/components/ReplayDecisionBriefSection';
 import { ReplayDecisionSupportSection } from '../features/agent-studio/components/ReplayDecisionSupportSection';
@@ -5286,6 +5287,114 @@ export default function AgentStudio() {
     setNotice({ tone: 'success', message: `Focused Live on ${formatDirectivePhaseScope([phase])} for ${getPreferredRoleForPhase(phase)}.` });
   }, [formatDirectivePhaseScope]);
 
+  const handleOpenReplayFromLiveLoop = useCallback(() => {
+    const contextTargetRunId = operationalContext?.recommendationEvidence[0]?.relatedRunIds?.find((runId) => runId !== operationalContext?.runId)
+      || operationalContext?.runId
+      || selectedRow?.runs.find((run) => run.status === 'succeeded' || run.status === 'failed')?.id;
+    if (contextTargetRunId) {
+      handleOpenContextRun(contextTargetRunId);
+      return;
+    }
+    setActiveRoom('replay');
+  }, [handleOpenContextRun, operationalContext, selectedRow?.runs]);
+
+  const handleOpenOptimizeFromReplayLoop = useCallback(() => {
+    if (!recommendedReplayFix) return;
+    setPhaseSimulation({ phase: recommendedReplayFix.phase, mode: recommendedReplayFix.mode });
+    setActiveRoom('optimize');
+  }, [recommendedReplayFix]);
+
+  const handleOpenLiveFromOptimizeLoop = useCallback(() => {
+    if (phaseSimulationPreview) {
+      setSelectedDirectivePhase(phaseSimulationPreview.phase);
+      setSelectedWorkerRole(phaseSimulationPreview.targetRole);
+    } else if (selectedDirectivePhase !== 'all') {
+      setSelectedWorkerRole(getPreferredRoleForPhase(selectedDirectivePhase));
+    }
+    setActiveRoom('live');
+  }, [phaseSimulationPreview, selectedDirectivePhase]);
+
+  const controlLoopHandoff = useMemo(() => {
+    if (activeRoom === 'live') {
+      const livePhase = operationalContext?.recommendationEvidence[0]?.phase;
+      return {
+        currentRoom: 'live' as const,
+        nextRoom: 'replay' as const,
+        title: livePhase
+          ? `Next: verify ${formatDirectivePhaseScope([livePhase])} in Replay`
+          : 'Next: verify the strongest signal in Replay',
+        body: operationalContext?.recommendationEvidence[0]?.body
+          || 'Replay is the next stop when Live shows pressure but you still need to confirm what actually changed outcome.',
+        actionLabel: 'Open Replay',
+        onAction: handleOpenReplayFromLiveLoop,
+        secondaryLabel: livePhase ? `Focus ${formatDirectivePhaseScope([livePhase])}` : undefined,
+        onSecondary: livePhase ? () => handleFocusLiveContextPhase(livePhase) : undefined,
+      };
+    }
+
+    if (activeRoom === 'replay') {
+      if (!recommendedReplayFix) {
+        return {
+          currentRoom: 'replay' as const,
+          nextRoom: 'live' as const,
+          title: 'Next: inspect the live system before changing policy',
+          body: 'Replay has signal, but not enough for a clean targeted fix yet. Use Live to inspect the active role and collect the next run before promoting or simulating broader changes.',
+          actionLabel: 'Open Live',
+          onAction: () => setActiveRoom('live'),
+        };
+      }
+      return {
+        currentRoom: 'replay' as const,
+        nextRoom: 'optimize' as const,
+        title: `Next: test ${replayDecisionBrief.fixModeLabel.toLowerCase()} in Optimize`,
+        body: replayDecisionBrief.nextStep,
+        actionLabel: 'Open Optimize',
+        onAction: handleOpenOptimizeFromReplayLoop,
+        secondaryLabel: `Open ${replayDecisionBrief.focusLabel} in Live`,
+        onSecondary: () => {
+          setSelectedDirectivePhase(recommendedReplayFix.phase);
+          setSelectedWorkerRole(getPreferredRoleForPhase(recommendedReplayFix.phase));
+          setActiveRoom('live');
+        },
+      };
+    }
+
+    return {
+      currentRoom: 'optimize' as const,
+      nextRoom: 'live' as const,
+      title: phaseSimulationPreview
+        ? `Next: validate ${formatDirectivePhaseScope([phaseSimulationPreview.phase])} in Live`
+        : optimizeDecisionBrief.headline,
+      body: phaseSimulationPreview
+        ? `You have a concrete fix preview. Open Live to inspect the target role and watch the next run after you apply it.`
+        : `${optimizeDecisionBrief.nextStep} Live is where you confirm whether the released posture actually improves the operating system.`,
+      actionLabel: 'Open Live',
+      onAction: handleOpenLiveFromOptimizeLoop,
+      secondaryLabel: phaseSimulationPreview ? `Apply ${getDirectiveModeLabel(phaseSimulationPreview.mode)}` : undefined,
+      onSecondary: phaseSimulationPreview
+        ? () => handleApplyPhaseLearning(phaseSimulationPreview.phase, phaseSimulationPreview.mode)
+        : undefined,
+    };
+  }, [
+    activeRoom,
+    formatDirectivePhaseScope,
+    getDirectiveModeLabel,
+    handleApplyPhaseLearning,
+    handleFocusLiveContextPhase,
+    handleOpenOptimizeFromReplayLoop,
+    handleOpenReplayFromLiveLoop,
+    handleOpenLiveFromOptimizeLoop,
+    operationalContext,
+    optimizeDecisionBrief.headline,
+    optimizeDecisionBrief.nextStep,
+    phaseSimulationPreview,
+    recommendedReplayFix,
+    replayDecisionBrief.fixModeLabel,
+    replayDecisionBrief.focusLabel,
+    replayDecisionBrief.nextStep,
+    setActiveRoom,
+  ]);
+
   const handleOpenRunPairInReplay = useCallback((
     primaryRun: PlatformTaskRunRecord,
     comparedRun: PlatformTaskRunRecord,
@@ -7411,6 +7520,17 @@ export default function AgentStudio() {
                       );
                     })}
                   </div>
+
+                  <ControlLoopHandoffStrip
+                    currentRoom={controlLoopHandoff.currentRoom}
+                    nextRoom={controlLoopHandoff.nextRoom}
+                    title={controlLoopHandoff.title}
+                    body={controlLoopHandoff.body}
+                    actionLabel={controlLoopHandoff.actionLabel}
+                    onAction={controlLoopHandoff.onAction}
+                    secondaryLabel={controlLoopHandoff.secondaryLabel}
+                    onSecondary={controlLoopHandoff.onSecondary}
+                  />
 
                 </div>
 
