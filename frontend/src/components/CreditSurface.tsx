@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowUpRight, CreditCard, Gift, Sparkles, ChevronRight, History, ExternalLink } from 'lucide-react';
+import { ArrowUpRight, CreditCard, Gift, Sparkles, ChevronRight, History, ExternalLink, TrendingUp } from 'lucide-react';
 import {
   buildReferralMessage,
   formatCredits,
@@ -9,6 +9,12 @@ import {
   useCreditSnapshot,
   useRecentCreditUsage,
 } from '../lib/credits';
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
 
 function Stat({
   label,
@@ -174,25 +180,41 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
             {recentUsage.slice(0, 3).map((item) => (
               <div
                 key={item.id}
-                className="flex items-start justify-between gap-3 rounded-xl border border-navy-700/60 bg-navy-900/45 px-3 py-2"
+                className="rounded-xl border border-navy-700/60 bg-navy-900/45 px-3 py-2"
               >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium leading-snug text-white">{item.title}</p>
-                  <p className="text-[10px] text-slate-500 sm:text-[11px]">{item.detail}</p>
-                </div>
-                <div className="flex-shrink-0 text-right">
-                  <p
-                    className={`text-[11px] font-semibold ${
-                      item.tone === 'amber'
-                        ? 'text-amber-300'
-                        : item.tone === 'cyan'
-                          ? 'text-cyan-300'
-                          : 'text-violet-300'
-                    }`}
-                  >
-                    -{formatCredits(item.credits)}
-                  </p>
-                  <p className="text-[10px] text-slate-600">{formatRelativeTime(item.timestamp)}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-snug text-white">{item.title}</p>
+                    <p className="text-[10px] text-slate-500 sm:text-[11px]">{item.detail}</p>
+                    {item.totalTokens != null && (
+                      <p className="mt-0.5 text-[10px] text-slate-600">
+                        {formatTokens(item.totalTokens)} tokens
+                        {item.providerCostUsd != null && (
+                          <> · <span className="text-slate-500">${item.providerCostUsd < 0.01 ? item.providerCostUsd.toFixed(5) : item.providerCostUsd.toFixed(4)} provider cost</span></>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex-shrink-0 text-right">
+                    <p
+                      className={`text-[11px] font-semibold ${
+                        item.tone === 'amber'
+                          ? 'text-amber-300'
+                          : item.tone === 'cyan'
+                            ? 'text-cyan-300'
+                            : 'text-violet-300'
+                      }`}
+                    >
+                      -{formatCredits(item.credits)}
+                    </p>
+                    {item.marginPct != null && (
+                      <p className="flex items-center justify-end gap-0.5 text-[10px] text-emerald-400">
+                        <TrendingUp className="h-2.5 w-2.5" />
+                        {item.marginPct}% margin
+                      </p>
+                    )}
+                    <p className="text-[10px] text-slate-600">{formatRelativeTime(item.timestamp)}</p>
+                  </div>
                 </div>
               </div>
             ))}

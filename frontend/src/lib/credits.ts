@@ -25,6 +25,15 @@ export interface RecentCreditUsage {
   credits: number;
   timestamp: string;
   tone: 'violet' | 'cyan' | 'amber';
+  // enriched cost-visibility fields (optional — only present when token data exists)
+  modelTier?: string;
+  status?: string;
+  totalTokens?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  providerCostUsd?: number | null;
+  creditValueUsd?: number;
+  marginPct?: number | null;
 }
 
 export interface CreditEstimateInput {

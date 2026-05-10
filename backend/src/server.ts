@@ -49,6 +49,8 @@ import {
   evaluatePlanEnforcement,
   ensureWorkspaceCredits,
   estimateCreditCost,
+  estimateProviderCostUsd,
+  CREDIT_VALUE_USD,
   finalizeTaskRun,
   getBillingStatus,
   getStripeBillingConfig,
@@ -4583,19 +4585,50 @@ app.get('/api/billing/recent-usage', (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const items = listTaskRuns(workspaceId)
     .slice(0, 8)
-    .map((run) => ({
-      id: run.id,
-      title: run.metadata?.title ? String(run.metadata.title) : `${run.agentRole} ${run.modelTier} run`,
-      detail: `${run.modelTier} · ${run.status}`,
-      credits: run.actualCredits ?? run.estimatedCredits,
-      timestamp: run.finishedAt || run.startedAt,
-      tone:
-        run.modelTier === 'critical'
-          ? 'amber'
-          : run.modelTier === 'ops'
-            ? 'cyan'
-            : 'violet',
-    }));
+    .map((run) => {
+      const stepCharges = Array.isArray((run.metadata as Record<string, unknown> | undefined)?.stepCharges)
+        ? (run.metadata as Record<string, unknown>).stepCharges as Array<Record<string, unknown>>
+        : [];
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let totalTokens = 0;
+      for (const step of stepCharges) {
+        const tu = step.tokenUsage as Record<string, number> | undefined;
+        if (tu && typeof tu === 'object') {
+          inputTokens += typeof tu.inputTokens === 'number' ? tu.inputTokens : 0;
+          outputTokens += typeof tu.outputTokens === 'number' ? tu.outputTokens : 0;
+          totalTokens += typeof tu.totalTokens === 'number' ? tu.totalTokens : 0;
+        }
+      }
+      if (totalTokens === 0 && (inputTokens > 0 || outputTokens > 0)) {
+        totalTokens = inputTokens + outputTokens;
+      }
+
+      const credits = run.actualCredits ?? run.estimatedCredits;
+      const providerCostUsd = totalTokens > 0 ? estimateProviderCostUsd(run.modelTier, totalTokens) : null;
+      const creditValueUsd = credits * CREDIT_VALUE_USD;
+      const marginPct =
+        providerCostUsd !== null && creditValueUsd > 0
+          ? Math.round(((creditValueUsd - providerCostUsd) / creditValueUsd) * 100)
+          : null;
+
+      return {
+        id: run.id,
+        title: run.metadata?.title ? String(run.metadata.title) : `${run.agentRole} ${run.modelTier} run`,
+        detail: `${run.modelTier} · ${run.status}`,
+        credits,
+        timestamp: run.finishedAt || run.startedAt,
+        tone: run.modelTier === 'critical' ? 'amber' : run.modelTier === 'ops' ? 'cyan' : 'violet',
+        modelTier: run.modelTier,
+        status: run.status,
+        totalTokens: totalTokens > 0 ? totalTokens : null,
+        inputTokens: inputTokens > 0 ? inputTokens : null,
+        outputTokens: outputTokens > 0 ? outputTokens : null,
+        providerCostUsd,
+        creditValueUsd,
+        marginPct,
+      };
+    });
 
   res.json(items);
 });

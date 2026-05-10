@@ -160,6 +160,24 @@ export function estimateUsageEventCredits(event: UsageEvent): number {
   }).estimatedCredits;
 }
 
+// Blended provider cost in USD per 1M tokens (input-heavy 3:1 ratio weighted average).
+// Used only for margin reporting; does not affect credit billing.
+const PROVIDER_COST_USD_PER_1M_TOKENS: Record<ModelTier, number> = {
+  micro: 0.10,
+  default: 6.00,
+  hard: 15.00,
+  critical: 30.00,
+  ops: 0.20,
+};
+
+// Approximate USD value of one credit at Pro-plan rates ($79 / 2000 credits).
+export const CREDIT_VALUE_USD = 0.0395;
+
+export function estimateProviderCostUsd(modelTier: ModelTier, totalTokens: number): number {
+  const ratePerMillion = PROVIDER_COST_USD_PER_1M_TOKENS[modelTier] ?? 6.00;
+  return (totalTokens / 1_000_000) * ratePerMillion;
+}
+
 export function calculateRuntimeCredits(input: RuntimeCreditInput): RuntimeCreditResult {
   const baseCredits = BASE_TASK_CREDITS[input.taskKind] || 0;
   const toolCredits = normalizeCount(input.toolCalls) * DEFAULT_TOOL_CREDIT_COST;
