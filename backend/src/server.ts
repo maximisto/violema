@@ -672,7 +672,7 @@ function formatSlackReply(text: string) {
   }
 
   const withoutPlanning = trimmed
-    .replace(/^I(?:'|’)ll [^.]+?\.\s*/i, '')
+    .replace(/^I(?:'|')ll [^.]+?\.\s*/i, '')
     .replace(/^Let me [^.]+?\.\s*/i, '');
 
   const normalized = withoutPlanning
@@ -682,20 +682,25 @@ function formatSlackReply(text: string) {
     .replace(/```[\s\S]*?```/g, (block) => block)
     .replace(/\n{3,}/g, '\n\n');
 
-  return normalized.length > 3500 ? `${normalized.slice(0, 3450).trim()}\n\n_(truncated for Slack)_` : normalized;
+  if (normalized.length <= 3500) return normalized;
+  const cutAt = normalized.lastIndexOf('\n\n', 3450);
+  const truncated = cutAt > 800 ? normalized.slice(0, cutAt) : normalized.slice(0, 3450).trim();
+  return `${truncated}\n\n_(truncated — ask me to continue if needed)_`;
 }
 
 function buildSlackTaskPrompt(prompt: string, context: { isDm: boolean }) {
   const cleaned = prompt.trim() || 'Help me get started.';
   const deliveryContext = context.isDm
     ? 'This request came from a direct message in Slack.'
-    : 'This request came from an @mention in a Slack channel. Reply for the thread, not for the whole app.';
+    : 'This request came from an @mention in a Slack channel. Reply in-thread, not for the whole app.';
 
   return [
     deliveryContext,
     'Reply in Slack format: concise, useful, action-oriented.',
-    'Lead with the answer. Use short paragraphs or bullets. Avoid long preambles.',
-    'If you cite current information, include source URLs inline.',
+    'Lead directly with the answer. Use plain text paragraphs or short bullet lists.',
+    'Do NOT use # headers or --- dividers. Use *bold* sparingly for key terms only.',
+    'Keep it under 3 short paragraphs or 6 bullets total.',
+    'If citing current information, include source URLs inline.',
     '',
     `User request: ${cleaned}`,
   ].join('\n');
@@ -716,7 +721,7 @@ async function handleSlackIncomingEvent(payload: {
       ? event.ts
       : undefined;
 
-  if (!channel || !threadTs) return;
+  if (!channel) return;
   if (event.bot_id || typeof event.subtype === 'string') return;
   const isDm = eventType === 'message' && event.channel_type === 'im';
   if (eventType !== 'app_mention' && !isDm) return;
@@ -759,7 +764,7 @@ async function handleSlackIncomingEvent(payload: {
       to: channel,
       channel: 'slack',
       threadTs,
-      body: `I hit an error while working on that: ${errorMessage}`,
+      body: 'I ran into an issue processing that request. Please try again, or rephrase your question.',
     });
   }
 }
@@ -2758,22 +2763,26 @@ function buildAutomationDeliveryFallbackBody(
   stepExecutions: AutomationStepExecution[],
   stepErrors: string[],
 ) {
-  const artifactSummary = artifacts
-    .filter((artifact) => artifact.kind !== 'delivery')
-    .map((artifact) => `- ${artifact.title}${artifact.kind ? ` (${artifact.kind})` : ''}`)
-    .join('\n');
+  const hasFailures = stepErrors.length > 0 || stepExecutions.some((s) => s.status === 'failed');
+  const statusLine = hasFailures ? '⚠️ Completed with errors' : '✅ Completed';
+
+  const stepIcon = (status: string) =>
+    status === 'succeeded' ? '✅' : status === 'failed' ? '❌' : status === 'skipped' ? '—' : '…';
+
   const executedSteps = stepExecutions
-    .filter((step) => step.status === 'succeeded' || step.status === 'failed' || step.status === 'skipped')
-    .map((step) => `- ${step.title}: ${step.status}${step.summary ? ` — ${step.summary}` : ''}${step.error ? ` — ${step.error}` : ''}`)
+    .filter((s) => s.status !== 'planned' && s.status !== 'running')
+    .map((s) => {
+      const note = s.summary ? ` — ${s.summary}` : s.error ? ` — ${s.error}` : '';
+      return `${stepIcon(s.status)} ${s.title}${note}`;
+    })
     .join('\n');
 
   return [
-    `Automation: ${automation.name}`,
-    automation.description ? `Description: ${automation.description}` : null,
-    artifactSummary ? `Generated artifacts:\n${artifactSummary}` : null,
-    executedSteps ? `Executed steps:\n${executedSteps}` : null,
-    stepErrors.length > 0 ? `Errors:\n- ${stepErrors.join('\n- ')}` : null,
-  ].filter(Boolean).join('\n\n');
+    `*${automation.name}* — ${statusLine}`,
+    automation.description || null,
+    executedSteps ? `\n${executedSteps}` : null,
+    stepErrors.length > 0 ? `\n*Errors:*\n${stepErrors.map((e) => `• ${e}`).join('\n')}` : null,
+  ].filter(Boolean).join('\n');
 }
 
 async function ensureAutomationSummaryText(

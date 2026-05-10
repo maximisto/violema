@@ -1856,8 +1856,12 @@ export default function Dashboard() {
     );
   }, [location.pathname, location.search, navigate]);
 
+  const pendingRunAfterSave = useRef(false);
+
   const handleAutomationEditorSave = useCallback(async () => {
     if (!automationEditor) return;
+    const shouldRun = pendingRunAfterSave.current;
+    pendingRunAfterSave.current = false;
     setActionBusy('save');
     try {
       const sourceSteps = automationEditor.authoringMode === 'describe'
@@ -1899,11 +1903,21 @@ export default function Dashboard() {
       if (!response.ok) throw new Error('Could not save automation');
       const payload = await response.json() as { item?: { id?: string } };
       await refreshAutomations();
-      if (automationEditor.mode === 'create' && payload.item?.id) {
-        setSelectedTaskId(payload.item.id);
+      const savedId = automationEditor.mode === 'create' ? (payload.item?.id as string | undefined) : automationEditor.id;
+      if (automationEditor.mode === 'create' && savedId) {
+        setSelectedTaskId(savedId);
       }
       closeAutomationEditor();
-      showNotice('success', `${automationEditor.mode === 'create' ? 'Created' : 'Updated'} "${automationEditor.name.trim() || 'automation'}"`);
+      if (shouldRun && savedId) {
+        try {
+          await fetch(`/api/automations/${savedId}/run`, { method: 'POST' });
+          showNotice('success', `Saved and started "${automationEditor.name.trim() || 'automation'}"`);
+        } catch {
+          showNotice('success', `Saved "${automationEditor.name.trim() || 'automation'}" — could not start run`);
+        }
+      } else {
+        showNotice('success', `${automationEditor.mode === 'create' ? 'Created' : 'Updated'} "${automationEditor.name.trim() || 'automation'}"`);
+      }
     } catch {
       showNotice('error', automationEditor.mode === 'create' ? 'Could not create automation' : 'Could not save automation changes');
     } finally {
@@ -3230,6 +3244,46 @@ export default function Dashboard() {
                             No evidence links were attached to the latest run.
                           </div>
                         ) : null}
+                        {selectedTaskStepExecutions.length > 0 && selectedTask.lastRunAt ? (
+                          <div className="mt-3">
+                            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Run steps</p>
+                            <div className="mt-2 space-y-1">
+                              {selectedTaskStepExecutions.map((step, i) => {
+                                const isOk = step.status === 'succeeded';
+                                const isFail = step.status === 'failed';
+                                const statusSymbol = isOk ? '✓' : isFail ? '✗' : step.status === 'skipped' ? '—' : '…';
+                                const statusColor = isOk ? 'text-emerald-400' : isFail ? 'text-red-400' : 'text-slate-500';
+                                const snippet = step.summary || step.error;
+                                return (
+                                  <div key={step.stepId} className="rounded-lg border border-navy-700/60 bg-navy-950/45 px-2.5 py-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex min-w-0 items-center gap-1.5">
+                                        <span className={`flex-shrink-0 text-[11px] font-bold ${statusColor}`}>{statusSymbol}</span>
+                                        <p className="truncate text-[11px] font-medium text-white">{i + 1}. {step.title}</p>
+                                      </div>
+                                      <div className="flex flex-shrink-0 items-center gap-2">
+                                        {step.durationMs != null && (
+                                          <span className="text-[10px] text-slate-600">
+                                            {step.durationMs >= 1000 ? `${(step.durationMs / 1000).toFixed(1)}s` : `${step.durationMs}ms`}
+                                          </span>
+                                        )}
+                                        {step.actualCredits != null && (
+                                          <span className="text-[10px] text-slate-600">{step.actualCredits} cr</span>
+                                        )}
+                                        <span className="ui-pill px-1.5 py-0.5 normal-case tracking-normal text-[9px] text-slate-400">{step.kind}</span>
+                                      </div>
+                                    </div>
+                                    {snippet ? (
+                                      <p className={`mt-1 text-[10px] leading-relaxed ${isFail ? 'text-red-300' : 'text-slate-500'}`}>
+                                        {snippet}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
                         <div className="mt-3 rounded-xl border border-violet-500/12 bg-violet-500/6 px-3 py-3">
                           <div className="flex items-start justify-between gap-3">
                             <div>
@@ -4204,6 +4258,16 @@ export default function Dashboard() {
                   className="ui-button-ghost"
                 >
                   Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    pendingRunAfterSave.current = true;
+                    void handleAutomationEditorSave();
+                  }}
+                  disabled={actionBusy === 'save' || !automationEditor.name.trim() || !automationEditor.schedule.trim() || !hasAutomationSteps}
+                  className="rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/18 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {actionBusy === 'save' && pendingRunAfterSave.current ? 'Saving…' : 'Save & run'}
                 </button>
                 <button
                   onClick={() => { void handleAutomationEditorSave(); }}
