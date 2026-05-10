@@ -2858,55 +2858,49 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* User / settings */}
-          <div className="border-t border-navy-800 px-4 py-3">
-            <div className="mb-3 rounded-2xl border border-navy-700/80 bg-navy-950/38 px-3.5 py-3 shadow-[0_10px_24px_rgba(2,6,23,0.14)]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Slack</p>
-                  <p className="mt-1 text-sm font-medium text-white">
-                    {hasSlackConnection() ? authSession?.slackDisplayTarget || authSession?.slackChannelId : 'Not connected'}
-                  </p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-                    {hasSlackConnection()
-                      ? `${authSession?.slackWorkspace || 'Slack'} is ready for alerts and approvals.`
-                      : 'Save one Slack channel during onboarding so automations have a real destination.'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate('/connect/slack?next=%2Fdashboard')}
-                  className="ui-button-ghost px-3 py-2 text-[11px]"
-                >
-                  {hasSlackConnection() ? 'Edit' : 'Connect'}
-                </button>
+          {/* Compact user footer */}
+          <div className="border-t border-navy-800 px-3 py-2.5">
+            <div className="flex items-center gap-2.5">
+              {/* Avatar */}
+              <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl border border-violet-800/40 bg-gradient-to-br from-violet-700/35 to-navy-700 text-[10px] font-bold text-violet-300">
+                {authSession?.name ? authSession.name[0].toUpperCase() : 'U'}
               </div>
-            </div>
-            <div className="rounded-2xl border border-navy-700/80 bg-navy-950/38 px-3.5 py-3 shadow-[0_10px_24px_rgba(2,6,23,0.14)]">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl border border-violet-800/40 bg-gradient-to-br from-violet-700/35 to-navy-700 text-xs font-bold text-violet-300">
-                  U
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-200">You</p>
-                  <p className="truncate text-[11px] text-slate-500">{snapshot.planName} plan · claude-opus-4-6</p>
-                </div>
+
+              {/* Name + plan */}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12px] font-medium leading-none text-slate-200">
+                  {authSession?.name || authSession?.email || 'You'}
+                </p>
+                <p className="mt-0.5 text-[10px] leading-none text-slate-600">{snapshot.planName} plan</p>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => navigate('/settings')}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-400 transition-colors hover:border-violet-700 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-                >
-                  <Settings className="h-3.5 w-3.5" />
-                  Settings
-                </button>
-                <button
-                  onClick={() => navigate('/')}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-400 transition-colors hover:border-violet-700 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Home
-                </button>
-              </div>
+
+              {/* Slack status dot */}
+              <button
+                onClick={() => navigate('/connect/slack?next=%2Fdashboard')}
+                aria-label={hasSlackConnection() ? 'Slack connected — click to edit' : 'Connect Slack'}
+                title={hasSlackConnection() ? `Slack: ${authSession?.slackDisplayTarget || authSession?.slackChannelId || 'connected'}` : 'Slack not connected'}
+                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-navy-800 hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              >
+                <span className={`h-2 w-2 rounded-full ${hasSlackConnection() ? 'bg-green-400' : 'bg-slate-600'}`} />
+              </button>
+
+              {/* Settings */}
+              <button
+                onClick={() => navigate('/settings')}
+                aria-label="Settings"
+                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-navy-800 hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              >
+                <Settings className="h-3.5 w-3.5" />
+              </button>
+
+              {/* Home */}
+              <button
+                onClick={() => navigate('/')}
+                aria-label="Back to home"
+                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-navy-800 hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         </aside>
