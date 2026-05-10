@@ -105,6 +105,7 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const workspace = useMemo(() => resolveWorkspaceContext(), []);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
@@ -152,7 +153,7 @@ export default function SettingsPage() {
   });
 
   async function loadSettings(silent = false) {
-    if (!silent) setLoading(true);
+    if (!silent) { setLoading(true); setLoadError(null); }
     try {
       const response = await fetch(`/api/settings?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
         headers: {
@@ -201,7 +202,9 @@ export default function SettingsPage() {
         memory_code: { tone: 'idle' },
       });
     } catch (error) {
-      setNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not load settings.' });
+      const msg = error instanceof Error ? error.message : 'Could not load settings.';
+      if (!silent) setLoadError(msg);
+      else setNotice({ tone: 'error', message: msg });
     } finally {
       if (!silent) setLoading(false);
     }
@@ -435,11 +438,23 @@ export default function SettingsPage() {
       </header>
 
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6">
-        {loading || !data ? (
+        {loading ? (
           <div className="rounded-[1.8rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-5 py-12 text-center text-sm text-slate-500">
             Loading workspace setup…
           </div>
-        ) : (
+        ) : loadError ? (
+          <div className="rounded-[1.8rem] border border-rose-500/20 bg-rose-500/8 px-5 py-12 text-center">
+            <p className="text-sm font-medium text-rose-300">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => void loadSettings()}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-2 text-xs font-medium text-rose-200 transition-colors hover:bg-rose-500/18"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Retry
+            </button>
+          </div>
+        ) : !data ? null : (
           <div className="space-y-6">
             <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr),minmax(0,1.08fr)]">
               <section className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
@@ -477,7 +492,7 @@ export default function SettingsPage() {
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
                           <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                            Active: {status.activeSourceLabel || 'Not configured'}
+                            {status.activeSourceLabel ? `Active: ${status.activeSourceLabel}` : 'No key set — using server default'}
                           </span>
                           {status.workspaceConfigured ? (
                             <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">

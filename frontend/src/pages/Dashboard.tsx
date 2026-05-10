@@ -3299,6 +3299,21 @@ export default function Dashboard() {
                         ? 'Deleted or completed workflow runs remain in task history, but only active automations appear in this panel.'
                         : 'Start with a scheduled automation and the latest result will appear here automatically.'}
                     </p>
+                    {!hasAutomationHistory ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTaskPanelOpen(false);
+                          window.setTimeout(() => {
+                            const ta = document.querySelector<HTMLTextAreaElement>('textarea');
+                            if (ta) { ta.focus(); ta.placeholder = 'Try: "Set up a weekly Slack digest automation"'; }
+                          }, 50);
+                        }}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-violet-500/25 bg-violet-500/10 px-3 py-1.5 text-[11px] font-medium text-violet-300 transition-colors hover:bg-violet-500/18"
+                      >
+                        Set up first automation
+                      </button>
+                    ) : null}
                   </div>
                 ) : taskItems.map((task) => {
                   const Icon = task.icon;

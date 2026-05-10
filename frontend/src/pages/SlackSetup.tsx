@@ -138,7 +138,7 @@ export default function SlackSetup() {
                   value={workspace}
                   onChange={(event) => setWorkspace(event.target.value)}
                   placeholder="purpleorangehq"
-                  className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40"
+                  className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40 focus:ring-2 focus:ring-violet-500/50"
                 />
               </label>
 
@@ -148,8 +148,17 @@ export default function SlackSetup() {
                   value={channelId}
                   onChange={(event) => setChannelId(event.target.value.toUpperCase())}
                   placeholder="C0123456789"
-                  className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40"
+                  className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40 focus:ring-2 focus:ring-violet-500/50"
                 />
+                {channelId && !/^([CGD])[A-Z0-9]{8,}$/.test(channelId.trim()) ? (
+                  <p className="mt-1.5 text-[11px] text-amber-400">
+                    Must start with C, G, or D and be at least 9 characters (e.g. C0123456789)
+                  </p>
+                ) : channelId && /^([CGD])[A-Z0-9]{8,}$/.test(channelId.trim()) ? (
+                  <p className="mt-1.5 text-[11px] text-emerald-400">Looks good ✓</p>
+                ) : (
+                  <p className="mt-1.5 text-[11px] text-slate-500">Starts with C, G, or D — find it by right-clicking a channel in Slack</p>
+                )}
               </label>
 
               <label className="block">
@@ -158,7 +167,7 @@ export default function SlackSetup() {
                   value={displayTarget}
                   onChange={(event) => setDisplayTarget(event.target.value)}
                   placeholder="#ops-alerts"
-                  className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40"
+                  className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40 focus:ring-2 focus:ring-violet-500/50"
                 />
               </label>
             </div>

@@ -44,6 +44,7 @@ export default function Billing() {
   const [session, setSession] = useState(() => getAuthSession());
   const { snapshot, refresh } = useCreditSnapshot();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [redirecting, setRedirecting] = useState(false);
   const [hoveredPlanId, setHoveredPlanId] = useState<'starter' | 'pro' | 'team' | null>(null);
   const search = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const section = search.get('section') === 'topups' ? 'topups' : 'plans';
@@ -74,6 +75,7 @@ export default function Billing() {
     try {
       const result = await createBillingCheckout({ kind: 'subscription', planId });
       if (result.session?.checkoutUrl) {
+        setRedirecting(true);
         window.location.assign(result.session.checkoutUrl);
         return;
       }
@@ -91,6 +93,7 @@ export default function Billing() {
     try {
       const result = await createBillingCheckout({ kind: 'top-up', offerId });
       if (result.session?.checkoutUrl) {
+        setRedirecting(true);
         window.location.assign(result.session.checkoutUrl);
         return;
       }
@@ -186,7 +189,16 @@ export default function Billing() {
           </div>
         </div>
 
-        {checkoutState ? (
+        {redirecting ? (
+          <div className="mt-6 rounded-2xl border border-violet-500/25 bg-violet-500/10 px-4 py-3 text-violet-100">
+            <div className="flex items-center gap-3">
+              <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-violet-500/15">
+                <ArrowRight className="h-3.5 w-3.5 animate-pulse text-violet-300" />
+              </div>
+              <p className="text-sm font-medium">Redirecting to Stripe checkout…</p>
+            </div>
+          </div>
+        ) : checkoutState ? (
           <div
             className={`mt-6 rounded-2xl border px-4 py-3 ${
               checkoutState === 'success'
@@ -202,7 +214,7 @@ export default function Billing() {
               >
                 <Check className="h-4 w-4" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">
                   {checkoutState === 'success' ? 'Checkout complete' : 'Checkout canceled'}
                 </p>
@@ -215,7 +227,16 @@ export default function Billing() {
                   <p className="mt-2 text-xs text-current/70">
                     Current balance: {formatCredits(snapshot.creditsRemaining)} credits
                   </p>
-                ) : null}
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/plans')}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/22"
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" />
+                    View plans and retry
+                  </button>
+                )}
               </div>
             </div>
           </div>
