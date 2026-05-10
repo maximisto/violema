@@ -2192,11 +2192,11 @@ export default function Dashboard() {
     try {
       const response = await fetch('/api/admin/test-credits', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: {
           'Content-Type': 'application/json',
           'X-Workspace-Id': workspace.workspaceId,
           'X-Workspace-Name': workspace.workspaceName,
-          'X-Admin-Email': authSession.email,
         },
         body: JSON.stringify({
           amount: 5000,

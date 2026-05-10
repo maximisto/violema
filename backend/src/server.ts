@@ -598,23 +598,15 @@ function getAdminEmailAllowlist() {
   return new Set(configured.length > 0 ? configured : DEFAULT_ADMIN_EMAILS);
 }
 
-function resolveAdminEmail(req: Request) {
-  const headerValue = typeof req.header('X-Admin-Email') === 'string' ? req.header('X-Admin-Email') : undefined;
-  const bodyValue =
-    typeof (req.body as Record<string, unknown> | undefined)?.adminEmail === 'string'
-      ? String((req.body as Record<string, unknown>).adminEmail)
-      : undefined;
-  return normalizeEmail(headerValue || bodyValue);
-}
-
 function assertAdminAccess(req: Request) {
-  const adminEmail = resolveAdminEmail(req);
-  if (!adminEmail || !getAdminEmailAllowlist().has(adminEmail)) {
+  const token = parseCookieValue(req, AUTH_COOKIE_NAME);
+  const record = token ? getAuthUserByToken(token) : null;
+  if (!record || record.user.role !== 'admin') {
     const error = new Error('Admin access required');
     (error as Error & { statusCode?: number }).statusCode = 403;
     throw error;
   }
-  return adminEmail;
+  return record.user.email;
 }
 
 function verifySlackSignature(rawBody: Buffer, signature: string, timestamp: string) {

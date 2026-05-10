@@ -74,11 +74,11 @@ export function hasSlackConnection(): boolean {
 
 export function isAdminSession(session: AuthSession | null = getAuthSession()): boolean {
   if (!session) return false;
-  return session.role === 'admin' || isAdminEmail(session.email);
+  return session.role === 'admin';
 }
 
-function normalizeSessionRole(email: string, role?: string): AccessRole {
-  if (role === 'admin' || isAdminEmail(email)) return 'admin';
+function normalizeSessionRole(_email: string, role?: string): AccessRole {
+  if (role === 'admin') return 'admin';
   if (role === 'tester') return 'tester';
   if (role === 'investor') return 'investor';
   return 'user';

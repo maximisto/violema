@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, KeyRound, Mail } from 'lucide-react';
-import { beginOAuthFlow, getAuthSession, isAdminEmail, persistAuthSessionToBackend, saveAuthSession, type AuthMethod } from '../lib/auth';
+import { beginOAuthFlow, getAuthSession, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
@@ -39,19 +39,17 @@ export default function Login() {
     setSubmitting(true);
     setErrorMessage(null);
     persistWorkspaceContext();
-    const session = {
-      email: email.trim(),
-      name: name.trim(),
-      role: isAdminEmail(email) ? 'admin' : existing?.role || 'user',
-      method: existing?.method || 'email',
-      acceptedTerms: true,
-      acceptedEducation: true,
-      createdAt: existing?.createdAt || new Date().toISOString(),
-    } as const;
 
     try {
-      saveAuthSession(session);
-      await persistAuthSessionToBackend(session);
+      await persistAuthSessionToBackend({
+        email: email.trim(),
+        name: name.trim(),
+        role: existing?.role || 'user',
+        method: existing?.method || 'email',
+        acceptedTerms: true,
+        acceptedEducation: true,
+        createdAt: existing?.createdAt || new Date().toISOString(),
+      });
       navigate(next);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Could not sign in');

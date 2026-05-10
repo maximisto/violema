@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Eye, Globe, Lock, Mail, MonitorSmartphone, Slack } from 'lucide-react';
-import { beginOAuthFlow, isAdminEmail, persistAuthSessionToBackend, saveAuthSession, type AuthMethod } from '../lib/auth';
+import { beginOAuthFlow, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
@@ -67,19 +67,17 @@ export default function Signup() {
     setSubmitting(true);
     setErrorMessage(null);
     persistWorkspaceContext();
-    const session = {
-      email: email.trim(),
-      name: name.trim(),
-      role: isAdminEmail(email) ? 'admin' : 'user',
-      method: 'email' as const,
-      acceptedTerms,
-      acceptedEducation,
-      createdAt: new Date().toISOString(),
-    } as const;
 
     try {
-      saveAuthSession(session);
-      await persistAuthSessionToBackend(session);
+      await persistAuthSessionToBackend({
+        email: email.trim(),
+        name: name.trim(),
+        role: 'user',
+        method: 'email' as const,
+        acceptedTerms,
+        acceptedEducation,
+        createdAt: new Date().toISOString(),
+      });
       navigate(`/connect/slack?next=${encodeURIComponent(nextPath)}`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Could not create access');
