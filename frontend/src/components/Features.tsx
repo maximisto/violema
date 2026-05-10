@@ -59,7 +59,7 @@ const FEATURES = [
   {
     icon: Brain,
     title: 'Long-term Memory',
-    description: 'Violema keeps thread context, workspace memory, and handoff state organized so the team of specialists stays aligned without wasting tokens.',
+    description: 'Violema remembers your projects, tools, and prior work — so every conversation picks up where the last one left off, without re-explaining context.',
     color: 'cyan',
     gradient: 'from-cyan-500/20 to-teal-600/5',
     border: 'border-cyan-800/40',
@@ -144,7 +144,7 @@ export default function Features() {
               Most AI tools stop at advice. Violema handles research, execution, and automation with humans kept in the loop.
             </p>
             <p className="mt-4 text-sm text-slate-500 max-w-3xl mx-auto">
-              The runtime is manager-led: one orchestration lane routes typed steps into six resident specialists for research, analysis, build work, operations, review, and coordination. Four elastic lanes open only when a run needs more reasoning depth, burst throughput, or tighter memory control.
+              Violema chooses the right model and depth for each task — keeping fast work cheap and complex work focused. You see the work, not the plumbing.
             </p>
           </div>
 

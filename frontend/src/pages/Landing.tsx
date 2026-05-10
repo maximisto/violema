@@ -170,7 +170,7 @@ function ProductDemo() {
               <span className="gradient-text">done in seconds</span>
             </h2>
             <p className="text-xl text-slate-400 mb-8 leading-relaxed">
-              Watch Violema pull Stripe data, analyze it, message your team, and create follow-up tasks — all coordinated by a manager leading a team of specialists.
+              Watch Violema pull Stripe data, analyze it, message your team, and create follow-up tasks — all from one prompt.
             </p>
 
             <div className="space-y-4 mb-10">
@@ -178,7 +178,7 @@ function ProductDemo() {
                 { icon: BarChart3, text: 'Executes across your connected tools' },
                 { icon: MessageSquare, text: 'Communicates results back to the right humans' },
                 { icon: CheckCircle, text: 'Automates research and follow-through' },
-                { icon: TrendingUp, text: 'Routes work through specialists and elastic lanes only when justified' },
+                { icon: TrendingUp, text: 'Allocates depth dynamically — fast tasks stay fast, complex work gets focus' },
               ].map(({ icon: Icon, text }, i) => (
                 <div key={i} className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-violet-600/20 flex items-center justify-center flex-shrink-0">

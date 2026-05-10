@@ -37,7 +37,7 @@ const EDUCATION_CARDS = [
   {
     icon: MonitorSmartphone,
     title: 'Built for real execution',
-    body: 'One manager coordinates a team of specialists to handle research, execution, and automation without wasting context or tokens.',
+    body: 'Built for real execution. Violema handles research, multi-step workflows, and recurring automations across the tools your team already uses.',
   },
 ];
 
@@ -150,7 +150,7 @@ export default function Signup() {
                 ))}
               </div>
               <p className="mt-3 text-xs leading-relaxed text-slate-500">
-                One manager leads six resident specialists and opens four elastic lanes only when the run justifies it.
+                Violema dynamically allocates reasoning depth so simple tasks stay fast and complex tasks get the depth they need.
               </p>
             </div>
           </div>

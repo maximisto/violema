@@ -1359,12 +1359,12 @@ export default function ChatInterface({
                     Your AI coworker
                   </p>
                   <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-300">
-                    Violema doesn’t just answer. It gets the work done.
+                    Violema doesn't just answer. It gets the work done.
                     <br />
-                    Research, execution, and automation, coordinated by a manager agent leading a team of specialists.
+                    Research, execution, and automation — across the tools your team already uses.
                   </p>
                   <p className="mt-2 max-w-xl text-sm text-slate-500">
-                    {modeConfig.description}. The manager keeps six resident specialists ready and opens up to four elastic lanes only when the run needs more depth, cleaner context grouping, or tighter token control.
+                    {modeConfig.description}. Ask for anything from a quick search to a multi-step report.
                   </p>
 
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
@@ -1379,8 +1379,8 @@ export default function ChatInterface({
                       <p className="mt-1 text-sm font-medium text-white">Ask for a search, an execution task, or an automation.</p>
                     </div>
                     <div className="ui-panel p-4 text-left shadow-none">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">Runtime model</p>
-                      <p className="mt-1 text-sm font-medium text-white">One manager, six resident specialists, and four elastic lanes when justified.</p>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">Stay in control</p>
+                      <p className="mt-1 text-sm font-medium text-white">Switch autonomy modes any time. Approve, edit, or run anything fully hands-off.</p>
                     </div>
                   </div>
                 </div>
