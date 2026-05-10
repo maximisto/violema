@@ -14,6 +14,7 @@ import {
 } from './auth';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } from './integrations';
+import { executeComposioAction, getComposioConnectionUrl, isComposioEnabled, isComposioToolName, listConnectedApps } from './composioBridge';
 import {
   createAutomation,
   deleteAutomation,
@@ -1166,7 +1167,26 @@ function randomConfidence(toolName: string): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-async function executeToolCall(toolName: string, toolInput: Record<string, unknown>): Promise<string> {
+async function executeToolCall(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  ctx?: { workspaceId?: string },
+): Promise<string> {
+  // Composio fallback path — tool names like SLACK_SEND_MESSAGE, GITHUB_CREATE_ISSUE etc.
+  if (isComposioToolName(toolName) && isComposioEnabled()) {
+    try {
+      const result = await executeComposioAction(toolName, toolInput, {
+        entityId: ctx?.workspaceId ?? 'default',
+      });
+      return JSON.stringify(result);
+    } catch (err) {
+      return JSON.stringify({
+        error: err instanceof Error ? err.message : 'Composio action failed',
+        tool: toolName,
+      });
+    }
+  }
+
   switch (toolName) {
     case 'web_search': {
       const query = toolInput.query as string;
@@ -3569,6 +3589,41 @@ app.post('/api/summarize', async (req: Request, res: Response) => {
   } catch {
     res.json({ summary: '' });
   }
+});
+
+// ── Composio integration endpoints ────────────────────────────────────────────
+app.get('/api/integrations/composio/status', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json({ enabled: isComposioEnabled(), workspaceId });
+});
+
+app.get('/api/integrations/composio/connections', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  if (!isComposioEnabled()) {
+    res.json({ enabled: false, apps: [] });
+    return;
+  }
+  const apps = await listConnectedApps({ entityId: workspaceId });
+  res.json({ enabled: true, apps });
+});
+
+app.post('/api/integrations/composio/connect', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const { appName } = (req.body || {}) as { appName?: string };
+  if (!appName || typeof appName !== 'string') {
+    res.status(400).json({ error: 'appName is required' });
+    return;
+  }
+  if (!isComposioEnabled()) {
+    res.status(503).json({ error: 'Composio is not configured on this server.' });
+    return;
+  }
+  const redirectUrl = await getComposioConnectionUrl(appName, { entityId: workspaceId });
+  if (!redirectUrl) {
+    res.status(500).json({ error: `Could not start OAuth flow for ${appName}` });
+    return;
+  }
+  res.json({ redirectUrl });
 });
 
 registerAgentStudioSettingsRoutes(app, {

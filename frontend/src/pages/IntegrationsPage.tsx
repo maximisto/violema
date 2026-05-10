@@ -1,6 +1,25 @@
-import { ArrowRight, BellRing, Bot, Github, Globe, Layers3, Link2, Search, Shield, Slack, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowRight, BellRing, Bot, CheckCircle2, Github, Globe, Layers3, Link2, Loader2, Plug, Search, Shield, Slack, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PublicHeader from '../components/PublicHeader';
+
+// Apps the user can connect via Composio's hosted OAuth flow.
+// Composio app names are uppercase; tool names follow APP_ACTION format.
+const COMPOSIO_APPS = [
+  { name: 'slack',    label: 'Slack',    detail: 'Send messages, read channels, post threads' },
+  { name: 'github',   label: 'GitHub',   detail: 'Triage PRs, file issues, search code' },
+  { name: 'linear',   label: 'Linear',   detail: 'Create tasks, sprint reports' },
+  { name: 'notion',   label: 'Notion',   detail: 'Pages, databases, comments' },
+  { name: 'hubspot',  label: 'HubSpot',  detail: 'Contacts, deals, pipeline' },
+  { name: 'gmail',    label: 'Gmail',    detail: 'Send & search email' },
+  { name: 'gcalendar',label: 'Calendar', detail: 'Create events, find time' },
+  { name: 'asana',    label: 'Asana',    detail: 'Tasks, projects, comments' },
+];
+
+interface ComposioStatus {
+  enabled: boolean;
+  apps: string[];
+}
 
 const NATIVE_NOW = [
   {
@@ -53,6 +72,117 @@ const CUSTOM = [
   'Admin and approval-heavy back-office processes',
   'Security-conscious rollouts that need tighter scoping',
 ];
+
+function ComposioConnectSection() {
+  const [status, setStatus] = useState<ComposioStatus | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/integrations/composio/connections', { credentials: 'same-origin' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!active) return;
+        setStatus({ enabled: Boolean(data.enabled), apps: Array.isArray(data.apps) ? data.apps : [] });
+      })
+      .catch(() => {
+        if (active) setStatus({ enabled: false, apps: [] });
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleConnect(appName: string) {
+    setBusy(appName);
+    setError(null);
+    try {
+      const res = await fetch('/api/integrations/composio/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ appName }),
+      });
+      const data = await res.json() as { redirectUrl?: string; error?: string };
+      if (!res.ok || !data.redirectUrl) throw new Error(data.error ?? 'Failed to start OAuth');
+      window.location.assign(data.redirectUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not connect');
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="mt-8 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
+      <div className="flex items-center gap-3">
+        <div className="rounded-2xl bg-violet-500/10 p-3 text-violet-300">
+          <Plug className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Connect your tools</p>
+          <h2 className="mt-1 text-2xl font-semibold text-white">One-click integrations</h2>
+        </div>
+      </div>
+
+      {status === null ? (
+        <p className="mt-5 text-sm text-slate-500">Loading available integrations…</p>
+      ) : !status.enabled ? (
+        <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200/90">
+          <p className="font-semibold">Connector layer not enabled on this server.</p>
+          <p className="mt-1 text-amber-200/70">
+            Set <code className="rounded bg-navy-950 px-1.5 py-0.5 font-mono text-amber-200">COMPOSIO_API_KEY</code> in the backend environment to enable 250+ pre-built integrations.
+            See <code className="font-mono">docs/INTEGRATIONS_ARCHITECTURE.md</code>.
+          </p>
+        </div>
+      ) : (
+        <>
+          <p className="mt-3 text-sm text-slate-400">
+            Click any tool to authenticate and let Violema use it on your behalf. We never see or store your passwords — OAuth is handled by Composio.
+          </p>
+          {error && (
+            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+              {error}
+            </div>
+          )}
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {COMPOSIO_APPS.map((app) => {
+              const connected = status.apps.includes(app.name);
+              const isBusy = busy === app.name;
+              return (
+                <button
+                  key={app.name}
+                  onClick={() => !connected && handleConnect(app.name)}
+                  disabled={connected || isBusy}
+                  className={`rounded-2xl border px-4 py-4 text-left transition-all ${
+                    connected
+                      ? 'border-green-500/30 bg-green-500/5 cursor-default'
+                      : 'border-navy-700/60 bg-navy-950/45 hover:border-violet-500/40 hover:bg-navy-800/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-white">{app.label}</p>
+                    {connected ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-400" />
+                    ) : isBusy ? (
+                      <Loader2 className="h-4 w-4 text-violet-400 animate-spin" />
+                    ) : (
+                      <ArrowRight className="h-4 w-4 text-slate-500" />
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">{app.detail}</p>
+                  <p className="mt-2 text-[10px] uppercase tracking-wider font-medium">
+                    {connected ? <span className="text-green-400">Connected</span> : <span className="text-violet-400">Connect</span>}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
 export default function IntegrationsPage() {
   return (
@@ -175,6 +305,8 @@ export default function IntegrationsPage() {
             </div>
           </div>
         </section>
+
+        <ComposioConnectSection />
 
         <section className="mt-8 grid gap-5 lg:grid-cols-2">
           <div className="rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
