@@ -58,13 +58,10 @@ import type {
 } from '../features/agent-studio/types';
 import { LiveSupportRailSection } from '../features/agent-studio/components/LiveSupportRailSection';
 import { LiveNodeInspectorSection } from '../features/agent-studio/components/LiveNodeInspectorSection';
-import { LiveHandoffsSection } from '../features/agent-studio/components/LiveHandoffsSection';
 import { LiveAdvancedSupportSection } from '../features/agent-studio/components/LiveAdvancedSupportSection';
-import { LiveOptimizationLoopSection } from '../features/agent-studio/components/LiveOptimizationLoopSection';
 import { LiveOperatorBriefSection } from '../features/agent-studio/components/LiveOperatorBriefSection';
 import { LiveSystemMapSection } from '../features/agent-studio/components/LiveSystemMapSection';
 import { OptimizeCurrentReleaseSection } from '../features/agent-studio/components/OptimizeCurrentReleaseSection';
-import { OptimizeDecisionBriefSection } from '../features/agent-studio/components/OptimizeDecisionBriefSection';
 import { OptimizeDiagnosticsSection } from '../features/agent-studio/components/OptimizeDiagnosticsSection';
 import { OptimizeReleaseCandidateSection } from '../features/agent-studio/components/OptimizeReleaseCandidateSection';
 import { OptimizeScenarioSimulatorSection } from '../features/agent-studio/components/OptimizeScenarioSimulatorSection';
@@ -7713,13 +7710,6 @@ export default function AgentStudio() {
                           getStatusTone={getStatusTone}
                         />
 
-                        <LiveHandoffsSection items={liveActivationTrail} getStatusTone={getStatusTone} />
-
-                        <LiveOptimizationLoopSection
-                          items={optimizationRecommendations}
-                          actionBusy={actionBusy}
-                          onApplyRecommendation={applyRecommendationAction}
-                        />
                       </>
                     )}
                     showAdvanced={showLiveAdvanced}
@@ -7819,16 +7809,11 @@ export default function AgentStudio() {
 
                     <OptimizeReleaseCandidateSection
                       candidatePresets={scenarioComparisons}
-                      decisionBrief={(
-                        <OptimizeDecisionBriefSection
-                          scenarioLabel={selectedScenario.label}
-                          previewPresetLabel={previewPreset.label}
-                          activePresetLabel={activePresetLabel}
-                          changedPolicyCount={policyDiffRows.length}
-                          decision={optimizeDecisionBrief}
-                          formatSignedDelta={formatSignedDelta}
-                        />
-                      )}
+                      decisionBrief={policyDiffRows.length > 0 ? (
+                        <p className="text-sm text-slate-300">
+                          Switching to <span className="font-semibold text-white">{previewPreset.label}</span> changes {policyDiffRows.length} policy {policyDiffRows.length === 1 ? 'setting' : 'settings'} vs. current <span className="font-semibold text-white">{activePresetLabel}</span>.
+                        </p>
+                      ) : undefined}
                       selectedPresetId={previewPreset.id}
                       previewPresetLabel={previewPreset.label}
                       activePresetLabel={activePresetLabel}

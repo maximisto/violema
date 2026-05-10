@@ -136,6 +136,63 @@ const SCHEDULE_PRESETS = [
 ];
 
 type WorkflowBlockKind = 'search' | 'query' | 'capture' | 'analyze' | 'summarize' | 'deliver' | 'note';
+
+const COMMON_TIMEZONES = [
+  { value: 'UTC', label: 'UTC' },
+  { value: 'America/New_York', label: 'Eastern (ET)' },
+  { value: 'America/Chicago', label: 'Central (CT)' },
+  { value: 'America/Denver', label: 'Mountain (MT)' },
+  { value: 'America/Los_Angeles', label: 'Pacific (PT)' },
+  { value: 'America/Sao_Paulo', label: 'Brasília (BRT)' },
+  { value: 'Europe/London', label: 'London (GMT/BST)' },
+  { value: 'Europe/Paris', label: 'Central Europe (CET)' },
+  { value: 'Europe/Istanbul', label: 'Istanbul (TRT)' },
+  { value: 'Asia/Dubai', label: 'Dubai (GST)' },
+  { value: 'Asia/Kolkata', label: 'India (IST)' },
+  { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
+  { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
+  { value: 'Australia/Sydney', label: 'Sydney (AEST)' },
+];
+
+const QUERY_TYPE_OPTIONS: Record<string, Array<{ value: string; label: string }>> = {
+  stripe: [
+    { value: 'revenue_summary', label: 'Revenue summary' },
+    { value: 'failed_payments', label: 'Failed payments' },
+    { value: 'new_customers', label: 'New customers' },
+    { value: 'churn_events', label: 'Churn / cancellations' },
+    { value: 'mrr_change', label: 'MRR change' },
+    { value: 'subscription_status', label: 'Subscription status' },
+  ],
+  github: [
+    { value: 'open_issues', label: 'Open issues' },
+    { value: 'open_prs', label: 'Open pull requests' },
+    { value: 'recent_commits', label: 'Recent commits' },
+    { value: 'failing_checks', label: 'Failing CI checks' },
+    { value: 'release_notes', label: 'Release notes' },
+  ],
+  linear: [
+    { value: 'open_issues', label: 'Open issues' },
+    { value: 'in_progress', label: 'In-progress issues' },
+    { value: 'overdue', label: 'Overdue issues' },
+    { value: 'recent_completions', label: 'Recently completed' },
+    { value: 'cycle_status', label: 'Current cycle status' },
+  ],
+  posthog: [
+    { value: 'active_users', label: 'Active users (DAU/WAU)' },
+    { value: 'top_events', label: 'Top events' },
+    { value: 'funnel_drop', label: 'Funnel drop-off' },
+    { value: 'feature_flags', label: 'Feature flag status' },
+    { value: 'error_rate', label: 'Error rate' },
+  ],
+  notion: [
+    { value: 'database_rows', label: 'Database rows' },
+    { value: 'recent_pages', label: 'Recently updated pages' },
+    { value: 'tagged_items', label: 'Items by tag/status' },
+  ],
+  custom: [
+    { value: 'custom', label: 'Custom query' },
+  ],
+};
 type ExecutionMode = 'recommended' | 'custom';
 type OptimizationGoal = 'balanced' | 'cost_saver' | 'quality_first';
 type ReviewPolicy = 'lean' | 'standard' | 'strict';
@@ -361,6 +418,7 @@ interface AutomationEditorDraft {
   id: string;
   name: string;
   schedule: string;
+  timezone: string;
   description: string;
   notify: string;
   condition: string;
@@ -1735,6 +1793,7 @@ export default function Dashboard() {
       id: task.automationId,
       name: task.title,
       schedule: task.schedule || task.time,
+      timezone: task.timezone || getLocalTimeZone(),
       description: task.description || '',
       notify: task.notify || '',
       condition: task.condition || '',
@@ -1760,6 +1819,7 @@ export default function Dashboard() {
       id: `draft-${Date.now()}`,
       name: '',
       schedule: 'every monday at 9am',
+      timezone: getLocalTimeZone(),
       description: '',
       notify: '',
       condition: '',
@@ -1825,7 +1885,7 @@ export default function Dashboard() {
         body: JSON.stringify({
           name: automationEditor.name.trim(),
           schedule: automationEditor.schedule.trim(),
-          timezone: getLocalTimeZone(),
+          timezone: automationEditor.timezone || getLocalTimeZone(),
           description: automationEditor.description.trim() || null,
           authoringMode: automationEditor.authoringMode,
           workflowPrompt: automationEditor.workflowPrompt.trim() || null,
@@ -2245,6 +2305,7 @@ export default function Dashboard() {
             : selectedTask.notify
               ? 'custom'
               : 'none',
+      timezone: selectedTask.timezone || getLocalTimeZone(),
     });
   }, [selectedTask]);
 
@@ -3502,7 +3563,28 @@ export default function Dashboard() {
                     placeholder="Every monday at 9am"
                   />
                 </div>
-                <p className="mt-1 px-1 text-[11px] text-slate-500">Use plain language like “every hour”, “daily at 6pm”, or “every monday at 9am”.</p>
+                <p className="mt-1 px-1 text-[11px] text-slate-500">Use plain language like "every hour", "daily at 6pm", or "every monday at 9am".</p>
+              </label>
+
+              <label className="block">
+                <span className="ui-section-label px-1">Timezone</span>
+                <div className="ui-input-shell mt-1">
+                  <select
+                    value={automationEditor.timezone || getLocalTimeZone()}
+                    onChange={(event) => setAutomationEditor((current) => current ? { ...current, timezone: event.target.value } : current)}
+                    className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                  >
+                    {COMMON_TIMEZONES.map((tz) => (
+                      <option key={tz.value} value={tz.value} className="bg-slate-950 text-slate-100">{tz.label}</option>
+                    ))}
+                    {!COMMON_TIMEZONES.some((tz) => tz.value === (automationEditor.timezone || getLocalTimeZone())) && (
+                      <option value={automationEditor.timezone || getLocalTimeZone()} className="bg-slate-950 text-slate-100">
+                        {automationEditor.timezone || getLocalTimeZone()}
+                      </option>
+                    )}
+                  </select>
+                </div>
+                <p className="mt-1 px-1 text-[11px] text-slate-500">Schedule times are evaluated in this timezone.</p>
               </label>
 
                 <label className="block">
@@ -3560,13 +3642,19 @@ export default function Dashboard() {
                         disabled={automationEditor.destinationType === 'none'}
                       />
                     </div>
-                    <p className="mt-1 px-1 text-[11px] text-slate-500">
-                      Slack is most reliable with a channel ID like <span className="font-mono text-slate-400">C0123456789</span>. Channel names like <span className="font-mono text-slate-400">#ops-alerts</span> need extra Slack scopes or alias mapping.
-                    </p>
+                    {automationEditor.destinationType === 'slack' && automationEditor.notify && !/^([CGD])[A-Z0-9]{8,}$/i.test(automationEditor.notify.trim()) ? (
+                      <p className="mt-1 px-1 text-[11px] text-amber-400">Slack IDs start with C, G, or D and are 9+ characters. Right-click a channel → Copy link → grab the last segment.</p>
+                    ) : automationEditor.destinationType === 'slack' && automationEditor.notify ? (
+                      <p className="mt-1 px-1 text-[11px] text-emerald-400">Channel ID looks good ✓</p>
+                    ) : (
+                      <p className="mt-1 px-1 text-[11px] text-slate-500">
+                        Slack channel ID like <span className="font-mono text-slate-400">C0123456789</span> (not <span className="font-mono text-slate-400">#channel-name</span>).
+                      </p>
+                    )}
                   </label>
 
                   <label className="block">
-                    <span className="ui-section-label px-1">Condition</span>
+                    <span className="ui-section-label px-1">Condition <span className="ml-1 font-normal normal-case tracking-normal text-slate-500">(optional — skip run if not met)</span></span>
                     <div className="ui-input-shell mt-1">
                       <input
                         value={automationEditor.condition}
@@ -3575,6 +3663,9 @@ export default function Dashboard() {
                         placeholder="Only if failure count exceeds 3"
                       />
                     </div>
+                    <p className="mt-1 px-1 text-[11px] text-slate-500">
+                      Supported: <span className="font-mono text-slate-400">"only if last run failed"</span>, <span className="font-mono text-slate-400">"only if consecutive failures &gt; 2"</span>, or leave blank to always run.
+                    </p>
                   </label>
                 </div>
                 </>
@@ -3789,26 +3880,50 @@ export default function Dashboard() {
                                 </select>
                               </div>
                               <div className="ui-input-shell">
-                                <input
-                                  value={typeof step.inputs?.query_type === 'string' ? step.inputs.query_type : ''}
-                                  onChange={(event) => {
-                                    const value = event.target.value;
-                                    setAutomationEditor((current) => {
-                                      if (!current) return current;
-                                      const steps = [...current.steps];
-                                      steps[index] = {
-                                        ...steps[index],
-                                        inputs: {
-                                          ...(steps[index].inputs || {}),
-                                          query_type: value,
-                                        },
-                                      };
-                                      return { ...current, steps };
-                                    });
-                                  }}
-                                  className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                                  placeholder="failed_payments"
-                                />
+                                {(() => {
+                                  const src = typeof step.inputs?.source === 'string' ? step.inputs.source : 'stripe';
+                                  const opts = QUERY_TYPE_OPTIONS[src] ?? QUERY_TYPE_OPTIONS.custom;
+                                  const currentVal = typeof step.inputs?.query_type === 'string' ? step.inputs.query_type : '';
+                                  const isCustom = src === 'custom' || !opts.some((o) => o.value === currentVal);
+                                  return (
+                                    <>
+                                      <select
+                                        value={isCustom && src !== 'custom' ? '__custom__' : currentVal || opts[0]?.value || ''}
+                                        onChange={(event) => {
+                                          const value = event.target.value === '__custom__' ? '' : event.target.value;
+                                          setAutomationEditor((current) => {
+                                            if (!current) return current;
+                                            const steps = [...current.steps];
+                                            steps[index] = { ...steps[index], inputs: { ...(steps[index].inputs || {}), query_type: value } };
+                                            return { ...current, steps };
+                                          });
+                                        }}
+                                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                                      >
+                                        {opts.map((o) => (
+                                          <option key={o.value} value={o.value} className="bg-slate-950 text-slate-100">{o.label}</option>
+                                        ))}
+                                        {src !== 'custom' && <option value="__custom__" className="bg-slate-950 text-slate-400">Custom…</option>}
+                                      </select>
+                                      {(src === 'custom' || (isCustom && src !== 'custom')) && (
+                                        <input
+                                          value={currentVal}
+                                          onChange={(event) => {
+                                            const value = event.target.value;
+                                            setAutomationEditor((current) => {
+                                              if (!current) return current;
+                                              const steps = [...current.steps];
+                                              steps[index] = { ...steps[index], inputs: { ...(steps[index].inputs || {}), query_type: value } };
+                                              return { ...current, steps };
+                                            });
+                                          }}
+                                          className="mt-1 w-full bg-transparent px-3 py-2 text-sm text-slate-100 outline-none border-t border-navy-700/60"
+                                          placeholder="e.g. failed_payments"
+                                        />
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </div>
                           )}

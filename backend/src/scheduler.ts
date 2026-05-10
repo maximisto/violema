@@ -44,6 +44,7 @@ export interface AutomationRecord {
   status: 'active' | 'paused';
   last_run_at?: string;
   last_run_status?: 'succeeded' | 'failed';
+  consecutive_failures?: number;
   next_run_at?: string;
   created_at: string;
 }
@@ -237,12 +238,73 @@ export function normalizeSchedule(schedule: string): string {
   throw new Error('Unsupported schedule format. Use cron, "hourly", "every 4 hours", "daily at 6pm", or "every monday at 9am".');
 }
 
+/**
+ * Evaluate a human-written condition string against the automation's current state.
+ * Returns true (should run) or false (should skip this run).
+ *
+ * Supported patterns (case-insensitive):
+ *   "only if last run failed"         → skip if last run succeeded
+ *   "only if last run succeeded"      → skip if last run failed
+ *   "if failure count exceeds N"      → skip if consecutive_failures <= N
+ *   "only if consecutive failures > N"
+ *   "skip if last run succeeded"      → same as "only if last run failed"
+ */
+function evaluateCondition(condition: string, record: AutomationRecord): { pass: boolean; reason: string } {
+  const norm = condition.trim().toLowerCase();
+
+  const lastStatus = record.last_run_status;
+  const failures = record.consecutive_failures ?? 0;
+
+  if (/only if last run failed|skip if last run succeeded/.test(norm)) {
+    if (!lastStatus) return { pass: true, reason: 'No previous run — allowing first run.' };
+    const pass = lastStatus === 'failed';
+    return { pass, reason: pass ? 'Last run failed — condition met.' : `Skipped: last run succeeded.` };
+  }
+
+  if (/only if last run succeeded|skip if last run failed/.test(norm)) {
+    if (!lastStatus) return { pass: true, reason: 'No previous run — allowing first run.' };
+    const pass = lastStatus === 'succeeded';
+    return { pass, reason: pass ? 'Last run succeeded — condition met.' : `Skipped: last run failed.` };
+  }
+
+  const failThresholdMatch = norm.match(/(?:if failure count exceeds|if consecutive failures[^>]*>)\s*(\d+)/);
+  if (failThresholdMatch) {
+    const threshold = Number(failThresholdMatch[1]);
+    const pass = failures > threshold;
+    return {
+      pass,
+      reason: pass
+        ? `Failure count ${failures} exceeds threshold ${threshold} — condition met.`
+        : `Skipped: failure count ${failures} does not exceed ${threshold}.`,
+    };
+  }
+
+  // Unknown pattern — allow the run (fail open)
+  return { pass: true, reason: 'Condition pattern not recognised — running anyway.' };
+}
+
 async function executeAutomation(
   record: AutomationRecord,
   onTrigger: (record: AutomationRecord) => Promise<{ ok: boolean; error?: string } | void>
 ) {
   const startedAt = new Date().toISOString();
   const timezone = normalizeTimeZone(record.timezone);
+
+  // Evaluate condition before running
+  if (record.condition?.trim()) {
+    const { pass, reason } = evaluateCondition(record.condition, record);
+    if (!pass) {
+      console.log(`[scheduler] automation ${record.id} skipped: ${reason}`);
+      updateAutomationRecord(record.id, (current) => ({
+        ...current,
+        timezone,
+        next_run_at: computeNextRunAt(current.cron_expression, timezone, new Date(startedAt)),
+      }));
+      return;
+    }
+    console.log(`[scheduler] automation ${record.id} condition passed: ${reason}`);
+  }
+
   updateAutomationRecord(record.id, (current) => ({
     ...current,
     timezone,
@@ -266,6 +328,7 @@ async function executeAutomation(
     timezone,
     last_run_at: startedAt,
     last_run_status: ok ? 'succeeded' : 'failed',
+    consecutive_failures: ok ? 0 : (current.consecutive_failures ?? 0) + 1,
     next_run_at: computeNextRunAt(current.cron_expression, timezone, new Date(startedAt)),
   }));
 }
