@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bot, KeyRound, RotateCcw, Save, Shield } from 'lucide-react';
+import { ArrowLeft, Bot, KeyRound, Link2, LogOut, RotateCcw, Save, Shield, Slack, User } from 'lucide-react';
+import { getAuthSession, logoutBackendAuthSession } from '../lib/auth';
 import { resolveWorkspaceContext } from '../lib/workspace';
 
 type Provider = 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax';
@@ -104,6 +105,7 @@ const AUTO_GRADUATION_PROFILES: Array<{
 export default function SettingsPage() {
   const navigate = useNavigate();
   const workspace = useMemo(() => resolveWorkspaceContext(), []);
+  const authSession = useMemo(() => getAuthSession(), []);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -456,6 +458,95 @@ export default function SettingsPage() {
           </div>
         ) : !data ? null : (
           <div className="space-y-6">
+            {/* Account & Connections */}
+            <section className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-violet-300" />
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Account</p>
+                  <h2 className="text-sm font-semibold text-white">Account & connections</h2>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {/* Identity card */}
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-violet-500/18 text-sm font-semibold text-violet-200">
+                      {authSession?.name ? authSession.name[0].toUpperCase() : 'U'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-white">{authSession?.name || 'Unknown'}</p>
+                      <p className="truncate text-[11px] text-slate-400">{authSession?.email || ''}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">
+                      {authSession?.role || 'user'}
+                    </span>
+                    <span className="rounded-full border border-navy-700 bg-navy-900 px-2 py-0.5 text-[10px] text-slate-400">
+                      via {authSession?.method || 'email'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await logoutBackendAuthSession().catch(() => null);
+                      navigate('/login');
+                    }}
+                    className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-rose-500/20 bg-rose-500/8 px-3 py-2 text-[11px] font-medium text-rose-300 transition-colors hover:bg-rose-500/14"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    Sign out
+                  </button>
+                </div>
+
+                {/* Slack connection card */}
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
+                  <div className="flex items-center gap-2">
+                    <Slack className="h-4 w-4 text-slate-400" />
+                    <p className="text-sm font-medium text-white">Slack</p>
+                    {authSession?.slackChannelId ? (
+                      <span className="ml-auto rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-300">Connected</span>
+                    ) : (
+                      <span className="ml-auto rounded-full border border-navy-700 bg-navy-900 px-2 py-0.5 text-[10px] text-slate-500">Not set up</span>
+                    )}
+                  </div>
+                  {authSession?.slackChannelId ? (
+                    <div className="mt-3 space-y-1 text-[11px] text-slate-400">
+                      <p>Workspace: <span className="text-slate-200">{authSession.slackWorkspace || '—'}</span></p>
+                      <p>Channel: <span className="font-mono text-slate-200">{authSession.slackDisplayTarget || authSession.slackChannelId}</span></p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                      Connect your Slack workspace so Violema can send automation results and respond to your messages.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => navigate('/connect/slack?next=%2Fsettings')}
+                    className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-cyan-500/20 bg-cyan-500/8 px-3 py-2 text-[11px] font-medium text-cyan-300 transition-colors hover:bg-cyan-500/14"
+                  >
+                    <Link2 className="h-3.5 w-3.5" />
+                    {authSession?.slackChannelId ? 'Update Slack connection' : 'Set up Slack'}
+                  </button>
+                </div>
+
+                {/* Session info card */}
+                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Session</p>
+                  <p className="mt-2 text-sm font-medium text-white">Device session</p>
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+                    Your workspace context is saved to this browser. Signing out clears the local session. Your data and automations remain in the workspace.
+                  </p>
+                  {authSession?.createdAt ? (
+                    <p className="mt-3 text-[10px] text-slate-600">
+                      Active since {new Date(authSession.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+
             <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr),minmax(0,1.08fr)]">
               <section className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
                 <div className="flex items-center gap-2">
