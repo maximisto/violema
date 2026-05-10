@@ -2094,6 +2094,14 @@ export default function Dashboard() {
     return sourceSteps.filter((item) => workflowBlockHasContent(item)).length;
   }, [automationEditor]);
   const hasAutomationSteps = automationActionCount > 0;
+  const hasUnconfiguredDelivery = useMemo(() => {
+    if (!automationEditor) return false;
+    const steps = automationEditor.authoringMode === 'describe'
+      ? buildWorkflowBlocksFromPrompt(automationEditor.workflowPrompt)
+      : automationEditor.steps;
+    const hasDeliverStep = steps.some((s) => s.kind === 'deliver');
+    return hasDeliverStep && !automationEditor.notify.trim() && automationEditor.destinationType === 'none';
+  }, [automationEditor]);
   const automationEditorPolicyMath = useMemo(
     () => inferExecutionPolicyMath(automationEditor?.executionPolicy || DEFAULT_EXECUTION_POLICY, automationEditor?.steps || []),
     [automationEditor]
@@ -3629,7 +3637,9 @@ export default function Dashboard() {
                     className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
                   >
                     {COMMON_TIMEZONES.map((tz) => (
-                      <option key={tz.value} value={tz.value} className="bg-slate-950 text-slate-100">{tz.label}</option>
+                      <option key={tz.value} value={tz.value} className="bg-slate-950 text-slate-100">
+                        {tz.label}{tz.value === getLocalTimeZone() ? ' (your device)' : ''}
+                      </option>
                     ))}
                     {!COMMON_TIMEZONES.some((tz) => tz.value === (automationEditor.timezone || getLocalTimeZone())) && (
                       <option value={automationEditor.timezone || getLocalTimeZone()} className="bg-slate-950 text-slate-100">
@@ -4252,6 +4262,11 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
+              {hasUnconfiguredDelivery ? (
+                <p className="mb-2 text-right text-[11px] text-amber-400">
+                  Add a notification target in Setup before saving — your workflow has a Deliver step with no destination.
+                </p>
+              ) : null}
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
                   onClick={closeAutomationEditor}
@@ -4264,14 +4279,14 @@ export default function Dashboard() {
                     pendingRunAfterSave.current = true;
                     void handleAutomationEditorSave();
                   }}
-                  disabled={actionBusy === 'save' || !automationEditor.name.trim() || !automationEditor.schedule.trim() || !hasAutomationSteps}
+                  disabled={actionBusy === 'save' || !automationEditor.name.trim() || !automationEditor.schedule.trim() || !hasAutomationSteps || hasUnconfiguredDelivery}
                   className="rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/18 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {actionBusy === 'save' && pendingRunAfterSave.current ? 'Saving…' : 'Save & run'}
                 </button>
                 <button
                   onClick={() => { void handleAutomationEditorSave(); }}
-                  disabled={actionBusy === 'save' || !automationEditor.name.trim() || !automationEditor.schedule.trim() || !hasAutomationSteps}
+                  disabled={actionBusy === 'save' || !automationEditor.name.trim() || !automationEditor.schedule.trim() || !hasAutomationSteps || hasUnconfiguredDelivery}
                   className="ui-button-surface disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {actionBusy === 'save' ? 'Saving…' : 'Save changes'}

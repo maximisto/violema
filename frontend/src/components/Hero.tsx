@@ -190,7 +190,10 @@ export default function Hero() {
                 </svg>
                 Start free — no card required
               </button>
-              <button className="btn-secondary text-base py-3 px-6 group">
+              <button
+                onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
+                className="btn-secondary text-base py-3 px-6 group"
+              >
                 <Play className="w-4 h-4 group-hover:text-violet-400 transition-colors" />
                 See it in action
               </button>

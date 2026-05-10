@@ -279,8 +279,11 @@ function evaluateCondition(condition: string, record: AutomationRecord): { pass:
     };
   }
 
-  // Unknown pattern — allow the run (fail open)
-  return { pass: true, reason: 'Condition pattern not recognised — running anyway.' };
+  // Unknown pattern — fail closed so the user notices the condition needs fixing
+  return {
+    pass: false,
+    reason: `Condition not recognised: "${condition.trim()}". Supported patterns: "only if last run failed", "only if last run succeeded", "if consecutive failures > N". Leave blank to always run.`,
+  };
 }
 
 async function executeAutomation(

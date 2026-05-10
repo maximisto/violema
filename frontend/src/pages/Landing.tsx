@@ -723,8 +723,11 @@ function FinalCTA() {
             <Zap className="w-5 h-5" />
             Start setup
           </button>
-          <button className="btn-secondary text-lg py-4 px-8 group">
-            See a live demo
+          <button
+            onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
+            className="btn-secondary text-lg py-4 px-8 group"
+          >
+            See how it works
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
         </div>

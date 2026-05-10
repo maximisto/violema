@@ -9,27 +9,14 @@ const LINKS = {
     { label: 'Features', path: '/#features' },
     { label: 'Integrations', path: '/integrations' },
     { label: 'Pricing', path: '/#pricing' },
-    { label: 'Changelog', path: '#' },
-    { label: 'Roadmap', path: '#' },
+    { label: 'FAQ', path: '/faq' },
   ],
   Company: [
-    { label: 'About', path: '#' },
-    { label: 'Blog', path: '#' },
-    { label: 'Careers', path: '#' },
-    { label: 'Press', path: '#' },
     { label: 'Contact', path: 'mailto:hello@purpleorange.io' },
-  ],
-  Resources: [
-    { label: 'Documentation', path: '#' },
-    { label: 'API Reference', path: '#' },
-    { label: 'Status', path: '#' },
-    { label: 'Community', path: '#' },
-    { label: 'FAQ', path: '/faq' },
   ],
   Legal: [
     { label: 'Privacy Policy', path: '/privacy' },
     { label: 'Terms of Service', path: '/terms' },
-    { label: 'Cookie Policy', path: '#' },
     { label: 'Security', path: 'mailto:security@purpleorange.io' },
   ],
 };
@@ -245,16 +232,13 @@ export default function Footer() {
               </svg>
               Start setup
             </button>
-            <button className="btn-secondary text-base py-3 px-8">
-              Book a demo
-            </button>
           </div>
         </div>
 
         {/* ── Footer links ─────────────────────────────────────────────── */}
-        <div className="py-16 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
+        <div className="py-16 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
           {/* Logo + description */}
-          <div className="col-span-2 md:col-span-4 lg:col-span-1">
+          <div className="col-span-2 md:col-span-3 lg:col-span-1">
             <button
               className="flex items-center gap-2.5 mb-4 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-lg"
               onClick={() => navigate('/')}
@@ -267,20 +251,9 @@ export default function Footer() {
                 <span className="brand-submark text-[8px]">Your AI coworker</span>
               </div>
             </button>
-            <p className="text-slate-500 text-sm leading-relaxed mb-4">
+            <p className="text-slate-500 text-sm leading-relaxed">
               Your AI coworker that proactively executes tasks, coordinates your tools, and gets things done — autonomously.
             </p>
-            <div className="flex gap-3">
-              {['twitter', 'linkedin', 'github'].map((social) => (
-                <a
-                  key={social}
-                  href="#"
-                  className="w-8 h-8 rounded-lg bg-navy-800 border border-navy-700 hover:border-navy-600 flex items-center justify-center text-slate-500 hover:text-slate-300 transition-colors text-xs capitalize"
-                >
-                  {social[0].toUpperCase()}
-                </a>
-              ))}
-            </div>
           </div>
 
           {/* Links */}
