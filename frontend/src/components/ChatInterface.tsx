@@ -964,8 +964,15 @@ export default function ChatInterface({
       setAgentStatus('idle');
     }
 
-    // Prevent the parent from seeing one stale render of the previous thread's
-    // messages when we intentionally hydrate a different conversation.
+    // When promoting 'new' → real ID, the stream is still in flight.
+    // Only update the ref so subsequent switches work correctly — do NOT
+    // reset messages or suppress sync, which would wipe streamed content.
+    if (isPromotingNewConversation) {
+      previousConversationIdRef.current = conversationId;
+      return;
+    }
+
+    // Real conversation switch: hydrate with the selected thread's history.
     suppressNextMessagesSyncRef.current = true;
     setMessages(initialMessages);
     setInput('');

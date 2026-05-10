@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom';
 import { Shield, Zap } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -189,8 +188,6 @@ function renderContent(text: string) {
 }
 
 export default function PrivacyPolicy() {
-  const navigate = useNavigate();
-
   return (
     <div className="min-h-screen bg-navy-900">
       <Navbar />
