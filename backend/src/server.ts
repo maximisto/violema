@@ -491,13 +491,21 @@ function sanitizeNextPath(value: string | undefined, fallback = '/dashboard') {
   return trimmed;
 }
 
-function getAuthStateSecret() {
-  return (
+function getAuthStateSecret(): string {
+  const secret =
     process.env.AUTH_STATE_SECRET?.trim() ||
     process.env.SLACK_SIGNING_SECRET?.trim() ||
-    process.env.STRIPE_WEBHOOK_SECRET?.trim() ||
-    'violema-auth-state-dev-secret'
-  );
+    process.env.STRIPE_WEBHOOK_SECRET?.trim();
+
+  if (secret) return secret;
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'AUTH_STATE_SECRET is not set. OAuth flows are disabled in production without a signing secret. Set AUTH_STATE_SECRET in your environment.',
+    );
+  }
+
+  return 'violema-auth-state-dev-secret';
 }
 
 function encodeOAuthState(payload: OAuthStatePayload) {
@@ -3689,14 +3697,20 @@ app.get('/api/auth/:provider/start', (req: Request, res: Response) => {
     return;
   }
 
-  const state = encodeOAuthState({
-    provider,
-    intent,
-    next,
-    acceptedTerms,
-    acceptedEducation,
-    issuedAt: Date.now(),
-  });
+  let state: string;
+  try {
+    state = encodeOAuthState({
+      provider,
+      intent,
+      next,
+      acceptedTerms,
+      acceptedEducation,
+      issuedAt: Date.now(),
+    });
+  } catch (err) {
+    redirectToAuthError(res, origin, intent, next, err instanceof Error ? err.message : 'Sign-in is not available right now.');
+    return;
+  }
 
   const callbackUrl = buildOAuthCallbackUrl(req, provider);
   const authUrl = new URL(
