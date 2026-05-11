@@ -285,6 +285,72 @@
   animation-play-state: paused;
 }
 
+.mobile-header-row {
+  height: 5.2rem;
+}
+
+.violema-header-logo {
+  display: block;
+  height: 4.05rem;
+  width: auto;
+  max-width: calc(100vw - 7.75rem);
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 0 18px rgba(168, 85, 247, 0.16));
+}
+
+.mobile-nav-drawer {
+  min-height: calc(100dvh - 5.2rem);
+  max-height: calc(100dvh - 5.2rem);
+  overflow-y: auto;
+}
+
+.mobile-hero-section {
+  min-height: 100svh;
+  align-items: flex-start;
+  padding-top: 6.45rem;
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+}
+
+.mobile-hero-copy {
+  max-width: 21.5rem;
+}
+
+.mobile-home-cta {
+  position: fixed;
+  z-index: 60;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-top: 1px solid rgba(124, 58, 237, 0.36);
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.82), rgba(2, 6, 23, 0.98));
+  padding: 0.65rem 1rem calc(0.65rem + env(safe-area-inset-bottom));
+  box-shadow: 0 -16px 34px rgba(2, 6, 23, 0.52);
+  backdrop-filter: blur(18px);
+}
+
+@media (min-width: 640px) {
+  .mobile-header-row {
+    height: 5.4rem;
+  }
+
+  .violema-header-logo {
+    height: 4.45rem;
+    max-width: 20rem;
+  }
+
+  .mobile-hero-section {
+    min-height: 100vh;
+    align-items: center;
+    padding-top: 4rem;
+    padding-bottom: 0;
+  }
+
+  .mobile-hero-copy {
+    max-width: 42rem;
+  }
+}
+
 .panel-scroll {
   overflow-y: auto;
   overscroll-behavior: contain;

@@ -127,7 +127,7 @@ export default function Hero() {
   }, []);
 
   return (
-    <section className="relative min-h-screen flex items-center pt-[4.6rem] sm:pt-16 overflow-hidden">
+    <section className="mobile-hero-section relative flex overflow-hidden">
       {/* Background gradients */}
       <div className="absolute inset-0 bg-hero-gradient" />
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-violet-700/10 rounded-full blur-3xl pointer-events-none" />
@@ -143,36 +143,49 @@ export default function Hero() {
         }}
       />
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-24 w-full">
+      <div className="relative mx-auto w-full max-w-7xl px-4 py-0 sm:px-6 sm:py-24 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           {/* Left: Copy */}
           <div className="animate-fade-in-up">
             {/* Badge */}
-            <div className="inline-flex max-w-full items-center gap-2 bg-violet-950/60 border border-violet-800/50 rounded-full px-3.5 sm:px-4 py-1.5 mb-5 sm:mb-8">
+            <div className="hidden max-w-full items-center gap-2 bg-violet-950/60 border border-violet-800/50 rounded-full px-3.5 py-1.5 mb-8 sm:inline-flex sm:px-4">
               <Sparkles className="w-3.5 h-3.5 text-violet-400" />
               <span className="text-violet-300 text-sm font-medium">Now in beta</span>
             </div>
 
             {/* Headline */}
-            <h1 className="text-[3.3rem] sm:text-6xl lg:text-7xl font-extrabold text-white leading-[0.98] sm:leading-[1.05] mb-5 sm:mb-6 tracking-tight">
-              Your AI coworker
-              <br />
-              <span className="gradient-text">for real work.</span>
+            <h1 className="mb-4 text-[3.05rem] font-extrabold leading-[0.96] tracking-normal text-white sm:mb-6 sm:text-6xl sm:leading-[1.05] lg:text-7xl">
+              <span className="sm:hidden">
+                The AI
+                <br />
+                operator
+                <br />
+                <span className="gradient-text">
+                  for founder
+                  <br />
+                  work.
+                </span>
+              </span>
+              <span className="hidden sm:inline">
+                The AI operator
+                <br />
+                <span className="gradient-text">for founder work.</span>
+              </span>
             </h1>
 
             {/* Sub */}
-            <p className="text-[1.03rem] sm:text-xl text-slate-400 mb-6 sm:mb-10 max-w-2xl leading-relaxed">
-              Violema doesn't just answer questions — it pulls data from Stripe, ships Slack digests, triages PRs, and runs your weekly reports. While you focus on what matters.
+            <p className="mobile-hero-copy mb-5 text-base leading-[1.58] text-slate-400 sm:mb-10 sm:text-xl sm:leading-relaxed">
+              Violema turns weekly updates, revenue checks, research briefs, and follow-up into monitored runs your team can review, approve, and schedule.
             </p>
 
             {/* Social proof bullets */}
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-6 sm:mb-10">
+            <div className="mb-5 flex flex-col gap-2 sm:mb-10 sm:flex-row sm:gap-3">
               {[
-                'Connects to Slack, GitHub, Stripe + 60 more',
-                'Runs digests & reports on autopilot',
-                'You stay in control of every action',
+                'Weekly founder updates',
+                'Revenue and risk monitors',
+                'Approval before delivery',
               ].map((item) => (
-                <div key={item} className="flex items-center gap-2 text-[0.98rem] sm:text-sm text-slate-400">
+                <div key={item} className="flex items-center gap-2 text-[0.95rem] text-slate-400 sm:text-sm">
                   <CheckCircle2 className="w-4 h-4 text-violet-400 flex-shrink-0" />
                   <span>{item}</span>
                 </div>
@@ -180,26 +193,27 @@ export default function Hero() {
             </div>
 
             {/* CTAs */}
-            <div className="flex flex-wrap gap-3 sm:gap-4">
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
               <button
                 onClick={() => navigate('/signup?next=%2Fplans')}
-                className="btn-primary text-base py-3 px-6 shadow-glow-violet animate-glow"
+                className="btn-primary w-full max-w-[15.25rem] justify-center px-4 py-3 text-base shadow-glow-violet animate-glow sm:w-auto sm:max-w-none sm:px-6"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z" />
                 </svg>
-                Start free — no card required
+                Set up beta access
+                <ArrowRight className="h-4 w-4" />
               </button>
               <button
                 onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
-                className="btn-secondary text-base py-3 px-6 group"
+                className="btn-secondary w-full max-w-[14rem] justify-center px-4 py-3 text-base group sm:w-auto sm:max-w-none sm:px-6"
               >
                 <Play className="w-4 h-4 group-hover:text-violet-400 transition-colors" />
-                See it in action
+                See workflow demo
               </button>
             </div>
 
-            <div className="mt-3.5 sm:mt-5 flex flex-wrap gap-2">
+            <div className="mt-3.5 hidden flex-wrap gap-2 sm:mt-5 sm:flex">
               {[
                 { icon: Slack, label: 'Slack' },
                 { icon: DiscordIcon, label: 'Discord' },
@@ -214,7 +228,7 @@ export default function Hero() {
           </div>
 
           {/* Right: Terminal mockup */}
-          <div className="relative animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <div className="relative hidden animate-fade-in-up lg:block" style={{ animationDelay: '0.2s' }}>
             {/* Glow effect */}
             <div className="absolute -inset-4 bg-violet-600/10 rounded-3xl blur-2xl" />
 
@@ -263,7 +277,7 @@ export default function Hero() {
         {/* Stats bar */}
         <div
           ref={statsRef}
-          className="mt-20 pt-8 border-t border-navy-800/60"
+          className="mt-20 hidden border-t border-navy-800/60 pt-8 sm:block"
         >
           <div className="flex flex-wrap items-center justify-center gap-x-0 gap-y-6 divide-x divide-navy-800">
             {STATS.map((stat, i) => (

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
-const VIOLEMA_MARK = '/po-logo.png';
+const VIOLEMA_LOGO = '/violema-logo.png';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -31,24 +31,14 @@ export default function Navbar() {
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-[4.9rem] sm:h-[5.4rem]">
+        <div className="mobile-header-row relative flex items-center justify-between">
           {/* Logo */}
           <button
-            className="flex items-center gap-4 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-2xl"
+            className="flex min-w-0 items-center group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-2xl"
             onClick={() => navigate('/')}
           aria-label="Violema home"
           >
-            <div className="w-10 h-10 sm:w-11 sm:h-11 overflow-hidden flex-shrink-0">
-              <img src={VIOLEMA_MARK} alt="Violema" className="po-logo w-full h-full object-contain" />
-            </div>
-            <div className="brand-lockup w-[10.4rem] sm:w-[11.7rem]">
-              <span className="brand-wordmark text-[1.08rem] sm:text-[1.34rem]">
-                VIOLEMA
-              </span>
-              <span className="brand-submark text-[8.7px] sm:text-[10px]">
-                Your AI coworker
-              </span>
-            </div>
+            <img src={VIOLEMA_LOGO} alt="Violema - Your AI coworker" className="violema-header-logo" />
           </button>
 
           {/* Desktop nav links */}
@@ -95,20 +85,20 @@ export default function Navbar() {
 
           {/* Mobile menu toggle */}
           <button
-            className="md:hidden text-slate-400 hover:text-white p-1 rounded-lg focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
+            className="absolute right-0 top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 flex-shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-navy-950/50 text-slate-200 shadow-[0_10px_24px_rgba(2,6,23,0.28)] transition-colors hover:text-white md:hidden focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={mobileOpen}
           >
-            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {mobileOpen ? <X className="w-8 h-8" /> : <Menu className="w-8 h-8" />}
           </button>
         </div>
       </div>
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="md:hidden bg-navy-900/95 backdrop-blur-md border-b border-navy-800">
-          <div className="px-4 py-4 space-y-3">
+        <div className="mobile-nav-drawer md:hidden bg-navy-900/95 backdrop-blur-md border-b border-navy-800">
+          <div className="px-5 py-7 space-y-4">
             {navLinks.map((link) => (
               link.href.startsWith('/') ? (
                 <button
@@ -117,7 +107,7 @@ export default function Navbar() {
                     navigate(link.href);
                     setMobileOpen(false);
                   }}
-                  className="block w-full text-left text-slate-400 hover:text-white text-sm font-medium transition-colors"
+                  className="block w-full rounded-2xl border border-white/8 bg-navy-950/40 px-5 py-4 text-left text-xl font-semibold text-slate-200 transition-colors hover:border-violet-500/50 hover:text-white"
                 >
                   {link.label}
                 </button>
@@ -125,7 +115,7 @@ export default function Navbar() {
                 <a
                   key={link.label}
                   href={link.href}
-                  className="block text-slate-400 hover:text-white text-sm font-medium transition-colors"
+                  className="block rounded-2xl border border-white/8 bg-navy-950/40 px-5 py-4 text-xl font-semibold text-slate-200 transition-colors hover:border-violet-500/50 hover:text-white"
                   onClick={() => setMobileOpen(false)}
                 >
                   {link.label}
@@ -135,7 +125,7 @@ export default function Navbar() {
             <div className="pt-3 border-t border-navy-800">
               <button
                 onClick={() => navigate('/signup?next=%2Fplans')}
-                className="w-full btn-primary justify-center text-sm"
+                className="w-full btn-primary justify-center py-4 text-lg"
               >
                 Get access
               </button>

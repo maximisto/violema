@@ -745,6 +745,8 @@ function FinalCTA() {
 }
 
 export default function Landing() {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-navy-900">
       <Navbar />
@@ -759,6 +761,22 @@ export default function Landing() {
       <Pricing />
       <FinalCTA />
       <Footer />
+      <div className="mobile-home-cta sm:hidden" aria-label="Violema mobile quick actions">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => navigate('/signup?next=%2Fplans')}
+            className="btn-primary min-w-0 justify-center px-3 py-2.5 text-sm"
+          >
+            Start setup
+          </button>
+          <button
+            onClick={() => navigate('/login')}
+            className="btn-secondary min-w-0 justify-center px-3 py-2.5 text-sm"
+          >
+            Sign in
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
