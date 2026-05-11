@@ -132,7 +132,7 @@ const SCHEDULE_PRESETS = [
   { label: 'Hourly', value: 'every hour' },
   { label: 'Every 4 hours', value: 'every 4 hours' },
   { label: 'Daily 9am', value: 'daily at 9am' },
-  { label: 'Every monday', value: 'every monday at 9am' },
+  { label: 'Every Monday', value: 'every monday at 9am' },
 ];
 
 type WorkflowBlockKind = 'search' | 'query' | 'capture' | 'analyze' | 'summarize' | 'deliver' | 'note';
@@ -261,6 +261,30 @@ const DEFAULT_EXECUTION_POLICY: AutomationExecutionPolicyDraft = {
   reviewPolicy: 'standard',
   maxElasticLanes: 2,
 };
+
+const AUTOMATION_EDITOR_SECTIONS = [
+  {
+    id: 'setup' as const,
+    label: 'Setup',
+    eyebrow: '01',
+    description: 'Name, cadence, timezone, and delivery target.',
+    Icon: Settings,
+  },
+  {
+    id: 'workflow' as const,
+    label: 'Workflow',
+    eyebrow: '02',
+    description: 'The actual instructions and runnable steps.',
+    Icon: CheckSquare,
+  },
+  {
+    id: 'agents' as const,
+    label: 'Agent setup',
+    eyebrow: '03',
+    description: 'Cost, quality, review depth, and worker lanes.',
+    Icon: Bot,
+  },
+];
 
 type DashboardTaskStatus = 'scheduled' | 'complete' | 'alert';
 
@@ -1317,6 +1341,7 @@ export default function Dashboard() {
   const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | 'delete' | 'grant' | null>(null);
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
   const [automationEditorSection, setAutomationEditorSection] = useState<AutomationEditorSection>('setup');
+  const [automationSetupOptionalOpen, setAutomationSetupOptionalOpen] = useState(false);
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -1780,14 +1805,18 @@ export default function Dashboard() {
     void handleAutomationDelete(task);
   }, [handleAutomationDelete]);
 
-  const handleAutomationEdit = useCallback(async (task: DashboardTaskItem | undefined) => {
+  const handleAutomationEdit = useCallback(async (
+    task: DashboardTaskItem | undefined,
+    initialSection: AutomationEditorSection = 'setup',
+  ) => {
     if (!task?.automationId) return;
     const nextSteps = Array.isArray(task.steps) && task.steps.length > 0
       ? task.steps.map((step) => createWorkflowBlock(step.kind, step))
       : Array.isArray(task.actions) && task.actions.length > 0
         ? task.actions.map((action) => parseLegacyActionToWorkflowBlock(action))
         : [createWorkflowBlock('summarize')];
-    setAutomationEditorSection('setup');
+    setAutomationEditorSection(initialSection);
+    setAutomationSetupOptionalOpen(Boolean(task.description || task.condition));
     setAutomationEditor({
       mode: 'edit',
       id: task.automationId,
@@ -1814,6 +1843,7 @@ export default function Dashboard() {
 
   const handleAutomationCreate = useCallback(() => {
     setAutomationEditorSection('setup');
+    setAutomationSetupOptionalOpen(false);
     setAutomationEditor({
       mode: 'create',
       id: `draft-${Date.now()}`,
@@ -1837,6 +1867,7 @@ export default function Dashboard() {
   const closeAutomationEditor = useCallback(() => {
     setAutomationEditor(null);
     setAutomationEditorSection('setup');
+    setAutomationSetupOptionalOpen(false);
     setDraggedStepIndex(null);
     setActionBusy((current) => (current === 'save' || current === 'edit' ? null : current));
 
@@ -2224,8 +2255,7 @@ export default function Dashboard() {
     if (editTarget === 'workflow' && automationId && !automationEditor) {
       const match = taskItems.find((task) => task.automationId === automationId || String(task.id) === automationId);
       if (match) {
-        setAutomationEditorSection('workflow');
-        void handleAutomationEdit(match);
+        void handleAutomationEdit(match, 'workflow');
       }
     }
   }, [automationEditor, handleAutomationCreate, handleAutomationEdit, location.search, taskItems]);
@@ -2307,6 +2337,7 @@ export default function Dashboard() {
         ? selectedTask.actions.map((action) => parseLegacyActionToWorkflowBlock(action))
         : [createWorkflowBlock('summarize')];
     setAutomationEditorSection('setup');
+    setAutomationSetupOptionalOpen(Boolean(selectedTask.description || selectedTask.condition));
     setAutomationEditor({
       mode: 'create',
       id: `draft-${Date.now()}`,
@@ -3299,8 +3330,7 @@ export default function Dashboard() {
                             <button
                               type="button"
                               onClick={() => {
-                                setAutomationEditorSection('workflow');
-                                void handleAutomationEdit(selectedTask);
+                                void handleAutomationEdit(selectedTask, 'workflow');
                               }}
                               className="ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal text-violet-200"
                             >
@@ -3344,6 +3374,7 @@ export default function Dashboard() {
                       )}
                       <div className="mt-3 flex items-center gap-2">
                         <button
+                          type="button"
                           onClick={() => { void handleAutomationRun(selectedTask); }}
                           disabled={selectedTask.source !== 'live' || actionBusy !== null}
                           className="flex-1 rounded-xl border border-violet-500/20 bg-violet-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300 transition-colors hover:bg-violet-500/12 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3351,6 +3382,7 @@ export default function Dashboard() {
                           {actionBusy === 'run' ? 'Running…' : 'Run now'}
                         </button>
                         <button
+                          type="button"
                           onClick={() => { void handleAutomationPauseToggle(selectedTask); }}
                           disabled={selectedTask.source !== 'live' || actionBusy !== null}
                           className="flex-1 rounded-xl border border-navy-700/70 bg-navy-950/35 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition-colors hover:bg-navy-900/70 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3358,9 +3390,9 @@ export default function Dashboard() {
                           {actionBusy === 'pause' ? 'Saving…' : selectedTask.automationStatus === 'paused' ? 'Resume' : 'Pause'}
                         </button>
                         <button
+                          type="button"
                           onClick={() => {
-                            setAutomationEditorSection('setup');
-                            void handleAutomationEdit(selectedTask);
+                            void handleAutomationEdit(selectedTask, 'setup');
                           }}
                           disabled={selectedTask.source !== 'live' || actionBusy !== null}
                           className="flex-1 rounded-xl border border-amber-500/20 bg-amber-500/8 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300 transition-colors hover:bg-amber-500/12 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3370,6 +3402,7 @@ export default function Dashboard() {
                       </div>
                       {selectedTask.source === 'live' && (
                         <button
+                          type="button"
                           onClick={() => confirmAutomationDelete(selectedTask)}
                           disabled={actionBusy !== null}
                           className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/18 bg-red-500/6 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3381,12 +3414,14 @@ export default function Dashboard() {
                       {selectedTask.source === 'live' && (
                         <div className="mt-2 flex items-center gap-2">
                           <button
+                            type="button"
                             onClick={duplicateSelectedAutomation}
                             className="flex-1 rounded-xl border border-navy-700/70 bg-transparent px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-navy-600 hover:bg-navy-950/35 hover:text-slate-200"
                           >
                             Duplicate
                           </button>
                           <button
+                            type="button"
                             onClick={handleAutomationCreate}
                             className="flex-1 rounded-xl border border-navy-700/70 bg-transparent px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:border-navy-600 hover:bg-navy-950/35 hover:text-cyan-200"
                           >
@@ -3544,6 +3579,7 @@ export default function Dashboard() {
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={closeAutomationEditor}
                 className="rounded-xl border border-navy-700/80 bg-navy-900/55 p-2 text-slate-400 transition-colors hover:text-white"
                 aria-label="Close automation editor"
@@ -3558,110 +3594,134 @@ export default function Dashboard() {
                 <p className="mt-1 text-sm text-white">Set the cadence, design the workflow here, and keep agent policy in Agent Studio.</p>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { id: 'setup' as const, label: 'Setup' },
-                  { id: 'workflow' as const, label: 'Workflow' },
-                  { id: 'agents' as const, label: 'Agent setup' },
-                ].map((section) => (
-                  <button
-                    key={section.id}
-                    type="button"
-                    onClick={() => setAutomationEditorSection(section.id)}
-                    className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
-                      automationEditorSection === section.id
-                        ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
-                        : 'text-slate-300'
-                    }`}
-                  >
-                    {section.label}
-                  </button>
-                ))}
+              <div className="grid gap-2 sm:grid-cols-3">
+                {AUTOMATION_EDITOR_SECTIONS.map((section) => {
+                  const Icon = section.Icon;
+                  const isActive = automationEditorSection === section.id;
+                  const isReady = section.id === 'setup'
+                    ? Boolean(automationEditor.name.trim() && automationEditor.schedule.trim())
+                    : section.id === 'workflow'
+                      ? hasAutomationSteps
+                      : true;
+                  const statusText = isReady
+                    ? section.id === 'agents' && automationEditor.executionPolicy.mode === 'recommended'
+                      ? 'Default ready'
+                      : 'Ready'
+                    : section.id === 'setup'
+                      ? 'Needs name + cadence'
+                      : 'Needs steps';
+
+                  return (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => setAutomationEditorSection(section.id)}
+                      aria-pressed={isActive}
+                      className={`group rounded-2xl border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 ${
+                        isActive
+                          ? 'border-violet-400/45 bg-violet-500/12 shadow-[0_18px_38px_rgba(91,33,182,0.22)]'
+                          : 'border-navy-700/80 bg-navy-950/35 hover:border-violet-500/28 hover:bg-navy-900/60'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`flex h-8 w-8 items-center justify-center rounded-xl border text-xs font-semibold ${
+                          isActive
+                            ? 'border-violet-300/35 bg-violet-400/16 text-violet-100'
+                            : 'border-white/10 bg-white/[0.03] text-slate-400'
+                        }`}>
+                          {section.eyebrow}
+                        </span>
+                        <Icon className={`h-4 w-4 ${isActive ? 'text-violet-200' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-white">{section.label}</p>
+                      <p className="mt-1 min-h-[2.4rem] text-xs leading-5 text-slate-400">{section.description}</p>
+                      <p className={`mt-2 text-xs font-medium ${isReady ? 'text-cyan-200' : 'text-amber-200'}`}>
+                        {statusText}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
 
               {automationEditorSection === 'setup' && (
                 <>
-              <label className="block">
-                <span className="ui-section-label px-1">Name</span>
-                <div className="ui-input-shell mt-1">
-                  <input
-                    value={automationEditor.name}
-                    onChange={(event) => setAutomationEditor((current) => current ? { ...current, name: event.target.value } : current)}
-                    className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                    placeholder="Stripe failed payments monitor"
-                  />
-                </div>
-              </label>
+                  <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-300/90">Required setup</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-200">
+                      Name and cadence are required. Timezone protects the schedule. Everything else is optional.
+                    </p>
+                  </div>
 
-                <label className="block">
-                <span className="ui-section-label px-1">Schedule</span>
-                <div className="mt-1 flex flex-wrap gap-2 px-1">
-                  {SCHEDULE_PRESETS.map((preset) => (
-                    <button
-                      key={preset.value}
-                      type="button"
-                      onClick={() => setAutomationEditor((current) => current ? { ...current, schedule: preset.value } : current)}
-                      className={`ui-pill px-2.5 py-1 text-[10px] normal-case tracking-normal ${
-                        automationEditor.schedule.trim().toLowerCase() === preset.value
-                          ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
-                          : 'text-slate-300'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="ui-input-shell mt-1">
-                  <input
-                    value={automationEditor.schedule}
-                    onChange={(event) => setAutomationEditor((current) => current ? { ...current, schedule: event.target.value } : current)}
-                    className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                    placeholder="Every monday at 9am"
-                  />
-                </div>
-                <p className="mt-1 px-1 text-[11px] text-slate-500">Use plain language like "every hour", "daily at 6pm", or "every monday at 9am".</p>
-              </label>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="ui-section-label px-1">Workflow name</span>
+                      <div className="ui-input-shell mt-1">
+                        <input
+                          value={automationEditor.name}
+                          onChange={(event) => setAutomationEditor((current) => current ? { ...current, name: event.target.value } : current)}
+                          className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                          placeholder="Stripe failed payments monitor"
+                        />
+                      </div>
+                    </label>
 
-              <label className="block">
-                <span className="ui-section-label px-1">Timezone</span>
-                <div className="ui-input-shell mt-1">
-                  <select
-                    value={automationEditor.timezone || getLocalTimeZone()}
-                    onChange={(event) => setAutomationEditor((current) => current ? { ...current, timezone: event.target.value } : current)}
-                    className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                  >
-                    {COMMON_TIMEZONES.map((tz) => (
-                      <option key={tz.value} value={tz.value} className="bg-slate-950 text-slate-100">
-                        {tz.label}{tz.value === getLocalTimeZone() ? ' (your device)' : ''}
-                      </option>
-                    ))}
-                    {!COMMON_TIMEZONES.some((tz) => tz.value === (automationEditor.timezone || getLocalTimeZone())) && (
-                      <option value={automationEditor.timezone || getLocalTimeZone()} className="bg-slate-950 text-slate-100">
-                        {automationEditor.timezone || getLocalTimeZone()}
-                      </option>
-                    )}
-                  </select>
-                </div>
-                <p className="mt-1 px-1 text-[11px] text-slate-500">Schedule times are evaluated in this timezone.</p>
-              </label>
+                    <div className="block">
+                      <p className="ui-section-label px-1">Cadence</p>
+                      <div className="mt-1 flex flex-wrap gap-2 px-1">
+                        {SCHEDULE_PRESETS.map((preset) => (
+                          <button
+                            key={preset.value}
+                            type="button"
+                            onClick={() => setAutomationEditor((current) => current ? { ...current, schedule: preset.value } : current)}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              automationEditor.schedule.trim().toLowerCase() === preset.value
+                                ? 'border-violet-500/35 bg-violet-500/14 text-violet-100'
+                                : 'border-white/10 bg-navy-950/45 text-slate-300 hover:border-violet-500/25 hover:text-white'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="ui-input-shell mt-2">
+                        <input
+                          value={automationEditor.schedule}
+                          onChange={(event) => setAutomationEditor((current) => current ? { ...current, schedule: event.target.value } : current)}
+                          aria-label="Cadence"
+                          className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                          placeholder="Every Monday at 9am"
+                        />
+                      </div>
+                      <p className="mt-1 px-1 text-xs leading-5 text-slate-400">Plain language works: every hour, daily at 6pm, every Monday at 9am.</p>
+                    </div>
 
-                <label className="block">
-                <span className="ui-section-label px-1">Description</span>
-                <div className="ui-input-shell mt-1">
-                  <textarea
-                    value={automationEditor.description}
-                    onChange={(event) => setAutomationEditor((current) => current ? { ...current, description: event.target.value } : current)}
-                    rows={3}
-                    className="w-full resize-none bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                    placeholder="What this workflow is responsible for."
-                  />
-                </div>
-              </label>
+                    <label className="block sm:col-span-2">
+                      <span className="ui-section-label px-1">Timezone</span>
+                      <div className="ui-input-shell mt-1">
+                        <select
+                          value={automationEditor.timezone || getLocalTimeZone()}
+                          onChange={(event) => setAutomationEditor((current) => current ? { ...current, timezone: event.target.value } : current)}
+                          className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                        >
+                          {COMMON_TIMEZONES.map((tz) => (
+                            <option key={tz.value} value={tz.value} className="bg-slate-950 text-slate-100">
+                              {tz.label}{tz.value === getLocalTimeZone() ? ' (your device)' : ''}
+                            </option>
+                          ))}
+                          {!COMMON_TIMEZONES.some((tz) => tz.value === (automationEditor.timezone || getLocalTimeZone())) && (
+                            <option value={automationEditor.timezone || getLocalTimeZone()} className="bg-slate-950 text-slate-100">
+                              {automationEditor.timezone || getLocalTimeZone()}
+                            </option>
+                          )}
+                        </select>
+                      </div>
+                      <p className="mt-1 px-1 text-xs leading-5 text-slate-400">Schedule times are evaluated in this timezone.</p>
+                    </label>
+                  </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="ui-section-label px-1">Notify</span>
-                    <div className="mt-1 flex flex-wrap gap-2 px-1">
+                  <div className="block rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                    <p className="ui-section-label px-1">Result destination</p>
+                    <div className="mt-2 flex flex-wrap gap-2 px-1">
                       {[
                         { label: 'Slack', value: 'slack', placeholder: 'C0123456789' },
                         { label: 'Email', value: 'email', placeholder: 'max@purpleorange.io' },
@@ -3681,60 +3741,81 @@ export default function Dashboard() {
                                 : current.notify || option.placeholder,
                             };
                           })}
-                          className={`ui-pill px-2.5 py-1 text-[10px] normal-case tracking-normal ${
+                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                             automationEditor.destinationType === option.value
-                              ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
-                              : 'text-slate-300'
+                              ? 'border-cyan-500/35 bg-cyan-500/14 text-cyan-100'
+                              : 'border-white/10 bg-navy-950/45 text-slate-300 hover:border-cyan-500/25 hover:text-white'
                           }`}
                         >
                           {option.label}
                         </button>
                       ))}
                     </div>
-                    <div className="ui-input-shell mt-1">
+                    <div className="ui-input-shell mt-2">
                       <input
                         value={automationEditor.notify}
                         onChange={(event) => setAutomationEditor((current) => current ? { ...current, notify: event.target.value } : current)}
-                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                        placeholder="Slack channel ID (C...) or email"
+                        aria-label="Result destination"
+                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none disabled:text-slate-600"
+                        placeholder="Slack channel ID, email, or webhook target"
                         disabled={automationEditor.destinationType === 'none'}
                       />
                     </div>
                     {automationEditor.destinationType === 'slack' && automationEditor.notify && !/^([CGD])[A-Z0-9]{8,}$/i.test(automationEditor.notify.trim()) ? (
-                      <p className="mt-1 px-1 text-[11px] text-amber-400">Slack IDs start with C, G, or D and are 9+ characters. Right-click a channel → Copy link → grab the last segment.</p>
-                    ) : automationEditor.destinationType === 'slack' && automationEditor.notify ? (
-                      <p className="mt-1 px-1 text-[11px] text-emerald-400">Channel ID looks good ✓</p>
+                      <p className="mt-2 px-1 text-xs leading-5 text-amber-300">Slack IDs start with C, G, or D and are 9+ characters.</p>
                     ) : (
-                      <p className="mt-1 px-1 text-[11px] text-slate-500">
-                        Slack channel ID like <span className="font-mono text-slate-400">C0123456789</span> (not <span className="font-mono text-slate-400">#channel-name</span>).
+                      <p className="mt-2 px-1 text-xs leading-5 text-slate-400">
+                        Slack channel IDs like <span className="font-mono text-slate-300">C0123456789</span> are more reliable than channel names.
                       </p>
                     )}
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="ui-section-label px-1">Condition <span className="ml-1 font-normal normal-case tracking-normal text-slate-500">(optional — skip run if not met)</span></span>
-                    <div className="ui-input-shell mt-1">
-                      <input
-                        value={automationEditor.condition}
-                        onChange={(event) => setAutomationEditor((current) => current ? { ...current, condition: event.target.value } : current)}
-                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                        placeholder="Only if failure count exceeds 3"
-                      />
+                  <details
+                    className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3"
+                    open={automationSetupOptionalOpen}
+                    onToggle={(event) => setAutomationSetupOptionalOpen(event.currentTarget.open)}
+                  >
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-slate-100 [&::-webkit-details-marker]:hidden">
+                      Optional context and run guard
+                      <ChevronDown className="h-4 w-4 text-slate-500" />
+                    </summary>
+                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="ui-section-label px-1">Context</span>
+                        <div className="ui-input-shell mt-1">
+                          <textarea
+                            value={automationEditor.description}
+                            onChange={(event) => setAutomationEditor((current) => current ? { ...current, description: event.target.value } : current)}
+                            rows={3}
+                            className="w-full resize-none bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                            placeholder="What should someone know when reviewing this later?"
+                          />
+                        </div>
+                      </label>
+
+                      <label className="block">
+                        <span className="ui-section-label px-1">Run guard</span>
+                        <div className="ui-input-shell mt-1">
+                          <input
+                            value={automationEditor.condition}
+                            onChange={(event) => setAutomationEditor((current) => current ? { ...current, condition: event.target.value } : current)}
+                            className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                            placeholder="Only if failure count exceeds 3"
+                          />
+                        </div>
+                        <p className="mt-1 px-1 text-xs leading-5 text-slate-400">Leave empty when the schedule should run every time.</p>
+                      </label>
                     </div>
-                    <p className="mt-1 px-1 text-[11px] text-slate-500">
-                      Supported: <span className="font-mono text-slate-400">"only if last run failed"</span>, <span className="font-mono text-slate-400">"only if consecutive failures &gt; 2"</span>, or leave blank to always run.
-                    </p>
-                  </label>
-                </div>
+                  </details>
                 </>
               )}
 
               {automationEditorSection === 'workflow' && (
                 <>
               <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/80">Workflow authoring</p>
-                <p className="mt-1 text-sm text-white">Use guided steps when you want precise control. Use a natural-language brief when you want speed. Keep the workflow here and tune the worker system in Agent Studio.</p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-300/90">Workflow authoring</p>
+                <p className="mt-1 text-sm leading-6 text-slate-200">Use guided steps for a precise runbook, or describe the whole workflow in plain language for speed.</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <button
                     type="button"
                     onClick={() => setAutomationEditor((current) => current ? {
@@ -3742,13 +3823,14 @@ export default function Dashboard() {
                       authoringMode: 'guided',
                       steps: current.steps.length > 0 ? current.steps : buildWorkflowBlocksFromPrompt(current.workflowPrompt),
                     } : current)}
-                    className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                    className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition-colors ${
                       automationEditor.authoringMode === 'guided'
-                        ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
-                        : 'text-slate-300'
+                        ? 'border-violet-500/35 bg-violet-500/14 text-violet-100'
+                        : 'border-white/10 bg-navy-950/45 text-slate-300 hover:border-violet-500/25 hover:text-white'
                     }`}
                   >
                     Guided steps
+                    <span className="mt-1 block text-xs font-normal leading-5 text-slate-400">Best when each action should be explicit.</span>
                   </button>
                   <button
                     type="button"
@@ -3757,26 +3839,32 @@ export default function Dashboard() {
                       authoringMode: 'describe',
                       workflowPrompt: current.workflowPrompt.trim() || buildWorkflowPromptFromBlocks(current.steps),
                     } : current)}
-                    className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
+                    className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition-colors ${
                       automationEditor.authoringMode === 'describe'
-                        ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
-                        : 'text-slate-300'
+                        ? 'border-cyan-500/35 bg-cyan-500/14 text-cyan-100'
+                        : 'border-white/10 bg-navy-950/45 text-slate-300 hover:border-cyan-500/25 hover:text-white'
                     }`}
                   >
                     Describe it
+                    <span className="mt-1 block text-xs font-normal leading-5 text-slate-400">Best when you know the outcome, not every tool call.</span>
                   </button>
                 </div>
               </div>
               {automationEditor.authoringMode === 'guided' ? (
-              <label className="block">
-                <span className="ui-section-label px-1">Workflow steps</span>
-                <div className="mt-1 flex flex-wrap gap-2 px-1">
+              <div className="block">
+                <div className="flex items-end justify-between gap-3 px-1">
+                  <div>
+                    <p className="ui-section-label">Workflow steps</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">One clear instruction per step. Display labels are optional.</p>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 px-1">
                   {ACTION_TEMPLATES.map((template) => (
                     <button
                       key={template.label}
                       type="button"
                       onClick={() => addAutomationTemplate(template.block)}
-                      className="ui-pill px-2.5 py-1 text-[10px] normal-case tracking-normal text-slate-300"
+                      className="rounded-full border border-white/10 bg-navy-950/45 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:border-violet-500/25 hover:text-white"
                     >
                       + {template.label}
                     </button>
@@ -3836,9 +3924,11 @@ export default function Dashboard() {
                           </button>
                         </div>
                       </div>
-                      <div className="mt-2 grid gap-2 md:grid-cols-[180px,minmax(0,1fr)]">
-                        <div className="ui-input-shell">
-                          <select
+                      <div className="mt-3 grid gap-2 md:grid-cols-[180px,minmax(0,1fr)]">
+                        <div>
+                          <p className="mb-1 px-1 text-xs font-medium text-slate-400">Step type</p>
+                          <div className="ui-input-shell">
+                            <select
                             value={step.kind}
                             onChange={(event) => {
                               const nextKind = event.target.value as WorkflowBlockKind;
@@ -3856,63 +3946,48 @@ export default function Dashboard() {
                                 {option.label}
                               </option>
                             ))}
-                          </select>
+                            </select>
+                          </div>
                         </div>
                         <div className="space-y-2">
-                          <div className="ui-input-shell">
-                            <input
-                              value={step.title}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setAutomationEditor((current) => {
-                                  if (!current) return current;
-                                  const steps = [...current.steps];
-                                  steps[index] = { ...steps[index], title: value };
-                                  return { ...current, steps };
-                                });
-                              }}
-                              className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                              placeholder="Step title"
-                            />
-                          </div>
-                          <div className="ui-input-shell">
-                            <input
-                              value={step.objective}
-                              onChange={(event) => updateAutomationStep(index, event.target.value)}
-                              className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                              placeholder="What this step should do"
-                            />
-                          </div>
-                          {step.kind === 'search' && (
+                          <div>
+                            <p className="mb-1 px-1 text-xs font-medium text-slate-400">Instruction</p>
                             <div className="ui-input-shell">
                               <input
-                                value={typeof step.inputs?.query === 'string' ? step.inputs.query : ''}
+                                value={step.objective}
+                                onChange={(event) => updateAutomationStep(index, event.target.value)}
+                                className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                                placeholder="What should Violema do in this step?"
+                              />
+                            </div>
+                          </div>
+                          <details className="rounded-xl border border-navy-700/70 bg-navy-900/35 px-3 py-2">
+                            <summary className="cursor-pointer list-none text-xs font-medium text-slate-400 [&::-webkit-details-marker]:hidden">
+                              Optional display label
+                            </summary>
+                            <div className="ui-input-shell mt-2">
+                              <input
+                                value={step.title}
                                 onChange={(event) => {
                                   const value = event.target.value;
                                   setAutomationEditor((current) => {
                                     if (!current) return current;
                                     const steps = [...current.steps];
-                                    steps[index] = {
-                                      ...steps[index],
-                                      inputs: {
-                                        ...(steps[index].inputs || {}),
-                                        query: value,
-                                        num_results: 6,
-                                      },
-                                    };
+                                    steps[index] = { ...steps[index], title: value };
                                     return { ...current, steps };
                                   });
                                 }}
                                 className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                                placeholder="Search query"
+                                placeholder="Short label for run history"
                               />
                             </div>
-                          )}
-                          {step.kind === 'query' && (
-                            <div className="grid gap-2 sm:grid-cols-2">
+                          </details>
+                          {step.kind === 'search' && (
+                            <div>
+                              <p className="mb-1 px-1 text-xs font-medium text-slate-400">Search query override</p>
                               <div className="ui-input-shell">
-                                <select
-                                  value={typeof step.inputs?.source === 'string' ? step.inputs.source : 'stripe'}
+                                <input
+                                  value={typeof step.inputs?.query === 'string' ? step.inputs.query : ''}
                                   onChange={(event) => {
                                     const value = event.target.value;
                                     setAutomationEditor((current) => {
@@ -3922,22 +3997,54 @@ export default function Dashboard() {
                                         ...steps[index],
                                         inputs: {
                                           ...(steps[index].inputs || {}),
-                                          source: value,
+                                          query: value,
+                                          num_results: 6,
                                         },
                                       };
                                       return { ...current, steps };
                                     });
                                   }}
                                   className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                                >
-                                  {['stripe', 'posthog', 'github', 'linear', 'notion', 'custom'].map((option) => (
-                                    <option key={option} value={option} className="bg-slate-950 text-slate-100">
-                                      {option}
-                                    </option>
-                                  ))}
-                                </select>
+                                  placeholder="Leave empty to use the instruction"
+                                />
                               </div>
-                              <div className="ui-input-shell">
+                            </div>
+                          )}
+                          {step.kind === 'query' && (
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <div>
+                                <p className="mb-1 px-1 text-xs font-medium text-slate-400">Data source</p>
+                                <div className="ui-input-shell">
+                                  <select
+                                    value={typeof step.inputs?.source === 'string' ? step.inputs.source : 'stripe'}
+                                    onChange={(event) => {
+                                      const value = event.target.value;
+                                      setAutomationEditor((current) => {
+                                        if (!current) return current;
+                                        const steps = [...current.steps];
+                                        steps[index] = {
+                                          ...steps[index],
+                                          inputs: {
+                                            ...(steps[index].inputs || {}),
+                                            source: value,
+                                          },
+                                        };
+                                        return { ...current, steps };
+                                      });
+                                    }}
+                                    className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                                  >
+                                    {['stripe', 'posthog', 'github', 'linear', 'notion', 'custom'].map((option) => (
+                                      <option key={option} value={option} className="bg-slate-950 text-slate-100">
+                                        {option}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                              <div>
+                                <p className="mb-1 px-1 text-xs font-medium text-slate-400">Query name</p>
+                                <div className="ui-input-shell">
                                 {(() => {
                                   const src = typeof step.inputs?.source === 'string' ? step.inputs.source : 'stripe';
                                   const opts = QUERY_TYPE_OPTIONS[src] ?? QUERY_TYPE_OPTIONS.custom;
@@ -3982,31 +4089,35 @@ export default function Dashboard() {
                                     </>
                                   );
                                 })()}
+                                </div>
                               </div>
                             </div>
                           )}
                           {step.kind === 'capture' && (
-                            <div className="ui-input-shell">
-                              <input
-                                value={typeof step.inputs?.url === 'string' ? step.inputs.url : ''}
-                                onChange={(event) => {
-                                  const value = event.target.value;
-                                  setAutomationEditor((current) => {
-                                    if (!current) return current;
-                                    const steps = [...current.steps];
-                                    steps[index] = {
-                                      ...steps[index],
-                                      inputs: {
-                                        ...(steps[index].inputs || {}),
-                                        url: value,
-                                      },
-                                    };
-                                    return { ...current, steps };
-                                  });
-                                }}
-                                className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                                placeholder="https://example.com"
-                              />
+                            <div>
+                              <p className="mb-1 px-1 text-xs font-medium text-slate-400">Page or asset URL</p>
+                              <div className="ui-input-shell">
+                                <input
+                                  value={typeof step.inputs?.url === 'string' ? step.inputs.url : ''}
+                                  onChange={(event) => {
+                                    const value = event.target.value;
+                                    setAutomationEditor((current) => {
+                                      if (!current) return current;
+                                      const steps = [...current.steps];
+                                      steps[index] = {
+                                        ...steps[index],
+                                        inputs: {
+                                          ...(steps[index].inputs || {}),
+                                          url: value,
+                                        },
+                                      };
+                                      return { ...current, steps };
+                                    });
+                                  }}
+                                  className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                                  placeholder="https://example.com"
+                                />
+                              </div>
                             </div>
                           )}
                           <p className="px-1 text-[11px] text-slate-500">
@@ -4028,7 +4139,7 @@ export default function Dashboard() {
                   </button>
                 </div>
                 <p className="mt-1 px-1 text-[11px] text-slate-500">Build the workflow one step at a time, then reorder or trim as needed.</p>
-              </label>
+              </div>
               ) : (
                 <label className="block">
                   <span className="ui-section-label px-1">Workflow brief</span>
@@ -4067,137 +4178,158 @@ export default function Dashboard() {
 
               {automationEditorSection === 'agents' && (
                 <>
-              <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/6 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300/80">Agent setup</p>
-                <p className="mt-1 text-sm text-white">This is the lightweight policy view. Use the system recommendation by default. Go to Agent Studio for the full worker map, performance trends, and preset comparison.</p>
-              </div>
+                  <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/6 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300/90">Agent setup</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-200">
+                      Keep this on system recommended unless the workflow has a clear reason to spend more, review harder, or run extra worker lanes.
+                    </p>
+                  </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Execution mode</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {[
-                      { value: 'recommended' as const, label: 'System recommended' },
-                      { value: 'custom' as const, label: 'Custom policy' },
-                    ].map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setAutomationEditor((current) => current ? {
-                          ...current,
-                          executionPolicy: {
-                            ...current.executionPolicy,
-                            mode: option.value,
-                          },
-                        } : current)}
-                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
-                          automationEditor.executionPolicy.mode === option.value
-                            ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
-                            : 'text-slate-300'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
+                      {
+                        value: 'recommended' as const,
+                        label: 'System recommended',
+                        description: 'Violema balances quality, cost, and review depth from the workflow complexity.',
+                      },
+                      {
+                        value: 'custom' as const,
+                        label: 'Custom policy',
+                        description: 'Manually tune optimization goal, review strictness, and extra worker lanes.',
+                      },
+                    ].map((option) => {
+                      const isSelected = automationEditor.executionPolicy.mode === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setAutomationEditor((current) => current ? {
+                            ...current,
+                            executionPolicy: {
+                              ...current.executionPolicy,
+                              mode: option.value,
+                            },
+                          } : current)}
+                          className={`rounded-2xl border p-3 text-left transition-colors ${
+                            isSelected
+                              ? 'border-cyan-500/35 bg-cyan-500/14 text-cyan-100'
+                              : 'border-white/10 bg-navy-950/35 text-slate-300 hover:border-cyan-500/25 hover:text-white'
+                          }`}
+                        >
+                          <span className="text-sm font-semibold">{option.label}</span>
+                          <span className="mt-1 block text-xs font-normal leading-5 text-slate-400">{option.description}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                </div>
 
-                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Optimization goal</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {[
-                      { value: 'balanced' as const, label: 'Balanced' },
-                      { value: 'cost_saver' as const, label: 'Cost Saver' },
-                      { value: 'quality_first' as const, label: 'Quality First' },
-                    ].map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setAutomationEditor((current) => current ? {
-                          ...current,
-                          executionPolicy: {
-                            ...current.executionPolicy,
-                            mode: 'custom',
-                            optimizationGoal: option.value,
-                          },
-                        } : current)}
-                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
-                          automationEditor.executionPolicy.optimizationGoal === option.value
-                            ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
-                            : 'text-slate-300'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
+                  {automationEditor.executionPolicy.mode === 'recommended' ? (
+                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                      <p className="text-sm font-semibold text-white">Recommended policy is active</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-400">
+                        The system will use balanced quality, standard review, and up to {automationEditorPolicyMath.recommendedElasticLanes} extra worker lanes for this workflow shape.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                        <p className="ui-section-label">Optimization goal</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {[
+                            { value: 'balanced' as const, label: 'Balanced' },
+                            { value: 'cost_saver' as const, label: 'Cost Saver' },
+                            { value: 'quality_first' as const, label: 'Quality First' },
+                          ].map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setAutomationEditor((current) => current ? {
+                                ...current,
+                                executionPolicy: {
+                                  ...current.executionPolicy,
+                                  mode: 'custom',
+                                  optimizationGoal: option.value,
+                                },
+                              } : current)}
+                              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                automationEditor.executionPolicy.optimizationGoal === option.value
+                                  ? 'border-violet-500/35 bg-violet-500/14 text-violet-100'
+                                  : 'border-white/10 bg-navy-950/45 text-slate-300 hover:border-violet-500/25 hover:text-white'
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                        <p className="ui-section-label">Review policy</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {[
+                            { value: 'lean' as const, label: 'Lean' },
+                            { value: 'standard' as const, label: 'Standard' },
+                            { value: 'strict' as const, label: 'Strict' },
+                          ].map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setAutomationEditor((current) => current ? {
+                                ...current,
+                                executionPolicy: {
+                                  ...current.executionPolicy,
+                                  mode: 'custom',
+                                  reviewPolicy: option.value,
+                                },
+                              } : current)}
+                              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                automationEditor.executionPolicy.reviewPolicy === option.value
+                                  ? 'border-violet-500/35 bg-violet-500/14 text-violet-100'
+                                  : 'border-white/10 bg-navy-950/45 text-slate-300 hover:border-violet-500/25 hover:text-white'
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3 sm:col-span-2">
+                        <p className="ui-section-label">Extra worker lanes</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-400">Higher lanes can finish broad workflows faster, but they increase credit pressure.</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {[0, 1, 2, 3, 4].map((count) => (
+                            <button
+                              key={count}
+                              type="button"
+                              onClick={() => setAutomationEditor((current) => current ? {
+                                ...current,
+                                executionPolicy: {
+                                  ...current.executionPolicy,
+                                  mode: 'custom',
+                                  maxElasticLanes: count,
+                                },
+                              } : current)}
+                              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                automationEditor.executionPolicy.maxElasticLanes === count
+                                  ? 'border-cyan-500/35 bg-cyan-500/14 text-cyan-100'
+                                  : 'border-white/10 bg-navy-950/45 text-slate-300 hover:border-cyan-500/25 hover:text-white'
+                              }`}
+                            >
+                              {count}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
+                    <p className="ui-section-label">Why this setup</p>
+                    <p className="mt-2 text-xs leading-5 text-slate-400">
+                      This workflow has {automationEditorPolicyMath.stepCount} steps, {automationEditorPolicyMath.toolCalls} expected tool calls, and lane demand {automationEditorPolicyMath.recommendedElasticLanes}. Stronger reasoning is reserved for workflows where the complexity justifies the extra spend.
+                    </p>
                   </div>
-                </div>
-
-                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Review policy</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {[
-                      { value: 'lean' as const, label: 'Lean' },
-                      { value: 'standard' as const, label: 'Standard' },
-                      { value: 'strict' as const, label: 'Strict' },
-                    ].map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setAutomationEditor((current) => current ? {
-                          ...current,
-                          executionPolicy: {
-                            ...current.executionPolicy,
-                            mode: 'custom',
-                            reviewPolicy: option.value,
-                          },
-                        } : current)}
-                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
-                          automationEditor.executionPolicy.reviewPolicy === option.value
-                            ? 'border-violet-500/30 bg-violet-500/12 text-violet-200'
-                            : 'text-slate-300'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Elastic lane cap</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {[0, 1, 2, 3, 4].map((count) => (
-                      <button
-                        key={count}
-                        type="button"
-                        onClick={() => setAutomationEditor((current) => current ? {
-                          ...current,
-                          executionPolicy: {
-                            ...current.executionPolicy,
-                            mode: 'custom',
-                            maxElasticLanes: count,
-                          },
-                        } : current)}
-                        className={`ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal ${
-                          automationEditor.executionPolicy.maxElasticLanes === count
-                            ? 'border-cyan-500/30 bg-cyan-500/12 text-cyan-200'
-                            : 'text-slate-300'
-                        }`}
-                      >
-                        {count}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Why this setup</p>
-                <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-                  Math: {automationEditorPolicyMath.stepCount} workflow steps, {automationEditorPolicyMath.toolCalls} tool calls, lane demand {automationEditorPolicyMath.recommendedElasticLanes}. This keeps heavyweight reasoning on stronger models only when the run complexity justifies the extra spend.
-                </p>
-              </div>
                 </>
               )}
 
@@ -4263,12 +4395,14 @@ export default function Dashboard() {
               ) : null}
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
+                  type="button"
                   onClick={closeAutomationEditor}
                   className="ui-button-ghost"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     pendingRunAfterSave.current = true;
                     void handleAutomationEditorSave();
@@ -4279,11 +4413,12 @@ export default function Dashboard() {
                   {actionBusy === 'save' && pendingRunAfterSave.current ? 'Saving…' : 'Save & run'}
                 </button>
                 <button
+                  type="button"
                   onClick={() => { void handleAutomationEditorSave(); }}
                   disabled={actionBusy === 'save' || !automationEditor.name.trim() || !automationEditor.schedule.trim() || !hasAutomationSteps || hasUnconfiguredDelivery}
                   className="ui-button-surface disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {actionBusy === 'save' ? 'Saving…' : 'Save changes'}
+                  {actionBusy === 'save' ? 'Saving…' : automationEditor.mode === 'create' ? 'Create schedule' : 'Save changes'}
                 </button>
               </div>
             </div>

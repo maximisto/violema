@@ -91,7 +91,7 @@
   }
 
   .ui-section-label {
-    @apply text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600;
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500;
   }
 
   .ui-button-surface {
