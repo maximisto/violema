@@ -1,14 +1,6 @@
 import { useNavigate } from 'react-router-dom';
-import { Play, ArrowRight, Sparkles, CheckCircle2, Globe, Slack } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
-
-function DiscordIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
-      <path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037 13.7 13.7 0 0 0-.608 1.249 18.27 18.27 0 0 0-5.487 0 13.6 13.6 0 0 0-.617-1.249.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.045-.32 13.579.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.1 14.1 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128q.152-.111.297-.23a.074.074 0 0 1 .077-.01c3.927 1.792 8.18 1.792 12.062 0a.074.074 0 0 1 .078.01q.146.12.297.23a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03M8.02 15.331c-1.182 0-2.157-1.085-2.157-2.418s.956-2.418 2.157-2.418c1.21 0 2.167 1.094 2.157 2.418s-.956 2.418-2.157 2.418m7.975 0c-1.182 0-2.157-1.085-2.157-2.418s.956-2.418 2.157-2.418c1.21 0 2.167 1.094 2.157 2.418s-.947 2.418-2.157 2.418"/>
-    </svg>
-  );
-}
+import { Play, ArrowRight, Sparkles, CheckCircle2, Globe, Slack, Mail } from 'lucide-react';
+import { useState, useEffect, useRef, type CSSProperties, type PointerEvent } from 'react';
 
 function useCountUp(target: number, duration = 1800, start = false) {
   const [count, setCount] = useState(0);
@@ -35,12 +27,26 @@ const STATS = [
   { value: 5, suffix: '', label: 'Included seats on Team', prefix: '' },
 ];
 
+function trackHeroCta(action: 'start_free' | 'sign_in', placement: 'hero' | 'sticky_mobile') {
+  const payload = {
+    event: 'hero_cta_click',
+    action,
+    placement,
+    ts: new Date().toISOString(),
+  };
+  if (typeof window !== 'undefined') {
+    // Optional analytics integration: GTM-style dataLayer.
+    (window as Window & { dataLayer?: unknown[] }).dataLayer?.push(payload);
+  }
+  console.info('[analytics]', payload);
+}
+
 const TERMINAL_MESSAGES = [
   { role: 'user', content: '@violema pull the MRR from Stripe and compare to last month' },
   { role: 'violema', content: '📊 Pulling Stripe data...', type: 'thinking' },
   { role: 'violema', content: 'MRR this month: **$127,450** (+17.8% vs Feb)\nNew subscriptions: 47 | Churn: 3\nNet Revenue Retention: 118% 🚀', type: 'result' },
-  { role: 'user', content: '@violema send the summary to #revenue-team on Slack' },
-  { role: 'violema', content: '✅ Sent to #revenue-team. Want me to create a weekly automated report?', type: 'result' },
+  { role: 'user', content: '@violema prepare the summary for #revenue-team approval' },
+  { role: 'violema', content: '✅ Draft ready for approval. Want me to schedule this as a weekly workflow?', type: 'result' },
 ];
 
 function TerminalMessage({ msg, visible }: { msg: typeof TERMINAL_MESSAGES[0]; visible: boolean }) {
@@ -56,8 +62,8 @@ function TerminalMessage({ msg, visible }: { msg: typeof TERMINAL_MESSAGES[0]; v
           <span className="text-xs text-white font-bold">U</span>
         </div>
       ) : (
-        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex-shrink-0 flex items-center justify-center">
-          <span className="violema-glyph text-xs text-white">V</span>
+        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex-shrink-0 flex items-center justify-center shadow-glow-violet">
+          <Sparkles className="w-3 h-3 text-white" />
         </div>
       )}
       <div className={`flex-1 text-sm ${isUser ? 'text-slate-300' : 'text-slate-200'}`}>
@@ -88,10 +94,11 @@ function TerminalMessage({ msg, visible }: { msg: typeof TERMINAL_MESSAGES[0]; v
 
 function StatItem({ stat, animate }: { stat: typeof STATS[0]; animate: boolean }) {
   const count = useCountUp(stat.value, 1800, animate);
+  const displayValue = animate ? count : stat.value;
   return (
     <div className="text-center px-6 first:pl-0 last:pr-0">
       <p className="text-3xl font-extrabold text-white tabular-nums">
-        {stat.prefix}{count.toLocaleString()}{stat.suffix}
+        {stat.prefix}{displayValue.toLocaleString()}{stat.suffix}
       </p>
       <p className="text-xs text-slate-500 mt-1 font-medium">{stat.label}</p>
     </div>
@@ -100,15 +107,35 @@ function StatItem({ stat, animate }: { stat: typeof STATS[0]; animate: boolean }
 
 export default function Hero() {
   const navigate = useNavigate();
-  const [visibleMessages, setVisibleMessages] = useState<number[]>([]);
+  const [visibleMessages, setVisibleMessages] = useState<number[]>([0]);
   const statsRef = useRef<HTMLDivElement>(null);
   const [statsVisible, setStatsVisible] = useState(false);
+  const [terminalSpotlight, setTerminalSpotlight] = useState({ x: 50, y: 50 });
+
+  function handleTerminalPointerMove(event: PointerEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setTerminalSpotlight({
+      x: ((event.clientX - rect.left) / rect.width) * 100,
+      y: ((event.clientY - rect.top) / rect.height) * 100,
+    });
+  }
+
+  const terminalStyle = {
+    animationDelay: '0.2s',
+    '--mx': `${terminalSpotlight.x}%`,
+    '--my': `${terminalSpotlight.y}%`,
+  } as CSSProperties;
+
+  function scrollToDemo() {
+    document.getElementById('product-demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   useEffect(() => {
-    let idx = 0;
+    let idx = 1;
     const interval = setInterval(() => {
       if (idx < TERMINAL_MESSAGES.length) {
-        setVisibleMessages((prev) => [...prev, idx]);
+        const current = idx;
+        setVisibleMessages((prev) => [...prev, current]);
         idx++;
       } else {
         clearInterval(interval);
@@ -143,18 +170,18 @@ export default function Hero() {
         }}
       />
 
-      <div className="relative mx-auto w-full max-w-7xl px-4 py-0 sm:px-6 sm:py-24 lg:px-8">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-24 w-full">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           {/* Left: Copy */}
           <div className="animate-fade-in-up">
             {/* Badge */}
-            <div className="hidden max-w-full items-center gap-2 bg-violet-950/60 border border-violet-800/50 rounded-full px-3.5 py-1.5 mb-8 sm:inline-flex sm:px-4">
+            <div className="interactive-glow surface-lift hidden max-w-full items-center gap-2 rounded-full border border-violet-800/50 bg-violet-950/60 px-3.5 py-1.5 mb-5 sm:mb-8 sm:inline-flex sm:px-4">
               <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-              <span className="text-violet-300 text-sm font-medium">Now in beta</span>
+              <span className="text-violet-300 text-sm font-medium">Controlled beta</span>
             </div>
 
             {/* Headline */}
-            <h1 className="mb-4 text-[3.05rem] font-extrabold leading-[0.96] tracking-normal text-white sm:mb-6 sm:text-6xl sm:leading-[1.05] lg:text-7xl">
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-white leading-[0.96] sm:leading-[1.05] mb-3 sm:mb-6 tracking-tight">
               <span className="sm:hidden">
                 The AI
                 <br />
@@ -174,18 +201,18 @@ export default function Hero() {
             </h1>
 
             {/* Sub */}
-            <p className="mobile-hero-copy mb-5 text-base leading-[1.58] text-slate-400 sm:mb-10 sm:text-xl sm:leading-relaxed">
+            <p className="mobile-hero-copy text-base sm:text-xl text-slate-400 mb-4 sm:mb-10 leading-[1.5] sm:leading-relaxed">
               Violema turns weekly updates, revenue checks, research briefs, and follow-up into monitored runs your team can review, approve, and schedule.
             </p>
 
             {/* Social proof bullets */}
-            <div className="mb-5 flex flex-col gap-2 sm:mb-10 sm:flex-row sm:gap-3">
+            <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-3 mb-4 sm:mb-10">
               {[
                 'Weekly founder updates',
                 'Revenue and risk monitors',
                 'Approval before delivery',
               ].map((item) => (
-                <div key={item} className="flex items-center gap-2 text-[0.95rem] text-slate-400 sm:text-sm">
+                <div key={item} className="flex items-center gap-2 text-[0.95rem] sm:text-sm text-slate-400">
                   <CheckCircle2 className="w-4 h-4 text-violet-400 flex-shrink-0" />
                   <span>{item}</span>
                 </div>
@@ -193,21 +220,19 @@ export default function Hero() {
             </div>
 
             {/* CTAs */}
-            <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
+            <div className="flex flex-wrap gap-3 sm:gap-4">
               <button
-                onClick={() => navigate('/signup?next=%2Fplans')}
-                className="btn-primary w-full max-w-[15.25rem] justify-center px-4 py-3 text-base shadow-glow-violet animate-glow sm:w-auto sm:max-w-none sm:px-6"
+                onClick={() => {
+                  trackHeroCta('start_free', 'hero');
+                  navigate('/signup?next=%2Fplans');
+                }}
+                className="btn-primary group text-base py-2.5 sm:py-3 px-5 sm:px-6 shadow-glow-violet animate-glow"
               >
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z" />
-                </svg>
+                <Sparkles className="w-5 h-5" />
                 Set up beta access
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="magnetic-arrow w-4 h-4" />
               </button>
-              <button
-                onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
-                className="btn-secondary w-full max-w-[14rem] justify-center px-4 py-3 text-base group sm:w-auto sm:max-w-none sm:px-6"
-              >
+              <button onClick={scrollToDemo} className="btn-secondary text-base py-2.5 sm:py-3 px-5 sm:px-6 group">
                 <Play className="w-4 h-4 group-hover:text-violet-400 transition-colors" />
                 See workflow demo
               </button>
@@ -216,7 +241,7 @@ export default function Hero() {
             <div className="mt-3.5 hidden flex-wrap gap-2 sm:mt-5 sm:flex">
               {[
                 { icon: Slack, label: 'Slack' },
-                { icon: DiscordIcon, label: 'Discord' },
+                { icon: Mail, label: 'Email' },
                 { icon: Globe, label: 'Web app' },
               ].map(({ icon: Icon, label }) => (
                 <div key={label} className="ui-pill px-3 py-1.5 text-slate-300">
@@ -228,12 +253,16 @@ export default function Hero() {
           </div>
 
           {/* Right: Terminal mockup */}
-          <div className="relative hidden animate-fade-in-up lg:block" style={{ animationDelay: '0.2s' }}>
+          <div
+            className="relative mt-14 hidden animate-fade-in-up lg:mt-0 lg:block"
+            style={terminalStyle}
+            onPointerMove={handleTerminalPointerMove}
+          >
             {/* Glow effect */}
             <div className="absolute -inset-4 bg-violet-600/10 rounded-3xl blur-2xl" />
 
             {/* Terminal window */}
-            <div className="relative bg-navy-800/80 backdrop-blur-sm border border-navy-700/60 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="interactive-glow demo-scanline surface-lift relative bg-navy-800/80 backdrop-blur-sm border border-navy-700/60 rounded-2xl overflow-hidden shadow-2xl hover:border-violet-700/55">
               {/* Window chrome */}
               <div className="flex items-center gap-2 px-4 py-3 bg-navy-900/60 border-b border-navy-700/60">
                 <div className="flex gap-1.5">
@@ -242,9 +271,9 @@ export default function Hero() {
                   <div className="w-3 h-3 rounded-full bg-green-500/70" />
                 </div>
                 <div className="flex-1 flex justify-center">
-                  <div className="bg-navy-800 rounded-md px-4 py-1 flex items-center gap-2">
+                  <div className="signal-rail bg-navy-800 rounded-md px-4 py-1 flex items-center gap-2 overflow-hidden">
                     <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                    <span className="text-xs text-slate-500 font-mono">#general — Violema AI</span>
+                    <span className="text-xs text-slate-500 font-mono">sample workflow — demo data</span>
                   </div>
                 </div>
               </div>
@@ -258,10 +287,10 @@ export default function Hero() {
 
               {/* Input bar */}
               <div className="px-4 py-3 border-t border-navy-700/60 bg-navy-900/40">
-                <div className="flex items-center gap-2 bg-navy-800 rounded-lg px-3 py-2">
+                <div className="group flex items-center gap-2 bg-navy-800 rounded-lg px-3 py-2 border border-transparent transition-colors duration-200 hover:border-violet-700/45">
                   <span className="text-slate-500 text-sm">Message #general...</span>
                   <div className="ml-auto flex gap-2">
-                    <ArrowRight className="w-4 h-4 text-slate-600" />
+                    <ArrowRight className="magnetic-arrow w-4 h-4 text-slate-600 group-hover:text-violet-300" />
                   </div>
                 </div>
               </div>
@@ -269,7 +298,7 @@ export default function Hero() {
 
             {/* Floating badge */}
             <div className="absolute -top-3 -right-3 bg-violet-600 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-glow-violet animate-float">
-              Violema is working...
+              Sample workflow
             </div>
           </div>
         </div>
@@ -277,13 +306,37 @@ export default function Hero() {
         {/* Stats bar */}
         <div
           ref={statsRef}
-          className="mt-20 hidden border-t border-navy-800/60 pt-8 sm:block"
+          className="mt-20 pt-8 border-t border-navy-800/60"
         >
           <div className="flex flex-wrap items-center justify-center gap-x-0 gap-y-6 divide-x divide-navy-800">
             {STATS.map((stat, i) => (
               <StatItem key={i} stat={stat} animate={statsVisible} />
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Mobile sticky conversion bar */}
+      <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-violet-800/40 bg-navy-950/95 backdrop-blur-md px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => {
+              trackHeroCta('start_free', 'sticky_mobile');
+              navigate('/signup?next=%2Fplans');
+            }}
+            className="min-w-0 w-full btn-primary justify-center px-3 py-2.5 text-sm"
+          >
+            Start setup
+          </button>
+          <button
+            onClick={() => {
+              trackHeroCta('sign_in', 'sticky_mobile');
+              navigate('/login');
+            }}
+            className="min-w-0 w-full btn-secondary justify-center px-3 py-2.5 text-sm"
+          >
+            Sign in
+          </button>
         </div>
       </div>
     </section>

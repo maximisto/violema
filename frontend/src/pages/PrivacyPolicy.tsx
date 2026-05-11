@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { Shield, Zap } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -6,7 +7,7 @@ const SECTIONS = [
   {
     id: 'overview',
     title: '1. Overview',
-    content: `Purple Orange AI, Inc. ("Purple Orange AI", "we", "our", or "us") operates VIOLEMA, an AI coworker platform accessible at violema.com and related subdomains (the "Service"). This Privacy Policy explains how we collect, use, store, and share information when you use the Service.
+    content: `Purple Orange AI, Inc. ("Purple Orange AI", "we", "our", or "us") operates VIOLEMA, an AI operator platform accessible at violema.com and related subdomains (the "Service"). This Privacy Policy explains how we collect, use, store, and share information when you use the Service.
 
 By using VIOLEMA, you agree to the practices described in this policy. If you do not agree, please discontinue use of the Service.
 
@@ -188,6 +189,8 @@ function renderContent(text: string) {
 }
 
 export default function PrivacyPolicy() {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-navy-900">
       <Navbar />

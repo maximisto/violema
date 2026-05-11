@@ -9,9 +9,9 @@ import ChatInterface from '../components/ChatInterface';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import { getAuthSession, hasSlackConnection, isAdminSession } from '../lib/auth';
+import ViolemaLogo from '../components/ViolemaLogo';
 import type { Conversation, Message, AutonomyMode } from '../types';
 
-const VIOLEMA_MARK = '/po-logo.png';
 const LEGACY_CONVOS_KEY = 'nexus_convos';
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
@@ -2400,20 +2400,10 @@ export default function Dashboard() {
           <div className="flex items-center gap-2.5 px-4 py-4 border-b border-navy-800">
             <button
               onClick={() => navigate('/')}
-              className="flex items-center gap-3.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-1"
+              className="flex min-w-0 items-center group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-1"
               aria-label="Go to Violema home"
             >
-              <div className="w-9 h-9 overflow-hidden flex-shrink-0">
-                <img src={VIOLEMA_MARK} alt="Violema" className="po-logo w-full h-full object-contain" />
-              </div>
-              <div className="brand-lockup w-[10rem]">
-                <span className="brand-wordmark text-[1.02rem]">
-                  VIOLEMA
-                </span>
-                <span className="brand-submark text-[7.9px]">
-                  Your AI coworker
-                </span>
-              </div>
+              <ViolemaLogo className="h-10 w-[11.25rem]" />
             </button>
             <span className="ml-auto text-[10px] bg-violet-900/50 text-violet-300 border border-violet-800/50 rounded-full px-2 py-0.5 font-medium flex-shrink-0 shadow-sm">
               Beta

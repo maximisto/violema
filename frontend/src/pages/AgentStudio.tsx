@@ -58,10 +58,13 @@ import type {
 } from '../features/agent-studio/types';
 import { LiveSupportRailSection } from '../features/agent-studio/components/LiveSupportRailSection';
 import { LiveNodeInspectorSection } from '../features/agent-studio/components/LiveNodeInspectorSection';
+import { LiveHandoffsSection } from '../features/agent-studio/components/LiveHandoffsSection';
 import { LiveAdvancedSupportSection } from '../features/agent-studio/components/LiveAdvancedSupportSection';
+import { LiveOptimizationLoopSection } from '../features/agent-studio/components/LiveOptimizationLoopSection';
 import { LiveOperatorBriefSection } from '../features/agent-studio/components/LiveOperatorBriefSection';
 import { LiveSystemMapSection } from '../features/agent-studio/components/LiveSystemMapSection';
 import { OptimizeCurrentReleaseSection } from '../features/agent-studio/components/OptimizeCurrentReleaseSection';
+import { OptimizeDecisionBriefSection } from '../features/agent-studio/components/OptimizeDecisionBriefSection';
 import { OptimizeDiagnosticsSection } from '../features/agent-studio/components/OptimizeDiagnosticsSection';
 import { OptimizeReleaseCandidateSection } from '../features/agent-studio/components/OptimizeReleaseCandidateSection';
 import { OptimizeScenarioSimulatorSection } from '../features/agent-studio/components/OptimizeScenarioSimulatorSection';
@@ -75,8 +78,8 @@ import { ReplayGovernanceSection } from '../features/agent-studio/components/Rep
 import { LiveRoom } from '../features/agent-studio/rooms/LiveRoom';
 import { OptimizeRoom } from '../features/agent-studio/rooms/OptimizeRoom';
 import { ReplayRoom } from '../features/agent-studio/rooms/ReplayRoom';
+import ViolemaLogo from '../components/ViolemaLogo';
 
-const VIOLEMA_MARK = '/po-logo.png';
 const AGENT_STUDIO_GUIDE_DISMISSED_KEY = 'violema_agentstudio_guide_dismissed';
 
 const DEFAULT_EXECUTION_POLICY: AutomationExecutionPolicyDraft = {
@@ -188,7 +191,7 @@ const WORKER_DEFINITIONS: Array<{
     label: 'Operations Lead',
     laneType: 'core',
     preferredBand: 'default',
-    modelLabel: 'Sonnet / MiniMax hybrid',
+    modelLabel: 'Sonnet / Nano hybrid',
     summary: 'Handles tools, delivery, and workflow orchestration.',
   },
   {
@@ -228,7 +231,7 @@ const WORKER_DEFINITIONS: Array<{
     label: 'Elastic lane 03',
     laneType: 'elastic',
     preferredBand: 'micro',
-    modelLabel: 'MiniMax / low-cost throughput',
+    modelLabel: 'GPT-5.4 Nano / low-cost throughput',
     summary: 'Opens for delivery, operational overflow, and tool-heavy work.',
   },
   {
@@ -7366,8 +7369,8 @@ export default function AgentStudio() {
       )}
 
       <header className="sticky top-0 z-30 border-b border-navy-800/80 bg-gradient-to-r from-navy-950/96 via-navy-900/92 to-navy-950/96 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center justify-between gap-2 lg:hidden">
             <button
               type="button"
               onClick={() => navigate('/dashboard')}
@@ -7376,16 +7379,42 @@ export default function AgentStudio() {
               <ArrowLeft className="h-3.5 w-3.5" />
               Dashboard
             </button>
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.04]">
-              <img src={VIOLEMA_MARK} alt="Violema" className="h-8 w-8 object-contain" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Separate control room</p>
-              <h1 className="truncate text-lg font-semibold tracking-[-0.02em] text-white">Agent Studio</h1>
-              <p className="mt-1 text-sm text-slate-400">Configure worker strategy, inspect performance, and keep the schedule view clean.</p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={showStudioGuide ? dismissStudioGuide : openStudioGuide}
+                className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-violet-600/50 hover:text-white"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                <span className="max-[390px]:hidden">{showStudioGuide ? 'Hide guide' : 'Guide'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadData()}
+                className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-violet-600/50 hover:text-white"
+                aria-label="Refresh Agent Studio"
+              >
+                <RotateCcw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="hidden items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-violet-600/50 hover:text-white lg:flex"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Dashboard
+            </button>
+            <ViolemaLogo className="h-9 w-[11.5rem] sm:h-10 sm:w-[12.5rem]" />
+            <div className="min-w-0 max-w-full sm:max-w-[34rem]">
+              <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Separate control room</p>
+              <h1 className="text-lg font-semibold tracking-[-0.02em] text-white">Agent Studio</h1>
+              <p className="mt-1 max-w-[24rem] text-sm leading-relaxed text-slate-400 sm:max-w-none">Configure worker strategy, inspect performance, and keep the schedule view clean.</p>
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 lg:flex">
             <button
               type="button"
               onClick={showStudioGuide ? dismissStudioGuide : openStudioGuide}
@@ -7710,6 +7739,13 @@ export default function AgentStudio() {
                           getStatusTone={getStatusTone}
                         />
 
+                        <LiveHandoffsSection items={liveActivationTrail} getStatusTone={getStatusTone} />
+
+                        <LiveOptimizationLoopSection
+                          items={optimizationRecommendations}
+                          actionBusy={actionBusy}
+                          onApplyRecommendation={applyRecommendationAction}
+                        />
                       </>
                     )}
                     showAdvanced={showLiveAdvanced}
@@ -7809,11 +7845,16 @@ export default function AgentStudio() {
 
                     <OptimizeReleaseCandidateSection
                       candidatePresets={scenarioComparisons}
-                      decisionBrief={policyDiffRows.length > 0 ? (
-                        <p className="text-sm text-slate-300">
-                          Switching to <span className="font-semibold text-white">{previewPreset.label}</span> changes {policyDiffRows.length} policy {policyDiffRows.length === 1 ? 'setting' : 'settings'} vs. current <span className="font-semibold text-white">{activePresetLabel}</span>.
-                        </p>
-                      ) : undefined}
+                      decisionBrief={(
+                        <OptimizeDecisionBriefSection
+                          scenarioLabel={selectedScenario.label}
+                          previewPresetLabel={previewPreset.label}
+                          activePresetLabel={activePresetLabel}
+                          changedPolicyCount={policyDiffRows.length}
+                          decision={optimizeDecisionBrief}
+                          formatSignedDelta={formatSignedDelta}
+                        />
+                      )}
                       selectedPresetId={previewPreset.id}
                       previewPresetLabel={previewPreset.label}
                       activePresetLabel={activePresetLabel}
@@ -9338,6 +9379,13 @@ export default function AgentStudio() {
           </section>
         </div>
       </main>
+
+      <footer className="border-t border-navy-800/70 bg-navy-950/72 px-4 py-8 sm:px-6">
+        <div className="mx-auto flex max-w-[1440px] flex-col items-center justify-center gap-2 text-center">
+          <ViolemaLogo className="h-12 w-[14rem]" />
+          <p className="text-xs text-slate-600">Violema Agent Studio</p>
+        </div>
+      </footer>
     </div>
   );
 }

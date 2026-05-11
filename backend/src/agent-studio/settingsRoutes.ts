@@ -1,6 +1,7 @@
 import type { Express, Request } from 'express';
 
 type Provider = 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax';
+type IntegrationProvider = 'github' | 'linear' | 'notion' | 'stripe' | 'hubspot' | 'airtable' | 'figma' | 'vercel';
 type Profile = 'micro' | 'default' | 'hard' | 'critical' | 'ops' | 'memory_text' | 'memory_code';
 type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -15,6 +16,7 @@ interface SettingsRoutesDeps {
   upsertWorkspaceSettings(input: {
     workspaceId: string;
     providerTokens?: Record<string, string | null>;
+    integrationCredentials?: Record<string, Record<string, string> | null>;
     modelOverrides?: Record<string, { provider?: string; model?: string; baseUrl?: string; reasoningEffort?: ReasoningEffort } | null>;
     agentStudio?: {
       autoGraduationProfiles?: Record<string, string> | null;
@@ -24,6 +26,7 @@ interface SettingsRoutesDeps {
     };
   }): unknown;
   testProviderConnection(input: { workspaceId: string; provider: Provider; tokenOverride?: string }): Promise<unknown>;
+  testIntegrationConnection(input: { workspaceId: string; provider: IntegrationProvider; credentials?: Record<string, string> }): Promise<unknown>;
   testModelProfileConnection(input: { workspaceId: string; profile: Profile }): Promise<unknown>;
 }
 
@@ -41,6 +44,7 @@ export function registerAgentStudioSettingsRoutes(app: Express, deps: SettingsRo
     const { workspaceId } = deps.resolveWorkspaceContext(req);
     const body = (req.body || {}) as {
       providerTokens?: Record<string, string | null>;
+      integrationCredentials?: Record<string, Record<string, string | null> | null>;
       modelOverrides?: Record<string, { provider?: string; model?: string; baseUrl?: string; reasoningEffort?: string } | null>;
       agentStudio?: {
         autoGraduationProfiles?: Record<string, string | null> | null;
@@ -51,6 +55,17 @@ export function registerAgentStudioSettingsRoutes(app: Express, deps: SettingsRo
     };
 
     const allowedProviders = new Set<Provider>(['anthropic', 'openai', 'openrouter', 'mistral', 'minimax']);
+    const allowedIntegrations = new Set<IntegrationProvider>(['github', 'linear', 'notion', 'stripe', 'hubspot', 'airtable', 'figma', 'vercel']);
+    const allowedIntegrationFields: Record<IntegrationProvider, Set<string>> = {
+      github: new Set(['token']),
+      linear: new Set(['apiKey']),
+      notion: new Set(['token']),
+      stripe: new Set(['secretKey']),
+      hubspot: new Set(['token']),
+      airtable: new Set(['token']),
+      figma: new Set(['token']),
+      vercel: new Set(['token']),
+    };
     const allowedProfiles = new Set<Profile>(['micro', 'default', 'hard', 'critical', 'ops', 'memory_text', 'memory_code']);
     const allowedReasoning = new Set<ReasoningEffort>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 
@@ -59,6 +74,22 @@ export function registerAgentStudioSettingsRoutes(app: Express, deps: SettingsRo
           Object.entries(body.providerTokens)
             .filter(([provider]) => allowedProviders.has(provider as Provider))
             .map(([provider, token]) => [provider, typeof token === 'string' ? token.trim() : null]),
+        )
+      : undefined;
+
+    const integrationCredentials = body.integrationCredentials
+      ? Object.fromEntries(
+          Object.entries(body.integrationCredentials)
+            .filter(([provider]) => allowedIntegrations.has(provider as IntegrationProvider))
+            .map(([provider, credentials]) => {
+              if (!credentials) return [provider, null];
+              const providerKey = provider as IntegrationProvider;
+              return [provider, Object.fromEntries(
+                Object.entries(credentials)
+                  .filter(([field]) => allowedIntegrationFields[providerKey].has(field))
+                  .map(([field, value]) => [field, typeof value === 'string' ? value.trim() : '']),
+              )];
+            }),
         )
       : undefined;
 
@@ -112,6 +143,7 @@ export function registerAgentStudioSettingsRoutes(app: Express, deps: SettingsRo
     const settings = deps.upsertWorkspaceSettings({
       workspaceId,
       providerTokens,
+      integrationCredentials,
       modelOverrides,
       agentStudio,
     });
@@ -144,6 +176,40 @@ export function registerAgentStudioSettingsRoutes(app: Express, deps: SettingsRo
         ok: false,
         provider,
         detail: error instanceof Error ? error.message : 'Provider test failed',
+      });
+    }
+  });
+
+  app.post('/api/settings/test-integration', async (req, res) => {
+    const { workspaceId } = deps.resolveWorkspaceContext(req);
+    const body = (req.body || {}) as { provider?: string; credentials?: Record<string, string> };
+    const provider = body.provider as IntegrationProvider | undefined;
+    if (
+      provider !== 'github' &&
+      provider !== 'linear' &&
+      provider !== 'notion' &&
+      provider !== 'stripe' &&
+      provider !== 'hubspot' &&
+      provider !== 'airtable' &&
+      provider !== 'figma' &&
+      provider !== 'vercel'
+    ) {
+      res.status(400).json({ error: 'Unsupported integration provider' });
+      return;
+    }
+
+    try {
+      const result = await deps.testIntegrationConnection({
+        workspaceId,
+        provider,
+        credentials: body.credentials,
+      });
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({
+        ok: false,
+        provider,
+        detail: error instanceof Error ? error.message : 'Integration test failed.',
       });
     }
   });

@@ -7,6 +7,7 @@ import type { Message, ToolCall, SSEEvent, AutonomyMode } from '../types';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import BillingGateBar from './BillingGateBar';
+import ViolemaLogo from './ViolemaLogo';
 
 // ─── Markdown renderer ───────────────────────────────────────────────────────
 
@@ -807,7 +808,7 @@ function MessageBubble({
       onMouseLeave={() => setHovered(false)}
     >
       <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-violet-700 shadow-glow-violet ring-1 ring-white/10">
-        <span className="text-xs text-white font-bold">N</span>
+        <Sparkles className="h-3.5 w-3.5 text-white" />
       </div>
 
       <div className="min-w-0 flex-1 rounded-[1.45rem] border border-navy-800/75 bg-gradient-to-br from-navy-900/84 via-navy-900/60 to-navy-950/74 px-4 py-3.5 shadow-[0_16px_34px_rgba(2,6,23,0.18)]">
@@ -1351,20 +1352,18 @@ export default function ChatInterface({
                     <Sparkles className="h-3 w-3" />
                     Violema workspace
                   </div>
-                  <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-[1.15rem] bg-gradient-to-br from-violet-500 to-violet-700 shadow-glow-violet ring-1 ring-white/10 sm:h-16 sm:w-16">
-                    <span className="violema-glyph text-[1.35rem] text-white sm:text-[1.7rem]">V</span>
-                  </div>
+                  <ViolemaLogo className="mb-4 h-12 w-full max-w-[14rem] sm:h-14 sm:max-w-[16rem]" />
                   <h2 className="text-[1.8rem] font-bold text-white sm:text-[2.4rem]">Hey, I'm Violema</h2>
                   <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.32em] text-violet-300/70 sm:text-[11px]">
-                    Your AI coworker
+                    Your AI operator
                   </p>
                   <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-300">
-                    Violema doesn't just answer. It gets the work done.
+                    Violema doesn't just answer. It turns recurring work into monitored runs.
                     <br />
-                    Research, execution, and automation — across the tools your team already uses.
+                    Research, execution, and automation stay tied to review state, delivery targets, and credit cost.
                   </p>
                   <p className="mt-2 max-w-xl text-sm text-slate-500">
-                    {modeConfig.description}. Ask for anything from a quick search to a multi-step report.
+                    {modeConfig.description}. The routing layer chooses the lightest useful model path and escalates only when the run needs more depth.
                   </p>
 
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
@@ -1379,8 +1378,8 @@ export default function ChatInterface({
                       <p className="mt-1 text-sm font-medium text-white">Ask for a search, an execution task, or an automation.</p>
                     </div>
                     <div className="ui-panel p-4 text-left shadow-none">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">Stay in control</p>
-                      <p className="mt-1 text-sm font-medium text-white">Switch autonomy modes any time. Approve, edit, or run anything fully hands-off.</p>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">Runtime model</p>
+                      <p className="mt-1 text-sm font-medium text-white">One manager, six resident specialists, and four elastic lanes when justified.</p>
                     </div>
                   </div>
                 </div>

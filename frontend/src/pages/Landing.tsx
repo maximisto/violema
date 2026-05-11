@@ -4,22 +4,23 @@ import Integrations from '../components/Integrations';
 import Features from '../components/Features';
 import Pricing from '../components/Pricing';
 import Footer from '../components/Footer';
+import ViolemaLogo from '../components/ViolemaLogo';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, CheckCircle, BarChart3, MessageSquare, Zap, Activity,
-  Brain, Shield, Eye, Check, X, Star, ArrowRight,
+  Brain, Shield, Eye, Check, X, ArrowRight, Sparkles,
 } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type CSSProperties, type PointerEvent } from 'react';
 
 const ACTIVITY_FEED = [
-  { team: 'Acme Corp', action: 'pulled MRR from Stripe', result: '+17.8% MoM', icon: '📊', color: 'text-green-400' },
-  { team: 'Vercel', action: 'triaged 12 GitHub PRs', result: '3 merged automatically', icon: '🔀', color: 'text-violet-400' },
-  { team: 'Linear', action: 'sent weekly digest', result: 'to #engineering', icon: '📨', color: 'text-cyan-400' },
-  { team: 'Retool', action: 'enriched 47 HubSpot leads', result: 'from LinkedIn', icon: '✅', color: 'text-green-400' },
-  { team: 'Figma', action: 'detected CAC anomaly', result: 'alert sent to @cmo', icon: '⚠️', color: 'text-yellow-400' },
-  { team: 'Clerk', action: 'generated Q1 board deck', result: '18 slides, 3 charts', icon: '📋', color: 'text-violet-400' },
-  { team: 'Supabase', action: 'ran database health check', result: 'all systems nominal', icon: '⚡', color: 'text-cyan-400' },
-  { team: 'Planetscale', action: 'created sprint report', result: '42 tasks completed', icon: '🎯', color: 'text-green-400' },
+  { team: 'Revenue ops', action: 'drafted the weekly MRR brief', result: 'ready for review', icon: '📊', color: 'text-green-400' },
+  { team: 'Founder office', action: 'assembled investor update notes', result: 'open risks flagged', icon: '📋', color: 'text-violet-400' },
+  { team: 'Product', action: 'summarized support themes', result: '3 follow-ups queued', icon: '📨', color: 'text-cyan-400' },
+  { team: 'Sales', action: 'prepared CRM follow-up draft', result: 'approval required', icon: '✅', color: 'text-green-400' },
+  { team: 'Finance', action: 'checked subscription anomalies', result: 'needs human review', icon: '⚠️', color: 'text-yellow-400' },
+  { team: 'Engineering', action: 'compiled release notes', result: 'delivery log attached', icon: '🔀', color: 'text-violet-400' },
+  { team: 'Operations', action: 'ran vendor renewal check', result: 'next step suggested', icon: '⚡', color: 'text-cyan-400' },
+  { team: 'Customer success', action: 'built account health digest', result: 'priority list ready', icon: '🎯', color: 'text-green-400' },
 ];
 
 function LiveActivity() {
@@ -40,27 +41,27 @@ function LiveActivity() {
   }, []);
 
   return (
-    <section className="py-24 relative overflow-hidden">
+    <section className="py-24 relative overflow-hidden" id="product-demo">
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-navy-950/30 to-transparent pointer-events-none" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-16 items-center">
           {/* Live feed */}
           <div className="relative">
             <div className="absolute -inset-4 bg-cyan-500/5 rounded-3xl blur-2xl" />
-            <div className="relative bg-navy-800/60 border border-navy-700/60 rounded-2xl overflow-hidden">
+            <div className="interactive-glow demo-scanline surface-lift relative bg-navy-800/60 border border-navy-700/60 rounded-2xl overflow-hidden">
               <div className="flex items-center gap-3 px-5 py-4 border-b border-navy-700/60 bg-navy-900/40">
                 <Activity className="w-4 h-4 text-cyan-400" />
-                <span className="text-sm font-semibold text-white">Live activity feed</span>
+                <span className="text-sm font-semibold text-white">Demo workflow feed</span>
                 <div className="ml-auto flex items-center gap-2">
                   <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  <span className="text-xs text-slate-500">Real-time</span>
+                  <span className="text-xs text-slate-500">Sample run</span>
                 </div>
               </div>
               <div className="p-4 space-y-2">
                 {feed.map((item, i) => (
                   <div
                     key={(item as typeof item & { _key?: number })._key ?? i}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl bg-navy-900/60 border border-navy-700/40 transition-all duration-500 ${
+                    className={`surface-lift flex items-center gap-3 px-4 py-3 rounded-xl bg-navy-900/60 border border-navy-700/40 transition-all duration-500 ${
                       i === 0 && fadeIn ? 'opacity-100 scale-100' : 'opacity-100'
                     }`}
                     style={i === 0 && fadeIn ? { animation: 'fadeSlideIn 0.5s ease-out' } : {}}
@@ -83,23 +84,23 @@ function LiveActivity() {
           {/* Copy */}
           <div>
             <div className="inline-flex items-center gap-2 bg-navy-800 border border-navy-700 rounded-full px-4 py-1.5 mb-6">
-              <span className="text-cyan-400 text-sm font-medium">Always on</span>
+              <span className="text-cyan-400 text-sm font-medium">Operating loop</span>
             </div>
             <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6 leading-tight">
-              Violema works{' '}
-              <span className="gradient-text">while you sleep</span>
+              Recurring work,{' '}
+              <span className="gradient-text">without recurring reminders</span>
             </h2>
             <p className="text-xl text-slate-400 mb-8 leading-relaxed">
-              Violema doesn’t just answer. It gets the work done — pulling reports, triaging issues, sending updates, and closing the loop on follow-through your team would otherwise miss.
+              Start with a workflow you already repeat. Violema turns it into a run with clear inputs, review state, delivery target, and a history you can inspect later.
             </p>
             <div className="grid grid-cols-2 gap-4">
               {[
-                { value: '24/7', label: 'Always available' },
-                { value: '< 1s', label: 'Task start time' },
-                { value: '10x', label: 'Team throughput' },
-                { value: '0', label: 'Manual reminders' },
+                { value: '6', label: 'Beta workflow candidates' },
+                { value: 'Gate', label: 'Approval before send' },
+                { value: 'Log', label: 'Run history included' },
+                { value: 'Cost', label: 'Credits visible per run' },
               ].map((stat) => (
-                <div key={stat.label} className="bg-navy-800/60 border border-navy-700/60 rounded-xl px-4 py-3">
+                <div key={stat.label} className="interactive-glow surface-lift bg-navy-800/60 border border-navy-700/60 rounded-xl px-4 py-3">
                   <p className="text-2xl font-extrabold text-white">{stat.value}</p>
                   <p className="text-xs text-slate-500 mt-0.5">{stat.label}</p>
                 </div>
@@ -121,6 +122,10 @@ function LiveActivity() {
 // Demo section with product mockup
 function ProductDemo() {
   const navigate = useNavigate();
+  const demoRef = useRef<HTMLDivElement>(null);
+  const [demoInView, setDemoInView] = useState(false);
+  const [visibleDemoMessages, setVisibleDemoMessages] = useState(0);
+  const [demoSpotlight, setDemoSpotlight] = useState({ x: 50, y: 50 });
 
   const DEMO_MESSAGES = [
     {
@@ -153,6 +158,51 @@ function ProductDemo() {
       text: '✅ Done! I\'ve sent the MRR summary to **#revenue-team** and created task **TASK-4821** "Review Q1 MRR Metrics" assigned to you, due Friday.',
     },
   ];
+  const demoMessageCount = DEMO_MESSAGES.length;
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setDemoInView(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.28 }
+    );
+    if (demoRef.current) observer.observe(demoRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!demoInView) return;
+    setVisibleDemoMessages(0);
+
+    const interval = window.setInterval(() => {
+      setVisibleDemoMessages((count) => {
+        if (count >= demoMessageCount) {
+          window.clearInterval(interval);
+          return count;
+        }
+        return count + 1;
+      });
+    }, 420);
+
+    return () => window.clearInterval(interval);
+  }, [demoInView, demoMessageCount]);
+
+  function handleDemoPointerMove(event: PointerEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setDemoSpotlight({
+      x: ((event.clientX - rect.left) / rect.width) * 100,
+      y: ((event.clientY - rect.top) / rect.height) * 100,
+    });
+  }
+
+  const demoShellStyle = {
+    '--mx': `${demoSpotlight.x}%`,
+    '--my': `${demoSpotlight.y}%`,
+  } as CSSProperties;
 
   return (
     <section className="py-24 relative overflow-hidden">
@@ -163,25 +213,25 @@ function ProductDemo() {
           {/* Left copy */}
           <div>
             <div className="inline-flex items-center gap-2 bg-navy-800 border border-navy-700 rounded-full px-4 py-1.5 mb-6">
-              <span className="text-violet-400 text-sm font-medium">See it in action</span>
+              <span className="text-violet-400 text-sm font-medium">Demo workflow</span>
             </div>
             <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6 leading-tight">
-              Real work,{' '}
-              <span className="gradient-text">done in seconds</span>
+              One workflow,{' '}
+              <span className="gradient-text">shown end to end</span>
             </h2>
             <p className="text-xl text-slate-400 mb-8 leading-relaxed">
-              Watch Violema pull Stripe data, analyze it, message your team, and create follow-up tasks — all from one prompt.
+              A simple revenue run shows the product loop: connect data, draft the summary, ask for approval, deliver the update, and preserve the run history.
             </p>
 
             <div className="space-y-4 mb-10">
               {[
-                { icon: BarChart3, text: 'Executes across your connected tools' },
-                { icon: MessageSquare, text: 'Communicates results back to the right humans' },
-                { icon: CheckCircle, text: 'Automates research and follow-through' },
-                { icon: TrendingUp, text: 'Allocates depth dynamically — fast tasks stay fast, complex work gets focus' },
+                { icon: BarChart3, text: 'Reads from the connected system of record' },
+                { icon: MessageSquare, text: 'Drafts the update for the right channel' },
+                { icon: CheckCircle, text: 'Requires approval before delivery' },
+                { icon: TrendingUp, text: 'Records output, status, and credit cost' },
               ].map(({ icon: Icon, text }, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-violet-600/20 flex items-center justify-center flex-shrink-0">
+                <div key={i} className="group flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-violet-600/20 flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-105">
                     <Icon className="w-4 h-4 text-violet-400" />
                   </div>
                   <span className="text-slate-300 text-sm">{text}</span>
@@ -194,14 +244,19 @@ function ProductDemo() {
               className="btn-primary text-base py-3 px-8"
             >
               <Zap className="w-5 h-5" />
-              Set up access
+              Set up beta access
             </button>
           </div>
 
           {/* Right: Chat mockup */}
-          <div className="relative">
+          <div
+            ref={demoRef}
+            className="relative"
+            style={demoShellStyle}
+            onPointerMove={handleDemoPointerMove}
+          >
             <div className="absolute -inset-4 bg-violet-600/10 rounded-3xl blur-2xl" />
-            <div className="relative bg-navy-800/80 backdrop-blur-sm border border-navy-700/60 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="interactive-glow demo-scanline surface-lift relative bg-navy-800/80 backdrop-blur-sm border border-navy-700/60 rounded-2xl overflow-hidden shadow-2xl hover:border-violet-700/55">
               {/* Window bar */}
               <div className="flex items-center gap-2 px-4 py-3 bg-navy-900/60 border-b border-navy-700/60">
                 <div className="flex gap-1.5">
@@ -210,70 +265,76 @@ function ProductDemo() {
                   <div className="w-3 h-3 rounded-full bg-green-500/70" />
                 </div>
                 <div className="flex-1 flex justify-center">
-                  <span className="text-xs text-slate-500 font-mono">#general</span>
+                  <span className="signal-rail overflow-hidden rounded-full bg-navy-800/70 px-3 py-1 text-xs text-slate-500 font-mono">#general</span>
                 </div>
               </div>
 
               {/* Messages */}
               <div className="p-5 space-y-4 max-h-[480px] overflow-y-auto">
-                {DEMO_MESSAGES.map((msg, i) => (
-                  <div key={i}>
-                    {msg.role === 'user' ? (
-                      <div className="flex gap-2.5">
-                        <div className="w-6 h-6 rounded-full bg-slate-600 flex-shrink-0 flex items-center justify-center">
-                          <span className="text-xs text-white font-bold">A</span>
+                {DEMO_MESSAGES.map((msg, i) => {
+                  const isVisible = i < visibleDemoMessages;
+                  return (
+                    <div
+                      key={i}
+                      className={`staged-message ${isVisible ? 'translate-y-0 opacity-100 blur-0' : 'translate-y-4 opacity-0 blur-[1px]'}`}
+                    >
+                      {msg.role === 'user' ? (
+                        <div className="flex gap-2.5">
+                          <div className="w-6 h-6 rounded-full bg-slate-600 flex-shrink-0 flex items-center justify-center">
+                            <span className="text-xs text-white font-bold">A</span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-slate-500 mb-0.5 block">Alex</span>
+                            <p className="text-sm text-slate-300 font-mono">{msg.text}</p>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-xs text-slate-500 mb-0.5 block">Alex</span>
-                          <p className="text-sm text-slate-300 font-mono">{msg.text}</p>
+                      ) : (
+                        <div className="flex gap-2.5">
+                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex-shrink-0 flex items-center justify-center shadow-glow-violet">
+                            <Sparkles className="w-3 h-3 text-white" />
+                          </div>
+                          <div className="flex-1">
+                            <span className="text-xs text-violet-400 mb-0.5 block font-semibold">Violema</span>
+                            {msg.tool && (
+                              <div className="bg-navy-900 border border-navy-700 rounded-lg px-3 py-2 flex items-center gap-2 mb-2">
+                                <span>{msg.tool.icon}</span>
+                                <span className="text-xs text-slate-400">{msg.tool.label}...</span>
+                                <span className="ml-auto flex gap-1">
+                                  {[0, 150, 300].map((d) => (
+                                    <span key={d} className="w-1 h-1 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                                  ))}
+                                </span>
+                              </div>
+                            )}
+                            {(msg as { tools?: { name: string; label: string; icon: string }[] }).tools?.map((tool, j) => (
+                              <div key={j} className="bg-navy-900 border border-navy-700 rounded-lg px-3 py-2 flex items-center gap-2 mb-2">
+                                <span className="text-xs text-green-400">✓</span>
+                                <span>{tool.icon}</span>
+                                <span className="text-xs text-slate-400">{tool.label}</span>
+                              </div>
+                            ))}
+                            {msg.text && (
+                              <p
+                                className="text-sm text-slate-300"
+                                dangerouslySetInnerHTML={{
+                                  __html: msg.text
+                                    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
+                                    .replace(/\n\n/g, '<br /><br />')
+                                    .replace(/\n/g, '<br />')
+                                    .replace(/\|(.+)\|/g, (match) => {
+                                      if (match.includes('---')) return '';
+                                      const cells = match.split('|').filter(Boolean).map((c) => c.trim());
+                                      return `<span class="flex gap-4 text-xs font-mono text-slate-400 my-0.5">${cells.map((c) => `<span>${c}</span>`).join('')}</span>`;
+                                    }),
+                                }}
+                              />
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="flex gap-2.5">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex-shrink-0 flex items-center justify-center">
-                          <span className="text-xs text-white font-bold">V</span>
-                        </div>
-                        <div className="flex-1">
-                          <span className="text-xs text-violet-400 mb-0.5 block font-semibold">Violema</span>
-                          {msg.tool && (
-                            <div className="bg-navy-900 border border-navy-700 rounded-lg px-3 py-2 flex items-center gap-2 mb-2">
-                              <span>{msg.tool.icon}</span>
-                              <span className="text-xs text-slate-400">{msg.tool.label}...</span>
-                              <span className="ml-auto flex gap-1">
-                                {[0, 150, 300].map((d) => (
-                                  <span key={d} className="w-1 h-1 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
-                                ))}
-                              </span>
-                            </div>
-                          )}
-                          {(msg as { tools?: { name: string; label: string; icon: string }[] }).tools?.map((tool, j) => (
-                            <div key={j} className="bg-navy-900 border border-navy-700 rounded-lg px-3 py-2 flex items-center gap-2 mb-2">
-                              <span className="text-xs text-green-400">✓</span>
-                              <span>{tool.icon}</span>
-                              <span className="text-xs text-slate-400">{tool.label}</span>
-                            </div>
-                          ))}
-                          {msg.text && (
-                            <p
-                              className="text-sm text-slate-300"
-                              dangerouslySetInnerHTML={{
-                                __html: msg.text
-                                  .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
-                                  .replace(/\n\n/g, '<br /><br />')
-                                  .replace(/\n/g, '<br />')
-                                  .replace(/\|(.+)\|/g, (match) => {
-                                    if (match.includes('---')) return '';
-                                    const cells = match.split('|').filter(Boolean).map((c) => c.trim());
-                                    return `<span class="flex gap-4 text-xs font-mono text-slate-400 my-0.5">${cells.map((c) => `<span>${c}</span>`).join('')}</span>`;
-                                  }),
-                              }}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -294,10 +355,10 @@ const AUTONOMY_MODES = [
     bg: 'bg-green-950/20',
     glow: 'shadow-green-900/20',
     label: 'Autonomous',
-    tagline: 'Full autopilot',
-    description: 'Violema acts immediately with no confirmation needed. Perfect for routine tasks, reports, and anything you trust it to run on its own.',
-    example: 'Every Monday at 9am, Violema pulls Stripe MRR, generates the executive summary, and posts it to #revenue-team — while you sleep.',
-    chips: ['No interruptions', 'Fastest execution', 'Best for routine work'],
+    tagline: 'Approved autopilot',
+    description: 'For low-risk recurring workflows you have already approved. Violema can run the loop and leave a clear record behind.',
+    example: 'Every Monday at 9am, Violema pulls Stripe MRR, drafts the executive summary, and prepares it for delivery to the revenue team.',
+    chips: ['Pre-approved work', 'Scheduled runs', 'Best for routine loops'],
   },
   {
     key: 'cautious',
@@ -308,9 +369,9 @@ const AUTONOMY_MODES = [
     glow: 'shadow-yellow-900/20',
     label: 'Cautious',
     tagline: 'Explain then act',
-    description: 'Before taking significant actions, Violema tells you what it\'s about to do and why. You stay informed without being slowed down.',
-    example: '"I\'m going to pause 3 campaigns (ROAS < 1.5x) and reallocate $4,200 to the top performer. Proceeding now."',
-    chips: ['Transparent intent', 'Informed decisions', 'Best for high-stakes work'],
+    description: 'Before taking meaningful actions, Violema explains the proposed next step and waits for your confirmation.',
+    example: '"Revenue churn moved outside the normal range. I drafted a short customer-risk brief and need approval before sending it."',
+    chips: ['Approval gates', 'Clear next step', 'Best for sensitive work'],
   },
   {
     key: 'supervised',
@@ -320,10 +381,10 @@ const AUTONOMY_MODES = [
     bg: 'bg-cyan-950/20',
     glow: 'shadow-cyan-900/20',
     label: 'Supervised',
-    tagline: 'Full reasoning visible',
-    description: 'See every step of Violema\'s thinking — the reasoning, the alternatives considered, and why it chose the path it took. Maximum transparency.',
-    example: 'Step 1: Querying Stripe… Step 2: Cross-referencing PostHog funnel data… Step 3: Identified checkout drop at payment step (mobile only)…',
-    chips: ['Full thought process', 'Audit everything', 'Best for learning/debugging'],
+    tagline: 'Full execution trace',
+    description: 'See the steps taken, sources used, actions proposed, and why approval is needed before the workflow moves forward.',
+    example: 'Run log: Stripe checked. Funnel notes attached. Mobile checkout risk flagged. Delivery paused until approval.',
+    chips: ['Execution trace', 'Inspect every action', 'Best for learning/debugging'],
   },
 ];
 
@@ -354,11 +415,11 @@ function AutonomyModes() {
             <span className="text-violet-400 text-sm font-medium">Autonomy modes</span>
           </div>
           <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4">
-            You decide{' '}
-            <span className="gradient-text">how much control</span>
+            You choose what{' '}
+            <span className="gradient-text">can run on its own</span>
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Unlike black-box AI tools, Violema adapts to your trust level. Start supervised, go autonomous when you're ready.
+            Start with approval gates. Move only the repeatable, low-risk parts into autonomous mode once the run history earns trust.
           </p>
         </div>
 
@@ -375,7 +436,7 @@ function AutonomyModes() {
                 <button
                   key={m.key}
                   onClick={() => setActive(i)}
-                  className={`w-full text-left rounded-2xl border p-5 transition-all duration-300 ${m.border} ${
+                  className={`interactive-glow surface-lift w-full text-left rounded-2xl border p-5 transition-all duration-300 ${m.border} ${
                     isActive ? `${m.bg} shadow-lg ${m.glow}` : 'bg-navy-800/30 border-navy-700/40 hover:bg-navy-800/60'
                   }`}
                 >
@@ -402,7 +463,7 @@ function AutonomyModes() {
           {/* Preview window */}
           <div className="relative">
             <div className={`absolute -inset-4 rounded-3xl blur-2xl opacity-20 transition-all duration-500 ${mode.color.replace('text-', 'bg-')}`} />
-            <div className="relative bg-navy-800/80 border border-navy-700/60 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="interactive-glow demo-scanline surface-lift relative bg-navy-800/80 border border-navy-700/60 rounded-2xl overflow-hidden shadow-2xl">
               <div className="flex items-center gap-2 px-4 py-3 bg-navy-900/60 border-b border-navy-700/60">
                 <div className="flex gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
@@ -447,56 +508,50 @@ function AutonomyModes() {
   );
 }
 
-// ─── Testimonials ─────────────────────────────────────────────────────────────
+// ─── Beta workflows ───────────────────────────────────────────────────────────
 
-const TESTIMONIALS = [
+const BETA_WORKFLOWS = [
   {
-    quote: "Violema replaced 3 hours of Monday morning reporting. It pulls our Stripe, HubSpot, and Linear data, writes the digest, and posts it to Slack before anyone's even logged on.",
-    name: 'Sarah Chen',
-    role: 'Head of Operations',
-    company: 'Loops',
-    avatar: 'SC',
-    stars: 5,
+    title: 'Weekly founder update',
+    description: 'Pull metrics and notes, draft the update, request approval, then deliver to Slack or email.',
+    stack: 'Stripe, docs, Slack/email',
+    output: 'Investor-ready weekly brief',
+    control: 'Approval before send',
   },
   {
-    quote: "The supervised mode was a revelation. I could see exactly why Violema made each decision — it completely changed how I think about delegating work to AI.",
-    name: 'Marcus Webb',
-    role: 'CTO',
-    company: 'Framer',
-    avatar: 'MW',
-    stars: 5,
+    title: 'Revenue risk monitor',
+    description: 'Check revenue signals, flag anomalies, summarize what changed, and suggest follow-up.',
+    stack: 'Stripe, CRM, product analytics',
+    output: 'Risk digest with next actions',
+    control: 'Human review for risky actions',
   },
   {
-    quote: "We set up 12 automations in our first week. Violema now handles all our recurring ops work. My team focuses only on problems that actually need human judgment.",
-    name: 'Priya Nair',
-    role: 'VP Engineering',
-    company: 'Loom',
-    avatar: 'PN',
-    stars: 5,
+    title: 'Fundraising intelligence brief',
+    description: 'Track investor, market, and competitor signals with source links and prioritized follow-up.',
+    stack: 'Web research, notes, CRM',
+    output: 'Source-linked research brief',
+    control: 'Sources and assumptions visible',
   },
   {
-    quote: "The confidence scores on tool calls were a game-changer. I knew exactly when to trust Violema's output and when to verify. That level of transparency is rare.",
-    name: 'James Liu',
-    role: 'Founder',
-    company: 'Fathom',
-    avatar: 'JL',
-    stars: 5,
+    title: 'Engineering release digest',
+    description: 'Summarize shipped work, open blockers, customer impact, and handoff notes for the next cycle.',
+    stack: 'GitHub, Linear, docs',
+    output: 'Release summary and blockers',
+    control: 'Delivery log retained',
   },
   {
-    quote: "What shocked me: Violema noticed we had 18 failed payments at risk and proactively drafted a recovery email campaign. We hadn't asked for it. That's a real coworker.",
-    name: 'Elena Vasquez',
-    role: 'Head of Revenue',
-    company: 'Linear',
-    avatar: 'EV',
-    stars: 5,
+    title: 'Customer follow-up queue',
+    description: 'Collect account signals, draft follow-up messages, and separate routine nudges from sensitive outreach.',
+    stack: 'CRM, email, support notes',
+    output: 'Prioritized follow-up list',
+    control: 'Sensitive messages gated',
   },
   {
-    quote: "We tried ChatGPT, Claude, and Copilot. None of them actually *do* anything. Violema executes — it takes actions, moves data, sends messages. It's in a different category.",
-    name: 'Tom Okello',
-    role: 'COO',
-    company: 'Resend',
-    avatar: 'TO',
-    stars: 5,
+    title: 'Operating cost check',
+    description: 'Review recurring tools, usage changes, and renewal dates so small costs do not become invisible drag.',
+    stack: 'Billing exports, vendor notes',
+    output: 'Renewal and savings brief',
+    control: 'No spend change without approval',
   },
 ];
 
@@ -519,13 +574,13 @@ function Testimonials() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 bg-navy-800 border border-navy-700 rounded-full px-4 py-1.5 mb-6">
-            <span className="text-violet-400 text-sm font-medium">What teams say</span>
+            <span className="text-violet-400 text-sm font-medium">Controlled beta proof</span>
           </div>
           <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4">
-            Teams that shipped faster
+            Beta workflows we are proving
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Teams use Violema to cut repetitive work, centralize execution, and keep humans in the loop.
+            The first product story is not fake traction. It is a focused set of recurring workflows that can be run, reviewed, delivered, and improved.
           </p>
         </div>
 
@@ -533,25 +588,30 @@ function Testimonials() {
           ref={ref}
           className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
         >
-          {TESTIMONIALS.map((t, i) => (
+          {BETA_WORKFLOWS.map((workflow, i) => (
             <div
               key={i}
-              className={`bg-navy-800/50 border border-navy-700/60 rounded-2xl p-6 hover:border-navy-600 transition-all duration-500 ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+              className={`interactive-glow surface-lift bg-navy-800/50 border border-navy-700/60 rounded-2xl p-6 hover:border-navy-600 transition-all duration-500 ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
               style={{ transitionDelay: `${i * 80}ms` }}
             >
-              <div className="flex items-center gap-1 mb-4">
-                {Array.from({ length: t.stars }).map((_, j) => (
-                  <Star key={j} className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
-                ))}
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <span className="ui-pill normal-case tracking-normal text-violet-200">Beta workflow</span>
+                <span className="h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_16px_rgba(74,222,128,0.5)]" />
               </div>
-              <p className="text-slate-300 text-sm leading-relaxed mb-6">"{t.quote}"</p>
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-600/40 to-violet-800/40 border border-violet-700/40 flex items-center justify-center">
-                  <span className="text-xs font-bold text-violet-300">{t.avatar}</span>
+              <h3 className="text-lg font-semibold text-white">{workflow.title}</h3>
+              <p className="mt-3 text-sm leading-relaxed text-slate-400">{workflow.description}</p>
+              <div className="mt-5 space-y-2 rounded-xl border border-navy-700/60 bg-navy-950/35 p-4">
+                <div className="flex items-start gap-2 text-xs text-slate-400">
+                  <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-cyan-400" />
+                  <span>{workflow.stack}</span>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">{t.name}</p>
-                  <p className="text-xs text-slate-500">{t.role} · {t.company}</p>
+                <div className="flex items-start gap-2 text-xs text-slate-400">
+                  <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-400" />
+                  <span>{workflow.output}</span>
+                </div>
+                <div className="flex items-start gap-2 text-xs text-slate-400">
+                  <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-green-400" />
+                  <span>{workflow.control}</span>
                 </div>
               </div>
             </div>
@@ -565,16 +625,16 @@ function Testimonials() {
 // ─── Comparison Table ─────────────────────────────────────────────────────────
 
 const COMPARISON_ROWS = [
-  { feature: 'Actually executes tasks', violema: true, chatgpt: false, viktor: true, devin: true, note: '' },
-  { feature: 'Reasoning transparency', violema: true, chatgpt: false, viktor: false, devin: false, note: 'See every thought step' },
-  { feature: 'Autonomy modes (3 levels)', violema: true, chatgpt: false, viktor: false, devin: false, note: 'Auto / Cautious / Supervised' },
-  { feature: 'Confidence scoring on actions', violema: true, chatgpt: false, viktor: false, devin: false, note: '' },
-  { feature: 'Proactive anomaly detection', violema: true, chatgpt: false, viktor: true, devin: false, note: '' },
-  { feature: 'Scheduled automations', violema: true, chatgpt: false, viktor: true, devin: false, note: '' },
-  { feature: 'Extensible integration layer', violema: true, chatgpt: false, viktor: true, devin: false, note: 'Core tools first, then custom expansion' },
-  { feature: 'Slack / Teams native', violema: true, chatgpt: false, viktor: true, devin: false, note: '' },
-  { feature: 'Long-term memory', violema: true, chatgpt: 'partial', viktor: true, devin: 'partial', note: '' },
-  { feature: 'Built for paid production use', violema: true, chatgpt: 'partial', viktor: false, devin: false, note: 'Plans + one-time top-ups' },
+  { feature: 'Recurring workflow runs', violema: true, chatAssistant: false, workflowBot: true, codingAgent: false, note: '' },
+  { feature: 'Run history and delivery log', violema: true, chatAssistant: 'partial', workflowBot: 'partial', codingAgent: 'partial', note: '' },
+  { feature: 'Approval gates before sensitive actions', violema: true, chatAssistant: false, workflowBot: 'partial', codingAgent: 'partial', note: '' },
+  { feature: 'Source links and checked inputs', violema: true, chatAssistant: 'partial', workflowBot: 'partial', codingAgent: 'partial', note: '' },
+  { feature: 'Credit cost visible per run', violema: true, chatAssistant: false, workflowBot: false, codingAgent: false, note: '' },
+  { feature: 'Failure reason and retry path', violema: true, chatAssistant: false, workflowBot: 'partial', codingAgent: 'partial', note: '' },
+  { feature: 'Slack + web app delivery', violema: true, chatAssistant: false, workflowBot: 'partial', codingAgent: false, note: '' },
+  { feature: 'API-key setup for providers', violema: true, chatAssistant: false, workflowBot: 'partial', codingAgent: false, note: 'Core tools first' },
+  { feature: 'Workspace memory for repeated work', violema: true, chatAssistant: 'partial', workflowBot: 'partial', codingAgent: 'partial', note: '' },
+  { feature: 'Plans and top-ups tied to usage', violema: true, chatAssistant: false, workflowBot: false, codingAgent: false, note: '' },
 ];
 
 function CompCell({ value }: { value: boolean | string }) {
@@ -606,16 +666,16 @@ function ComparisonTable() {
             <span className="text-violet-400 text-sm font-medium">How we compare</span>
           </div>
           <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4">
-            Not all AI is equal
+            Built for inspected execution
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Chat interfaces suggest. Violema executes — with full transparency into why.
+            The difference is not a louder chatbot. It is the operating loop around each run: inputs, approvals, delivery, cost, failure state, and retry path.
           </p>
         </div>
 
         <div
           ref={ref}
-          className={`overflow-x-auto rounded-2xl border border-navy-700/60 transition-all duration-700 ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+          className={`interactive-glow surface-lift overflow-x-auto rounded-2xl border border-navy-700/60 transition-all duration-700 ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
         >
           <table className="w-full">
             <thead>
@@ -634,7 +694,7 @@ function ComparisonTable() {
                     <div className="w-7 h-7 rounded-lg bg-navy-700 flex items-center justify-center">
                       <span className="text-xs font-bold text-slate-300">G</span>
                     </div>
-                    <span className="text-xs text-slate-500">ChatGPT</span>
+                    <span className="text-xs text-slate-500">Chat assistant</span>
                   </div>
                 </th>
                 <th className="px-4 py-4 text-center">
@@ -642,7 +702,7 @@ function ComparisonTable() {
                     <div className="w-7 h-7 rounded-lg bg-navy-700 flex items-center justify-center">
                       <span className="text-xs font-bold text-slate-300">V</span>
                     </div>
-                    <span className="text-xs text-slate-500">Viktor</span>
+                    <span className="text-xs text-slate-500">Workflow bot</span>
                   </div>
                 </th>
                 <th className="px-4 py-4 text-center">
@@ -650,7 +710,7 @@ function ComparisonTable() {
                     <div className="w-7 h-7 rounded-lg bg-navy-700 flex items-center justify-center">
                       <span className="text-xs font-bold text-slate-300">D</span>
                     </div>
-                    <span className="text-xs text-slate-500">Devin</span>
+                    <span className="text-xs text-slate-500">Coding agent</span>
                   </div>
                 </th>
               </tr>
@@ -676,13 +736,13 @@ function ComparisonTable() {
                     <CompCell value={row.violema} />
                   </td>
                   <td className="px-4 py-3.5">
-                    <CompCell value={row.chatgpt} />
+                    <CompCell value={row.chatAssistant} />
                   </td>
                   <td className="px-4 py-3.5">
-                    <CompCell value={row.viktor} />
+                    <CompCell value={row.workflowBot} />
                   </td>
                   <td className="px-4 py-3.5">
-                    <CompCell value={row.devin} />
+                    <CompCell value={row.codingAgent} />
                   </td>
                 </tr>
               ))}
@@ -698,22 +758,27 @@ function ComparisonTable() {
 
 function FinalCTA() {
   const navigate = useNavigate();
+  function scrollToDemo() {
+    document.getElementById('product-demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   return (
     <section className="py-32 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-violet-950/20 to-navy-950/40 pointer-events-none" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-violet-700/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <div className="absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-violet-500/20 to-transparent pointer-events-none" />
+      <div className="interactive-glow relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <ViolemaLogo className="mx-auto mb-8 h-[7rem] w-full max-w-[28.5rem]" />
         <div className="inline-flex items-center gap-2 bg-violet-950/60 border border-violet-800/50 rounded-full px-4 py-1.5 mb-8">
           <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-          <span className="text-violet-300 text-sm font-medium">Access, billing, and onboarding</span>
+          <span className="text-violet-300 text-sm font-medium">Private beta starts with one live workflow</span>
         </div>
         <h2 className="text-5xl sm:text-6xl font-extrabold text-white mb-6 leading-[1.05]">
-          Put Violema to work
+          Connect the stack.
           <br />
-          <span className="gradient-text">with a plan that fits.</span>
+          <span className="gradient-text">Let Violema run the loop.</span>
         </h2>
         <p className="text-xl text-slate-400 mb-10 max-w-xl mx-auto leading-relaxed">
-          No prompting tricks. No babysitting. Violema executes, reports back, and gets better every day. Pick a plan, connect your stack, and put it to work.
+          Start with revenue, investor updates, engineering digests, or CRM follow-up. Violema connects the tools, drafts the work, and asks before anything risky ships.
         </p>
         <div className="flex flex-wrap gap-4 justify-center mb-10">
           <button
@@ -723,16 +788,13 @@ function FinalCTA() {
             <Zap className="w-5 h-5" />
             Start setup
           </button>
-          <button
-            onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
-            className="btn-secondary text-lg py-4 px-8 group"
-          >
-            See how it works
+          <button onClick={scrollToDemo} className="btn-secondary text-lg py-4 px-8 group">
+            See workflow demo
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-slate-500">
-          {['Slack + web app', 'Plans and top-ups', 'Human review controls', 'Cancel anytime'].map((item) => (
+          {['Slack + core tools', 'API keys in setup', 'Human approval controls', 'Controlled-beta workflows'].map((item) => (
             <div key={item} className="flex items-center gap-2">
               <Check className="w-3.5 h-3.5 text-green-500" />
               <span>{item}</span>
@@ -745,8 +807,6 @@ function FinalCTA() {
 }
 
 export default function Landing() {
-  const navigate = useNavigate();
-
   return (
     <div className="min-h-screen bg-navy-900">
       <Navbar />
@@ -761,22 +821,6 @@ export default function Landing() {
       <Pricing />
       <FinalCTA />
       <Footer />
-      <div className="mobile-home-cta sm:hidden" aria-label="Violema mobile quick actions">
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => navigate('/signup?next=%2Fplans')}
-            className="btn-primary min-w-0 justify-center px-3 py-2.5 text-sm"
-          >
-            Start setup
-          </button>
-          <button
-            onClick={() => navigate('/login')}
-            className="btn-secondary min-w-0 justify-center px-3 py-2.5 text-sm"
-          >
-            Sign in
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

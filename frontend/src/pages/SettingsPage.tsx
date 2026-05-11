@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bot, KeyRound, Link2, LogOut, RotateCcw, Save, Shield, Slack, User } from 'lucide-react';
-import { getAuthSession, logoutBackendAuthSession } from '../lib/auth';
+import { ArrowLeft, Bot, KeyRound, Plug, RotateCcw, Save, Shield } from 'lucide-react';
 import { resolveWorkspaceContext } from '../lib/workspace';
+import ViolemaLogo from '../components/ViolemaLogo';
 
 type Provider = 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax';
+type IntegrationProvider = 'github' | 'linear' | 'notion' | 'stripe' | 'hubspot' | 'airtable' | 'figma' | 'vercel';
+type IntegrationCredentialField = 'token' | 'apiKey' | 'secretKey';
 type Profile = 'micro' | 'default' | 'hard' | 'critical' | 'ops' | 'memory_text' | 'memory_code';
 type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 type AutoGraduationProfileId = 'cautious' | 'balanced' | 'fast_learning';
@@ -17,6 +19,22 @@ interface ProviderStatus {
   serverConfigured?: boolean;
   activeSource?: 'workspace_token' | 'server_token' | 'none';
   activeSourceLabel?: string;
+}
+
+interface IntegrationFieldStatus {
+  configured: boolean;
+  maskedValue?: string;
+  workspaceConfigured?: boolean;
+  serverConfigured?: boolean;
+}
+
+interface IntegrationStatus {
+  configured: boolean;
+  workspaceConfigured?: boolean;
+  serverConfigured?: boolean;
+  activeSource?: 'workspace_credentials' | 'server_credentials' | 'none';
+  activeSourceLabel?: string;
+  fields: Partial<Record<IntegrationCredentialField, IntegrationFieldStatus>>;
 }
 
 interface ModelOverride {
@@ -32,6 +50,7 @@ interface SettingsPayload {
     workspaceId: string;
     updatedAt?: string;
     providers: Record<Provider, ProviderStatus>;
+    integrations: Record<IntegrationProvider, IntegrationStatus>;
     modelOverrides: Partial<Record<Profile, ModelOverride>>;
     agentStudio?: {
       autoGraduationProfiles?: Record<string, string>;
@@ -64,13 +83,102 @@ interface ProfileTestState {
   testing?: boolean;
 }
 
+interface IntegrationTestState {
+  tone: 'success' | 'error' | 'idle';
+  message?: string;
+  testing?: boolean;
+}
+
 const PROVIDER_COPY: Record<Provider, { label: string; help: string }> = {
   anthropic: { label: 'Anthropic', help: 'Used for the default and critical reasoning lanes by default.' },
   openai: { label: 'OpenAI', help: 'Used for micro and hard reasoning lanes by default.' },
-  openrouter: { label: 'OpenRouter', help: 'Used for ops routing and broad model access.' },
+  openrouter: { label: 'OpenRouter', help: 'Optional broad model access when a workspace wants non-default routing.' },
   mistral: { label: 'Mistral', help: 'Used for memory and embedding workloads.' },
   minimax: { label: 'MiniMax', help: 'Optional direct provider for Anthropic-compatible routing.' },
 };
+
+const INTEGRATION_COPY: Array<{
+  id: IntegrationProvider;
+  label: string;
+  field: IntegrationCredentialField;
+  fieldLabel: string;
+  placeholder: string;
+  help: string;
+  use: string;
+}> = [
+  {
+    id: 'github',
+    label: 'GitHub',
+    field: 'token',
+    fieldLabel: 'Personal access token',
+    placeholder: 'ghp_…',
+    help: 'Repos, issues, PRs, code context, and engineering follow-through.',
+    use: 'Engineering workflows',
+  },
+  {
+    id: 'linear',
+    label: 'Linear',
+    field: 'apiKey',
+    fieldLabel: 'API key',
+    placeholder: 'lin_api_…',
+    help: 'Issues, project status, sprint updates, and execution tracking.',
+    use: 'Product ops',
+  },
+  {
+    id: 'notion',
+    label: 'Notion',
+    field: 'token',
+    fieldLabel: 'Internal integration secret',
+    placeholder: 'secret_…',
+    help: 'Docs, knowledge bases, project notes, and weekly update source material.',
+    use: 'Knowledge work',
+  },
+  {
+    id: 'stripe',
+    label: 'Stripe',
+    field: 'secretKey',
+    fieldLabel: 'Secret key',
+    placeholder: 'sk_live_… or sk_test_…',
+    help: 'Revenue, billing, churn, failed payments, and founder metric reports.',
+    use: 'Revenue intelligence',
+  },
+  {
+    id: 'hubspot',
+    label: 'HubSpot',
+    field: 'token',
+    fieldLabel: 'Private app token',
+    placeholder: 'pat-…',
+    help: 'CRM context, leads, accounts, follow-ups, and GTM reporting.',
+    use: 'CRM',
+  },
+  {
+    id: 'airtable',
+    label: 'Airtable',
+    field: 'token',
+    fieldLabel: 'Personal access token',
+    placeholder: 'pat…',
+    help: 'Lightweight databases, ops trackers, CRM tables, and custom workflow data.',
+    use: 'Ops data',
+  },
+  {
+    id: 'figma',
+    label: 'Figma',
+    field: 'token',
+    fieldLabel: 'Personal access token',
+    placeholder: 'figd_…',
+    help: 'Design file context, product reviews, and launch asset workflows.',
+    use: 'Design ops',
+  },
+  {
+    id: 'vercel',
+    label: 'Vercel',
+    field: 'token',
+    fieldLabel: 'Access token',
+    placeholder: 'vercel token',
+    help: 'Deployments, project status, release checks, and production readiness signals.',
+    use: 'Deployments',
+  },
+];
 
 const PROFILE_COPY: Array<{ id: Profile; label: string; help: string }> = [
   { id: 'micro', label: 'Micro', help: 'Cheap text work and utility routing.' },
@@ -84,7 +192,7 @@ const PROFILE_COPY: Array<{ id: Profile; label: string; help: string }> = [
 
 const REASONING_OPTIONS: ReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
 const PROVIDER_OPTIONS: Provider[] = ['anthropic', 'openai', 'openrouter', 'mistral', 'minimax'];
-const VIOLEMA_MARK = '/po-logo.png';
+const INTEGRATION_OPTIONS = INTEGRATION_COPY.map((item) => item.id);
 const WORKFLOW_ARCHETYPES: Array<{ id: WorkflowArchetypeId; label: string; help: string }> = [
   { id: 'briefing', label: 'Briefing and delivery', help: 'Research-heavy workflows that still need polished output and final delivery.' },
   { id: 'research', label: 'Research and monitoring', help: 'Source gathering, scanning, and current-state intelligence work.' },
@@ -102,12 +210,22 @@ const AUTO_GRADUATION_PROFILES: Array<{
   { id: 'fast_learning', label: 'Fast learning', help: 'Promotes sooner. Better when speed matters more than avoiding reversals.' },
 ];
 
+function createEmptyIntegrationInputState() {
+  return Object.fromEntries(INTEGRATION_OPTIONS.map((provider) => [provider, ''])) as Record<IntegrationProvider, string>;
+}
+
+function createEmptyIntegrationClearState() {
+  return Object.fromEntries(INTEGRATION_OPTIONS.map((provider) => [provider, false])) as Record<IntegrationProvider, boolean>;
+}
+
+function createEmptyIntegrationTestState() {
+  return Object.fromEntries(INTEGRATION_OPTIONS.map((provider) => [provider, { tone: 'idle' }])) as Record<IntegrationProvider, IntegrationTestState>;
+}
+
 export default function SettingsPage() {
   const navigate = useNavigate();
   const workspace = useMemo(() => resolveWorkspaceContext(), []);
-  const authSession = useMemo(() => getAuthSession(), []);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
@@ -125,6 +243,8 @@ export default function SettingsPage() {
     mistral: false,
     minimax: false,
   });
+  const [integrationInputs, setIntegrationInputs] = useState<Record<IntegrationProvider, string>>(createEmptyIntegrationInputState);
+  const [integrationClears, setIntegrationClears] = useState<Record<IntegrationProvider, boolean>>(createEmptyIntegrationClearState);
   const [modelOverrides, setModelOverrides] = useState<Partial<Record<Profile, ModelOverride>>>({});
   const [providerTests, setProviderTests] = useState<Record<Provider, ProviderTestState>>({
     anthropic: { tone: 'idle' },
@@ -133,6 +253,7 @@ export default function SettingsPage() {
     mistral: { tone: 'idle' },
     minimax: { tone: 'idle' },
   });
+  const [integrationTests, setIntegrationTests] = useState<Record<IntegrationProvider, IntegrationTestState>>(createEmptyIntegrationTestState);
   const [profileTests, setProfileTests] = useState<Record<Profile, ProfileTestState>>({
     micro: { tone: 'idle' },
     default: { tone: 'idle' },
@@ -155,7 +276,7 @@ export default function SettingsPage() {
   });
 
   async function loadSettings(silent = false) {
-    if (!silent) { setLoading(true); setLoadError(null); }
+    if (!silent) setLoading(true);
     try {
       const response = await fetch(`/api/settings?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
         headers: {
@@ -187,6 +308,8 @@ export default function SettingsPage() {
         mistral: '',
         minimax: '',
       });
+      setIntegrationInputs(createEmptyIntegrationInputState());
+      setIntegrationClears(createEmptyIntegrationClearState());
       setProviderTests({
         anthropic: { tone: 'idle' },
         openai: { tone: 'idle' },
@@ -194,6 +317,7 @@ export default function SettingsPage() {
         mistral: { tone: 'idle' },
         minimax: { tone: 'idle' },
       });
+      setIntegrationTests(createEmptyIntegrationTestState());
       setProfileTests({
         micro: { tone: 'idle' },
         default: { tone: 'idle' },
@@ -204,9 +328,7 @@ export default function SettingsPage() {
         memory_code: { tone: 'idle' },
       });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Could not load settings.';
-      if (!silent) setLoadError(msg);
-      else setNotice({ tone: 'error', message: msg });
+      setNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not load settings.' });
     } finally {
       if (!silent) setLoading(false);
     }
@@ -232,6 +354,17 @@ export default function SettingsPage() {
         ]),
       );
 
+      const integrationCredentials = Object.fromEntries(
+        INTEGRATION_COPY.map((integration) => [
+          integration.id,
+          integrationClears[integration.id]
+            ? null
+            : integrationInputs[integration.id].trim()
+              ? { [integration.field]: integrationInputs[integration.id].trim() }
+              : undefined,
+        ]),
+      );
+
       const serializedOverrides = Object.fromEntries(
         PROFILE_COPY.map(({ id }) => {
           const current = modelOverrides[id];
@@ -251,6 +384,7 @@ export default function SettingsPage() {
           workspaceId: workspace.workspaceId,
           workspaceName: workspace.workspaceName,
           providerTokens,
+          integrationCredentials,
           modelOverrides: serializedOverrides,
           agentStudio: {
             autoGraduationProfiles: agentStudioSettings.autoGraduationProfiles,
@@ -277,6 +411,7 @@ export default function SettingsPage() {
         mistral: '',
         minimax: '',
       });
+      setIntegrationInputs(createEmptyIntegrationInputState());
       setProviderClears({
         anthropic: false,
         openai: false,
@@ -284,6 +419,7 @@ export default function SettingsPage() {
         mistral: false,
         minimax: false,
       });
+      setIntegrationClears(createEmptyIntegrationClearState());
       setNotice({ tone: 'success', message: 'Saved workspace setup.' });
     } catch (error) {
       setNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not save settings.' });
@@ -343,6 +479,44 @@ export default function SettingsPage() {
       setProviderTests((current) => ({
         ...current,
         [provider]: { tone: 'error', message: error instanceof Error ? error.message : 'Provider test failed.' },
+      }));
+    }
+  }
+
+  async function handleIntegrationTest(integration: (typeof INTEGRATION_COPY)[number]) {
+    setIntegrationTests((current) => ({
+      ...current,
+      [integration.id]: { tone: 'idle', testing: true, message: 'Testing…' },
+    }));
+
+    try {
+      const draftValue = integrationInputs[integration.id].trim();
+      const response = await fetch('/api/settings/test-integration', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Workspace-Id': workspace.workspaceId,
+          'X-Workspace-Name': workspace.workspaceName,
+        },
+        body: JSON.stringify({
+          workspaceId: workspace.workspaceId,
+          workspaceName: workspace.workspaceName,
+          provider: integration.id,
+          credentials: draftValue ? { [integration.field]: draftValue } : undefined,
+        }),
+      });
+
+      const payload = await response.json() as { ok?: boolean; detail?: string };
+      if (!response.ok) throw new Error(payload.detail || 'Integration test failed');
+
+      setIntegrationTests((current) => ({
+        ...current,
+        [integration.id]: { tone: 'success', message: payload.detail || 'Integration looks good.' },
+      }));
+    } catch (error) {
+      setIntegrationTests((current) => ({
+        ...current,
+        [integration.id]: { tone: 'error', message: error instanceof Error ? error.message : 'Integration test failed.' },
       }));
     }
   }
@@ -408,13 +582,11 @@ export default function SettingsPage() {
               <ArrowLeft className="h-3.5 w-3.5" />
               Dashboard
             </button>
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.04]">
-              <img src={VIOLEMA_MARK} alt="Violema" className="h-8 w-8 object-contain" />
-            </span>
+            <ViolemaLogo className="hidden h-10 w-[12.5rem] sm:flex" />
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Workspace setup</p>
-              <h1 className="truncate text-lg font-semibold tracking-[-0.02em] text-white">Models and provider tokens</h1>
-              <p className="mt-1 text-sm text-slate-400">Bring your own provider keys, override model lanes, and make routing match the work you actually want to run.</p>
+              <h1 className="truncate text-lg font-semibold tracking-[-0.02em] text-white">Models and integrations</h1>
+              <p className="mt-1 text-sm text-slate-400">Connect the accounts Violema can work inside, then tune model routing only where the work justifies it.</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -440,110 +612,127 @@ export default function SettingsPage() {
       </header>
 
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6">
-        {loading ? (
+        {loading || !data ? (
           <div className="rounded-[1.8rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-5 py-12 text-center text-sm text-slate-500">
             Loading workspace setup…
           </div>
-        ) : loadError ? (
-          <div className="rounded-[1.8rem] border border-rose-500/20 bg-rose-500/8 px-5 py-12 text-center">
-            <p className="text-sm font-medium text-rose-300">{loadError}</p>
-            <button
-              type="button"
-              onClick={() => void loadSettings()}
-              className="mt-4 inline-flex items-center gap-2 rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-2 text-xs font-medium text-rose-200 transition-colors hover:bg-rose-500/18"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Retry
-            </button>
-          </div>
-        ) : !data ? null : (
+        ) : (
           <div className="space-y-6">
-            {/* Account & Connections */}
             <section className="rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-violet-300" />
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Account</p>
-                  <h2 className="text-sm font-semibold text-white">Account & connections</h2>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="max-w-3xl">
+                  <div className="flex items-center gap-2">
+                    <Plug className="h-4 w-4 text-cyan-300" />
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Tool integrations</p>
+                      <h2 className="text-sm font-semibold text-white">Connect the operating stack</h2>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                    Store workspace credentials for the platforms Violema needs to inspect, update, and report on. Slack stays in its dedicated setup flow; OAuth-heavy Google and Microsoft connectors should use proper OAuth instead of pasted user tokens.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/8 px-4 py-3 text-sm text-cyan-100">
+                  {INTEGRATION_OPTIONS.filter((provider) => data.settings.integrations[provider]?.configured).length} of {INTEGRATION_OPTIONS.length} configured
                 </div>
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {/* Identity card */}
-                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-violet-500/18 text-sm font-semibold text-violet-200">
-                      {authSession?.name ? authSession.name[0].toUpperCase() : 'U'}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-white">{authSession?.name || 'Unknown'}</p>
-                      <p className="truncate text-[11px] text-slate-400">{authSession?.email || ''}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300">
-                      {authSession?.role || 'user'}
-                    </span>
-                    <span className="rounded-full border border-navy-700 bg-navy-900 px-2 py-0.5 text-[10px] text-slate-400">
-                      via {authSession?.method || 'email'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await logoutBackendAuthSession().catch(() => null);
-                      navigate('/login');
-                    }}
-                    className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-rose-500/20 bg-rose-500/8 px-3 py-2 text-[11px] font-medium text-rose-300 transition-colors hover:bg-rose-500/14"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    Sign out
-                  </button>
-                </div>
 
-                {/* Slack connection card */}
-                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
-                  <div className="flex items-center gap-2">
-                    <Slack className="h-4 w-4 text-slate-400" />
-                    <p className="text-sm font-medium text-white">Slack</p>
-                    {authSession?.slackChannelId ? (
-                      <span className="ml-auto rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-300">Connected</span>
-                    ) : (
-                      <span className="ml-auto rounded-full border border-navy-700 bg-navy-900 px-2 py-0.5 text-[10px] text-slate-500">Not set up</span>
-                    )}
-                  </div>
-                  {authSession?.slackChannelId ? (
-                    <div className="mt-3 space-y-1 text-[11px] text-slate-400">
-                      <p>Workspace: <span className="text-slate-200">{authSession.slackWorkspace || '—'}</span></p>
-                      <p>Channel: <span className="font-mono text-slate-200">{authSession.slackDisplayTarget || authSession.slackChannelId}</span></p>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
-                      Connect your Slack workspace so Violema can send automation results and respond to your messages.
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => navigate('/connect/slack?next=%2Fsettings')}
-                    className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-cyan-500/20 bg-cyan-500/8 px-3 py-2 text-[11px] font-medium text-cyan-300 transition-colors hover:bg-cyan-500/14"
-                  >
-                    <Link2 className="h-3.5 w-3.5" />
-                    {authSession?.slackChannelId ? 'Update Slack connection' : 'Set up Slack'}
-                  </button>
-                </div>
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {INTEGRATION_COPY.map((integration) => {
+                  const status = data.settings.integrations[integration.id];
+                  const fieldStatus = status?.fields?.[integration.field];
+                  const testState = integrationTests[integration.id];
+                  return (
+                    <div key={integration.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/8 bg-white/[0.04] text-[11px] font-semibold text-slate-200">
+                              {integration.label.slice(0, 2).toUpperCase()}
+                            </span>
+                            <div>
+                              <p className="text-sm font-medium text-white">{integration.label}</p>
+                              <p className="text-[10px] uppercase tracking-[0.16em] text-slate-600">{integration.use}</p>
+                            </div>
+                          </div>
+                          <p className="mt-3 text-[11px] leading-relaxed text-slate-500">{integration.help}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                          status?.activeSource === 'workspace_credentials'
+                            ? 'border-cyan-500/18 bg-cyan-500/8 text-cyan-200'
+                            : status?.activeSource === 'server_credentials'
+                              ? 'border-violet-500/18 bg-violet-500/8 text-violet-200'
+                              : 'border-navy-700 bg-navy-900 text-slate-400'
+                        }`}>
+                          {status?.activeSourceLabel || 'Not configured'}
+                        </span>
+                      </div>
 
-                {/* Session info card */}
-                <div className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Session</p>
-                  <p className="mt-2 text-sm font-medium text-white">Device session</p>
-                  <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-                    Your workspace context is saved to this browser. Signing out clears the local session. Your data and automations remain in the workspace.
-                  </p>
-                  {authSession?.createdAt ? (
-                    <p className="mt-3 text-[10px] text-slate-600">
-                      Active since {new Date(authSession.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </p>
-                  ) : null}
-                </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {fieldStatus?.workspaceConfigured ? (
+                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                            Saved {fieldStatus.maskedValue || 'credential'}
+                          </span>
+                        ) : null}
+                        {fieldStatus?.serverConfigured ? (
+                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                            Server credential available
+                          </span>
+                        ) : null}
+                        {!fieldStatus?.configured ? (
+                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-500">
+                            Needs credential
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-3 space-y-2">
+                        <label className="block">
+                          <span className="mb-1.5 block text-[11px] text-slate-500">{integration.fieldLabel}</span>
+                          <div className="ui-input-shell">
+                            <input
+                              type="password"
+                              value={integrationInputs[integration.id]}
+                              onChange={(event) => setIntegrationInputs((current) => ({ ...current, [integration.id]: event.target.value }))}
+                              className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                              placeholder={integration.placeholder}
+                            />
+                          </div>
+                        </label>
+                        <label className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-400">
+                          <input
+                            type="checkbox"
+                            checked={integrationClears[integration.id]}
+                            onChange={(event) => setIntegrationClears((current) => ({ ...current, [integration.id]: event.target.checked }))}
+                            className="mt-0.5 rounded border-navy-700 bg-navy-950 text-violet-400 focus:ring-violet-500"
+                          />
+                          Clear workspace credential and fall back to server credential
+                        </label>
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => void handleIntegrationTest(integration)}
+                            disabled={integrationClears[integration.id] || testState?.testing}
+                            className="ui-pill shrink-0 px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200 disabled:opacity-50"
+                          >
+                            {testState?.testing ? 'Testing…' : 'Test'}
+                          </button>
+                        </div>
+                        {testState?.message ? (
+                          <div className={`rounded-xl border px-3 py-2 text-[11px] ${
+                            testState.tone === 'success'
+                              ? 'border-green-500/18 bg-green-500/8 text-green-200'
+                              : testState.tone === 'error'
+                                ? 'border-red-500/18 bg-red-500/8 text-red-200'
+                                : 'border-navy-700/70 bg-navy-950/35 text-slate-400'
+                          }`}>
+                            {testState.message}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </section>
 
@@ -552,12 +741,12 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-2">
                   <KeyRound className="h-4 w-4 text-cyan-300" />
                   <div>
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Provider access</p>
-                    <h2 className="text-sm font-semibold text-white">Bring your own tokens</h2>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Model provider access</p>
+                    <h2 className="text-sm font-semibold text-white">Bring your own model tokens</h2>
                   </div>
                 </div>
                 <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                  Workspace tokens override the shared server credentials for this workspace only. Useful for testing, cost separation, or forcing one client’s work onto their own accounts.
+                  These keys control model routing only. Use the Tool integrations section above for product platforms like GitHub, Linear, Notion, Stripe, and HubSpot.
                 </p>
                 <div className="mt-4 space-y-4">
                   {PROVIDER_OPTIONS.map((provider) => {
@@ -583,7 +772,7 @@ export default function SettingsPage() {
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-400">
                           <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
-                            {status.activeSourceLabel ? `Active: ${status.activeSourceLabel}` : 'No key set — using server default'}
+                            Active: {status.activeSourceLabel || 'Not configured'}
                           </span>
                           {status.workspaceConfigured ? (
                             <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">

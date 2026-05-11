@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { ArrowRight, Sparkles, Check, Loader2 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-
-const VIOLEMA_MARK = '/po-logo.png';
+import ViolemaLogo from './ViolemaLogo';
 
 const LINKS = {
   Product: [
@@ -13,11 +12,17 @@ const LINKS = {
   ],
   Company: [
     { label: 'Contact', path: 'mailto:hello@purpleorange.io' },
+    { label: 'Book a demo', path: 'mailto:sales@purpleorange.io?subject=Violema%20Demo' },
+    { label: 'Security', path: 'mailto:security@purpleorange.io' },
+  ],
+  Resources: [
+    { label: 'Setup access', path: '/signup?next=%2Fplans' },
+    { label: 'Sign in', path: '/login' },
+    { label: 'Integrations map', path: '/integrations' },
   ],
   Legal: [
     { label: 'Privacy Policy', path: '/privacy' },
     { label: 'Terms of Service', path: '/terms' },
-    { label: 'Security', path: 'mailto:security@purpleorange.io' },
   ],
 };
 
@@ -63,17 +68,17 @@ function WaitlistSignup() {
         </div>
         {state === 'success' ? (
           <>
-            <p className="text-white font-semibold text-lg mb-1">You're on the list! 🎉</p>
+            <p className="text-white font-semibold text-lg mb-1">You're on the beta list.</p>
             <p className="text-slate-400 text-sm">
               You're <span className="text-violet-400 font-semibold">#{position?.toLocaleString()}</span> in line. We'll
-              email you the moment early access opens.
+              email you when the next workflow cohort opens.
             </p>
           </>
         ) : (
           <>
             <p className="text-white font-semibold text-lg mb-1">Already signed up!</p>
             <p className="text-slate-400 text-sm">
-              You're <span className="text-violet-400 font-semibold">#{position?.toLocaleString()}</span> in line. We haven't forgotten you.
+              You're <span className="text-violet-400 font-semibold">#{position?.toLocaleString()}</span> in line for beta updates.
             </p>
           </>
         )}
@@ -168,14 +173,14 @@ export default function Footer() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-semibold tracking-wide uppercase mb-6">
               <Sparkles className="w-3 h-3" />
-              Not ready to commit yet? No stress.
+              Controlled beta
             </div>
 
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-3 leading-tight">
-              Get the scoop before anyone else
+              Join the beta list
             </h2>
             <p className="text-slate-400 text-lg mb-8 max-w-md mx-auto leading-relaxed">
-              Drop your email and we'll hit you with early access, behind-the-scenes product updates, and launch discounts. Zero fluff.
+              Get early access updates, product notes, and invitations to test the first workflow templates.
             </p>
 
             {/* Social proof */}
@@ -195,7 +200,7 @@ export default function Footer() {
                 ))}
               </div>
               <span className="text-slate-500 text-sm">
-                Get early product updates and launch notes
+                Early workflow templates and beta notes
               </span>
             </div>
 
@@ -232,27 +237,25 @@ export default function Footer() {
               </svg>
               Start setup
             </button>
+            <a href="mailto:sales@purpleorange.io?subject=Violema%20Demo" className="btn-secondary text-base py-3 px-8">
+              Book a demo
+            </a>
           </div>
         </div>
 
         {/* ── Footer links ─────────────────────────────────────────────── */}
-        <div className="py-16 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+        <div className="py-16 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
           {/* Logo + description */}
-          <div className="col-span-2 md:col-span-3 lg:col-span-1">
+          <div className="col-span-2 md:col-span-4 lg:col-span-1">
             <button
-              className="flex items-center gap-2.5 mb-4 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-lg"
+              className="mb-4 flex items-center rounded-lg group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
               onClick={() => navigate('/')}
+              aria-label="Violema home"
             >
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden transition-all group-hover:shadow-glow-violet">
-                <img src={VIOLEMA_MARK} alt="Violema" className="po-logo w-full h-full object-contain" />
-              </div>
-              <div className="brand-lockup w-[9.4rem]">
-                <span className="brand-wordmark text-[0.95rem]">VIOLEMA</span>
-                <span className="brand-submark text-[8px]">Your AI coworker</span>
-              </div>
+              <ViolemaLogo className="h-12 w-[13.5rem]" />
             </button>
-            <p className="text-slate-500 text-sm leading-relaxed">
-              Your AI coworker that proactively executes tasks, coordinates your tools, and gets things done — autonomously.
+            <p className="text-slate-500 text-sm leading-relaxed mb-4">
+              The AI operator for recurring founder work: monitored runs, reviewable outputs, and follow-through across the core stack.
             </p>
           </div>
 
@@ -289,11 +292,6 @@ export default function Footer() {
             <span className="text-slate-700 text-xs">TLS in transit</span>
             <span className="w-px h-3 bg-navy-700 hidden sm:block" />
             <span className="text-slate-700 text-xs">Private by default</span>
-            <span className="w-px h-3 bg-navy-700 hidden sm:block" />
-            <div className="flex items-center gap-1.5 text-xs text-slate-700">
-              <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-              All systems operational
-            </div>
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Eye, Globe, Lock, Mail, MonitorSmartphone, Slack } from 'lucide-react';
-import { beginOAuthFlow, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
+import { beginOAuthFlow, isAdminEmail, persistAuthSessionToBackend, saveAuthSession, type AuthMethod } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
@@ -37,7 +37,7 @@ const EDUCATION_CARDS = [
   {
     icon: MonitorSmartphone,
     title: 'Built for real execution',
-    body: 'Built for real execution. Violema handles research, multi-step workflows, and recurring automations across the tools your team already uses.',
+    body: 'One manager coordinates a team of specialists to handle research, execution, and automation without wasting context or tokens.',
   },
 ];
 
@@ -67,17 +67,19 @@ export default function Signup() {
     setSubmitting(true);
     setErrorMessage(null);
     persistWorkspaceContext();
+    const session = {
+      email: email.trim(),
+      name: name.trim(),
+      role: isAdminEmail(email) ? 'admin' : 'user',
+      method: 'email' as const,
+      acceptedTerms,
+      acceptedEducation,
+      createdAt: new Date().toISOString(),
+    } as const;
 
     try {
-      await persistAuthSessionToBackend({
-        email: email.trim(),
-        name: name.trim(),
-        role: 'user',
-        method: 'email' as const,
-        acceptedTerms,
-        acceptedEducation,
-        createdAt: new Date().toISOString(),
-      });
+      saveAuthSession(session);
+      await persistAuthSessionToBackend(session);
       navigate(`/connect/slack?next=${encodeURIComponent(nextPath)}`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Could not create access');
@@ -148,7 +150,7 @@ export default function Signup() {
                 ))}
               </div>
               <p className="mt-3 text-xs leading-relaxed text-slate-500">
-                Violema dynamically allocates reasoning depth so simple tasks stay fast and complex tasks get the depth they need.
+                One manager leads six resident specialists and opens four elastic lanes only when the run justifies it.
               </p>
             </div>
           </div>

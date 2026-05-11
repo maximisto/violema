@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 type Provider = 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax';
+export type IntegrationProvider = 'github' | 'linear' | 'notion' | 'stripe' | 'hubspot' | 'airtable' | 'figma' | 'vercel';
 type TextProfile = 'micro' | 'default' | 'hard' | 'critical' | 'ops';
 type EmbeddingProfile = 'memory_text' | 'memory_code';
 
@@ -30,6 +31,7 @@ export interface WorkspaceSettingsRecord {
   workspaceId: string;
   updatedAt: string;
   providerTokens?: Partial<Record<Provider, EncryptedSecret>>;
+  integrationCredentials?: Partial<Record<IntegrationProvider, Record<string, EncryptedSecret>>>;
   modelOverrides?: Partial<Record<TextProfile | EmbeddingProfile, WorkspaceModelOverride>>;
   agentStudio?: WorkspaceAgentStudioSettings;
 }
@@ -45,18 +47,52 @@ export interface WorkspaceSettingsView {
     activeSource: 'workspace_token' | 'server_token' | 'none';
     activeSourceLabel: string;
   }>;
+  integrations: Record<IntegrationProvider, {
+    configured: boolean;
+    workspaceConfigured: boolean;
+    serverConfigured: boolean;
+    activeSource: 'workspace_credentials' | 'server_credentials' | 'none';
+    activeSourceLabel: string;
+    fields: Record<string, {
+      configured: boolean;
+      workspaceConfigured: boolean;
+      serverConfigured: boolean;
+      maskedValue?: string;
+    }>;
+  }>;
   modelOverrides: Partial<Record<TextProfile | EmbeddingProfile, WorkspaceModelOverride>>;
   agentStudio?: WorkspaceAgentStudioSettings;
 }
 
 const SETTINGS_FILE = path.join(process.cwd(), 'workspace-settings.json');
 const PROVIDERS: Provider[] = ['anthropic', 'openai', 'openrouter', 'mistral', 'minimax'];
+const INTEGRATION_PROVIDERS: IntegrationProvider[] = ['github', 'linear', 'notion', 'stripe', 'hubspot', 'airtable', 'figma', 'vercel'];
 const PROVIDER_ENV_KEYS: Record<Provider, string[]> = {
   anthropic: ['ANTHROPIC_API_KEY'],
   openai: ['OPENAI_API_KEY'],
   openrouter: ['OPENROUTER_API_KEY'],
   mistral: ['MISTRAL_API_KEY'],
   minimax: ['MINIMAX_API_KEY', 'ANTHROPIC_API_KEY'],
+};
+const INTEGRATION_FIELDS: Record<IntegrationProvider, string[]> = {
+  github: ['token'],
+  linear: ['apiKey'],
+  notion: ['token'],
+  stripe: ['secretKey'],
+  hubspot: ['token'],
+  airtable: ['token'],
+  figma: ['token'],
+  vercel: ['token'],
+};
+const INTEGRATION_ENV_KEYS: Record<IntegrationProvider, Record<string, string[]>> = {
+  github: { token: ['GITHUB_TOKEN'] },
+  linear: { apiKey: ['LINEAR_API_KEY'] },
+  notion: { token: ['NOTION_API_KEY', 'NOTION_TOKEN'] },
+  stripe: { secretKey: ['STRIPE_SECRET_KEY'] },
+  hubspot: { token: ['HUBSPOT_ACCESS_TOKEN', 'HUBSPOT_PRIVATE_APP_TOKEN'] },
+  airtable: { token: ['AIRTABLE_ACCESS_TOKEN', 'AIRTABLE_API_KEY'] },
+  figma: { token: ['FIGMA_ACCESS_TOKEN'] },
+  vercel: { token: ['VERCEL_TOKEN'] },
 };
 
 function readStore(): WorkspaceSettingsRecord[] {
@@ -113,6 +149,15 @@ function maskToken(token?: string) {
   return `${token.slice(0, 4)}••••${token.slice(-4)}`;
 }
 
+function getServerIntegrationCredential(provider: IntegrationProvider, field: string) {
+  const envKeys = INTEGRATION_ENV_KEYS[provider]?.[field] || [];
+  for (const key of envKeys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
 export function getWorkspaceSettings(workspaceId: string): WorkspaceSettingsRecord | null {
   return readStore().find((record) => record.workspaceId === workspaceId) || null;
 }
@@ -144,6 +189,41 @@ export function getWorkspaceSettingsView(workspaceId: string): WorkspaceSettings
         }];
       }),
     ) as WorkspaceSettingsView['providers'],
+    integrations: Object.fromEntries(
+      INTEGRATION_PROVIDERS.map((provider) => {
+        const storedFields = record?.integrationCredentials?.[provider] || {};
+        const fields = Object.fromEntries(
+          INTEGRATION_FIELDS[provider].map((field) => {
+            const encrypted = storedFields[field];
+            const decrypted = encrypted ? decryptSecret(encrypted) : undefined;
+            const workspaceConfigured = Boolean(encrypted);
+            const serverConfigured = Boolean(getServerIntegrationCredential(provider, field));
+            return [field, {
+              configured: workspaceConfigured || serverConfigured,
+              workspaceConfigured,
+              serverConfigured,
+              maskedValue: maskToken(decrypted),
+            }];
+          }),
+        ) as WorkspaceSettingsView['integrations'][IntegrationProvider]['fields'];
+        const workspaceConfigured = Object.values(fields).some((field) => field.workspaceConfigured);
+        const serverConfigured = Object.values(fields).some((field) => field.serverConfigured);
+        const activeSource = workspaceConfigured ? 'workspace_credentials' : serverConfigured ? 'server_credentials' : 'none';
+        return [provider, {
+          configured: workspaceConfigured || serverConfigured,
+          workspaceConfigured,
+          serverConfigured,
+          activeSource,
+          activeSourceLabel:
+            activeSource === 'workspace_credentials'
+              ? 'Workspace credentials'
+              : activeSource === 'server_credentials'
+                ? 'Server credentials'
+                : 'Not configured',
+          fields,
+        }];
+      }),
+    ) as WorkspaceSettingsView['integrations'],
     modelOverrides: record?.modelOverrides || {},
     agentStudio: record?.agentStudio || {},
   };
@@ -159,9 +239,33 @@ export function getWorkspaceProviderToken(workspaceId: string, provider: Provide
   }
 }
 
+export function getWorkspaceIntegrationCredential(
+  workspaceId: string,
+  provider: IntegrationProvider,
+  field: string,
+): string | undefined {
+  if (!INTEGRATION_FIELDS[provider]?.includes(field)) return undefined;
+  const encrypted = getWorkspaceSettings(workspaceId)?.integrationCredentials?.[provider]?.[field];
+  if (!encrypted) return undefined;
+  try {
+    return decryptSecret(encrypted);
+  } catch {
+    return undefined;
+  }
+}
+
+export function getIntegrationCredential(
+  workspaceId: string,
+  provider: IntegrationProvider,
+  field: string,
+): string | undefined {
+  return getWorkspaceIntegrationCredential(workspaceId, provider, field) || getServerIntegrationCredential(provider, field);
+}
+
 export function upsertWorkspaceSettings(input: {
   workspaceId: string;
   providerTokens?: Partial<Record<Provider, string | null>>;
+  integrationCredentials?: Partial<Record<IntegrationProvider, Record<string, string> | null>>;
   modelOverrides?: Partial<Record<TextProfile | EmbeddingProfile, WorkspaceModelOverride | null>>;
   agentStudio?: {
     autoGraduationProfiles?: Record<string, string> | null;
@@ -178,6 +282,7 @@ export function upsertWorkspaceSettings(input: {
         workspaceId: input.workspaceId,
         updatedAt: new Date().toISOString(),
         providerTokens: {},
+        integrationCredentials: {},
         modelOverrides: {},
       };
 
@@ -193,6 +298,35 @@ export function upsertWorkspaceSettings(input: {
       }
     }
     next.providerTokens = providerTokens;
+  }
+
+  if (input.integrationCredentials) {
+    const integrationCredentials = { ...(next.integrationCredentials || {}) };
+    for (const provider of INTEGRATION_PROVIDERS) {
+      if (!(provider in input.integrationCredentials)) continue;
+      const credentials = input.integrationCredentials[provider];
+      if (!credentials) {
+        delete integrationCredentials[provider];
+        continue;
+      }
+      const allowedFields = INTEGRATION_FIELDS[provider];
+      const existingFields = { ...(integrationCredentials[provider] || {}) };
+      for (const field of allowedFields) {
+        if (!(field in credentials)) continue;
+        const value = credentials[field]?.trim();
+        if (!value) {
+          delete existingFields[field];
+        } else {
+          existingFields[field] = encryptSecret(value);
+        }
+      }
+      if (Object.keys(existingFields).length > 0) {
+        integrationCredentials[provider] = existingFields;
+      } else {
+        delete integrationCredentials[provider];
+      }
+    }
+    next.integrationCredentials = integrationCredentials;
   }
 
   if (input.modelOverrides) {

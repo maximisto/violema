@@ -28,7 +28,7 @@ const PLANS = [
     description: 'The default operating tier for serious solo operators and execution-heavy workflows.',
     cta: 'Choose Pro',
     featured: true,
-    badge: 'Most popular',
+    badge: 'Recommended beta tier',
     features: [
       '2,000 Violema credits',
       '20 active automations',
@@ -98,7 +98,7 @@ export default function Pricing() {
                 onMouseLeave={() => setHoveredPlan(null)}
                 onFocusCapture={() => setHoveredPlan(plan.id)}
                 onBlurCapture={() => setHoveredPlan(null)}
-                className={`relative flex h-full flex-col rounded-2xl p-8 transition-all duration-300 ${
+                className={`interactive-glow surface-lift relative flex h-full flex-col rounded-2xl p-8 transition-all duration-300 ${
                   isActive
                     ? 'bg-gradient-to-b from-violet-950/82 via-navy-900/80 to-navy-800/80 border border-violet-500/55 shadow-glow-violet -translate-y-1'
                     : 'bg-navy-800/50 border border-navy-700/60 hover:border-navy-600'
@@ -164,10 +164,10 @@ export default function Pricing() {
           })}
         </div>
 
-        <div className="mt-10 rounded-2xl border border-navy-700/60 bg-navy-900/40 px-6 py-5 text-center">
+        <div className="interactive-glow surface-lift mt-10 rounded-2xl border border-navy-700/60 bg-navy-900/40 px-6 py-5 text-center">
           <p className="text-lg font-semibold text-white">Enterprise</p>
           <p className="mt-2 text-sm text-slate-400">
-            Custom pricing for larger teams that need higher limits, stronger security controls, custom onboarding, and SLA-ready support.
+            Custom pricing for larger teams that need higher limits, stronger security controls, custom onboarding, and security review.
           </p>
           <div className="mt-4 flex justify-center">
             <a

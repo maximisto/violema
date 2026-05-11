@@ -7,12 +7,12 @@ const INTEGRATIONS = [
   { name: 'Linear', color: '#5E6AD2', letter: 'L' },
   { name: 'Notion', color: '#ffffff', letter: 'N' },
   { name: 'Slack', color: '#4A154B', letter: 'S' },
-  { name: 'Salesforce', color: '#00A1E0', letter: 'SF' },
-  { name: 'Jira', color: '#0052CC', letter: 'J' },
+  { name: 'Salesforce', color: '#00A1E0', letter: 'SF', status: 'planned' },
+  { name: 'Jira', color: '#0052CC', letter: 'J', status: 'planned' },
   { name: 'Figma', color: '#F24E1E', letter: 'F' },
   { name: 'Vercel', color: '#000000', letter: 'V' },
-  { name: 'AWS', color: '#FF9900', letter: 'A' },
-  { name: 'Postgres', color: '#336791', letter: 'PG' },
+  { name: 'AWS', color: '#FF9900', letter: 'A', status: 'planned' },
+  { name: 'Postgres', color: '#336791', letter: 'PG', status: 'planned' },
 ];
 
 // Duplicate for seamless loop
@@ -23,18 +23,24 @@ interface IntegrationBadgeProps {
   name: string;
   color: string;
   letter: string;
+  status?: string;
 }
 
-function IntegrationBadge({ name, color, letter }: IntegrationBadgeProps) {
+function IntegrationBadge({ name, color, letter, status }: IntegrationBadgeProps) {
   return (
-    <div className="flex items-center gap-2.5 bg-navy-800/80 border border-navy-700/60 rounded-xl px-4 py-3 flex-shrink-0 hover:border-navy-600 transition-colors duration-200 cursor-default">
+    <div className="interactive-glow surface-lift integration-badge group flex items-center gap-2.5 bg-navy-800/80 border border-navy-700/60 rounded-xl px-4 py-3 flex-shrink-0 transition-colors duration-200 cursor-default">
       <div
-        className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0"
+        className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 transition-transform duration-200 group-hover:scale-105"
         style={{ backgroundColor: color === '#ffffff' ? '#1e293b' : `${color}22`, color }}
       >
         {letter}
       </div>
       <span className="text-slate-300 text-sm font-medium whitespace-nowrap">{name}</span>
+      {status ? (
+        <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+          planned
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -49,13 +55,13 @@ export default function Integrations() {
       <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-navy-900 to-transparent z-10 pointer-events-none" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-12 text-center">
-        <p className="text-slate-500 text-sm font-medium uppercase tracking-widest mb-2">Works with your entire stack</p>
+        <p className="text-slate-500 text-sm font-medium uppercase tracking-widest mb-2">Connect the first systems that matter</p>
         <h2 className="text-3xl sm:text-4xl font-bold text-white">
           Start with your
           <span className="gradient-text"> core operating stack</span>
         </h2>
         <p className="mt-4 max-w-2xl mx-auto text-slate-400">
-          Violema works best when it can see the systems that already run your work. Start with the important tools first, then expand the integration layer over time.
+          Start by adding credentials for the systems your first workflow needs. Slack is live today; the setup surface is ready for Stripe, GitHub, Linear, Notion, and CRM/data providers as each adapter is proven.
         </p>
         <button
           type="button"
@@ -67,14 +73,14 @@ export default function Integrations() {
       </div>
 
       {/* Row 1 — scrolls left */}
-      <div className="mb-4 flex gap-3" style={{ animation: 'scrollLeft 40s linear infinite' }}>
+      <div className="integration-marquee mb-4 flex gap-3" style={{ animation: 'scrollLeft 40s linear infinite' }}>
         {ROW1.map((item, i) => (
           <IntegrationBadge key={`r1-${i}`} {...item} />
         ))}
       </div>
 
       {/* Row 2 — scrolls right */}
-      <div className="flex gap-3" style={{ animation: 'scrollRight 45s linear infinite' }}>
+      <div className="integration-marquee flex gap-3" style={{ animation: 'scrollRight 45s linear infinite' }}>
         {ROW2.map((item, i) => (
           <IntegrationBadge key={`r2-${i}`} {...item} />
         ))}

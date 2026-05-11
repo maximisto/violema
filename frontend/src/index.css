@@ -119,6 +119,190 @@
   .bg-noise {
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
   }
+
+  .interactive-glow {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    --mx: 50%;
+    --my: 50%;
+  }
+
+  .interactive-glow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0;
+    background:
+      radial-gradient(circle at var(--mx) var(--my), rgba(168, 85, 247, 0.24), rgba(34, 211, 238, 0.10) 24%, transparent 48%);
+    transition: opacity 220ms ease;
+  }
+
+  .interactive-glow:hover::before,
+  .interactive-glow:focus-within::before {
+    opacity: 1;
+  }
+
+  .interactive-glow > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .surface-lift {
+    transform: translateZ(0);
+    transition:
+      transform 260ms ease,
+      border-color 260ms ease,
+      box-shadow 260ms ease,
+      background-color 260ms ease;
+  }
+
+  .surface-lift:hover,
+  .surface-lift:focus-within {
+    transform: translateY(-3px);
+    box-shadow: 0 22px 50px rgba(2, 6, 23, 0.28);
+  }
+
+  .demo-scanline {
+    position: relative;
+  }
+
+  .demo-scanline::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: linear-gradient(180deg, transparent 0%, rgba(125, 211, 252, 0.09) 48%, transparent 100%);
+    opacity: 0.52;
+    transform: translateY(-100%);
+    animation: scanline 6.5s ease-in-out infinite;
+  }
+
+  .signal-rail {
+    position: relative;
+  }
+
+  .signal-rail::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.9), rgba(34, 211, 238, 0.72), transparent);
+    transform: translateX(-55%) translateY(-50%);
+    opacity: 0;
+    animation: signalSweep 2.6s ease-in-out infinite;
+  }
+
+  .workflow-connector {
+    overflow: hidden;
+  }
+
+  .workflow-connector::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(196, 181, 253, 0.88), transparent);
+    transform: translateX(-100%);
+    animation: drawLine 3.4s ease-in-out infinite;
+  }
+
+  .integration-marquee:hover {
+    animation-play-state: paused !important;
+  }
+
+  .integration-badge {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .integration-badge:hover {
+    border-color: rgba(148, 163, 184, 0.45);
+    background-color: rgba(30, 41, 59, 0.86);
+  }
+
+  .magnetic-arrow {
+    transition: transform 180ms ease;
+  }
+
+  .group:hover .magnetic-arrow,
+  .group:focus-visible .magnetic-arrow {
+    transform: translateX(3px);
+  }
+
+  .staged-message {
+    transition:
+      opacity 420ms ease,
+      transform 420ms ease,
+      filter 420ms ease;
+  }
+}
+
+@keyframes scanline {
+  0%, 18% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  38%, 72% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes signalSweep {
+  0%, 18% {
+    opacity: 0;
+    transform: translateX(-55%) translateY(-50%);
+  }
+  34%, 60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(55%) translateY(-50%);
+  }
+}
+
+@keyframes drawLine {
+  0%, 16% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  34%, 72% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surface-lift,
+  .staged-message,
+  .magnetic-arrow {
+    transition: none !important;
+  }
+
+  .surface-lift:hover,
+  .surface-lift:focus-within {
+    transform: none;
+  }
+
+  .demo-scanline::after,
+  .signal-rail::after,
+  .workflow-connector::after,
+  .integration-marquee,
+  .violema-logo-electric::before,
+  .violema-logo-electric::after {
+    animation: none !important;
+  }
 }
 
 /* Prose / markdown rendering */
@@ -285,72 +469,6 @@
   animation-play-state: paused;
 }
 
-.mobile-header-row {
-  height: 5.2rem;
-}
-
-.violema-header-logo {
-  display: block;
-  height: 4.05rem;
-  width: auto;
-  max-width: calc(100vw - 7.75rem);
-  object-fit: contain;
-  object-position: left center;
-  filter: drop-shadow(0 0 18px rgba(168, 85, 247, 0.16));
-}
-
-.mobile-nav-drawer {
-  min-height: calc(100dvh - 5.2rem);
-  max-height: calc(100dvh - 5.2rem);
-  overflow-y: auto;
-}
-
-.mobile-hero-section {
-  min-height: 100svh;
-  align-items: flex-start;
-  padding-top: 6.45rem;
-  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
-}
-
-.mobile-hero-copy {
-  max-width: 21.5rem;
-}
-
-.mobile-home-cta {
-  position: fixed;
-  z-index: 60;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  border-top: 1px solid rgba(124, 58, 237, 0.36);
-  background: linear-gradient(180deg, rgba(2, 6, 23, 0.82), rgba(2, 6, 23, 0.98));
-  padding: 0.65rem 1rem calc(0.65rem + env(safe-area-inset-bottom));
-  box-shadow: 0 -16px 34px rgba(2, 6, 23, 0.52);
-  backdrop-filter: blur(18px);
-}
-
-@media (min-width: 640px) {
-  .mobile-header-row {
-    height: 5.4rem;
-  }
-
-  .violema-header-logo {
-    height: 4.45rem;
-    max-width: 20rem;
-  }
-
-  .mobile-hero-section {
-    min-height: 100vh;
-    align-items: center;
-    padding-top: 4rem;
-    padding-bottom: 0;
-  }
-
-  .mobile-hero-copy {
-    max-width: 42rem;
-  }
-}
-
 .panel-scroll {
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -438,6 +556,142 @@
   font-weight: 800;
   letter-spacing: -0.05em;
   transform: translateX(-0.04em);
+}
+
+.violema-logo-electric {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.mobile-header-row {
+  height: 5.75rem;
+}
+
+.mobile-header-logo {
+  height: 5.15rem;
+  width: 19rem;
+  max-width: calc(100vw - 78px);
+}
+
+.mobile-nav-drawer {
+  min-height: calc(100dvh - 5.75rem);
+  max-height: calc(100dvh - 5.75rem);
+}
+
+.mobile-hero-section {
+  min-height: 100svh;
+  align-items: flex-start;
+  padding-top: 5.75rem;
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+}
+
+.mobile-hero-copy {
+  max-width: 21.5rem;
+}
+
+@media (min-width: 640px) {
+  .mobile-header-row {
+    height: 5.4rem;
+  }
+
+  .mobile-header-logo {
+    height: 4.6rem;
+    width: 19rem;
+    max-width: none;
+  }
+
+  .mobile-hero-section {
+    min-height: 100vh;
+    align-items: center;
+    padding-top: 4rem;
+    padding-bottom: 0;
+  }
+
+  .mobile-hero-copy {
+    max-width: 42rem;
+  }
+}
+
+.violema-logo-electric img {
+  position: relative;
+  z-index: 1;
+}
+
+.violema-logo-electric::before,
+.violema-logo-electric::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  clip-path: polygon(0 0, 44% 0, 41% 100%, 0 100%);
+  mix-blend-mode: screen;
+  -webkit-mask-image: url('/brand/violema-logo-20260510.png');
+  mask-image: url('/brand/violema-logo-20260510.png');
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.violema-logo-electric::before {
+  opacity: 0.34;
+  background:
+    linear-gradient(102deg, transparent 0 11%, rgba(103, 232, 249, 0.08) 15%, rgba(255, 255, 255, 0.42) 16%, rgba(216, 180, 254, 0.3) 17.2%, transparent 22%),
+    repeating-linear-gradient(102deg, transparent 0 5.8%, rgba(34, 211, 238, 0.06) 6.2%, rgba(255, 255, 255, 0.18) 6.6%, rgba(167, 139, 250, 0.12) 7.1%, transparent 8.5%, transparent 14%),
+    linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.13) 34%, rgba(236, 72, 153, 0.1) 58%, transparent 86%);
+  background-size: 220% 100%, 210% 100%, 180% 100%;
+  filter: drop-shadow(0 0 3px rgba(125, 211, 252, 0.28)) drop-shadow(0 0 8px rgba(168, 85, 247, 0.18));
+  animation: violema-electric-current 8.8s linear infinite;
+}
+
+.violema-logo-electric::after {
+  opacity: 0;
+  background:
+    radial-gradient(circle at 7% 33%, rgba(255, 255, 255, 0.48) 0 1px, transparent 3px),
+    radial-gradient(circle at 13% 58%, rgba(103, 232, 249, 0.42) 0 1px, transparent 3.2px),
+    radial-gradient(circle at 20% 42%, rgba(251, 191, 36, 0.28) 0 0.9px, transparent 3px),
+    radial-gradient(circle at 27% 65%, rgba(216, 180, 254, 0.34) 0 1px, transparent 3.2px),
+    radial-gradient(circle at 35% 48%, rgba(255, 255, 255, 0.32) 0 0.8px, transparent 3px);
+  filter: drop-shadow(0 0 5px rgba(34, 211, 238, 0.3));
+  animation: violema-electric-sparks 7.2s ease-in-out infinite;
+}
+
+@keyframes violema-electric-current {
+  0% {
+    opacity: 0.18;
+    background-position: 112% 50%, 104% 50%, 88% 50%;
+  }
+  32% {
+    opacity: 0.34;
+    background-position: 62% 50%, 56% 50%, 52% 50%;
+  }
+  68% {
+    opacity: 0.28;
+    background-position: 18% 50%, 10% 50%, 20% 50%;
+  }
+  100% {
+    opacity: 0.18;
+    background-position: -42% 50%, -30% 50%, -8% 50%;
+  }
+}
+
+@keyframes violema-electric-sparks {
+  0%, 100% {
+    opacity: 0.08;
+    transform: translateX(0) scale(1);
+  }
+  46% {
+    opacity: 0.16;
+    transform: translateX(0.25%) scale(1.005);
+  }
+  58% {
+    opacity: 0.1;
+    transform: translateX(-0.18%) scale(1);
+  }
 }
 
 /* ── Smooth sidebar collapse ──────────────────────────────────────── */

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, KeyRound, Mail } from 'lucide-react';
-import { beginOAuthFlow, getAuthSession, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
+import { beginOAuthFlow, getAuthSession, isAdminEmail, persistAuthSessionToBackend, saveAuthSession, type AuthMethod } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
@@ -39,17 +39,19 @@ export default function Login() {
     setSubmitting(true);
     setErrorMessage(null);
     persistWorkspaceContext();
+    const session = {
+      email: email.trim(),
+      name: name.trim(),
+      role: isAdminEmail(email) ? 'admin' : existing?.role || 'user',
+      method: existing?.method || 'email',
+      acceptedTerms: true,
+      acceptedEducation: true,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+    } as const;
 
     try {
-      await persistAuthSessionToBackend({
-        email: email.trim(),
-        name: name.trim(),
-        role: existing?.role || 'user',
-        method: existing?.method || 'email',
-        acceptedTerms: true,
-        acceptedEducation: true,
-        createdAt: existing?.createdAt || new Date().toISOString(),
-      });
+      saveAuthSession(session);
+      await persistAuthSessionToBackend(session);
       navigate(next);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Could not sign in');
@@ -112,7 +114,7 @@ export default function Login() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your name"
-                className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40 focus:ring-2 focus:ring-violet-500/50"
+                className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40"
               />
             </label>
             <label className="block">
@@ -123,7 +125,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@company.com"
-                  className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 py-3 pl-11 pr-4 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40 focus:ring-2 focus:ring-violet-500/50"
+                  className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 py-3 pl-11 pr-4 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40"
                 />
               </div>
             </label>

@@ -93,7 +93,13 @@ import {
   routeChatProfile,
   type TextProfile,
 } from './models';
-import { getWorkspaceProviderToken, getWorkspaceSettingsView, upsertWorkspaceSettings } from './settingsStore';
+import {
+  getIntegrationCredential,
+  getWorkspaceProviderToken,
+  getWorkspaceSettingsView,
+  upsertWorkspaceSettings,
+  type IntegrationProvider,
+} from './settingsStore';
 import {
   buildAutomationExperimentAttribution,
   buildAutomationScenarioTelemetry,
@@ -450,6 +456,198 @@ async function testProviderConnection(input: {
   const data = await response.json() as { message?: string };
   if (!response.ok) throw new Error(data.message || 'Mistral test failed');
   return { ok: true, provider: input.provider, mode: 'verified' as const, detail: `Verified with ${process.env.MODEL_MEMORY_TEXT_MODEL?.trim() || 'mistral-embed'}.` };
+}
+
+async function parseIntegrationError(response: globalThis.Response): Promise<string> {
+  const text = await response.text();
+  if (!text) return `HTTP ${response.status}`;
+
+  try {
+    const data = JSON.parse(text) as {
+      message?: string;
+      error?: string | { message?: string };
+      errors?: Array<{ message?: string }>;
+      title?: string;
+    };
+    if (typeof data.error === 'string') return data.error;
+    if (data.error?.message) return data.error.message;
+    if (data.message) return data.message;
+    if (data.title) return data.title;
+    if (data.errors?.length) {
+      return data.errors.map((item) => item.message).filter(Boolean).join('; ') || `HTTP ${response.status}`;
+    }
+  } catch {
+    return text.slice(0, 240);
+  }
+
+  return text.slice(0, 240);
+}
+
+function getIntegrationTestCredential(input: {
+  workspaceId: string;
+  provider: IntegrationProvider;
+  credentials?: Record<string, string>;
+}, field: string) {
+  return input.credentials?.[field]?.trim() || getIntegrationCredential(input.workspaceId, input.provider, field);
+}
+
+async function assertJsonIntegrationResponse(response: globalThis.Response, label: string) {
+  if (!response.ok) {
+    throw new Error(`${label} test failed: ${await parseIntegrationError(response)}`);
+  }
+  return response.json().catch(() => ({})) as Promise<Record<string, unknown>>;
+}
+
+async function testIntegrationConnection(input: {
+  workspaceId: string;
+  provider: IntegrationProvider;
+  credentials?: Record<string, string>;
+}) {
+  if (input.provider === 'github') {
+    const token = getIntegrationTestCredential(input, 'token');
+    if (!token) throw new Error('No GitHub token available.');
+    const response = await fetch('https://api.github.com/user', {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'Violema-Integration-Test',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+    const data = await assertJsonIntegrationResponse(response, 'GitHub');
+    return {
+      ok: true,
+      provider: input.provider,
+      mode: 'verified' as const,
+      detail: `Verified GitHub${typeof data.login === 'string' ? ` as ${data.login}` : ''}.`,
+    };
+  }
+
+  if (input.provider === 'linear') {
+    const apiKey = getIntegrationTestCredential(input, 'apiKey');
+    if (!apiKey) throw new Error('No Linear API key available.');
+    const response = await fetch('https://api.linear.app/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: apiKey,
+      },
+      body: JSON.stringify({ query: 'query ViolemaIntegrationTest { viewer { id name email } }' }),
+    });
+    const data = await assertJsonIntegrationResponse(response, 'Linear');
+    if (Array.isArray(data.errors) && data.errors.length > 0) {
+      throw new Error(`Linear test failed: ${data.errors.map((item) => typeof item === 'object' && item && 'message' in item ? String(item.message) : 'GraphQL error').join('; ')}`);
+    }
+    const viewer = (data.data as Record<string, unknown> | undefined)?.viewer as Record<string, unknown> | undefined;
+    return {
+      ok: true,
+      provider: input.provider,
+      mode: 'verified' as const,
+      detail: `Verified Linear${typeof viewer?.name === 'string' ? ` as ${viewer.name}` : ''}.`,
+    };
+  }
+
+  if (input.provider === 'notion') {
+    const token = getIntegrationTestCredential(input, 'token');
+    if (!token) throw new Error('No Notion integration token available.');
+    const response = await fetch('https://api.notion.com/v1/users/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Notion-Version': '2022-06-28',
+      },
+    });
+    const data = await assertJsonIntegrationResponse(response, 'Notion');
+    return {
+      ok: true,
+      provider: input.provider,
+      mode: 'verified' as const,
+      detail: `Verified Notion${typeof data.name === 'string' ? ` as ${data.name}` : ''}.`,
+    };
+  }
+
+  if (input.provider === 'stripe') {
+    const secretKey = getIntegrationTestCredential(input, 'secretKey');
+    if (!secretKey) throw new Error('No Stripe secret key available.');
+    const response = await fetch('https://api.stripe.com/v1/balance', {
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+      },
+    });
+    await assertJsonIntegrationResponse(response, 'Stripe');
+    return {
+      ok: true,
+      provider: input.provider,
+      mode: 'verified' as const,
+      detail: 'Verified Stripe balance access.',
+    };
+  }
+
+  if (input.provider === 'hubspot') {
+    const token = getIntegrationTestCredential(input, 'token');
+    if (!token) throw new Error('No HubSpot private app token available.');
+    const response = await fetch('https://api.hubapi.com/crm/v3/objects/contacts?limit=1', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    await assertJsonIntegrationResponse(response, 'HubSpot');
+    return {
+      ok: true,
+      provider: input.provider,
+      mode: 'verified' as const,
+      detail: 'Verified HubSpot CRM access.',
+    };
+  }
+
+  if (input.provider === 'airtable') {
+    const token = getIntegrationTestCredential(input, 'token');
+    if (!token) throw new Error('No Airtable token available.');
+    const response = await fetch('https://api.airtable.com/v0/meta/bases', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    await assertJsonIntegrationResponse(response, 'Airtable');
+    return {
+      ok: true,
+      provider: input.provider,
+      mode: 'verified' as const,
+      detail: 'Verified Airtable metadata access.',
+    };
+  }
+
+  if (input.provider === 'figma') {
+    const token = getIntegrationTestCredential(input, 'token');
+    if (!token) throw new Error('No Figma token available.');
+    const response = await fetch('https://api.figma.com/v1/me', {
+      headers: {
+        'X-Figma-Token': token,
+      },
+    });
+    const data = await assertJsonIntegrationResponse(response, 'Figma');
+    return {
+      ok: true,
+      provider: input.provider,
+      mode: 'verified' as const,
+      detail: `Verified Figma${typeof data.email === 'string' ? ` for ${data.email}` : ''}.`,
+    };
+  }
+
+  const token = getIntegrationTestCredential(input, 'token');
+  if (!token) throw new Error('No Vercel token available.');
+  const response = await fetch('https://api.vercel.com/v2/user', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const data = await assertJsonIntegrationResponse(response, 'Vercel');
+  const user = data.user as Record<string, unknown> | undefined;
+  return {
+    ok: true,
+    provider: input.provider,
+    mode: 'verified' as const,
+    detail: `Verified Vercel${typeof user?.username === 'string' ? ` as ${user.username}` : ''}.`,
+  };
 }
 
 async function testModelProfileConnection(input: {
@@ -3643,6 +3841,7 @@ registerAgentStudioSettingsRoutes(app, {
   getModelRoutingStatus,
   upsertWorkspaceSettings,
   testProviderConnection,
+  testIntegrationConnection,
   testModelProfileConnection,
 });
 
