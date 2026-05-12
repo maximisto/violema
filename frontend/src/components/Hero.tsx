@@ -1,6 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { Play, ArrowRight, Sparkles, CheckCircle2, Globe, Slack, Mail } from 'lucide-react';
+import { Play, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useState, useEffect, useRef, type CSSProperties, type PointerEvent } from 'react';
+
+type IconProps = {
+  className?: string;
+};
 
 function useCountUp(target: number, duration = 1800, start = false) {
   const [count, setCount] = useState(0);
@@ -27,6 +31,13 @@ const STATS = [
   { value: 5, suffix: '', label: 'Included seats on Team', prefix: '' },
 ];
 
+const HERO_INTEGRATIONS = [
+  { icon: SlackLogo, label: 'Slack' },
+  { icon: TeamsLogo, label: 'MS Teams' },
+  { icon: WebAppIcon, label: 'Web app' },
+  { icon: EmailIcon, label: 'Email' },
+];
+
 function trackHeroCta(action: 'start_free' | 'sign_in', placement: 'hero' | 'sticky_mobile') {
   const payload = {
     event: 'hero_cta_click',
@@ -39,6 +50,54 @@ function trackHeroCta(action: 'start_free' | 'sign_in', placement: 'hero' | 'sti
     (window as Window & { dataLayer?: unknown[] }).dataLayer?.push(payload);
   }
   console.info('[analytics]', payload);
+}
+
+function SlackLogo({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#36C5F0" d="M8.4 3.2a2.15 2.15 0 0 0-2.15 2.15v4.2a2.15 2.15 0 1 0 4.3 0v-4.2A2.15 2.15 0 0 0 8.4 3.2Z" />
+      <path fill="#2EB67D" d="M20.8 8.4a2.15 2.15 0 0 0-2.15-2.15h-4.2a2.15 2.15 0 1 0 0 4.3h4.2A2.15 2.15 0 0 0 20.8 8.4Z" />
+      <path fill="#ECB22E" d="M15.6 20.8a2.15 2.15 0 0 0 2.15-2.15v-4.2a2.15 2.15 0 1 0-4.3 0v4.2a2.15 2.15 0 0 0 2.15 2.15Z" />
+      <path fill="#E01E5A" d="M3.2 15.6a2.15 2.15 0 0 0 2.15 2.15h4.2a2.15 2.15 0 1 0 0-4.3h-4.2A2.15 2.15 0 0 0 3.2 15.6Z" />
+      <path fill="#36C5F0" d="M6.25 14.45a2.15 2.15 0 0 1 4.3 0v.35h-2.15a2.15 2.15 0 0 1-2.15-2.15v1.8Z" />
+      <path fill="#2EB67D" d="M14.45 6.25a2.15 2.15 0 0 1 0 4.3h-.35V8.4a2.15 2.15 0 0 1 2.15-2.15h-1.8Z" />
+      <path fill="#ECB22E" d="M17.75 9.55a2.15 2.15 0 0 1-4.3 0V9.2h2.15a2.15 2.15 0 0 1 2.15 2.15v-1.8Z" />
+      <path fill="#E01E5A" d="M9.55 17.75a2.15 2.15 0 0 1 0-4.3h.35v2.15a2.15 2.15 0 0 1-2.15 2.15h1.8Z" />
+    </svg>
+  );
+}
+
+function TeamsLogo({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="17.2" cy="7.5" r="2.6" fill="#7B83EB" />
+      <circle cx="19.2" cy="11.1" r="2" fill="#5059C9" />
+      <path fill="#7B83EB" d="M13.5 11.2h5.9a1.7 1.7 0 0 1 1.7 1.7v2.2a4.7 4.7 0 0 1-4.7 4.7h-.2a4.4 4.4 0 0 1-4.4-4.4v-2.5a1.7 1.7 0 0 1 1.7-1.7Z" />
+      <path fill="#5059C9" d="M15.2 12.4h5.9a1.45 1.45 0 0 1 1.45 1.45v1.35a3.55 3.55 0 0 1-3.55 3.55h-.25a3.55 3.55 0 0 1-3.55-3.55v-2.8Z" opacity=".9" />
+      <rect width="10.9" height="10.9" x="2.35" y="6.1" fill="#6264A7" rx="2" />
+      <path fill="#fff" d="M5.15 8.9h5.45v1.25H8.55v4.35H7.2v-4.35H5.15V8.9Z" />
+    </svg>
+  );
+}
+
+function WebAppIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3.5" y="5" width="17" height="14" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M4.2 9h15.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="7" cy="7" r=".8" fill="currentColor" />
+      <circle cx="9.6" cy="7" r=".8" fill="currentColor" opacity=".72" />
+    </svg>
+  );
+}
+
+function EmailIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3.5" y="5.5" width="17" height="13" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="m5.2 8.3 6.8 5.1 6.8-5.1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 const TERMINAL_MESSAGES = [
@@ -239,13 +298,9 @@ export default function Hero() {
             </div>
 
             <div className="mt-3.5 hidden flex-wrap gap-2 sm:mt-5 sm:flex">
-              {[
-                { icon: Slack, label: 'Slack' },
-                { icon: Mail, label: 'Email' },
-                { icon: Globe, label: 'Web app' },
-              ].map(({ icon: Icon, label }) => (
-                <div key={label} className="ui-pill px-3 py-1.5 text-slate-300">
-                  <Icon className="h-3.5 w-3.5" />
+              {HERO_INTEGRATIONS.map(({ icon: Icon, label }) => (
+                <div key={label} className="ui-pill px-3.5 py-1.5 text-[0.72rem] normal-case tracking-normal text-slate-300">
+                  <Icon className="h-4 w-4 flex-shrink-0" />
                   {label}
                 </div>
               ))}
