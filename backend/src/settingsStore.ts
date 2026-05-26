@@ -1,9 +1,15 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import {
+  getIntegrationEnvKeys,
+  getIntegrationFields,
+  INTEGRATION_PROVIDERS,
+  type IntegrationProvider,
+} from './integrationRegistry';
 
 type Provider = 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax';
-export type IntegrationProvider = 'github' | 'linear' | 'notion' | 'stripe' | 'hubspot' | 'airtable' | 'figma' | 'vercel';
+export type { IntegrationProvider } from './integrationRegistry';
 type TextProfile = 'micro' | 'default' | 'hard' | 'critical' | 'ops';
 type EmbeddingProfile = 'memory_text' | 'memory_code';
 
@@ -66,33 +72,12 @@ export interface WorkspaceSettingsView {
 
 const SETTINGS_FILE = path.join(process.cwd(), 'workspace-settings.json');
 const PROVIDERS: Provider[] = ['anthropic', 'openai', 'openrouter', 'mistral', 'minimax'];
-const INTEGRATION_PROVIDERS: IntegrationProvider[] = ['github', 'linear', 'notion', 'stripe', 'hubspot', 'airtable', 'figma', 'vercel'];
 const PROVIDER_ENV_KEYS: Record<Provider, string[]> = {
   anthropic: ['ANTHROPIC_API_KEY'],
   openai: ['OPENAI_API_KEY'],
   openrouter: ['OPENROUTER_API_KEY'],
   mistral: ['MISTRAL_API_KEY'],
   minimax: ['MINIMAX_API_KEY', 'ANTHROPIC_API_KEY'],
-};
-const INTEGRATION_FIELDS: Record<IntegrationProvider, string[]> = {
-  github: ['token'],
-  linear: ['apiKey'],
-  notion: ['token'],
-  stripe: ['secretKey'],
-  hubspot: ['token'],
-  airtable: ['token'],
-  figma: ['token'],
-  vercel: ['token'],
-};
-const INTEGRATION_ENV_KEYS: Record<IntegrationProvider, Record<string, string[]>> = {
-  github: { token: ['GITHUB_TOKEN'] },
-  linear: { apiKey: ['LINEAR_API_KEY'] },
-  notion: { token: ['NOTION_API_KEY', 'NOTION_TOKEN'] },
-  stripe: { secretKey: ['STRIPE_SECRET_KEY'] },
-  hubspot: { token: ['HUBSPOT_ACCESS_TOKEN', 'HUBSPOT_PRIVATE_APP_TOKEN'] },
-  airtable: { token: ['AIRTABLE_ACCESS_TOKEN', 'AIRTABLE_API_KEY'] },
-  figma: { token: ['FIGMA_ACCESS_TOKEN'] },
-  vercel: { token: ['VERCEL_TOKEN'] },
 };
 
 function readStore(): WorkspaceSettingsRecord[] {
@@ -150,7 +135,7 @@ function maskToken(token?: string) {
 }
 
 function getServerIntegrationCredential(provider: IntegrationProvider, field: string) {
-  const envKeys = INTEGRATION_ENV_KEYS[provider]?.[field] || [];
+  const envKeys = getIntegrationEnvKeys(provider, field);
   for (const key of envKeys) {
     const value = process.env[key]?.trim();
     if (value) return value;
@@ -193,7 +178,7 @@ export function getWorkspaceSettingsView(workspaceId: string): WorkspaceSettings
       INTEGRATION_PROVIDERS.map((provider) => {
         const storedFields = record?.integrationCredentials?.[provider] || {};
         const fields = Object.fromEntries(
-          INTEGRATION_FIELDS[provider].map((field) => {
+          getIntegrationFields(provider).map((field) => {
             const encrypted = storedFields[field];
             const decrypted = encrypted ? decryptSecret(encrypted) : undefined;
             const workspaceConfigured = Boolean(encrypted);
@@ -244,7 +229,7 @@ export function getWorkspaceIntegrationCredential(
   provider: IntegrationProvider,
   field: string,
 ): string | undefined {
-  if (!INTEGRATION_FIELDS[provider]?.includes(field)) return undefined;
+  if (!getIntegrationFields(provider).includes(field)) return undefined;
   const encrypted = getWorkspaceSettings(workspaceId)?.integrationCredentials?.[provider]?.[field];
   if (!encrypted) return undefined;
   try {
@@ -309,7 +294,7 @@ export function upsertWorkspaceSettings(input: {
         delete integrationCredentials[provider];
         continue;
       }
-      const allowedFields = INTEGRATION_FIELDS[provider];
+      const allowedFields = getIntegrationFields(provider);
       const existingFields = { ...(integrationCredentials[provider] || {}) };
       for (const field of allowedFields) {
         if (!(field in credentials)) continue;

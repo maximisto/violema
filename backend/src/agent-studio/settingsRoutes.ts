@@ -1,9 +1,19 @@
 import type { Express, Request } from 'express';
+import {
+  getIntegrationFields,
+  INTEGRATION_PROVIDERS,
+  isIntegrationProvider,
+  type IntegrationProvider,
+} from '../integrationRegistry';
 
 type Provider = 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax';
-type IntegrationProvider = 'github' | 'linear' | 'notion' | 'stripe' | 'hubspot' | 'airtable' | 'figma' | 'vercel';
 type Profile = 'micro' | 'default' | 'hard' | 'critical' | 'ops' | 'memory_text' | 'memory_code';
 type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
+const ALLOWED_INTEGRATIONS = new Set<IntegrationProvider>(INTEGRATION_PROVIDERS);
+const ALLOWED_INTEGRATION_FIELDS = Object.fromEntries(
+  INTEGRATION_PROVIDERS.map((provider) => [provider, new Set(getIntegrationFields(provider))]),
+) as Record<IntegrationProvider, Set<string>>;
 
 interface WorkspaceContext {
   workspaceId: string;
@@ -55,17 +65,6 @@ export function registerAgentStudioSettingsRoutes(app: Express, deps: SettingsRo
     };
 
     const allowedProviders = new Set<Provider>(['anthropic', 'openai', 'openrouter', 'mistral', 'minimax']);
-    const allowedIntegrations = new Set<IntegrationProvider>(['github', 'linear', 'notion', 'stripe', 'hubspot', 'airtable', 'figma', 'vercel']);
-    const allowedIntegrationFields: Record<IntegrationProvider, Set<string>> = {
-      github: new Set(['token']),
-      linear: new Set(['apiKey']),
-      notion: new Set(['token']),
-      stripe: new Set(['secretKey']),
-      hubspot: new Set(['token']),
-      airtable: new Set(['token']),
-      figma: new Set(['token']),
-      vercel: new Set(['token']),
-    };
     const allowedProfiles = new Set<Profile>(['micro', 'default', 'hard', 'critical', 'ops', 'memory_text', 'memory_code']);
     const allowedReasoning = new Set<ReasoningEffort>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 
@@ -80,13 +79,13 @@ export function registerAgentStudioSettingsRoutes(app: Express, deps: SettingsRo
     const integrationCredentials = body.integrationCredentials
       ? Object.fromEntries(
           Object.entries(body.integrationCredentials)
-            .filter(([provider]) => allowedIntegrations.has(provider as IntegrationProvider))
+            .filter(([provider]) => isIntegrationProvider(provider))
             .map(([provider, credentials]) => {
               if (!credentials) return [provider, null];
               const providerKey = provider as IntegrationProvider;
               return [provider, Object.fromEntries(
                 Object.entries(credentials)
-                  .filter(([field]) => allowedIntegrationFields[providerKey].has(field))
+                  .filter(([field]) => ALLOWED_INTEGRATION_FIELDS[providerKey].has(field))
                   .map(([field, value]) => [field, typeof value === 'string' ? value.trim() : '']),
               )];
             }),
@@ -184,16 +183,7 @@ export function registerAgentStudioSettingsRoutes(app: Express, deps: SettingsRo
     const { workspaceId } = deps.resolveWorkspaceContext(req);
     const body = (req.body || {}) as { provider?: string; credentials?: Record<string, string> };
     const provider = body.provider as IntegrationProvider | undefined;
-    if (
-      provider !== 'github' &&
-      provider !== 'linear' &&
-      provider !== 'notion' &&
-      provider !== 'stripe' &&
-      provider !== 'hubspot' &&
-      provider !== 'airtable' &&
-      provider !== 'figma' &&
-      provider !== 'vercel'
-    ) {
+    if (!provider || !ALLOWED_INTEGRATIONS.has(provider)) {
       res.status(400).json({ error: 'Unsupported integration provider' });
       return;
     }

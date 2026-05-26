@@ -3,22 +3,25 @@ import { ArrowRight, BellRing, Bot, CheckCircle2, Github, Globe, Layers3, Link2,
 import { Link } from 'react-router-dom';
 import PublicHeader from '../components/PublicHeader';
 
-// Apps the user can connect via Composio's hosted OAuth flow.
-// Composio app names are uppercase; tool names follow APP_ACTION format.
-const COMPOSIO_APPS = [
-  { name: 'slack',    label: 'Slack',    detail: 'Send messages, read channels, post threads' },
-  { name: 'github',   label: 'GitHub',   detail: 'Triage PRs, file issues, search code' },
-  { name: 'linear',   label: 'Linear',   detail: 'Create tasks, sprint reports' },
-  { name: 'notion',   label: 'Notion',   detail: 'Pages, databases, comments' },
-  { name: 'hubspot',  label: 'HubSpot',  detail: 'Contacts, deals, pipeline' },
-  { name: 'gmail',    label: 'Gmail',    detail: 'Send & search email' },
-  { name: 'gcalendar',label: 'Calendar', detail: 'Create events, find time' },
-  { name: 'asana',    label: 'Asana',    detail: 'Tasks, projects, comments' },
-];
+interface PartnerApp {
+  name: string;
+  label: string;
+  detail: string;
+  status?: string;
+}
 
-interface ComposioStatus {
-  enabled: boolean;
-  apps: string[];
+interface IntegrationCatalog {
+  readiness: {
+    headline: string;
+    body: string;
+    stages: Array<{ title: string; body: string }>;
+  };
+  partner: {
+    enabled: boolean;
+    connectedApps: string[];
+    unavailableMessage: string;
+  };
+  partnerApps: PartnerApp[];
 }
 
 const NATIVE_NOW = [
@@ -74,20 +77,44 @@ const CUSTOM = [
 ];
 
 function ComposioConnectSection() {
-  const [status, setStatus] = useState<ComposioStatus | null>(null);
+  const [catalog, setCatalog] = useState<IntegrationCatalog | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetch('/api/integrations/composio/connections', { credentials: 'same-origin' })
+    fetch('/api/integrations/catalog', { credentials: 'same-origin' })
       .then((r) => r.json())
       .then((data) => {
         if (!active) return;
-        setStatus({ enabled: Boolean(data.enabled), apps: Array.isArray(data.apps) ? data.apps : [] });
+        setCatalog({
+          readiness: data.readiness,
+          partner: {
+            enabled: Boolean(data.partner?.enabled),
+            connectedApps: Array.isArray(data.partner?.connectedApps) ? data.partner.connectedApps : [],
+            unavailableMessage: typeof data.partner?.unavailableMessage === 'string'
+              ? data.partner.unavailableMessage
+              : 'Some one-click connectors are temporarily unavailable. Violema can still run native and sample-data workflows while we finish the connector layer.',
+          },
+          partnerApps: Array.isArray(data.partnerApps) ? data.partnerApps : [],
+        });
       })
       .catch(() => {
-        if (active) setStatus({ enabled: false, apps: [] });
+        if (active) {
+          setCatalog({
+            readiness: {
+              headline: 'Workflow readiness, not connector setup',
+              body: 'Connect the tools this workflow needs, approve the boundaries, run a dry test, then let Violema operate with a record you can inspect.',
+              stages: [],
+            },
+            partner: {
+              enabled: false,
+              connectedApps: [],
+              unavailableMessage: 'Some one-click connectors are temporarily unavailable. Violema can still run native and sample-data workflows while we finish the connector layer.',
+            },
+            partnerApps: [],
+          });
+        }
       });
     return () => {
       active = false;
@@ -105,7 +132,7 @@ function ComposioConnectSection() {
         body: JSON.stringify({ appName }),
       });
       const data = await res.json() as { redirectUrl?: string; error?: string };
-      if (!res.ok || !data.redirectUrl) throw new Error(data.error ?? 'Failed to start OAuth');
+      if (!res.ok || !data.redirectUrl) throw new Error('Could not open this connector. Try again or use native setup for now.');
       window.location.assign(data.redirectUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not connect');
@@ -121,24 +148,21 @@ function ComposioConnectSection() {
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Connect your tools</p>
-          <h2 className="mt-1 text-2xl font-semibold text-white">One-click integrations</h2>
+          <h2 className="mt-1 text-2xl font-semibold text-white">Workflow-ready connections</h2>
         </div>
       </div>
 
-      {status === null ? (
+      {catalog === null ? (
         <p className="mt-5 text-sm text-slate-500">Loading available integrations…</p>
-      ) : !status.enabled ? (
+      ) : !catalog.partner.enabled ? (
         <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200/90">
-          <p className="font-semibold">Connector layer not enabled on this server.</p>
-          <p className="mt-1 text-amber-200/70">
-            Set <code className="rounded bg-navy-950 px-1.5 py-0.5 font-mono text-amber-200">COMPOSIO_API_KEY</code> in the backend environment to enable 250+ pre-built integrations.
-            See <code className="font-mono">docs/INTEGRATIONS_ARCHITECTURE.md</code>.
-          </p>
+          <p className="font-semibold">Some one-click connectors are temporarily unavailable.</p>
+          <p className="mt-1 text-amber-200/70">{catalog.partner.unavailableMessage}</p>
         </div>
       ) : (
         <>
           <p className="mt-3 text-sm text-slate-400">
-            Click any tool to authenticate and let Violema use it on your behalf. We never see or store your passwords — OAuth is handled by Composio.
+            Choose the tools this workflow needs. Violema will test access, explain the boundaries, and run a dry check before anything goes live.
           </p>
           {error && (
             <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
@@ -146,8 +170,8 @@ function ComposioConnectSection() {
             </div>
           )}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {COMPOSIO_APPS.map((app) => {
-              const connected = status.apps.includes(app.name);
+            {catalog.partnerApps.map((app) => {
+              const connected = catalog.partner.connectedApps.some((connectedApp) => connectedApp.toLowerCase() === app.name.toLowerCase());
               const isBusy = busy === app.name;
               return (
                 <button

@@ -100,6 +100,7 @@ import {
   upsertWorkspaceSettings,
   type IntegrationProvider,
 } from './settingsStore';
+import { buildIntegrationCatalog } from './integrationRegistry';
 import {
   buildAutomationExperimentAttribution,
   buildAutomationScenarioTelemetry,
@@ -3801,6 +3802,15 @@ app.post('/api/summarize', async (req: Request, res: Response) => {
 });
 
 // ── Composio integration endpoints ────────────────────────────────────────────
+app.get('/api/integrations/catalog', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const partnerEnabled = isComposioEnabled();
+  const connectedPartnerApps = partnerEnabled
+    ? await listConnectedApps({ entityId: workspaceId })
+    : [];
+  res.json(buildIntegrationCatalog({ partnerEnabled, connectedPartnerApps }));
+});
+
 app.get('/api/integrations/composio/status', (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   res.json({ enabled: isComposioEnabled(), workspaceId });
