@@ -65,6 +65,47 @@ const SAMPLE_TASKS = [
   { id: 4, title: 'Anomaly alert: CAC spike', status: 'alert', time: '2h ago', icon: AlertCircle },
 ];
 
+type OAuthProvider = 'google' | 'microsoft';
+
+interface AuthIdentity {
+  id: string;
+  name: string;
+  email: string;
+  provider: OAuthProvider;
+  avatarUrl: string;
+  authenticatedAt: string;
+}
+
+const AUTH_STORAGE_KEY = 'nexus_auth_identity';
+
+function loadStoredIdentity(): AuthIdentity | null {
+  try {
+    const local = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (local) return JSON.parse(local) as AuthIdentity;
+    const session = sessionStorage.getItem(AUTH_STORAGE_KEY);
+    if (session) return JSON.parse(session) as AuthIdentity;
+  } catch {
+    // ignore storage issues
+  }
+  return null;
+}
+
+function persistIdentity(identity: AuthIdentity, rememberDevice: boolean) {
+  const payload = JSON.stringify(identity);
+  if (rememberDevice) {
+    localStorage.setItem(AUTH_STORAGE_KEY, payload);
+    sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    return;
+  }
+  sessionStorage.setItem(AUTH_STORAGE_KEY, payload);
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+}
+
+function clearStoredIdentity() {
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  sessionStorage.removeItem(AUTH_STORAGE_KEY);
+}
+
 // ─── Mode config (single source of truth) ────────────────────────────────────
 
 const MODE_BUTTONS = [
@@ -143,6 +184,11 @@ export default function Dashboard() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [autonomyMode, setAutonomyMode] = useState<AutonomyMode>('cautious');
   const [searchQuery, setSearchQuery] = useState('');
+  const [authLoadingProvider, setAuthLoadingProvider] = useState<OAuthProvider | null>(null);
+  const [authIdentity, setAuthIdentity] = useState<AuthIdentity | null>(() => loadStoredIdentity());
+  const [rememberDevice, setRememberDevice] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
@@ -234,6 +280,72 @@ export default function Dashboard() {
       c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.lastMessage ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const completeMockSignIn = async (provider: OAuthProvider, remember: boolean) => {
+    try {
+      const response = await fetch(`/auth/${provider}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remember }),
+      });
+      const data = await response.json() as { ok: boolean; user?: AuthIdentity; error?: string };
+      if (!response.ok || !data.ok || !data.user) {
+        throw new Error(data.error || 'Authentication failed.');
+      }
+      setAuthIdentity(data.user);
+      persistIdentity(data.user, remember);
+      setAuthNotice(`Signed in with ${provider === 'google' ? 'Google' : 'Microsoft'}.`);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Unable to sign in right now.');
+      setAuthNotice(null);
+      throw error;
+    }
+  };
+
+  const handleOAuthSignIn = async (provider: OAuthProvider) => {
+    setAuthLoadingProvider(provider);
+    setAuthError(null);
+    setAuthNotice(null);
+    try {
+      await completeMockSignIn(provider, rememberDevice);
+    } finally {
+      setAuthLoadingProvider(null);
+    }
+  };
+
+  const handleAuthSignOut = () => {
+    setAuthIdentity(null);
+    setAuthError(null);
+    setAuthNotice(null);
+    clearStoredIdentity();
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const authProvider = params.get('auth');
+    const status = params.get('status');
+    if ((authProvider !== 'google' && authProvider !== 'microsoft') || !status) return;
+
+    const provider = authProvider as OAuthProvider;
+    if (status === 'error') {
+      setAuthError(`Could not complete ${provider} sign-in. Please try again.`);
+      setAuthNotice(null);
+    } else if (status === 'success') {
+      setAuthLoadingProvider(provider);
+      setAuthError(null);
+      completeMockSignIn(provider, true)
+        .catch(() => {
+          // completeMockSignIn already sets authError for display.
+        })
+        .finally(() => setAuthLoadingProvider(null));
+    }
+
+    params.delete('auth');
+    params.delete('status');
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, []);
 
   const ModeSelector = ({ compact = false }: { compact?: boolean }) => (
     <div className={`flex items-center gap-1 bg-navy-800 border border-navy-700 rounded-xl p-1 ${compact ? 'w-full' : ''}`}>
@@ -410,6 +522,72 @@ export default function Dashboard() {
 
           {/* User / settings */}
           <div className="border-t border-navy-800 px-3 py-3 space-y-1">
+            {!authIdentity ? (
+              <div className="mb-2 rounded-xl border border-navy-700/70 bg-navy-800/40 p-2.5">
+                <p className="text-[11px] text-slate-400 mb-2">Sign in to sync history across devices</p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => handleOAuthSignIn('google')}
+                    disabled={authLoadingProvider !== null}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white text-slate-800 hover:bg-slate-100 transition-colors text-xs font-semibold disabled:opacity-60"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.9-5.5 3.9-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.4 14.6 2.5 12 2.5A9.5 9.5 0 1 0 12 21.5c5.5 0 9.1-3.8 9.1-9.2 0-.6-.1-1.1-.2-1.6H12z" />
+                    </svg>
+                    {authLoadingProvider === 'google' ? 'Connecting Google…' : 'Continue with Google'}
+                  </button>
+                  <button
+                    onClick={() => handleOAuthSignIn('microsoft')}
+                    disabled={authLoadingProvider !== null}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[#2f2f2f] text-white hover:bg-[#3a3a3a] transition-colors text-xs font-semibold disabled:opacity-60"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="2" y="2" width="9" height="9" fill="#F25022" />
+                      <rect x="13" y="2" width="9" height="9" fill="#7FBA00" />
+                      <rect x="2" y="13" width="9" height="9" fill="#00A4EF" />
+                      <rect x="13" y="13" width="9" height="9" fill="#FFB900" />
+                    </svg>
+                    {authLoadingProvider === 'microsoft' ? 'Connecting Microsoft…' : 'Continue with Microsoft'}
+                  </button>
+                </div>
+                <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberDevice}
+                    onChange={(event) => setRememberDevice(event.target.checked)}
+                    className="accent-violet-500"
+                  />
+                  Remember this device
+                </label>
+                {authError && (
+                  <p className="text-[11px] text-red-400 mt-2">{authError}</p>
+                )}
+                {authNotice && (
+                  <p className="text-[11px] text-green-400 mt-2">{authNotice}</p>
+                )}
+              </div>
+            ) : (
+              <div className="mb-2 rounded-xl border border-green-800/50 bg-green-950/30 p-2.5">
+                <div className="flex items-center gap-2">
+                  <img src={authIdentity.avatarUrl} alt={authIdentity.name} className="w-6 h-6 rounded-full border border-green-700/60" />
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-green-300 truncate">{authIdentity.name}</p>
+                    <p className="text-[10px] text-green-400/80 truncate">{authIdentity.email}</p>
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <p className="text-[10px] text-green-300/80">
+                    Connected with {authIdentity.provider === 'google' ? 'Google' : 'Microsoft'}
+                  </p>
+                  <button
+                    onClick={handleAuthSignOut}
+                    className="text-[10px] text-green-300 hover:text-white underline underline-offset-2"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            )}
             <button
               onClick={() => {/* settings panel placeholder */}}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-navy-800 hover:text-slate-200 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"

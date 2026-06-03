@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import Anthropic from '@anthropic-ai/sdk';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -24,6 +25,10 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+app.use((req: Request, _res: Response, next: () => void) => {
+  (req as RequestWithCookies).cookies = parseCookieHeader(req.headers.cookie);
+  next();
+});
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -42,6 +47,33 @@ const MODELS = {
   primary: 'claude-sonnet-4-6',
   utility: 'claude-haiku-4-5-20251001',
 } as const;
+
+type OAuthProvider = 'google' | 'microsoft';
+
+interface AuthIdentity {
+  id: string;
+  name: string;
+  email: string;
+  provider: OAuthProvider;
+  avatarUrl: string;
+  authenticatedAt: string;
+}
+
+type RequestWithCookies = Request & { cookies: Record<string, string> };
+
+function parseCookieHeader(cookieHeader?: string): Record<string, string> {
+  if (!cookieHeader) return {};
+  return cookieHeader
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce<Record<string, string>>((acc, item) => {
+      const [rawKey, ...rawValue] = item.split('=');
+      if (!rawKey) return acc;
+      acc[rawKey] = decodeURIComponent(rawValue.join('=') || '');
+      return acc;
+    }, {});
+}
 
 function buildSystemPrompt(autonomyMode: string): string {
   const now = new Date();
@@ -748,6 +780,140 @@ app.post('/api/waitlist', (req: Request, res: Response) => {
 
   console.log(`[waitlist] #${list.length} — ${email}`);
   res.json({ ok: true, duplicate: false, position: list.length });
+});
+
+function getPublicBackendUrl(req: Request) {
+  return process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+}
+
+function getPublicFrontendUrl() {
+  return process.env.PUBLIC_FRONTEND_URL || 'http://localhost:5173';
+}
+
+app.get('/auth/google/start', (req: Request, res: Response) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    res.status(501).json({ ok: false, error: 'GOOGLE_CLIENT_ID is not configured.' });
+    return;
+  }
+
+  const state = crypto.randomUUID();
+  res.cookie('oauth_state_google', state, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 10 * 60 * 1000,
+  });
+
+  const redirectUri = `${getPublicBackendUrl(req)}/auth/google/callback`;
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  authUrl.searchParams.set('client_id', clientId);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', 'openid email profile');
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('access_type', 'offline');
+  authUrl.searchParams.set('prompt', 'consent');
+
+  res.redirect(authUrl.toString());
+});
+
+app.get('/auth/google/callback', (req: Request, res: Response) => {
+  const typedReq = req as RequestWithCookies;
+  const { state, code } = req.query as { state?: string; code?: string };
+  const expectedState = typedReq.cookies.oauth_state_google;
+  const frontendUrl = getPublicFrontendUrl();
+
+  if (!state || !expectedState || state !== expectedState || !code) {
+    res.clearCookie('oauth_state_google');
+    res.redirect(`${frontendUrl}/dashboard?auth=google&status=error`);
+    return;
+  }
+
+  // OAuth token exchange should happen here (authorization code -> tokens/userinfo).
+  // Keeping this as a skeleton endpoint until provider credentials and secure token storage are finalized.
+  res.clearCookie('oauth_state_google');
+  res.redirect(`${frontendUrl}/dashboard?auth=google&status=success`);
+});
+
+app.get('/auth/microsoft/start', (req: Request, res: Response) => {
+  const clientId = process.env.MICROSOFT_CLIENT_ID;
+  const tenantId = process.env.MICROSOFT_TENANT_ID || 'common';
+  if (!clientId) {
+    res.status(501).json({ ok: false, error: 'MICROSOFT_CLIENT_ID is not configured.' });
+    return;
+  }
+
+  const state = crypto.randomUUID();
+  res.cookie('oauth_state_microsoft', state, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 10 * 60 * 1000,
+  });
+
+  const redirectUri = `${getPublicBackendUrl(req)}/auth/microsoft/callback`;
+  const authUrl = new URL(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`);
+  authUrl.searchParams.set('client_id', clientId);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', 'openid profile email offline_access User.Read');
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('prompt', 'select_account');
+
+  res.redirect(authUrl.toString());
+});
+
+app.get('/auth/microsoft/callback', (req: Request, res: Response) => {
+  const typedReq = req as RequestWithCookies;
+  const { state, code } = req.query as { state?: string; code?: string };
+  const expectedState = typedReq.cookies.oauth_state_microsoft;
+  const frontendUrl = getPublicFrontendUrl();
+
+  if (!state || !expectedState || state !== expectedState || !code) {
+    res.clearCookie('oauth_state_microsoft');
+    res.redirect(`${frontendUrl}/dashboard?auth=microsoft&status=error`);
+    return;
+  }
+
+  // OAuth token exchange should happen here (authorization code -> tokens/userinfo).
+  // Keeping this as a skeleton endpoint until provider credentials and secure token storage are finalized.
+  res.clearCookie('oauth_state_microsoft');
+  res.redirect(`${frontendUrl}/dashboard?auth=microsoft&status=success`);
+});
+
+app.post('/auth/:provider', (req: Request, res: Response) => {
+  const provider = req.params.provider as OAuthProvider;
+
+  if (provider !== 'google' && provider !== 'microsoft') {
+    res.status(404).json({ ok: false, error: 'Unsupported auth provider.' });
+    return;
+  }
+
+  const identity: AuthIdentity = provider === 'google'
+    ? {
+        id: 'usr_google_1024',
+        name: 'Alex Morgan',
+        email: 'alex.morgan@gmail.com',
+        provider: 'google',
+        avatarUrl: 'https://api.dicebear.com/9.x/initials/svg?seed=Alex%20Morgan',
+        authenticatedAt: new Date().toISOString(),
+      }
+    : {
+        id: 'usr_microsoft_2048',
+        name: 'Alex Morgan',
+        email: 'alex.morgan@outlook.com',
+        provider: 'microsoft',
+        avatarUrl: 'https://api.dicebear.com/9.x/initials/svg?seed=Alex%20Morgan',
+        authenticatedAt: new Date().toISOString(),
+      };
+
+  res.json({
+    ok: true,
+    provider,
+    user: identity,
+    token: `mock_${provider}_${Date.now()}`,
+  });
 });
 
 app.get('/api/health', (_req: Request, res: Response) => {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, Zap, MessageSquare, Shield, Cpu, CreditCard, Wrench } from 'lucide-react';
+import { ChevronDown, Zap, MessageSquare, Shield, Cpu, CreditCard, Wrench, Search, X } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
@@ -170,12 +170,34 @@ export default function FAQ() {
   const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState('general');
   const [openItems, setOpenItems] = useState<Record<string, boolean>>({ 'general-0': true });
+  const [query, setQuery] = useState('');
 
   const currentCat = CATEGORIES.find((c) => c.id === activeCategory)!;
   const Icon = currentCat.icon;
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleFaqs = currentCat.faqs
+    .map((faq, index) => ({ faq, index }))
+    .filter(({ faq }) =>
+      normalizedQuery.length === 0
+        ? true
+        : `${faq.q} ${faq.a}`.toLowerCase().includes(normalizedQuery)
+    );
 
   function toggle(key: string) {
     setOpenItems((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  const allOpen = visibleFaqs.length > 0
+    && visibleFaqs.every(({ index }) => openItems[`${activeCategory}-${index}`]);
+
+  function toggleAllVisible() {
+    setOpenItems((prev) => {
+      const next = { ...prev };
+      visibleFaqs.forEach(({ index }) => {
+        next[`${activeCategory}-${index}`] = !allOpen;
+      });
+      return next;
+    });
   }
 
   return (
@@ -238,17 +260,58 @@ export default function FAQ() {
           </div>
         </div>
 
+        <div className="mb-6 space-y-3">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={`Search in ${currentCat.label.toLowerCase()} questions...`}
+              className="w-full bg-navy-800/40 border border-navy-700/60 text-slate-200 placeholder:text-slate-500 rounded-xl py-3 pl-11 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/40"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1 rounded-md"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-500">
+              Showing {visibleFaqs.length} of {currentCat.faqs.length} questions
+            </p>
+            {visibleFaqs.length > 0 && (
+              <button
+                onClick={toggleAllVisible}
+                className="text-xs text-violet-400 hover:text-violet-300 font-semibold"
+              >
+                {allOpen ? 'Collapse all' : 'Expand all'}
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* FAQ items */}
         <div className="space-y-3">
-          {currentCat.faqs.map((faq, i) => (
+          {visibleFaqs.map(({ faq, index }) => (
             <AccordionItem
-              key={`${activeCategory}-${i}`}
+              key={`${activeCategory}-${index}`}
               q={faq.q}
               a={faq.a}
-              open={!!openItems[`${activeCategory}-${i}`]}
-              onToggle={() => toggle(`${activeCategory}-${i}`)}
+              open={!!openItems[`${activeCategory}-${index}`]}
+              onToggle={() => toggle(`${activeCategory}-${index}`)}
             />
           ))}
+          {visibleFaqs.length === 0 && (
+            <div className="rounded-xl border border-navy-700/60 bg-navy-800/30 p-6 text-center">
+              <p className="text-slate-300 font-medium mb-2">No matches found</p>
+              <p className="text-sm text-slate-500">Try a different keyword or switch to another category.</p>
+            </div>
+          )}
         </div>
 
         {/* Still have questions CTA */}

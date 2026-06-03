@@ -27,6 +27,26 @@ const STATS = [
   { value: 118, suffix: '%', label: 'Net revenue retention', prefix: '' },
 ];
 
+const MOBILE_HIGHLIGHTS = [
+  { label: 'Live automations', value: '24/7' },
+  { label: 'Task response', value: '< 1s' },
+  { label: 'Teams onboarded', value: '2,000+' },
+];
+
+function trackHeroCta(action: 'start_free' | 'sign_in', placement: 'hero' | 'sticky_mobile') {
+  const payload = {
+    event: 'hero_cta_click',
+    action,
+    placement,
+    ts: new Date().toISOString(),
+  };
+  if (typeof window !== 'undefined') {
+    // Optional analytics integration: GTM-style dataLayer.
+    (window as Window & { dataLayer?: unknown[] }).dataLayer?.push(payload);
+  }
+  console.info('[analytics]', payload);
+}
+
 const TERMINAL_MESSAGES = [
   { role: 'user', content: '@nexus pull the MRR from Stripe and compare to last month' },
   { role: 'nexus', content: '📊 Pulling Stripe data...', type: 'thinking' },
@@ -119,7 +139,7 @@ export default function Hero() {
   }, []);
 
   return (
-    <section className="relative min-h-screen flex items-center pt-16 overflow-hidden">
+    <section className="relative min-h-screen flex items-center pt-16 pb-24 sm:pb-0 overflow-hidden">
       {/* Background gradients */}
       <div className="absolute inset-0 bg-hero-gradient" />
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-violet-700/10 rounded-full blur-3xl pointer-events-none" />
@@ -147,6 +167,21 @@ export default function Hero() {
               <span className="text-slate-400 text-sm">Join 2,000+ teams</span>
             </div>
 
+            {/* Mobile quick highlights */}
+            <div className="sm:hidden mb-7 rounded-2xl border border-violet-700/30 bg-gradient-to-br from-violet-950/50 to-navy-800/70 p-3.5">
+              <p className="text-[11px] uppercase tracking-wider text-violet-300/90 font-semibold mb-3">
+                Why teams switch to Nexus
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {MOBILE_HIGHLIGHTS.map((item) => (
+                  <div key={item.label} className="rounded-xl border border-navy-700/80 bg-navy-900/50 px-2.5 py-2 text-center">
+                    <p className="text-sm font-bold text-white">{item.value}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Headline */}
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-white leading-[1.05] mb-6 tracking-tight">
               Not a tool.
@@ -172,7 +207,10 @@ export default function Hero() {
             {/* CTAs */}
             <div className="flex flex-wrap gap-4">
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => {
+                  trackHeroCta('start_free', 'hero');
+                  navigate('/dashboard');
+                }}
                 className="btn-primary text-base py-3 px-6 shadow-glow-violet animate-glow"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
@@ -249,6 +287,30 @@ export default function Hero() {
               <StatItem key={i} stat={stat} animate={statsVisible} />
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Mobile sticky conversion bar */}
+      <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-violet-800/40 bg-navy-950/95 backdrop-blur-md px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              trackHeroCta('start_free', 'sticky_mobile');
+              navigate('/dashboard');
+            }}
+            className="flex-1 btn-primary justify-center py-2.5 text-sm"
+          >
+            Start free
+          </button>
+          <button
+            onClick={() => {
+              trackHeroCta('sign_in', 'sticky_mobile');
+              navigate('/dashboard');
+            }}
+            className="flex-1 btn-secondary justify-center py-2.5 text-sm"
+          >
+            Sign in
+          </button>
         </div>
       </div>
     </section>

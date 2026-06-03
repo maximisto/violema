@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
 const PO_LOGO = '/po-logo.png';
@@ -7,6 +7,7 @@ const PO_LOGO = '/po-logo.png';
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -15,12 +16,47 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileOpen(false);
+    };
+    window.addEventListener('keydown', onEscape);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onEscape);
+      document.body.style.overflow = '';
+    };
+  }, [mobileOpen]);
+
   const navLinks = [
     { label: 'Product', href: '#features' },
     { label: 'Pricing', href: '#pricing' },
-    { label: 'Docs', href: '#' },
-    { label: 'Blog', href: '#' },
+    { label: 'Compare', href: '#compare' },
+    { label: 'FAQ', href: '/faq' },
   ];
+
+  const handleNavClick = (href: string) => {
+    if (href.startsWith('/')) {
+      navigate(href);
+      return;
+    }
+
+    const sectionId = href.replace('#', '');
+    if (location.pathname !== '/') {
+      navigate('/');
+      window.setTimeout(() => {
+        document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+      return;
+    }
+
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <nav
@@ -52,13 +88,13 @@ export default function Navbar() {
           {/* Desktop nav links */}
           <div className="hidden md:flex items-center gap-8">
             {navLinks.map((link) => (
-              <a
+              <button
                 key={link.label}
-                href={link.href}
+                onClick={() => handleNavClick(link.href)}
                 className="text-slate-400 hover:text-white text-sm font-medium transition-colors duration-200"
               >
                 {link.label}
-              </a>
+              </button>
             ))}
           </div>
 
@@ -98,14 +134,16 @@ export default function Navbar() {
         <div className="md:hidden bg-navy-900/95 backdrop-blur-md border-b border-navy-800">
           <div className="px-4 py-4 space-y-3">
             {navLinks.map((link) => (
-              <a
+              <button
                 key={link.label}
-                href={link.href}
-                className="block text-slate-400 hover:text-white text-sm font-medium transition-colors"
-                onClick={() => setMobileOpen(false)}
+                onClick={() => {
+                  handleNavClick(link.href);
+                  setMobileOpen(false);
+                }}
+                className="block w-full text-left text-slate-400 hover:text-white text-sm font-medium transition-colors"
               >
                 {link.label}
-              </a>
+              </button>
             ))}
             <div className="pt-3 border-t border-navy-800">
               <button
