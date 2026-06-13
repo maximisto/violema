@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Eye, Globe, Lock, Mail, MonitorSmartphone, Slack } from 'lucide-react';
-import { beginOAuthFlow, isAdminEmail, persistAuthSessionToBackend, saveAuthSession, type AuthMethod } from '../lib/auth';
+import { beginOAuthFlow, isAdminEmail, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
@@ -78,7 +78,6 @@ export default function Signup() {
     } as const;
 
     try {
-      saveAuthSession(session);
       await persistAuthSessionToBackend(session);
       navigate(`/connect/slack?next=${encodeURIComponent(nextPath)}`);
     } catch (error) {
@@ -159,7 +158,7 @@ export default function Signup() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Registration</p>
-                <h2 className="mt-2 text-2xl font-semibold text-white">Create your Violema access</h2>
+                <h2 className="mt-2 text-2xl font-semibold text-white">Request Violema beta access</h2>
               </div>
               <Link to="/login" className="text-sm font-medium text-slate-400 transition-colors hover:text-white">
                 Already have access?
@@ -244,14 +243,14 @@ export default function Signup() {
               disabled={!canContinue || submitting}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-glow-violet transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {submitting ? 'Creating account…' : 'Create account'}
+              {submitting ? 'Checking access…' : 'Request access'}
               <ArrowRight className="h-4 w-4" />
             </button>
             {errorMessage ? (
               <p className="mt-3 text-center text-sm text-rose-300">{errorMessage}</p>
             ) : null}
             <p className="mt-3 text-center text-xs text-slate-500">
-              Access now creates a real session for this workspace, whether you continue with email, Google, or Microsoft.
+              Access is manually approved. Approved beta users continue into setup; everyone else stays outside the workspace.
             </p>
           </div>
         </div>

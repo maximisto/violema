@@ -32,9 +32,50 @@ export interface AuthSessionRecord {
 const USERS_FILE = path.join(process.cwd(), 'auth-users.json');
 const SESSIONS_FILE = path.join(process.cwd(), 'auth-sessions.json');
 const THIRTY_DAYS_MS = 1000 * 60 * 60 * 24 * 30;
+const DEFAULT_APPROVED_ACCESS_EMAILS = ['max@purpleorange.io', 'max@violema.com'];
+const ACCESS_DENIED_MESSAGE =
+  'Violema beta access is manually approved right now. Your request is recorded, but this email is not approved yet.';
+
+export class AuthAccessDeniedError extends Error {
+  statusCode = 403;
+  code = 'access_not_approved';
+
+  constructor(message = ACCESS_DENIED_MESSAGE) {
+    super(message);
+    this.name = 'AuthAccessDeniedError';
+  }
+}
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function parseEmailList(value: string | undefined) {
+  return (value || '')
+    .split(',')
+    .map((item) => normalizeEmail(item))
+    .filter(Boolean);
+}
+
+export function getApprovedAccessEmails() {
+  return new Set([
+    ...DEFAULT_APPROVED_ACCESS_EMAILS,
+    ...parseEmailList(process.env.ADMIN_EMAILS),
+    ...parseEmailList(process.env.TEST_CREDIT_ADMIN_EMAILS),
+    ...parseEmailList(process.env.VIOLEMA_APPROVED_EMAILS),
+    ...parseEmailList(process.env.AUTH_APPROVED_EMAILS),
+    ...parseEmailList(process.env.BETA_ACCESS_EMAILS),
+  ]);
+}
+
+export function isEmailApprovedForAccess(email: string) {
+  return getApprovedAccessEmails().has(normalizeEmail(email));
+}
+
+export function assertEmailApprovedForAccess(email: string) {
+  if (!isEmailApprovedForAccess(email)) {
+    throw new AuthAccessDeniedError();
+  }
 }
 
 function readUsers() {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, KeyRound, Mail } from 'lucide-react';
-import { beginOAuthFlow, getAuthSession, isAdminEmail, persistAuthSessionToBackend, saveAuthSession, type AuthMethod } from '../lib/auth';
+import { beginOAuthFlow, getAuthSession, isAdminEmail, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
@@ -50,7 +50,6 @@ export default function Login() {
     } as const;
 
     try {
-      saveAuthSession(session);
       await persistAuthSessionToBackend(session);
       navigate(next);
     } catch (error) {
@@ -81,7 +80,7 @@ export default function Login() {
           </div>
           <h1 className="mt-6 text-3xl font-bold text-white">Return to your workspace</h1>
           <p className="mt-3 text-slate-400">
-            Use the same email you used during setup. This lightweight sign-in restores your local workspace access on this device.
+            Use an approved beta email. Violema checks access on the server before opening the workspace.
           </p>
 
           <div className="mt-6">
@@ -137,7 +136,7 @@ export default function Login() {
             disabled={!/\S+@\S+\.\S+/.test(email) || name.trim().length < 2 || submitting}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-glow-violet transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? 'Signing in…' : 'Open workspace'}
+            {submitting ? 'Checking access…' : 'Continue'}
             <ArrowRight className="h-4 w-4" />
           </button>
 

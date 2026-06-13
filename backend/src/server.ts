@@ -6,6 +6,8 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import {
+  AuthAccessDeniedError,
+  assertEmailApprovedForAccess,
   clearAuthSession as clearPersistedAuthSession,
   createAuthSession,
   getAuthUserByToken,
@@ -805,6 +807,10 @@ function getAdminEmailAllowlist() {
     .filter(Boolean);
 
   return new Set(configured.length > 0 ? configured : DEFAULT_ADMIN_EMAILS);
+}
+
+function isAuthAccessDenied(error: unknown): error is AuthAccessDeniedError {
+  return error instanceof AuthAccessDeniedError;
 }
 
 function assertAdminAccess(req: Request) {
@@ -4095,6 +4101,8 @@ app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
       return;
     }
 
+    assertEmailApprovedForAccess(email);
+
     const role = getAdminEmailAllowlist().has(normalizeEmail(email)) ? 'admin' : 'user';
     const user = upsertAuthUser({
       email,
@@ -4132,6 +4140,17 @@ app.get('/api/auth/session', (req: Request, res: Response) => {
     return;
   }
 
+  try {
+    assertEmailApprovedForAccess(record.user.email);
+  } catch (error) {
+    res.setHeader('Set-Cookie', getAuthCookieOptions());
+    res.status(isAuthAccessDenied(error) ? error.statusCode : 403).json({
+      error: error instanceof Error ? error.message : 'Access is not approved',
+      code: isAuthAccessDenied(error) ? error.code : 'access_not_approved',
+    });
+    return;
+  }
+
   res.json({
     ok: true,
     user: record.user,
@@ -4157,6 +4176,16 @@ app.post('/api/auth/session', (req: Request, res: Response) => {
 
   if (!name || name.length < 2) {
     res.status(400).json({ error: 'Valid name is required' });
+    return;
+  }
+
+  try {
+    assertEmailApprovedForAccess(email);
+  } catch (error) {
+    res.status(isAuthAccessDenied(error) ? error.statusCode : 403).json({
+      error: error instanceof Error ? error.message : 'Access is not approved',
+      code: isAuthAccessDenied(error) ? error.code : 'access_not_approved',
+    });
     return;
   }
 
@@ -4192,6 +4221,17 @@ app.patch('/api/auth/session', (req: Request, res: Response) => {
   if (!record) {
     res.setHeader('Set-Cookie', getAuthCookieOptions());
     res.status(401).json({ error: 'Session expired' });
+    return;
+  }
+
+  try {
+    assertEmailApprovedForAccess(record.user.email);
+  } catch (error) {
+    res.setHeader('Set-Cookie', getAuthCookieOptions());
+    res.status(isAuthAccessDenied(error) ? error.statusCode : 403).json({
+      error: error instanceof Error ? error.message : 'Access is not approved',
+      code: isAuthAccessDenied(error) ? error.code : 'access_not_approved',
+    });
     return;
   }
 
