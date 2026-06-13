@@ -11,6 +11,7 @@ import {
   clearAuthSession as clearPersistedAuthSession,
   createAuthSession,
   getAuthUserByToken,
+  requestBetaAccess,
   type AuthMethod as PersistedAuthMethod,
   upsertAuthUser,
 } from './auth';
@@ -4215,6 +4216,12 @@ app.post('/api/auth/session', (req: Request, res: Response) => {
   try {
     assertEmailApprovedForAccess(email);
   } catch (error) {
+    requestBetaAccess({
+      email,
+      name,
+      method,
+      note: 'Email session request',
+    });
     res.status(isAuthAccessDenied(error) ? error.statusCode : 403).json({
       error: error instanceof Error ? error.message : 'Access is not approved',
       code: isAuthAccessDenied(error) ? error.code : 'access_not_approved',

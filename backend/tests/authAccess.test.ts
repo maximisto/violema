@@ -4,6 +4,13 @@ import {
   assertEmailApprovedForAccess,
   isEmailApprovedForAccess,
 } from '../src/auth';
+import {
+  clearAdminAccessRecords,
+  getAccessRecord,
+  listAdminAuditEvents,
+  recordAccessRequest,
+  setAccessStatus,
+} from '../src/adminAccessStore';
 import { isPublicBetaApiPath } from '../src/betaAccess';
 
 test('auth access defaults to manual approval', async () => {
@@ -41,6 +48,51 @@ test('auth access accepts explicit beta allowlist entries', async () => {
     assert.equal(isEmailApprovedForAccess('INVESTOR@example.com'), true);
     assert.equal(isEmailApprovedForAccess('outsider@example.com'), false);
   } finally {
+    if (originalApproved === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
+    else process.env.VIOLEMA_APPROVED_EMAILS = originalApproved;
+  }
+});
+
+test('persistent admin access records requests, approvals, revokes, and audit events', () => {
+  const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
+  delete process.env.VIOLEMA_APPROVED_EMAILS;
+  clearAdminAccessRecords();
+
+  try {
+    const requested = recordAccessRequest({
+      email: 'founder@example.com',
+      name: 'Founder Example',
+      method: 'email',
+      note: 'Signup request',
+    });
+    assert.equal(requested.status, 'requested');
+    assert.equal(isEmailApprovedForAccess('founder@example.com'), false);
+
+    const approved = setAccessStatus({
+      email: 'founder@example.com',
+      status: 'approved',
+      role: 'user',
+      note: 'Approved for beta',
+      updatedBy: 'max@violema.com',
+    });
+    assert.equal(approved.status, 'approved');
+    assert.equal(isEmailApprovedForAccess('FOUNDER@example.com'), true);
+
+    const revoked = setAccessStatus({
+      email: 'founder@example.com',
+      status: 'revoked',
+      note: 'No longer in beta',
+      updatedBy: 'max@violema.com',
+    });
+    assert.equal(revoked.status, 'revoked');
+    assert.equal(isEmailApprovedForAccess('founder@example.com'), false);
+
+    const record = getAccessRecord('founder@example.com');
+    assert.equal(record?.name, 'Founder Example');
+    assert.equal(record?.status, 'revoked');
+    assert.ok(listAdminAuditEvents().some((event) => event.action === 'access.revoked'));
+  } finally {
+    clearAdminAccessRecords();
     if (originalApproved === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
     else process.env.VIOLEMA_APPROVED_EMAILS = originalApproved;
   }

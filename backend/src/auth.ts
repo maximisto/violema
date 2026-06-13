@@ -1,6 +1,11 @@
 import crypto from 'crypto';
 import path from 'path';
 import { readJsonFile, writeJsonFile } from './platform/jsonStore';
+import {
+  getAccessRecord,
+  listAdminAccessRecords,
+  recordAccessRequest,
+} from './adminAccessStore';
 
 export type AuthMethod = 'email' | 'google' | 'microsoft';
 export type AccessRole = 'user' | 'admin';
@@ -69,7 +74,11 @@ export function getApprovedAccessEmails() {
 }
 
 export function isEmailApprovedForAccess(email: string) {
-  return getApprovedAccessEmails().has(normalizeEmail(email));
+  const normalized = normalizeEmail(email);
+  const persistent = getAccessRecord(normalized);
+  if (persistent?.status === 'revoked') return false;
+  if (persistent?.status === 'approved') return true;
+  return getApprovedAccessEmails().has(normalized);
 }
 
 export function assertEmailApprovedForAccess(email: string) {
@@ -82,6 +91,10 @@ function readUsers() {
   return readJsonFile<AuthUserRecord[]>(USERS_FILE, []);
 }
 
+export function listAuthUsers() {
+  return readUsers();
+}
+
 function writeUsers(users: AuthUserRecord[]) {
   writeJsonFile(USERS_FILE, users);
 }
@@ -90,8 +103,38 @@ function readSessions() {
   return readJsonFile<AuthSessionRecord[]>(SESSIONS_FILE, []);
 }
 
+export function listAuthSessions() {
+  return readSessions().filter((session) => session.expiresAt > new Date().toISOString());
+}
+
 function writeSessions(sessions: AuthSessionRecord[]) {
   writeJsonFile(SESSIONS_FILE, sessions);
+}
+
+export function requestBetaAccess(input: {
+  email: string;
+  name?: string;
+  method?: AuthMethod;
+  note?: string;
+}) {
+  return recordAccessRequest(input);
+}
+
+export function getPersistentApprovedAccessEmails() {
+  return listAdminAccessRecords()
+    .filter((record) => record.status === 'approved')
+    .map((record) => record.email);
+}
+
+export function clearAuthSessionsForEmail(email: string) {
+  const normalized = normalizeEmail(email);
+  const users = readUsers();
+  const user = users.find((item) => item.email === normalized);
+  if (!user) return 0;
+  const sessions = readSessions();
+  const next = sessions.filter((session) => session.userId !== user.id);
+  writeSessions(next);
+  return sessions.length - next.length;
 }
 
 function hashToken(token: string) {
