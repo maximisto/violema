@@ -108,6 +108,10 @@ export function resolveAuthRole(email: string): AccessRole {
   return getAdminAccessEmails().has(normalized) ? 'admin' : 'user';
 }
 
+export function isEmailAdminForAccess(email: string) {
+  return isEmailApprovedForAccess(email) && resolveAuthRole(email) === 'admin';
+}
+
 export function assertEmailApprovedForAccess(email: string) {
   if (!isEmailApprovedForAccess(email)) {
     throw new AuthAccessDeniedError();

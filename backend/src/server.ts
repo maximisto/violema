@@ -11,6 +11,7 @@ import {
   clearAuthSession as clearPersistedAuthSession,
   createAuthSession,
   getAuthUserByToken,
+  isEmailAdminForAccess,
   requestBetaAccess,
   resolveAuthRole,
   type AuthMethod as PersistedAuthMethod,
@@ -833,10 +834,23 @@ function isAuthAccessDenied(error: unknown): error is AuthAccessDeniedError {
   return error instanceof AuthAccessDeniedError;
 }
 
+function recordDeniedBetaAccessRequest(input: {
+  email: string;
+  name: string;
+  method: PersistedAuthMethod;
+  note: string;
+}) {
+  try {
+    requestBetaAccess(input);
+  } catch {
+    console.warn('Failed to record denied beta access request.');
+  }
+}
+
 function assertAdminAccess(req: Request) {
   const token = parseCookieValue(req, AUTH_COOKIE_NAME);
   const record = token ? getAuthUserByToken(token) : null;
-  if (!record || record.user.role !== 'admin') {
+  if (!record || !isEmailAdminForAccess(record.user.email)) {
     const error = new Error('Admin access required');
     (error as Error & { statusCode?: number }).statusCode = 403;
     throw error;
@@ -4037,10 +4051,11 @@ app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
     return;
   }
 
+  let email = '';
+  let name = '';
+
   try {
     const callbackUrl = buildOAuthCallbackUrl(req, provider);
-    let email = '';
-    let name = '';
 
     if (provider === 'google') {
       const config = getGoogleOAuthConfig();
@@ -4136,6 +4151,14 @@ app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
     res.setHeader('Set-Cookie', buildAuthCookie(token));
     res.redirect(`${origin}${state.next}`);
   } catch (error) {
+    if (isAuthAccessDenied(error) && email) {
+      recordDeniedBetaAccessRequest({
+        email,
+        name,
+        method: provider,
+        note: 'OAuth session request',
+      });
+    }
     redirectToAuthError(
       res,
       origin,
@@ -4202,16 +4225,12 @@ app.post('/api/auth/session', (req: Request, res: Response) => {
   try {
     assertEmailApprovedForAccess(email);
   } catch (error) {
-    try {
-      requestBetaAccess({
-        email,
-        name,
-        method,
-        note: 'Email session request',
-      });
-    } catch {
-      console.warn('Failed to record denied beta access request.');
-    }
+    recordDeniedBetaAccessRequest({
+      email,
+      name,
+      method,
+      note: 'Email session request',
+    });
     res.status(isAuthAccessDenied(error) ? error.statusCode : 403).json({
       error: error instanceof Error ? error.message : 'Access is not approved',
       code: isAuthAccessDenied(error) ? error.code : 'access_not_approved',

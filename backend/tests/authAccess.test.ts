@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   assertEmailApprovedForAccess,
+  isEmailAdminForAccess,
   isEmailApprovedForAccess,
   resolveAuthRole,
 } from '../src/auth';
@@ -17,15 +18,6 @@ import {
 } from '../src/adminAccessStore';
 import { isPublicBetaApiPath } from '../src/betaAccess';
 
-const initialTestCwd = process.cwd();
-const adminStoreFileNames = ['admin-access.json', 'admin-audit-events.json'];
-
-function removeAdminStoreFiles(directory: string) {
-  for (const fileName of adminStoreFileNames) {
-    fs.rmSync(path.join(directory, fileName), { force: true });
-  }
-}
-
 function withTempAdminStore(run: () => void) {
   const originalCwd = process.cwd();
   const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'violema-auth-access-'));
@@ -36,7 +28,6 @@ function withTempAdminStore(run: () => void) {
   } finally {
     process.chdir(originalCwd);
     fs.rmSync(tempDirectory, { recursive: true, force: true });
-    removeAdminStoreFiles(initialTestCwd);
   }
 }
 
@@ -183,7 +174,9 @@ test('persistent approved role overrides default role resolution', () => withTem
 
   try {
     assert.equal(resolveAuthRole('max@violema.com'), 'admin');
+    assert.equal(isEmailAdminForAccess('max@violema.com'), true);
     assert.equal(resolveAuthRole('founder@example.com'), 'user');
+    assert.equal(isEmailAdminForAccess('founder@example.com'), false);
 
     setAccessStatus({
       email: 'founder@example.com',
@@ -192,6 +185,7 @@ test('persistent approved role overrides default role resolution', () => withTem
       updatedBy: 'max@violema.com',
     });
     assert.equal(resolveAuthRole('founder@example.com'), 'admin');
+    assert.equal(isEmailAdminForAccess('founder@example.com'), true);
 
     setAccessStatus({
       email: 'max@violema.com',
@@ -200,6 +194,14 @@ test('persistent approved role overrides default role resolution', () => withTem
       updatedBy: 'max@violema.com',
     });
     assert.equal(resolveAuthRole('max@violema.com'), 'user');
+    assert.equal(isEmailAdminForAccess('max@violema.com'), false);
+
+    setAccessStatus({
+      email: 'founder@example.com',
+      status: 'revoked',
+      updatedBy: 'max@violema.com',
+    });
+    assert.equal(isEmailAdminForAccess('founder@example.com'), false);
   } finally {
     clearAdminAccessRecords();
   }
