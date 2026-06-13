@@ -36,6 +36,17 @@ export interface AdminAuditEvent {
 
 const MAX_NAME_LENGTH = 160;
 const MAX_NOTE_LENGTH = 1000;
+const ACCESS_STATUSES = new Set<AdminAccessStatus>(['requested', 'approved', 'revoked']);
+const ACCESS_ROLES = new Set<AdminAccessRole>(['user', 'admin']);
+const AUTH_METHODS = new Set<NonNullable<AdminAccessRecord['method']>>(['email', 'google', 'microsoft']);
+const AUDIT_ACTIONS = new Set<AdminAuditAction>([
+  'access.requested',
+  'access.approved',
+  'access.revoked',
+  'role.promoted',
+  'role.demoted',
+  'credits.adjusted',
+]);
 
 function getAccessFile() {
   return path.join(process.cwd(), 'admin-access.json');
@@ -55,7 +66,23 @@ function trimBounded(value: string | undefined, maxLength: number) {
   return trimmed.slice(0, maxLength);
 }
 
-function readJsonArrayStrict<T>(filePath: string, label: string): T[] {
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function optionalString(value: unknown) {
+  return value === undefined || typeof value === 'string';
+}
+
+function optionalMetadata(value: unknown) {
+  return value === undefined || isPlainRecord(value);
+}
+
+function readJsonArrayStrict<T>(
+  filePath: string,
+  label: string,
+  validate: (row: unknown, index: number) => T,
+): T[] {
   if (!fs.existsSync(filePath)) return [];
 
   try {
@@ -63,7 +90,7 @@ function readJsonArrayStrict<T>(filePath: string, label: string): T[] {
     if (!Array.isArray(value)) {
       throw new Error(`${label} must contain a JSON array`);
     }
-    return value as T[];
+    return value.map((row, index) => validate(row, index));
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'Unknown read error';
     throw new Error(`Invalid ${label} store at ${filePath}: ${detail}`);
@@ -71,7 +98,25 @@ function readJsonArrayStrict<T>(filePath: string, label: string): T[] {
 }
 
 function readAccessRecords() {
-  return readJsonArrayStrict<AdminAccessRecord>(getAccessFile(), 'admin access');
+  const seenEmails = new Set<string>();
+  return readJsonArrayStrict<AdminAccessRecord>(getAccessFile(), 'admin access', (row, index) => {
+    if (!isPlainRecord(row)) throw new Error(`row ${index} must be an object`);
+    const email = typeof row.email === 'string' ? row.email : '';
+    if (!email || email !== normalizeEmail(email)) throw new Error(`row ${index} has invalid email`);
+    if (seenEmails.has(email)) throw new Error(`row ${index} duplicates email ${email}`);
+    seenEmails.add(email);
+    if (!ACCESS_STATUSES.has(row.status as AdminAccessStatus)) throw new Error(`row ${index} has invalid status`);
+    if (!ACCESS_ROLES.has(row.role as AdminAccessRole)) throw new Error(`row ${index} has invalid role`);
+    if (typeof row.createdAt !== 'string') throw new Error(`row ${index} has invalid createdAt`);
+    if (typeof row.updatedAt !== 'string') throw new Error(`row ${index} has invalid updatedAt`);
+    if (!optionalString(row.name)) throw new Error(`row ${index} has invalid name`);
+    if (row.method !== undefined && !AUTH_METHODS.has(row.method as NonNullable<AdminAccessRecord['method']>)) {
+      throw new Error(`row ${index} has invalid method`);
+    }
+    if (!optionalString(row.note)) throw new Error(`row ${index} has invalid note`);
+    if (!optionalString(row.updatedBy)) throw new Error(`row ${index} has invalid updatedBy`);
+    return row as unknown as AdminAccessRecord;
+  });
 }
 
 function writeAccessRecords(records: AdminAccessRecord[]) {
@@ -79,7 +124,17 @@ function writeAccessRecords(records: AdminAccessRecord[]) {
 }
 
 function readAuditEvents() {
-  return readJsonArrayStrict<AdminAuditEvent>(getAuditFile(), 'admin audit events');
+  return readJsonArrayStrict<AdminAuditEvent>(getAuditFile(), 'admin audit events', (row, index) => {
+    if (!isPlainRecord(row)) throw new Error(`row ${index} must be an object`);
+    if (typeof row.id !== 'string' || !row.id) throw new Error(`row ${index} has invalid id`);
+    if (typeof row.actorEmail !== 'string' || !row.actorEmail) throw new Error(`row ${index} has invalid actorEmail`);
+    if (!AUDIT_ACTIONS.has(row.action as AdminAuditAction)) throw new Error(`row ${index} has invalid action`);
+    if (typeof row.createdAt !== 'string') throw new Error(`row ${index} has invalid createdAt`);
+    if (!optionalString(row.targetEmail)) throw new Error(`row ${index} has invalid targetEmail`);
+    if (!optionalString(row.workspaceId)) throw new Error(`row ${index} has invalid workspaceId`);
+    if (!optionalMetadata(row.metadata)) throw new Error(`row ${index} has invalid metadata`);
+    return row as unknown as AdminAuditEvent;
+  });
 }
 
 function writeAuditEvents(events: AdminAuditEvent[]) {
@@ -141,9 +196,6 @@ export function recordAccessRequest(input: {
     updatedBy: existing?.updatedBy,
   };
 
-  if (index >= 0) records[index] = next;
-  else records.unshift(next);
-  writeAccessRecords(records);
   if (isNewRequest) {
     recordAdminAuditEvent({
       actorEmail: 'system',
@@ -152,6 +204,10 @@ export function recordAccessRequest(input: {
       metadata: { method: next.method, name: next.name },
     });
   }
+
+  if (index >= 0) records[index] = next;
+  else records.unshift(next);
+  writeAccessRecords(records);
   return next;
 }
 

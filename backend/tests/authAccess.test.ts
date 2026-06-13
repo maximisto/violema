@@ -87,6 +87,29 @@ test('malformed admin access store fails closed for default and env allowlists',
   }
 }));
 
+test('invalid admin access row fails closed for default and env allowlists', () => withTempAdminStore(() => {
+  const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
+  process.env.VIOLEMA_APPROVED_EMAILS = 'founder@example.com';
+
+  try {
+    fs.writeFileSync(path.join(process.cwd(), 'admin-access.json'), JSON.stringify([
+      {
+        email: 'max@violema.com',
+        status: 'invalid',
+        role: 'admin',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]));
+
+    assert.equal(isEmailApprovedForAccess('max@violema.com'), false);
+    assert.equal(isEmailApprovedForAccess('founder@example.com'), false);
+  } finally {
+    if (originalApproved === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
+    else process.env.VIOLEMA_APPROVED_EMAILS = originalApproved;
+  }
+}));
+
 test('production blocks unverified email session minting unless explicitly enabled', () => {
   assert.equal(isUnverifiedEmailSessionAllowed({ NODE_ENV: 'development' }), true);
   assert.equal(isUnverifiedEmailSessionAllowed({ NODE_ENV: 'test' }), true);
@@ -167,6 +190,27 @@ test('malformed audit store prevents access status mutation', () => withTempAdmi
       /Invalid admin audit events store/,
     );
     assert.equal(getAccessRecord('founder@example.com')?.status, 'requested');
+  } finally {
+    clearAdminAccessRecords();
+  }
+}));
+
+test('malformed audit store prevents new access request creation', () => withTempAdminStore(() => {
+  clearAdminAccessRecords();
+
+  try {
+    fs.writeFileSync(path.join(process.cwd(), 'admin-audit-events.json'), '{malformed');
+
+    assert.throws(
+      () => recordAccessRequest({
+        email: 'founder@example.com',
+        name: 'Founder Example',
+        method: 'email',
+        note: 'Signup request',
+      }),
+      /Invalid admin audit events store/,
+    );
+    assert.equal(getAccessRecord('founder@example.com'), null);
   } finally {
     clearAdminAccessRecords();
   }
