@@ -241,7 +241,7 @@ test('admin route input validation rejects invalid access mutations', async () =
     () => routes.parseAdminAccessRole('owner'),
     /role must be admin or user/,
   );
-  assert.equal(routes.parseAdminAccessRole(undefined), 'user');
+  assert.equal(routes.parseAdminAccessRole(undefined), undefined);
   assert.equal(routes.parseAdminAccessRole('admin'), 'admin');
 
   assert.throws(
@@ -319,6 +319,36 @@ test('admin role updates preserve existing access status', async () => {
 
     const auditActions = access.listAdminAuditEvents(10).map((event) => event.action);
     assert.ok(auditActions.includes('role.promoted'));
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('admin access status updates preserve existing role when role is omitted', async () => {
+  const originalCwd = process.cwd();
+  const tempDir = mkdtempSync(path.join(tmpdir(), 'violema-admin-access-role-preserve-'));
+
+  try {
+    process.chdir(tempDir);
+    const access = await import('../src/adminAccessStore');
+    const routes = await import('../src/adminRoutes');
+
+    access.setAccessStatus({
+      email: 'admin@example.com',
+      status: 'approved',
+      role: 'admin',
+      updatedBy: 'max@violema.com',
+    });
+    const updated = access.setAccessStatus({
+      email: 'admin@example.com',
+      status: 'revoked',
+      role: routes.parseAdminAccessRole(undefined),
+      updatedBy: 'max@violema.com',
+    });
+
+    assert.equal(updated.status, 'revoked');
+    assert.equal(updated.role, 'admin');
   } finally {
     process.chdir(originalCwd);
     rmSync(tempDir, { recursive: true, force: true });

@@ -28,8 +28,8 @@ export function parseAdminAccessStatus(value: unknown): AdminAccessStatus {
   throw new Error('status must be approved or revoked');
 }
 
-export function parseAdminAccessRole(value: unknown): AdminAccessRole {
-  if (value === undefined || value === null || value === '') return 'user';
+export function parseAdminAccessRole(value: unknown): AdminAccessRole | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
   if (value === 'admin' || value === 'user') return value;
   throw new Error('role must be admin or user');
 }
