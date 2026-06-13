@@ -6,7 +6,7 @@ import {
   buildAdminWorkspaces,
   buildWorkspaceAdminDetail,
 } from './adminDashboard';
-import { setAccessStatus, type AdminAccessRole, type AdminAccessStatus } from './adminAccessStore';
+import { setAccessRole, setAccessStatus, type AdminAccessRole, type AdminAccessStatus } from './adminAccessStore';
 import { clearAuthSessionsForEmail } from './auth';
 
 export interface AdminActor {
@@ -30,6 +30,11 @@ export function parseAdminAccessStatus(value: unknown): AdminAccessStatus {
 
 export function parseAdminAccessRole(value: unknown): AdminAccessRole {
   if (value === undefined || value === null || value === '') return 'user';
+  if (value === 'admin' || value === 'user') return value;
+  throw new Error('role must be admin or user');
+}
+
+export function parseRequiredAdminAccessRole(value: unknown): AdminAccessRole {
   if (value === 'admin' || value === 'user') return value;
   throw new Error('role must be admin or user');
 }
@@ -97,10 +102,9 @@ export function registerAdminRoutes(
     try {
       const actorEmail = assertAdminActor(options.getAdminActor(req));
       const email = parseAdminEmail(req.params.email);
-      const role = parseAdminAccessRole(req.body?.role);
-      const record = setAccessStatus({
+      const role = parseRequiredAdminAccessRole(req.body?.role);
+      const record = setAccessRole({
         email,
-        status: 'approved',
         role,
         note: typeof req.body?.note === 'string' ? req.body.note : undefined,
         updatedBy: actorEmail,

@@ -248,6 +248,48 @@ export function setAccessStatus(input: {
   return next;
 }
 
+export function setAccessRole(input: {
+  email: string;
+  role: AdminAccessRole;
+  note?: string;
+  updatedBy: string;
+}) {
+  const email = normalizeEmail(input.email);
+  const now = new Date().toISOString();
+  const records = readAccessRecords();
+  const index = records.findIndex((record) => record.email === email);
+  if (index < 0) {
+    throw new Error('existing access record required');
+  }
+
+  const existing = records[index];
+  const next: AdminAccessRecord = {
+    ...existing,
+    role: input.role,
+    note: trimBounded(input.note, MAX_NOTE_LENGTH) || existing.note,
+    updatedAt: now,
+    updatedBy: input.updatedBy,
+  };
+
+  if (existing.role !== input.role) {
+    recordAdminAuditEvent({
+      actorEmail: input.updatedBy,
+      action: input.role === 'admin' ? 'role.promoted' : 'role.demoted',
+      targetEmail: email,
+      metadata: {
+        previousRole: existing.role,
+        role: next.role,
+        status: next.status,
+        note: trimBounded(input.note, MAX_NOTE_LENGTH),
+      },
+    });
+  }
+
+  records[index] = next;
+  writeAccessRecords(records);
+  return next;
+}
+
 export function clearAdminAccessRecords() {
   fs.rmSync(getAccessFile(), { force: true });
   fs.rmSync(getAuditFile(), { force: true });

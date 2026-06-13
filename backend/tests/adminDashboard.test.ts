@@ -245,8 +245,70 @@ test('admin route input validation rejects invalid access mutations', async () =
   assert.equal(routes.parseAdminAccessRole('admin'), 'admin');
 
   assert.throws(
+    () => routes.parseRequiredAdminAccessRole(undefined),
+    /role must be admin or user/,
+  );
+  assert.throws(
+    () => routes.parseRequiredAdminAccessRole(''),
+    /role must be admin or user/,
+  );
+  assert.equal(routes.parseRequiredAdminAccessRole('user'), 'user');
+
+  assert.throws(
     () => routes.parseAdminEmail('not-an-email'),
     /valid email is required/,
   );
   assert.equal(routes.parseAdminEmail(' USER@Example.COM '), 'user@example.com');
+});
+
+test('admin role updates preserve existing access status', async () => {
+  const originalCwd = process.cwd();
+  const tempDir = mkdtempSync(path.join(tmpdir(), 'violema-admin-role-update-'));
+
+  try {
+    process.chdir(tempDir);
+    const access = await import('../src/adminAccessStore');
+
+    assert.throws(
+      () => access.setAccessRole({
+        email: 'missing@example.com',
+        role: 'admin',
+        updatedBy: 'max@violema.com',
+      }),
+      /existing access record required/,
+    );
+
+    access.recordAccessRequest({
+      email: 'requested@example.com',
+      method: 'email',
+      note: 'Requested beta',
+    });
+    const requested = access.setAccessRole({
+      email: 'requested@example.com',
+      role: 'admin',
+      updatedBy: 'max@violema.com',
+    });
+    assert.equal(requested.status, 'requested');
+    assert.equal(requested.role, 'admin');
+
+    access.setAccessStatus({
+      email: 'revoked@example.com',
+      status: 'revoked',
+      role: 'user',
+      updatedBy: 'max@violema.com',
+    });
+    const revoked = access.setAccessRole({
+      email: 'revoked@example.com',
+      role: 'admin',
+      updatedBy: 'max@violema.com',
+    });
+    assert.equal(revoked.status, 'revoked');
+    assert.equal(revoked.role, 'admin');
+
+    const auditActions = access.listAdminAuditEvents(10).map((event) => event.action);
+    assert.ok(auditActions.includes('role.promoted'));
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });
