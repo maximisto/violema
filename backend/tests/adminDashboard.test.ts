@@ -213,3 +213,40 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('admin route guard rejects non-admin actors', async () => {
+  const routes = await import('../src/adminRoutes');
+
+  assert.throws(
+    () => routes.assertAdminActor({ role: 'user', email: 'user@example.com' }),
+    /Admin access required/,
+  );
+  assert.equal(
+    routes.assertAdminActor({ role: 'admin', email: 'max@violema.com' }),
+    'max@violema.com',
+  );
+});
+
+test('admin route input validation rejects invalid access mutations', async () => {
+  const routes = await import('../src/adminRoutes');
+
+  assert.throws(
+    () => routes.parseAdminAccessStatus('requested'),
+    /status must be approved or revoked/,
+  );
+  assert.equal(routes.parseAdminAccessStatus('approved'), 'approved');
+  assert.equal(routes.parseAdminAccessStatus('revoked'), 'revoked');
+
+  assert.throws(
+    () => routes.parseAdminAccessRole('owner'),
+    /role must be admin or user/,
+  );
+  assert.equal(routes.parseAdminAccessRole(undefined), 'user');
+  assert.equal(routes.parseAdminAccessRole('admin'), 'admin');
+
+  assert.throws(
+    () => routes.parseAdminEmail('not-an-email'),
+    /valid email is required/,
+  );
+  assert.equal(routes.parseAdminEmail(' USER@Example.COM '), 'user@example.com');
+});

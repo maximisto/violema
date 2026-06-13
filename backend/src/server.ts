@@ -18,6 +18,7 @@ import {
   type AuthMethod as PersistedAuthMethod,
   upsertAuthUser,
 } from './auth';
+import { registerAdminRoutes } from './adminRoutes';
 import { isPublicBetaApiPath } from './betaAccess';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } from './integrations';
@@ -4324,6 +4325,22 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
   }
   res.setHeader('Set-Cookie', getAuthCookieOptions());
   res.json({ ok: true });
+});
+
+registerAdminRoutes(app, {
+  getAdminActor: (req) => {
+    const token = parseCookieValue(req, AUTH_COOKIE_NAME);
+    const record = token ? getAuthUserByToken(token) : null;
+    if (!record) {
+      const error = new Error('Admin session required') as Error & { statusCode?: number };
+      error.statusCode = 401;
+      throw error;
+    }
+    return {
+      email: record.user.email,
+      role: isEmailAdminForAccess(record.user.email) ? 'admin' : 'user',
+    };
+  },
 });
 
 app.get('/api/workspace', (req: Request, res: Response) => {
