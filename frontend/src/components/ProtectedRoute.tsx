@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { fetchBackendAuthSession } from '../lib/auth';
 
-export default function ProtectedRoute({ children }: { children: JSX.Element }) {
+interface ProtectedRouteProps {
+  children: JSX.Element;
+  blockedRedirectPath?: '/signup' | '/login';
+}
+
+export default function ProtectedRoute({ children, blockedRedirectPath = '/signup' }: ProtectedRouteProps) {
   const location = useLocation();
   const [status, setStatus] = useState<'checking' | 'allowed' | 'blocked'>('checking');
 
@@ -38,7 +43,7 @@ export default function ProtectedRoute({ children }: { children: JSX.Element }) 
 
   if (status !== 'allowed') {
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
-    return <Navigate to={`/signup?next=${next}`} replace />;
+    return <Navigate to={`${blockedRedirectPath}?next=${next}`} replace />;
   }
 
   return children;
