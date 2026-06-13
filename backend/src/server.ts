@@ -12,6 +12,7 @@ import {
   createAuthSession,
   getAuthUserByToken,
   requestBetaAccess,
+  resolveAuthRole,
   type AuthMethod as PersistedAuthMethod,
   upsertAuthUser,
 } from './auth';
@@ -122,8 +123,6 @@ const SLACK_EVENT_CACHE_WINDOW_MS = 5 * 60 * 1000;
 const AUTOMATION_STEP_TIMEOUT_MS = Number(process.env.AUTOMATION_STEP_TIMEOUT_MS || 45000);
 const handledSlackEvents = new Map<string, number>();
 const taskPanelStreamClients = new Map<string, Set<Response>>();
-const DEFAULT_ADMIN_EMAILS = ['max@purpleorange.io', 'max@violema.com'];
-
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -828,19 +827,6 @@ function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
-}
-
-function normalizeEmail(value: string | undefined | null) {
-  return (value || '').trim().toLowerCase();
-}
-
-function getAdminEmailAllowlist() {
-  const configured = (process.env.ADMIN_EMAILS || process.env.TEST_CREDIT_ADMIN_EMAILS || '')
-    .split(',')
-    .map((item) => normalizeEmail(item))
-    .filter(Boolean);
-
-  return new Set(configured.length > 0 ? configured : DEFAULT_ADMIN_EMAILS);
 }
 
 function isAuthAccessDenied(error: unknown): error is AuthAccessDeniedError {
@@ -4137,7 +4123,7 @@ app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
 
     assertEmailApprovedForAccess(email);
 
-    const role = getAdminEmailAllowlist().has(normalizeEmail(email)) ? 'admin' : 'user';
+    const role = resolveAuthRole(email);
     const user = upsertAuthUser({
       email,
       name,
@@ -4216,12 +4202,16 @@ app.post('/api/auth/session', (req: Request, res: Response) => {
   try {
     assertEmailApprovedForAccess(email);
   } catch (error) {
-    requestBetaAccess({
-      email,
-      name,
-      method,
-      note: 'Email session request',
-    });
+    try {
+      requestBetaAccess({
+        email,
+        name,
+        method,
+        note: 'Email session request',
+      });
+    } catch {
+      console.warn('Failed to record denied beta access request.');
+    }
     res.status(isAuthAccessDenied(error) ? error.statusCode : 403).json({
       error: error instanceof Error ? error.message : 'Access is not approved',
       code: isAuthAccessDenied(error) ? error.code : 'access_not_approved',
@@ -4229,7 +4219,7 @@ app.post('/api/auth/session', (req: Request, res: Response) => {
     return;
   }
 
-  const role = getAdminEmailAllowlist().has(normalizeEmail(email)) ? 'admin' : 'user';
+  const role = resolveAuthRole(email);
   const user = upsertAuthUser({
     email,
     name,

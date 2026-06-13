@@ -4,3 +4,7 @@ dist/
 .vercel/
 *.log
 .DS_Store
+/admin-access.json
+/admin-audit-events.json
+/backend/admin-access.json
+/backend/admin-audit-events.json

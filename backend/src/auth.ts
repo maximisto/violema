@@ -73,12 +73,39 @@ export function getApprovedAccessEmails() {
   ]);
 }
 
+export function getAdminAccessEmails() {
+  const configured = [
+    ...parseEmailList(process.env.ADMIN_EMAILS),
+    ...parseEmailList(process.env.TEST_CREDIT_ADMIN_EMAILS),
+  ];
+  return new Set(configured.length > 0 ? configured : DEFAULT_APPROVED_ACCESS_EMAILS);
+}
+
 export function isEmailApprovedForAccess(email: string) {
   const normalized = normalizeEmail(email);
-  const persistent = getAccessRecord(normalized);
+  let persistent: ReturnType<typeof getAccessRecord>;
+  try {
+    persistent = getAccessRecord(normalized);
+  } catch {
+    return false;
+  }
   if (persistent?.status === 'revoked') return false;
   if (persistent?.status === 'approved') return true;
   return getApprovedAccessEmails().has(normalized);
+}
+
+export function resolveAuthRole(email: string): AccessRole {
+  const normalized = normalizeEmail(email);
+
+  try {
+    const persistent = getAccessRecord(normalized);
+    if (persistent?.status === 'approved') return persistent.role;
+    if (persistent?.status === 'revoked') return 'user';
+  } catch {
+    return 'user';
+  }
+
+  return getAdminAccessEmails().has(normalized) ? 'admin' : 'user';
 }
 
 export function assertEmailApprovedForAccess(email: string) {

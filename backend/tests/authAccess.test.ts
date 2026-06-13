@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import {
   assertEmailApprovedForAccess,
   isEmailApprovedForAccess,
+  resolveAuthRole,
 } from '../src/auth';
 import {
   clearAdminAccessRecords,
@@ -13,7 +17,30 @@ import {
 } from '../src/adminAccessStore';
 import { isPublicBetaApiPath } from '../src/betaAccess';
 
-test('auth access defaults to manual approval', async () => {
+const initialTestCwd = process.cwd();
+const adminStoreFileNames = ['admin-access.json', 'admin-audit-events.json'];
+
+function removeAdminStoreFiles(directory: string) {
+  for (const fileName of adminStoreFileNames) {
+    fs.rmSync(path.join(directory, fileName), { force: true });
+  }
+}
+
+function withTempAdminStore(run: () => void) {
+  const originalCwd = process.cwd();
+  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'violema-auth-access-'));
+  process.chdir(tempDirectory);
+
+  try {
+    run();
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(tempDirectory, { recursive: true, force: true });
+    removeAdminStoreFiles(initialTestCwd);
+  }
+}
+
+test('auth access defaults to manual approval', () => withTempAdminStore(() => {
   const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
   const originalLegacyApproved = process.env.AUTH_APPROVED_EMAILS;
   const originalBetaApproved = process.env.BETA_ACCESS_EMAILS;
@@ -37,9 +64,9 @@ test('auth access defaults to manual approval', async () => {
     if (originalBetaApproved === undefined) delete process.env.BETA_ACCESS_EMAILS;
     else process.env.BETA_ACCESS_EMAILS = originalBetaApproved;
   }
-});
+}));
 
-test('auth access accepts explicit beta allowlist entries', async () => {
+test('auth access accepts explicit beta allowlist entries', () => withTempAdminStore(() => {
   const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
   process.env.VIOLEMA_APPROVED_EMAILS = 'founder@example.com, investor@example.com';
 
@@ -51,9 +78,24 @@ test('auth access accepts explicit beta allowlist entries', async () => {
     if (originalApproved === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
     else process.env.VIOLEMA_APPROVED_EMAILS = originalApproved;
   }
-});
+}));
 
-test('persistent admin access records requests, approvals, revokes, and audit events', () => {
+test('malformed admin access store fails closed for default and env allowlists', () => withTempAdminStore(() => {
+  const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
+  process.env.VIOLEMA_APPROVED_EMAILS = 'founder@example.com';
+
+  try {
+    fs.writeFileSync(path.join(process.cwd(), 'admin-access.json'), '{malformed');
+
+    assert.equal(isEmailApprovedForAccess('max@violema.com'), false);
+    assert.equal(isEmailApprovedForAccess('founder@example.com'), false);
+  } finally {
+    if (originalApproved === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
+    else process.env.VIOLEMA_APPROVED_EMAILS = originalApproved;
+  }
+}));
+
+test('persistent admin access records requests, approvals, revokes, and audit events', () => withTempAdminStore(() => {
   const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
   delete process.env.VIOLEMA_APPROVED_EMAILS;
   clearAdminAccessRecords();
@@ -96,7 +138,72 @@ test('persistent admin access records requests, approvals, revokes, and audit ev
     if (originalApproved === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
     else process.env.VIOLEMA_APPROVED_EMAILS = originalApproved;
   }
-});
+}));
+
+test('requested access records dedupe audit events and bound user text', () => withTempAdminStore(() => {
+  clearAdminAccessRecords();
+
+  try {
+    const requested = recordAccessRequest({
+      email: 'waiter@example.com',
+      name: 'A'.repeat(300),
+      method: 'email',
+      note: 'B'.repeat(5000),
+    });
+    assert.ok((requested.name?.length || 0) <= 160);
+    assert.ok((requested.note?.length || 0) <= 1000);
+
+    const updated = recordAccessRequest({
+      email: 'WAITER@example.com',
+      name: 'Updated Waiter',
+      method: 'email',
+      note: 'Updated note',
+    });
+    assert.equal(updated.name, 'Updated Waiter');
+
+    const requestedEvents = listAdminAuditEvents().filter(
+      (event) => event.action === 'access.requested' && event.targetEmail === 'waiter@example.com',
+    );
+    assert.equal(requestedEvents.length, 1);
+
+    const approved = setAccessStatus({
+      email: 'waiter@example.com',
+      status: 'approved',
+      note: 'C'.repeat(5000),
+      updatedBy: 'max@violema.com',
+    });
+    assert.ok((approved.note?.length || 0) <= 1000);
+  } finally {
+    clearAdminAccessRecords();
+  }
+}));
+
+test('persistent approved role overrides default role resolution', () => withTempAdminStore(() => {
+  clearAdminAccessRecords();
+
+  try {
+    assert.equal(resolveAuthRole('max@violema.com'), 'admin');
+    assert.equal(resolveAuthRole('founder@example.com'), 'user');
+
+    setAccessStatus({
+      email: 'founder@example.com',
+      status: 'approved',
+      role: 'admin',
+      updatedBy: 'max@violema.com',
+    });
+    assert.equal(resolveAuthRole('founder@example.com'), 'admin');
+
+    setAccessStatus({
+      email: 'max@violema.com',
+      status: 'approved',
+      role: 'user',
+      updatedBy: 'max@violema.com',
+    });
+    assert.equal(resolveAuthRole('max@violema.com'), 'user');
+  } finally {
+    clearAdminAccessRecords();
+  }
+}));
 
 test('beta API protection only leaves auth and signed webhook surfaces public', () => {
   assert.equal(isPublicBetaApiPath('GET', '/api/health'), true);
