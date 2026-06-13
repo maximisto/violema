@@ -24,7 +24,7 @@ export function buildAdminUsers() {
   return Array.from(emails).sort().map((email) => {
     const user = users.find((item) => item.email === email) || null;
     const access = accessRecords.find((item) => item.email === email) || null;
-    const approvedAccess = access?.status === 'approved' || (!access && isEmailApprovedForAccess(email));
+    const approvedAccess = access?.status === 'approved' || isEmailApprovedForAccess(email);
     const accessStatus = access?.status || (approvedAccess ? 'approved' : 'requested');
     return {
       email,
@@ -86,6 +86,8 @@ export function buildAdminWorkspaces() {
       taskCount: tasks.length,
       runCount: runs.length,
       automationCount: automations.length,
+      automationScope: 'global',
+      globalAutomationCount: automations.length,
       rowState,
       ...performance,
     };
@@ -94,14 +96,17 @@ export function buildAdminWorkspaces() {
 
 export function buildWorkspaceAdminDetail(workspaceId: string) {
   const workspace = listWorkspaces().find((item) => item.id === workspaceId) || getDefaultWorkspaceProfile(workspaceId);
+  const automations = listAutomations();
   return {
     workspace,
     billing: getBillingStatusSnapshot(workspaceId),
     performance: buildWorkspacePerformanceSummary(workspaceId),
     tasks: listTasks(workspaceId).slice(0, 100),
     runs: listTaskRuns(workspaceId).slice(0, 100),
-    ledger: listLedgerEntries(workspaceId).slice(-100).reverse(),
-    automations: listAutomations(),
+    ledger: listLedgerEntries(workspaceId).slice(0, 100),
+    automationScope: 'global',
+    globalAutomationCount: automations.length,
+    automations,
   };
 }
 
@@ -114,7 +119,7 @@ export function buildAdminOverview() {
   return {
     metrics: {
       approvedUsers: users.filter((user) => user.approvedAccess).length,
-      pendingUsers: users.filter((user) => user.accessStatus === 'requested').length,
+      pendingUsers: users.filter((user) => user.accessStatus === 'requested' && !user.approvedAccess).length,
       workspaces: workspaces.length,
       activeAutomations: listAutomations().filter((item) => item.status === 'active').length,
       totalRuns,

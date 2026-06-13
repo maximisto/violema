@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 test('admin dashboard summarizes users, workspaces, and run performance', async () => {
   const originalCwd = process.cwd();
+  const originalApprovedEmails = process.env.VIOLEMA_APPROVED_EMAILS;
   const tempDir = mkdtempSync(path.join(tmpdir(), 'violema-admin-dashboard-'));
 
   try {
@@ -80,10 +81,45 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(workspaces[0].workspaceId, 'client-acme');
     assert.equal(workspaces[0].planId, 'pro');
     assert.equal(workspaces[0].runSuccessRate, 100);
+    assert.equal(workspaces[0].automationScope, 'global');
+    assert.equal(workspaces[0].globalAutomationCount, workspaces[0].automationCount);
 
-    dashboard.buildWorkspaceAdminDetail('missing-workspace');
+    const missingWorkspaceDetail = dashboard.buildWorkspaceAdminDetail('missing-workspace');
+    assert.equal(missingWorkspaceDetail.automationScope, 'global');
     assert.equal(workspace.listWorkspaces().length, 1);
     assert.equal(billing.listBillingConfigs().length, 1);
+
+    process.env.VIOLEMA_APPROVED_EMAILS = 'allowlisted@example.com';
+    access.recordAccessRequest({
+      email: 'allowlisted@example.com',
+      method: 'email',
+      note: 'Allowlisted beta',
+    });
+    const allowlistedUsers = dashboard.buildAdminUsers();
+    const allowlistedUser = allowlistedUsers.find((user) => user.email === 'allowlisted@example.com');
+    assert.equal(allowlistedUser?.accessStatus, 'requested');
+    assert.equal(allowlistedUser?.approvedAccess, true);
+    assert.equal(dashboard.buildAdminOverview().metrics.pendingUsers, 0);
+
+    const ledgerEntries = Array.from({ length: 105 }, (_, index) => ({
+      id: `ledger_${String(index).padStart(3, '0')}`,
+      workspaceId: 'client-acme',
+      direction: 'grant',
+      source: 'manual_adjustment',
+      deltaCredits: index + 1,
+      balanceAfterCredits: index + 1,
+      referenceType: 'manual',
+      referenceId: `manual-${index}`,
+      note: `Ledger entry ${index}`,
+      createdAt: new Date(Date.UTC(2026, 5, 13, 0, index)).toISOString(),
+    }));
+    writeFileSync(path.join(tempDir, 'platform-credit-ledger.json'), JSON.stringify(ledgerEntries, null, 2));
+    const detailWithLedger = dashboard.buildWorkspaceAdminDetail('client-acme');
+    assert.equal(detailWithLedger.automationScope, 'global');
+    assert.equal(detailWithLedger.ledger.length, 100);
+    assert.equal(detailWithLedger.ledger[0].id, 'ledger_104');
+    assert.ok(detailWithLedger.ledger.some((entry) => entry.id === 'ledger_104'));
+    assert.equal(detailWithLedger.ledger.some((entry) => entry.id === 'ledger_000'), false);
 
     const createFailedRun = (workspaceId: string, title: string, finishedAt: string) => {
       const failedTask = store.createTask({
@@ -129,6 +165,11 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(overviewWithFailures.recentFailedRuns.length, 8);
   } finally {
     process.chdir(originalCwd);
+    if (originalApprovedEmails === undefined) {
+      delete process.env.VIOLEMA_APPROVED_EMAILS;
+    } else {
+      process.env.VIOLEMA_APPROVED_EMAILS = originalApprovedEmails;
+    }
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
