@@ -33,6 +33,7 @@ export function buildAdminUsers() {
       method: user?.method || access?.method || 'email',
       accessStatus,
       approvedAccess,
+      hasAccessRecord: Boolean(access),
       slackConnected: Boolean(user?.slackWorkspace && user?.slackChannelId),
       slackDisplayTarget: user?.slackDisplayTarget || null,
       activeSessionCount: user ? sessions.filter((session) => session.userId === user.id).length : 0,

@@ -34,8 +34,10 @@ interface AdminOverviewMetrics {
   requestedUsers?: number;
   workspaces?: number;
   workspaceCount?: number;
+  activeAutomations?: number;
   automations?: number;
   automationCount?: number;
+  totalRuns?: number;
   runs?: number;
   runCount?: number;
   successRate?: number;
@@ -53,6 +55,7 @@ interface AdminUserRow {
   method?: string;
   accessStatus: AccessStatus;
   approvedAccess?: boolean;
+  hasAccessRecord?: boolean;
   slackConnected?: boolean;
   slackDisplayTarget?: string;
   activeSessionCount?: number;
@@ -210,6 +213,10 @@ function Badge({ value }: { value?: string }) {
   );
 }
 
+function effectiveAccessStatus(user: AdminUserRow): AccessStatus {
+  return user.approvedAccess ? 'approved' : user.accessStatus;
+}
+
 function EmptyState({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="rounded-2xl border border-dashed border-navy-700/80 bg-navy-950/40 px-5 py-10 text-center">
@@ -303,13 +310,13 @@ function OverviewPanel({
     },
     {
       label: 'Automations',
-      value: formatNumber(firstMetric(metrics, ['automations', 'automationCount'])),
+      value: formatNumber(firstMetric(metrics, ['activeAutomations', 'automations', 'automationCount'])),
       detail: 'Configured recurring work',
       icon: SlidersHorizontal,
     },
     {
       label: 'Runs',
-      value: formatNumber(firstMetric(metrics, ['runs', 'runCount'])),
+      value: formatNumber(firstMetric(metrics, ['totalRuns', 'runs', 'runCount'])),
       detail: 'Total execution volume',
       icon: Activity,
     },
@@ -353,7 +360,7 @@ function OverviewPanel({
                   <p className="truncate text-sm font-medium text-white">{user.name || user.email}</p>
                   <p className="truncate text-xs text-slate-500">{user.email}</p>
                 </div>
-                <Badge value={user.accessStatus} />
+                <Badge value={effectiveAccessStatus(user)} />
               </div>
             )) : (
               <EmptyState title="No recent users" detail="New account activity will appear here." />
@@ -410,8 +417,12 @@ function UserActions({
   onAccessChange: (user: AdminUserRow, status: Extract<AccessStatus, 'approved' | 'revoked'>) => void;
   onRoleChange: (user: AdminUserRow, role: AdminRole) => void;
 }) {
-  const isApproved = user.accessStatus === 'approved';
+  const isApproved = effectiveAccessStatus(user) === 'approved';
   const isAdmin = user.role === 'admin';
+  const roleActionDisabled = busy || user.hasAccessRecord === false;
+  const roleActionTitle = user.hasAccessRecord === false
+    ? 'Role changes require a persistent access record. Approve or record access first.'
+    : isAdmin ? 'Demote to user' : 'Promote to admin';
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -435,8 +446,12 @@ function UserActions({
       </button>
       <button
         type="button"
-        disabled={busy}
-        onClick={() => onRoleChange(user, isAdmin ? 'user' : 'admin')}
+        disabled={roleActionDisabled}
+        title={roleActionTitle}
+        onClick={() => {
+          if (user.hasAccessRecord === false) return;
+          onRoleChange(user, isAdmin ? 'user' : 'admin');
+        }}
         className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/10 px-2.5 py-1.5 text-xs font-medium text-violet-100 transition-colors hover:bg-violet-500/16 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {isAdmin ? <ArrowDown className="h-3.5 w-3.5" /> : <ArrowUp className="h-3.5 w-3.5" />}
@@ -479,6 +494,7 @@ function UsersPanel({
           <tbody className="divide-y divide-navy-800/80">
             {users.map((user) => {
               const busy = actionKey === user.email;
+              const accessStatus = effectiveAccessStatus(user);
               return (
                 <tr key={user.email} className="align-top">
                   <td className="px-4 py-4">
@@ -486,7 +502,7 @@ function UsersPanel({
                     <p className="mt-1 text-xs text-slate-500">{user.email}</p>
                     {user.method ? <p className="mt-1 text-xs text-slate-600">{user.method}</p> : null}
                   </td>
-                  <td className="px-4 py-4"><Badge value={user.accessStatus} /></td>
+                  <td className="px-4 py-4"><Badge value={accessStatus} /></td>
                   <td className="px-4 py-4"><Badge value={user.role} /></td>
                   <td className="px-4 py-4">
                     <p className={user.slackConnected ? 'text-emerald-200' : 'text-slate-500'}>
@@ -509,6 +525,7 @@ function UsersPanel({
       <div className="grid gap-3 md:hidden">
         {users.map((user) => {
           const busy = actionKey === user.email;
+          const accessStatus = effectiveAccessStatus(user);
           return (
             <div key={user.email} className="rounded-2xl border border-navy-800 bg-navy-900/72 p-4">
               <div className="flex items-start justify-between gap-3">
@@ -516,7 +533,7 @@ function UsersPanel({
                   <p className="truncate text-sm font-semibold text-white">{user.name || user.email}</p>
                   <p className="truncate text-xs text-slate-500">{user.email}</p>
                 </div>
-                <Badge value={user.accessStatus} />
+                <Badge value={accessStatus} />
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
                 <div>
@@ -658,7 +675,9 @@ function AuditPanel({ events }: { events: AdminAuditEvent[] }) {
               <p className="mt-1 truncate">Workspace: {event.workspaceId || 'none'}</p>
             </div>
             <div className="min-w-0 text-xs text-slate-500">
-              {event.metadata && Object.keys(event.metadata).length ? JSON.stringify(event.metadata) : 'No metadata'}
+              <span className="block max-h-20 overflow-hidden break-words font-mono text-[11px] leading-relaxed text-slate-500">
+                {event.metadata && Object.keys(event.metadata).length ? JSON.stringify(event.metadata) : 'No metadata'}
+              </span>
             </div>
             <p className="text-xs text-slate-500 md:text-right">{formatDate(event.createdAt)}</p>
           </div>
@@ -738,9 +757,9 @@ export default function AdminDashboard() {
   }, [notice]);
 
   const counts = useMemo(() => ({
-    requested: users.filter((user) => user.accessStatus === 'requested').length,
-    approved: users.filter((user) => user.accessStatus === 'approved').length,
-    revoked: users.filter((user) => user.accessStatus === 'revoked').length,
+    requested: users.filter((user) => effectiveAccessStatus(user) === 'requested').length,
+    approved: users.filter((user) => effectiveAccessStatus(user) === 'approved').length,
+    revoked: users.filter((user) => effectiveAccessStatus(user) === 'revoked').length,
   }), [users]);
 
   const handleAccessChange = useCallback(async (user: AdminUserRow, status: Extract<AccessStatus, 'approved' | 'revoked'>) => {

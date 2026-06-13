@@ -76,6 +76,7 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(users[0].email, 'client@example.com');
     assert.equal(users[0].activeSessionCount, 1);
     assert.equal(users[0].approvedAccess, true);
+    assert.equal(users[0].hasAccessRecord, true);
 
     const workspaces = dashboard.buildAdminWorkspaces();
     assert.equal(workspaces[0].workspaceId, 'client-acme');
@@ -99,7 +100,22 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     const allowlistedUser = allowlistedUsers.find((user) => user.email === 'allowlisted@example.com');
     assert.equal(allowlistedUser?.accessStatus, 'requested');
     assert.equal(allowlistedUser?.approvedAccess, true);
+    assert.equal(allowlistedUser?.hasAccessRecord, true);
     assert.equal(dashboard.buildAdminOverview().metrics.pendingUsers, 0);
+
+    auth.upsertAuthUser({
+      email: 'auth-only@example.com',
+      name: 'Auth Only',
+      role: 'user',
+      method: 'email',
+      acceptedTerms: true,
+      acceptedEducation: true,
+    });
+    const authOnlyUsers = dashboard.buildAdminUsers();
+    const authOnlyUser = authOnlyUsers.find((user) => user.email === 'auth-only@example.com');
+    assert.equal(authOnlyUser?.accessStatus, 'requested');
+    assert.equal(authOnlyUser?.approvedAccess, false);
+    assert.equal(authOnlyUser?.hasAccessRecord, false);
 
     const ledgerEntries = Array.from({ length: 105 }, (_, index) => ({
       id: `ledger_${String(index).padStart(3, '0')}`,
