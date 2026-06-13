@@ -4,6 +4,7 @@ import {
   assertEmailApprovedForAccess,
   isEmailApprovedForAccess,
 } from '../src/auth';
+import { isPublicBetaApiPath } from '../src/betaAccess';
 
 test('auth access defaults to manual approval', async () => {
   const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
@@ -43,4 +44,20 @@ test('auth access accepts explicit beta allowlist entries', async () => {
     if (originalApproved === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
     else process.env.VIOLEMA_APPROVED_EMAILS = originalApproved;
   }
+});
+
+test('beta API protection only leaves auth and signed webhook surfaces public', () => {
+  assert.equal(isPublicBetaApiPath('GET', '/api/health'), true);
+  assert.equal(isPublicBetaApiPath('POST', '/api/waitlist'), true);
+  assert.equal(isPublicBetaApiPath('GET', '/api/auth/session'), true);
+  assert.equal(isPublicBetaApiPath('POST', '/api/auth/session'), true);
+  assert.equal(isPublicBetaApiPath('POST', '/api/billing/stripe/webhook'), true);
+  assert.equal(isPublicBetaApiPath('POST', '/api/slack/events'), true);
+  assert.equal(isPublicBetaApiPath('OPTIONS', '/api/chat'), true);
+
+  assert.equal(isPublicBetaApiPath('POST', '/api/chat'), false);
+  assert.equal(isPublicBetaApiPath('GET', '/api/integrations/catalog'), false);
+  assert.equal(isPublicBetaApiPath('GET', '/api/generated-screenshots/test.png'), false);
+  assert.equal(isPublicBetaApiPath('POST', '/api/billing/stripe/checkout/subscription'), false);
+  assert.equal(isPublicBetaApiPath('GET', '/api/studio/workflows'), false);
 });

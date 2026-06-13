@@ -58,6 +58,27 @@ render_production_nginx_config() {
     -e "s|__LEGACY_DOMAIN__|$LEGACY_DOMAIN|g" \
     -e "s|__APP_DIR__|$APP_DIR|g" \
     "$APP_DIR/deploy/nginx.conf" > "$NGINX_SITE"
+
+  local legacy_cert="/etc/letsencrypt/live/$LEGACY_DOMAIN/fullchain.pem"
+  local legacy_key="/etc/letsencrypt/live/$LEGACY_DOMAIN/privkey.pem"
+  if [[ -f "$legacy_cert" && -f "$legacy_key" ]]; then
+    cat >>"$NGINX_SITE" <<EOF
+
+server {
+    listen 443 ssl http2;
+    server_name $LEGACY_DOMAIN;
+
+    ssl_certificate     $legacy_cert;
+    ssl_certificate_key $legacy_key;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+
+    return 301 https://$DOMAIN\$request_uri;
+}
+EOF
+  else
+    warn "Legacy HTTPS certificate for $LEGACY_DOMAIN not found; only HTTP legacy redirects will be active."
+  fi
 }
 
 # ── 1. Dependencies ──────────────────────────────────────────────────────────
@@ -126,6 +147,7 @@ ln -sf "$NGINX_SITE" "/etc/nginx/sites-enabled/$DOMAIN"
 
 # Remove default site if still linked
 rm -f /etc/nginx/sites-enabled/default
+rm -f "/etc/nginx/sites-enabled/$LEGACY_DOMAIN"
 
 nginx -t || die "nginx config test failed — check $NGINX_SITE"
 systemctl reload nginx
