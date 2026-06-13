@@ -7,6 +7,7 @@ import {
   assertEmailApprovedForAccess,
   isEmailAdminForAccess,
   isEmailApprovedForAccess,
+  isUnverifiedEmailSessionAllowed,
   resolveAuthRole,
 } from '../src/auth';
 import {
@@ -86,6 +87,19 @@ test('malformed admin access store fails closed for default and env allowlists',
   }
 }));
 
+test('production blocks unverified email session minting unless explicitly enabled', () => {
+  assert.equal(isUnverifiedEmailSessionAllowed({ NODE_ENV: 'development' }), true);
+  assert.equal(isUnverifiedEmailSessionAllowed({ NODE_ENV: 'test' }), true);
+  assert.equal(isUnverifiedEmailSessionAllowed({ NODE_ENV: 'production' }), false);
+  assert.equal(
+    isUnverifiedEmailSessionAllowed({
+      NODE_ENV: 'production',
+      VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS: 'true',
+    }),
+    true,
+  );
+});
+
 test('persistent admin access records requests, approvals, revokes, and audit events', () => withTempAdminStore(() => {
   const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
   delete process.env.VIOLEMA_APPROVED_EMAILS;
@@ -128,6 +142,33 @@ test('persistent admin access records requests, approvals, revokes, and audit ev
     clearAdminAccessRecords();
     if (originalApproved === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
     else process.env.VIOLEMA_APPROVED_EMAILS = originalApproved;
+  }
+}));
+
+test('malformed audit store prevents access status mutation', () => withTempAdminStore(() => {
+  clearAdminAccessRecords();
+
+  try {
+    recordAccessRequest({
+      email: 'founder@example.com',
+      name: 'Founder Example',
+      method: 'email',
+      note: 'Signup request',
+    });
+    fs.writeFileSync(path.join(process.cwd(), 'admin-audit-events.json'), '{malformed');
+
+    assert.throws(
+      () => setAccessStatus({
+        email: 'founder@example.com',
+        status: 'approved',
+        role: 'admin',
+        updatedBy: 'max@violema.com',
+      }),
+      /Invalid admin audit events store/,
+    );
+    assert.equal(getAccessRecord('founder@example.com')?.status, 'requested');
+  } finally {
+    clearAdminAccessRecords();
   }
 }));
 

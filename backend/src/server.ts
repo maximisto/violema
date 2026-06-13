@@ -12,6 +12,7 @@ import {
   createAuthSession,
   getAuthUserByToken,
   isEmailAdminForAccess,
+  isUnverifiedEmailSessionAllowed,
   requestBetaAccess,
   resolveAuthRole,
   type AuthMethod as PersistedAuthMethod,
@@ -4196,7 +4197,10 @@ app.get('/api/auth/session', (req: Request, res: Response) => {
 
   res.json({
     ok: true,
-    user: record.user,
+    user: {
+      ...record.user,
+      role: resolveAuthRole(record.user.email),
+    },
   });
 });
 
@@ -4234,6 +4238,14 @@ app.post('/api/auth/session', (req: Request, res: Response) => {
     res.status(isAuthAccessDenied(error) ? error.statusCode : 403).json({
       error: error instanceof Error ? error.message : 'Access is not approved',
       code: isAuthAccessDenied(error) ? error.code : 'access_not_approved',
+    });
+    return;
+  }
+
+  if (!isUnverifiedEmailSessionAllowed()) {
+    res.status(403).json({
+      error: 'Verified identity is required for production sign-in.',
+      code: 'verified_identity_required',
     });
     return;
   }
@@ -4285,10 +4297,11 @@ app.patch('/api/auth/session', (req: Request, res: Response) => {
   }
 
   const body = (req.body || {}) as Record<string, unknown>;
+  const role = resolveAuthRole(record.user.email);
   const user = upsertAuthUser({
     email: record.user.email,
     name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : record.user.name,
-    role: record.user.role,
+    role,
     method: record.user.method,
     acceptedTerms: typeof body.acceptedTerms === 'boolean' ? body.acceptedTerms : record.user.acceptedTerms,
     acceptedEducation: typeof body.acceptedEducation === 'boolean' ? body.acceptedEducation : record.user.acceptedEducation,

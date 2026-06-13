@@ -179,15 +179,16 @@ export function setAccessStatus(input: {
     updatedBy: input.updatedBy,
   };
 
-  if (index >= 0) records[index] = next;
-  else records.unshift(next);
-  writeAccessRecords(records);
   recordAdminAuditEvent({
     actorEmail: input.updatedBy,
     action: input.status === 'approved' ? 'access.approved' : input.status === 'revoked' ? 'access.revoked' : 'access.requested',
     targetEmail: email,
     metadata: { note: next.note, role: next.role },
   });
+
+  if (index >= 0) records[index] = next;
+  else records.unshift(next);
+  writeAccessRecords(records);
   return next;
 }
 

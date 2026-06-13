@@ -112,6 +112,11 @@ export function isEmailAdminForAccess(email: string) {
   return isEmailApprovedForAccess(email) && resolveAuthRole(email) === 'admin';
 }
 
+export function isUnverifiedEmailSessionAllowed(env: Record<string, string | undefined> = process.env) {
+  if (env.NODE_ENV !== 'production') return true;
+  return env.VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS === 'true' || env.VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS === '1';
+}
+
 export function assertEmailApprovedForAccess(email: string) {
   if (!isEmailApprovedForAccess(email)) {
     throw new AuthAccessDeniedError();
