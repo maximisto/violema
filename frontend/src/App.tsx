@@ -14,6 +14,7 @@ const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
 const SlackSetup = lazy(() => import('./pages/SlackSetup'));
 const AgentStudio = lazy(() => import('./pages/AgentStudio'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 
 function RouteFallback() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/connect/slack" element={<ProtectedRoute><SlackSetup /></ProtectedRoute>} />
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/dashboard/agents" element={<ProtectedRoute><AgentStudio /></ProtectedRoute>} />
           <Route path="/faq" element={<FAQ />} />
