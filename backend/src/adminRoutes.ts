@@ -41,7 +41,7 @@ export function parseRequiredAdminAccessRole(value: unknown): AdminAccessRole {
 
 export function parseAdminEmail(value: unknown): string {
   const email = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (!email || !/\S+@\S+\.\S+/.test(email)) throw new Error('valid email is required');
+  if (!email || !/^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(email)) throw new Error('valid email is required');
   return email;
 }
 

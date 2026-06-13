@@ -258,6 +258,18 @@ test('admin route input validation rejects invalid access mutations', async () =
     () => routes.parseAdminEmail('not-an-email'),
     /valid email is required/,
   );
+  assert.throws(
+    () => routes.parseAdminEmail('foo@example.com extra'),
+    /valid email is required/,
+  );
+  assert.throws(
+    () => routes.parseAdminEmail('prefix foo@example.com'),
+    /valid email is required/,
+  );
+  assert.throws(
+    () => routes.parseAdminEmail('foo@example.com/extra'),
+    /valid email is required/,
+  );
   assert.equal(routes.parseAdminEmail(' USER@Example.COM '), 'user@example.com');
 });
 
