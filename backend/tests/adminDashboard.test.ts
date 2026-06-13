@@ -163,6 +163,46 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(overviewWithFailures.recentFailedRuns[0].id, newestFailureId);
     assert.ok(overviewWithFailures.recentFailedRuns.some((failedRun) => failedRun.id === newestFailureId));
     assert.equal(overviewWithFailures.recentFailedRuns.length, 8);
+
+    workspace.upsertWorkspaceProfile('client-buried', {
+      name: 'Buried Client',
+      ownerEmail: 'buried@example.com',
+      slug: 'buried-client',
+    });
+    const buriedTask = store.createTask({
+      workspaceId: 'client-buried',
+      title: 'Buried failure',
+      kind: 'report',
+    });
+    const buriedFailure = store.createTaskRun({
+      workspaceId: 'client-buried',
+      taskId: buriedTask.id,
+      agentRole: 'analyst',
+      modelTier: 'default',
+      estimatedCredits: 5,
+    });
+    store.updateTaskRun(buriedFailure.id, {
+      status: 'failed',
+      actualCredits: 5,
+      finishedAt: '2026-06-14T16:00:00.000Z',
+      metadata: { title: 'Buried failure' },
+    });
+    for (let index = 0; index < 101; index += 1) {
+      store.createTaskRun({
+        workspaceId: 'client-buried',
+        taskId: buriedTask.id,
+        agentRole: 'analyst',
+        modelTier: 'default',
+        estimatedCredits: 1,
+      });
+    }
+
+    const buriedDetail = dashboard.buildWorkspaceAdminDetail('client-buried');
+    assert.equal(buriedDetail.runs.some((detailRun) => detailRun.id === buriedFailure.id), false);
+
+    const overviewWithBuriedFailure = dashboard.buildAdminOverview();
+    assert.equal(overviewWithBuriedFailure.recentFailedRuns[0].id, buriedFailure.id);
+    assert.ok(overviewWithBuriedFailure.recentFailedRuns.some((failedRun) => failedRun.id === buriedFailure.id));
   } finally {
     process.chdir(originalCwd);
     if (originalApprovedEmails === undefined) {

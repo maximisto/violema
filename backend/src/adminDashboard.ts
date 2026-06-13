@@ -130,7 +130,7 @@ export function buildAdminOverview() {
     recentUsers: users.slice(0, 8),
     workspacesNeedingAttention: workspaces.filter((workspace) => workspace.rowState !== 'healthy').slice(0, 8),
     recentFailedRuns: workspaces.flatMap((workspace) =>
-      buildWorkspaceAdminDetail(workspace.workspaceId).runs
+      listTaskRuns(workspace.workspaceId)
         .filter((run) => run.status === 'failed')
         .map((run) => ({ ...run, workspaceName: workspace.workspaceName }))
     )
