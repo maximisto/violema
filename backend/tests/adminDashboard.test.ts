@@ -84,6 +84,49 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     dashboard.buildWorkspaceAdminDetail('missing-workspace');
     assert.equal(workspace.listWorkspaces().length, 1);
     assert.equal(billing.listBillingConfigs().length, 1);
+
+    const createFailedRun = (workspaceId: string, title: string, finishedAt: string) => {
+      const failedTask = store.createTask({
+        workspaceId,
+        title,
+        kind: 'report',
+      });
+      const failedRun = store.createTaskRun({
+        workspaceId,
+        taskId: failedTask.id,
+        agentRole: 'analyst',
+        modelTier: 'default',
+        estimatedCredits: 5,
+      });
+      store.updateTaskRun(failedRun.id, {
+        status: 'failed',
+        actualCredits: 5,
+        finishedAt,
+        metadata: { title },
+      });
+      return failedRun.id;
+    };
+
+    workspace.upsertWorkspaceProfile('client-newer', {
+      name: 'Newer Client',
+      ownerEmail: 'newer@example.com',
+      slug: 'newer-client',
+    });
+    const newestFailureId = createFailedRun('client-newer', 'Newest failure', '2026-06-13T16:00:00.000Z');
+
+    workspace.upsertWorkspaceProfile('client-older', {
+      name: 'Older Client',
+      ownerEmail: 'older@example.com',
+      slug: 'older-client',
+    });
+    for (let index = 0; index < 8; index += 1) {
+      createFailedRun('client-older', `Older failure ${index}`, `2026-06-12T0${index}:00:00.000Z`);
+    }
+
+    const overviewWithFailures = dashboard.buildAdminOverview();
+    assert.equal(overviewWithFailures.recentFailedRuns[0].id, newestFailureId);
+    assert.ok(overviewWithFailures.recentFailedRuns.some((failedRun) => failedRun.id === newestFailureId));
+    assert.equal(overviewWithFailures.recentFailedRuns.length, 8);
   } finally {
     process.chdir(originalCwd);
     rmSync(tempDir, { recursive: true, force: true });

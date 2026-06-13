@@ -11,7 +11,8 @@ function pct(numerator: number, denominator: number) {
 }
 
 function lastActivity(values: Array<string | undefined>) {
-  return values.filter(Boolean).sort().at(-1) || null;
+  const sorted = values.filter(Boolean).sort();
+  return sorted.length > 0 ? sorted[sorted.length - 1] : null;
 }
 
 export function buildAdminUsers() {
@@ -127,7 +128,11 @@ export function buildAdminOverview() {
       buildWorkspaceAdminDetail(workspace.workspaceId).runs
         .filter((run) => run.status === 'failed')
         .map((run) => ({ ...run, workspaceName: workspace.workspaceName }))
-    ).slice(0, 8),
+    )
+      .sort((left, right) =>
+        Date.parse(right.finishedAt ?? right.startedAt) - Date.parse(left.finishedAt ?? left.startedAt)
+      )
+      .slice(0, 8),
   };
 }
 
