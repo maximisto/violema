@@ -103,7 +103,8 @@ interface AdminOverviewPayload {
     workspaceName?: string;
     status?: string;
     error?: string;
-    createdAt?: string;
+    startedAt?: string;
+    finishedAt?: string;
   }>;
 }
 
@@ -392,7 +393,7 @@ function OverviewPanel({
               <div key={run.id || `${run.workspaceId}-${index}`} className="rounded-xl border border-red-500/15 bg-red-500/5 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="truncate text-sm font-medium text-red-100">{run.workspaceName || run.workspaceId || 'Unknown workspace'}</p>
-                  <span className="text-xs text-red-200">{formatDate(run.createdAt)}</span>
+                  <span className="text-xs text-red-200">{formatDate(run.finishedAt || run.startedAt)}</span>
                 </div>
                 <p className="mt-2 line-clamp-2 text-xs text-red-100/70">{run.error || run.status || 'Run failed'}</p>
               </div>
