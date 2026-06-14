@@ -8,3 +8,13 @@ dist/
 /admin-audit-events.json
 /backend/admin-access.json
 /backend/admin-audit-events.json
+.superpowers/
+.codex/
+backend/auth-sessions.json
+backend/auth-users.json
+backend/automations.json
+backend/platform-billing-config.json
+backend/platform-credit-ledger.json
+backend/platform-task-runs.json
+backend/platform-tasks.json
+backend/platform-workspaces.json
