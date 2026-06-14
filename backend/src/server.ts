@@ -17,6 +17,7 @@ import {
   resolveAuthRole,
   type AuthMethod as PersistedAuthMethod,
   upsertAuthUser,
+  verifyAdminMagicLoginToken,
 } from './auth';
 import { registerAdminRoutes } from './adminRoutes';
 import { isPublicBetaApiPath } from './betaAccess';
@@ -3937,6 +3938,45 @@ app.post('/api/waitlist', (req: Request, res: Response) => {
 
   console.log(`[waitlist] #${list.length} — ${email}`);
   res.json({ ok: true, duplicate: false, position: list.length });
+});
+
+app.get('/api/auth/admin/magic', (req: Request, res: Response) => {
+  const origin = getAuthPublicOrigin(req);
+  const fallbackNext = sanitizeNextPath(typeof req.query.next === 'string' ? req.query.next : undefined, '/admin');
+
+  try {
+    const token = typeof req.query.token === 'string' ? req.query.token : undefined;
+    const payload = verifyAdminMagicLoginToken(token);
+    if (!payload) {
+      redirectToAuthError(res, origin, 'login', fallbackNext, 'Magic login link is invalid or expired.');
+      return;
+    }
+
+    assertEmailApprovedForAccess(payload.email);
+    if (!isEmailAdminForAccess(payload.email)) {
+      throw new Error('Admin access required');
+    }
+
+    const user = upsertAuthUser({
+      email: payload.email,
+      name: payload.name,
+      role: 'admin',
+      method: 'email',
+      acceptedTerms: true,
+      acceptedEducation: true,
+    });
+    const { token: sessionToken } = createAuthSession(user.id);
+    res.setHeader('Set-Cookie', buildAuthCookie(sessionToken));
+    res.redirect(`${origin}${payload.next}`);
+  } catch (error) {
+    redirectToAuthError(
+      res,
+      origin,
+      'login',
+      fallbackNext,
+      error instanceof Error ? error.message : 'Magic login is not available right now.',
+    );
+  }
 });
 
 app.get('/api/auth/:provider/start', (req: Request, res: Response) => {

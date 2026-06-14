@@ -5,10 +5,12 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   assertEmailApprovedForAccess,
+  createAdminMagicLoginToken,
   isEmailAdminForAccess,
   isEmailApprovedForAccess,
   isUnverifiedEmailSessionAllowed,
   resolveAuthRole,
+  verifyAdminMagicLoginToken,
 } from '../src/auth';
 import {
   clearAdminAccessRecords,
@@ -121,6 +123,30 @@ test('production blocks unverified email session minting unless explicitly enabl
     }),
     true,
   );
+});
+
+test('admin magic login tokens are signed and expire', () => {
+  const secret = 'test-admin-magic-secret';
+  const issuedAt = Date.UTC(2026, 5, 14, 1, 0, 0);
+  const token = createAdminMagicLoginToken({
+    email: ' MAX@PurpleOrange.IO ',
+    name: ' Max ',
+    next: '/admin',
+    secret,
+    nowMs: issuedAt,
+    ttlMs: 60_000,
+  });
+
+  assert.deepEqual(
+    verifyAdminMagicLoginToken(token, { secret, nowMs: issuedAt + 30_000 }),
+    {
+      email: 'max@purpleorange.io',
+      name: 'Max',
+      next: '/admin',
+    },
+  );
+  assert.equal(verifyAdminMagicLoginToken(`${token}x`, { secret, nowMs: issuedAt + 30_000 }), null);
+  assert.equal(verifyAdminMagicLoginToken(token, { secret, nowMs: issuedAt + 61_000 }), null);
 });
 
 test('persistent admin access records requests, approvals, revokes, and audit events', () => withTempAdminStore(() => {

@@ -37,6 +37,7 @@ export interface AuthSessionRecord {
 const USERS_FILE = path.join(process.cwd(), 'auth-users.json');
 const SESSIONS_FILE = path.join(process.cwd(), 'auth-sessions.json');
 const THIRTY_DAYS_MS = 1000 * 60 * 60 * 24 * 30;
+const ADMIN_MAGIC_LOGIN_TTL_MS = 1000 * 60 * 10;
 const DEFAULT_APPROVED_ACCESS_EMAILS = ['max@purpleorange.io', 'max@violema.com'];
 const ACCESS_DENIED_MESSAGE =
   'Violema beta access is manually approved right now. Your request is recorded, but this email is not approved yet.';
@@ -115,6 +116,107 @@ export function isEmailAdminForAccess(email: string) {
 export function isUnverifiedEmailSessionAllowed(env: Record<string, string | undefined> = process.env) {
   if (env.NODE_ENV !== 'production') return true;
   return env.VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS === 'true' || env.VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS === '1';
+}
+
+function getAdminMagicLoginSecret(secret?: string) {
+  const resolved =
+    secret?.trim() ||
+    process.env.AUTH_MAGIC_LINK_SECRET?.trim() ||
+    process.env.AUTH_STATE_SECRET?.trim() ||
+    process.env.SLACK_SIGNING_SECRET?.trim() ||
+    process.env.STRIPE_WEBHOOK_SECRET?.trim();
+
+  if (resolved) return resolved;
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('AUTH_MAGIC_LINK_SECRET or AUTH_STATE_SECRET is required for admin magic login.');
+  }
+
+  return 'violema-admin-magic-login-dev-secret';
+}
+
+function sanitizeMagicLoginNext(value: string | undefined) {
+  const next = value?.trim() || '/admin';
+  if (!next.startsWith('/') || next.startsWith('//')) return '/admin';
+  return next;
+}
+
+export function createAdminMagicLoginToken(input: {
+  email: string;
+  name?: string;
+  next?: string;
+  ttlMs?: number;
+  nowMs?: number;
+  secret?: string;
+}) {
+  const email = normalizeEmail(input.email);
+  if (!email || !/\S+@\S+\.\S+/.test(email)) {
+    throw new Error('valid email is required');
+  }
+
+  const nowMs = input.nowMs ?? Date.now();
+  const ttlMs = input.ttlMs ?? ADMIN_MAGIC_LOGIN_TTL_MS;
+  const payload = {
+    email,
+    name: input.name?.trim() || email.split('@')[0],
+    next: sanitizeMagicLoginNext(input.next),
+    issuedAt: nowMs,
+    expiresAt: nowMs + ttlMs,
+  };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto
+    .createHmac('sha256', getAdminMagicLoginSecret(input.secret))
+    .update(encoded)
+    .digest('hex');
+  return `${encoded}.${signature}`;
+}
+
+export function verifyAdminMagicLoginToken(
+  token: string | undefined,
+  options: { nowMs?: number; secret?: string } = {},
+) {
+  if (!token) return null;
+  const [encoded, signature] = token.split('.');
+  if (!encoded || !signature) return null;
+  if (!/^[a-f0-9]{64}$/i.test(signature)) return null;
+
+  const expected = crypto
+    .createHmac('sha256', getAdminMagicLoginSecret(options.secret))
+    .update(encoded)
+    .digest('hex');
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  const signatureBuffer = Buffer.from(signature, 'hex');
+  if (expectedBuffer.length !== signatureBuffer.length || !crypto.timingSafeEqual(expectedBuffer, signatureBuffer)) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8')) as Partial<{
+      email: string;
+      name: string;
+      next: string;
+      issuedAt: number;
+      expiresAt: number;
+    }>;
+    if (
+      typeof payload.email !== 'string' ||
+      !/\S+@\S+\.\S+/.test(payload.email) ||
+      typeof payload.next !== 'string' ||
+      typeof payload.issuedAt !== 'number' ||
+      typeof payload.expiresAt !== 'number'
+    ) {
+      return null;
+    }
+    if ((options.nowMs ?? Date.now()) > payload.expiresAt) return null;
+
+    return {
+      email: normalizeEmail(payload.email),
+      name: typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : normalizeEmail(payload.email).split('@')[0],
+      next: sanitizeMagicLoginNext(payload.next),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function assertEmailApprovedForAccess(email: string) {
