@@ -1,8 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Eye, Globe, Lock, Mail, MonitorSmartphone, Slack } from 'lucide-react';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
+import Eye from 'lucide-react/dist/esm/icons/eye.js';
+import Lock from 'lucide-react/dist/esm/icons/lock.js';
+import Mail from 'lucide-react/dist/esm/icons/mail.js';
+import MonitorSmartphone from 'lucide-react/dist/esm/icons/monitor-smartphone.js';
 import { beginOAuthFlow, isAdminEmail, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
+import BrandIcon from '../components/BrandIcon';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
 
@@ -23,9 +28,17 @@ const PROVIDER_METHODS: Array<{
   },
 ];
 
-const EDUCATION_CARDS = [
+type EducationCard = {
+  title: string;
+  body: string;
+} & (
+  | { icon: typeof Eye; iconName?: never }
+  | { icon?: never; iconName: string }
+);
+
+const EDUCATION_CARDS: EducationCard[] = [
   {
-    icon: Slack,
+    iconName: 'Slack',
     title: 'Works where teams already are',
     body: 'Run Violema from Slack or the web app. Slack is the team-facing layer. The web app is the full control surface.',
   },
@@ -122,28 +135,32 @@ export default function Signup() {
             </p>
 
             <div className="mt-8 grid gap-4">
-              {EDUCATION_CARDS.map(({ icon: Icon, title, body }) => (
-                <div key={title} className="ui-panel flex gap-4 p-4">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-500/12 text-violet-300">
-                    <Icon className="h-4 w-4" />
+              {EDUCATION_CARDS.map((card) => {
+                const Icon = 'icon' in card ? card.icon : null;
+                return (
+                  <div key={card.title} className="ui-panel flex gap-4 p-4">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-500/12 text-violet-300">
+                      {typeof card.iconName === 'string' ? (
+                        <BrandIcon name={card.iconName} className="h-4 w-4" />
+                      ) : Icon ? (
+                        <Icon className="h-4 w-4" />
+                      ) : null}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">{card.title}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-400">{card.body}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">{title}</p>
-                    <p className="mt-1 text-sm leading-relaxed text-slate-400">{body}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="mt-8 rounded-3xl border border-navy-700/70 bg-navy-950/45 p-5">
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Channels</p>
               <div className="mt-3 flex flex-wrap gap-2.5">
-                {[
-                  { icon: Slack, label: 'Slack' },
-                  { icon: Globe, label: 'Web app' },
-                ].map(({ icon: Icon, label }) => (
+                {['Slack', 'Web app'].map((label) => (
                   <div key={label} className="ui-pill px-3 py-2 text-slate-300">
-                    <Icon className="h-3.5 w-3.5" />
+                    <BrandIcon name={label} className="h-3.5 w-3.5" />
                     {label}
                   </div>
                 ))}

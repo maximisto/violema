@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react';
+import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left.js';
 import { Link, useNavigate } from 'react-router-dom';
 import ViolemaLogo from './ViolemaLogo';
 

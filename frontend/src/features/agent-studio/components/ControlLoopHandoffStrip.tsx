@@ -1,4 +1,7 @@
-import { ArrowRight, Activity, LineChart, Target } from 'lucide-react';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
+import Activity from 'lucide-react/dist/esm/icons/activity.js';
+import LineChart from 'lucide-react/dist/esm/icons/line-chart.js';
+import Target from 'lucide-react/dist/esm/icons/target.js';
 import type { StudioRoom } from '../types';
 
 interface ControlLoopSignal {

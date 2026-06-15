@@ -1,4 +1,6 @@
-import { Brain, CheckCircle2, Clock3 } from 'lucide-react';
+import Brain from 'lucide-react/dist/esm/icons/brain.js';
+import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2.js';
+import Clock3 from 'lucide-react/dist/esm/icons/clock-3.js';
 import type { StudioExperimentRecord, StudioPromotionRecord, WorkflowBlockKind } from '../types';
 
 interface RollbackSuggestion {

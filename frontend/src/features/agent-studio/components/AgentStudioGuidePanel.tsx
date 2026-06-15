@@ -1,4 +1,8 @@
-import { ArrowRight, BookOpen, LineChart, Target, Workflow } from 'lucide-react';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
+import BookOpen from 'lucide-react/dist/esm/icons/book-open.js';
+import LineChart from 'lucide-react/dist/esm/icons/line-chart.js';
+import Target from 'lucide-react/dist/esm/icons/target.js';
+import Workflow from 'lucide-react/dist/esm/icons/workflow.js';
 
 interface AgentStudioGuidePanelProps {
   onDismiss: () => void;

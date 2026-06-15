@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type AnthropicClient from '@anthropic-ai/sdk';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages/messages';
 import { getWorkspaceProviderToken, getWorkspaceSettings } from './settingsStore';
 
@@ -9,6 +9,7 @@ export type TextProfile = CanonicalTextProfile | LegacyTextProfile;
 type CanonicalEmbeddingProfile = 'memory_text' | 'memory_code';
 type LegacyEmbeddingProfile = 'memory';
 type EmbeddingProfile = CanonicalEmbeddingProfile | LegacyEmbeddingProfile;
+type AnthropicConstructor = typeof import('@anthropic-ai/sdk').default;
 
 interface ModelRoute {
   provider: Provider;
@@ -39,6 +40,8 @@ export interface TextGenerationResult {
   usage?: TextGenerationUsage;
 }
 
+let cachedAnthropicConstructor: AnthropicConstructor | null = null;
+
 function env(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
 }
@@ -47,6 +50,13 @@ function requireEnv(name: string): string {
   const value = env(name);
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
+}
+
+function getAnthropicConstructor(): AnthropicConstructor {
+  if (cachedAnthropicConstructor) return cachedAnthropicConstructor;
+  const loaded = require('@anthropic-ai/sdk') as { default?: AnthropicConstructor };
+  cachedAnthropicConstructor = loaded.default || (loaded as AnthropicConstructor);
+  return cachedAnthropicConstructor;
 }
 
 function resolveTextProfile(profile: TextProfile): CanonicalTextProfile {
@@ -268,10 +278,10 @@ function getAnthropicCompatibleClient(profile: TextProfile, workspaceId?: string
 
   return {
     route,
-    client: new Anthropic({
+    client: new (getAnthropicConstructor())({
       apiKey: resolveProviderApiKey(route, workspaceId),
       baseURL: route.baseUrl,
-    }),
+    }) as AnthropicClient,
   };
 }
 

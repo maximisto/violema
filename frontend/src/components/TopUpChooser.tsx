@@ -1,4 +1,5 @@
-import { X, Sparkles } from 'lucide-react';
+import X from 'lucide-react/dist/esm/icons/x.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import { formatCredits, TOP_UP_OPTIONS, type TopUpOfferId } from '../lib/credits';
 
 export default function TopUpChooser({

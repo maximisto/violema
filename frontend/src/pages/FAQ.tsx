@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, Zap, MessageSquare, Shield, Cpu, CreditCard, Wrench, Search, X } from 'lucide-react';
+import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down.js';
+import Zap from 'lucide-react/dist/esm/icons/zap.js';
+import MessageSquare from 'lucide-react/dist/esm/icons/message-square.js';
+import Shield from 'lucide-react/dist/esm/icons/shield.js';
+import Cpu from 'lucide-react/dist/esm/icons/cpu.js';
+import CreditCard from 'lucide-react/dist/esm/icons/credit-card.js';
+import Wrench from 'lucide-react/dist/esm/icons/wrench.js';
+import Search from 'lucide-react/dist/esm/icons/search.js';
+import X from 'lucide-react/dist/esm/icons/x.js';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 

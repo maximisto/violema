@@ -1,4 +1,5 @@
-import { Flame, Target } from 'lucide-react';
+import Flame from 'lucide-react/dist/esm/icons/flame.js';
+import Target from 'lucide-react/dist/esm/icons/target.js';
 
 type RecommendationAction = 'lean_ops' | 'raise_review' | 'match_lanes' | 'trim_lanes' | 'none';
 type Severity = 'low' | 'medium' | 'high';

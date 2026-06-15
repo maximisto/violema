@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, Copy, ExternalLink, MessageSquare, Slack } from 'lucide-react';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
+import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2.js';
+import Copy from 'lucide-react/dist/esm/icons/copy.js';
+import ExternalLink from 'lucide-react/dist/esm/icons/external-link.js';
+import MessageSquare from 'lucide-react/dist/esm/icons/message-square.js';
+import Slack from 'lucide-react/dist/esm/icons/slack.js';
 import PublicHeader from '../components/PublicHeader';
 import { getAuthSession, updateBackendAuthSession } from '../lib/auth';
 

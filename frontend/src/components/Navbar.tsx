@@ -1,23 +1,30 @@
-import { useState, useEffect } from 'react';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
+import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down.js';
+import Menu from 'lucide-react/dist/esm/icons/menu.js';
+import X from 'lucide-react/dist/esm/icons/x.js';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Menu, Sparkles, X } from 'lucide-react';
+import { homepageNav } from '../content/homepage';
 import ViolemaLogo from './ViolemaLogo';
 
 export default function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', onScroll);
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  const isHomeRoute = location.pathname === '/';
+  const transparent = isHomeRoute && !scrolled && !mobileOpen;
 
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -32,15 +39,23 @@ export default function Navbar() {
     };
   }, [mobileOpen]);
 
-  const navLinks = [
-    { label: 'Product', href: '#features' },
-    { label: 'Integrations', href: '/integrations' },
-    { label: 'Pricing', href: '#pricing' },
-    { label: 'Compare', href: '#compare' },
-    { label: 'FAQ', href: '/faq' },
-  ];
+  useEffect(() => {
+    if (location.pathname !== '/' || !location.hash) return;
+    const sectionId = location.hash.replace('#', '');
+    const timer = window.setTimeout(() => scrollToSection(sectionId, 'auto'), 80);
+    return () => window.clearTimeout(timer);
+  }, [location.hash, location.pathname]);
 
-  const handleNavClick = (href: string) => {
+  function scrollToSection(sectionId: string, behavior?: ScrollBehavior) {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document
+      .getElementById(sectionId)
+      ?.scrollIntoView({ behavior: behavior ?? (prefersReducedMotion ? 'auto' : 'smooth'), block: 'start' });
+  }
+
+  function handleNavClick(event: MouseEvent<HTMLAnchorElement>, href: string) {
+    event.preventDefault();
+
     if (href.startsWith('/')) {
       navigate(href);
       return;
@@ -48,144 +63,122 @@ export default function Navbar() {
 
     const sectionId = href.replace('#', '');
     if (location.pathname !== '/') {
-      navigate('/');
-      window.setTimeout(() => {
-        document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 80);
+      navigate({ pathname: '/', hash: href });
       return;
     }
 
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+    window.history.pushState(null, '', href);
+    scrollToSection(sectionId);
+  }
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? 'bg-navy-900/90 backdrop-blur-md border-b border-navy-800/60 shadow-lg'
-          : 'border-b border-navy-800/70 bg-navy-900/72 backdrop-blur-md lg:border-transparent lg:bg-transparent lg:backdrop-blur-0'
+      className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${
+        transparent
+          ? 'border-b border-transparent bg-transparent'
+          : 'border-b border-white/10 bg-[#070b16]/85 shadow-[0_18px_44px_rgba(0,0,0,0.34)] backdrop-blur-xl'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8">
-        <div className="mobile-header-row flex items-center justify-between">
-          {/* Logo */}
+      <div className="mx-auto max-w-[100rem] px-4 sm:px-6 lg:px-8">
+        <div className="flex h-[4.75rem] items-center justify-between gap-4 xl:h-[5.5rem]">
           <button
-            className="flex items-center group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-2xl"
+            type="button"
+            className="flex items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             onClick={() => navigate('/')}
             aria-label="Violema home"
           >
-            <ViolemaLogo
-              className="mobile-header-logo"
-            />
+            <ViolemaLogo className="mobile-header-logo xl:h-14 xl:w-[15.5rem]" />
           </button>
 
-          {/* Desktop nav links */}
-          <div className="hidden lg:flex items-center gap-2 rounded-full border border-white/8 bg-navy-900/55 px-2 py-1.5 shadow-[0_12px_32px_rgba(4,8,20,0.22)] backdrop-blur-xl">
-            {navLinks.map((link) => (
-              <button
+          <div className="hidden items-center gap-9 xl:flex">
+            {homepageNav.map((link) => (
+              <a
                 key={link.label}
-                onClick={() => handleNavClick(link.href)}
-                className="rounded-full px-4 py-2 text-[0.82rem] font-medium text-slate-300 transition-all duration-200 hover:bg-white/6 hover:text-white"
+                href={link.href}
+                onClick={(event) => handleNavClick(event, link.href)}
+                className="inline-flex items-center gap-1.5 rounded-xl px-1 py-2 text-base font-medium text-[#dbe2f4] transition duration-200 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
               >
                 {link.label}
-              </button>
+                {link.label === 'Product' || link.label === 'Use cases' || link.label === 'Resources' ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : null}
+              </a>
             ))}
           </div>
 
-          {/* Desktop CTA */}
-          <div className="hidden lg:flex items-center gap-2.5">
+          <div className="hidden items-center gap-2 xl:flex">
             <button
+              type="button"
               onClick={() => navigate('/login')}
-              className="rounded-full px-4 py-2 text-[0.82rem] font-medium text-slate-300 transition-colors duration-200 hover:text-white"
+              className="min-h-12 rounded-xl border border-slate-500/55 bg-[#070b18]/45 px-8 text-base font-semibold text-[#dbe2f4] transition duration-200 hover:border-violet-200/45 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
               Sign in
             </button>
             <button
+              type="button"
               onClick={() => navigate('/signup?next=%2Fplans')}
-              className="btn-primary rounded-full text-[0.82rem] py-2.5 px-4.5"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] px-8 text-base font-bold text-white shadow-[0_18px_55px_rgba(124,58,237,0.28)] transition duration-200 hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
-              <Sparkles className="w-4 h-4" />
-              Get access
+              Set up access
+              <ArrowRight className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Mobile menu toggle */}
           <button
-            className={`lg:hidden transition-all duration-200 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
-              mobileOpen
-                ? 'rounded-2xl border border-violet-400/45 bg-violet-500/10 p-2.5 text-white shadow-[0_0_22px_rgba(139,92,246,0.24)]'
-                : 'rounded-xl p-1.5 text-slate-400'
-            }`}
-            onClick={() => setMobileOpen(!mobileOpen)}
+            type="button"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#f4f1ec] transition duration-200 hover:border-violet-200/40 xl:hidden"
+            onClick={() => setMobileOpen((open) => !open)}
             aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={mobileOpen}
           >
-            {mobileOpen ? <X className="h-8 w-8 sm:h-5 sm:w-5" /> : <Menu className="h-8 w-8 sm:h-5 sm:w-5" />}
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile menu */}
-      {mobileOpen && (
-        <div className="mobile-nav-drawer lg:hidden overflow-y-auto border-t border-violet-800/35 bg-navy-950 shadow-[0_28px_90px_rgba(2,6,23,0.72)]">
-          <div className="px-4 pb-7 pt-4">
-            <div className="mb-4 flex items-center justify-between rounded-2xl border border-white/8 bg-navy-900/80 px-4 py-3">
-              <span className="text-[0.72rem] font-bold uppercase tracking-[0.24em] text-violet-200/75">
-                Navigate
-              </span>
-              <span className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(103,232,249,0.8)]" />
-            </div>
-
-            <div className="space-y-2.5">
-              {navLinks.map((link, index) => (
-                <button
+      {mobileOpen ? (
+        <div className="border-t border-white/10 bg-[#090a0c]/96 backdrop-blur-xl xl:hidden">
+          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
+            <div className="grid gap-2">
+              {homepageNav.map((link) => (
+                <a
                   key={link.label}
-                  onClick={() => {
-                    handleNavClick(link.href);
+                  href={link.href}
+                  onClick={(event) => {
+                    handleNavClick(event, link.href);
                     setMobileOpen(false);
                   }}
-                  className="group flex w-full items-center justify-between rounded-2xl border border-white/8 bg-navy-900/80 px-4 py-4 text-left text-white shadow-[0_16px_36px_rgba(2,6,23,0.22)] transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-400/45 hover:bg-violet-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                  className="flex min-h-12 items-center justify-between rounded-xl border border-white/10 bg-white/[0.035] px-4 text-left text-base font-medium text-[#f4f1ec] transition duration-200 hover:border-violet-200/40"
                 >
-                  <span className="flex items-baseline gap-3">
-                    <span className="text-[0.72rem] font-bold tracking-[0.18em] text-violet-300/70">
-                      0{index + 1}
-                    </span>
-                    <span className="text-[1.75rem] font-black leading-none tracking-tight">
-                      {link.label}
-                    </span>
-                  </span>
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-navy-900/80 text-slate-300 transition-all duration-200 group-hover:border-violet-300/50 group-hover:text-white">
-                    <ArrowRight className="h-5 w-5" />
-                  </span>
-                </button>
+                  {link.label}
+                </a>
               ))}
             </div>
-
-            <div className="mt-5 grid gap-3 border-t border-white/10 pt-5">
+            <div className="mt-4 grid gap-2 border-t border-white/10 pt-4">
               <button
+                type="button"
                 onClick={() => {
                   navigate('/signup?next=%2Fplans');
                   setMobileOpen(false);
                 }}
-                className="btn-primary w-full justify-center rounded-2xl py-4 text-[1.05rem] font-extrabold"
+                className="min-h-12 rounded-xl bg-[#f4f1ec] px-4 text-sm font-semibold text-[#090a0c]"
               >
-                <Sparkles className="h-5 w-5" />
-                Start setup
-                <ArrowRight className="h-5 w-5" />
+                Set up access
               </button>
               <button
+                type="button"
                 onClick={() => {
                   navigate('/login');
                   setMobileOpen(false);
                 }}
-                className="btn-secondary w-full justify-center rounded-2xl py-4 text-[1.05rem] font-extrabold"
+                className="min-h-12 rounded-xl border border-white/10 bg-white/[0.035] px-4 text-sm font-semibold text-[#f4f1ec]"
               >
                 Sign in
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </nav>
   );
 }

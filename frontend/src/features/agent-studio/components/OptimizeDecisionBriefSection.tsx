@@ -1,4 +1,6 @@
-import { ArrowRightLeft, CheckCircle2, Clock3 } from 'lucide-react';
+import ArrowRightLeft from 'lucide-react/dist/esm/icons/arrow-right-left.js';
+import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2.js';
+import Clock3 from 'lucide-react/dist/esm/icons/clock-3.js';
 
 interface OptimizeDecisionBriefSectionProps {
   scenarioLabel: string;

@@ -1,5 +1,9 @@
 import type { ReactNode } from 'react';
-import { BarChart3, ChevronRight, Orbit, Radar, Target } from 'lucide-react';
+import BarChart3 from 'lucide-react/dist/esm/icons/bar-chart-3.js';
+import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right.js';
+import Orbit from 'lucide-react/dist/esm/icons/orbit.js';
+import Radar from 'lucide-react/dist/esm/icons/radar.js';
+import Target from 'lucide-react/dist/esm/icons/target.js';
 import type { AutomationExecutionPolicyDraft } from '../types';
 
 interface CandidatePreset {

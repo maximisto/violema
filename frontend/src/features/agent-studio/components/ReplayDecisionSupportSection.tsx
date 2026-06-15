@@ -1,4 +1,5 @@
-import { Brain, Sparkles } from 'lucide-react';
+import Brain from 'lucide-react/dist/esm/icons/brain.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import type { StudioExperimentRecord } from '../types';
 
 interface ReplayCausalReportItem {

@@ -1,8 +1,21 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import {
-  Send, ChevronDown, AlertCircle, Square, ChevronDownCircle,
-  Copy, Check, Clock, Brain, ThumbsUp, ThumbsDown, Zap, Shield, Eye, RefreshCw, Sparkles, X,
-} from 'lucide-react';
+import Send from 'lucide-react/dist/esm/icons/send.js';
+import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down.js';
+import AlertCircle from 'lucide-react/dist/esm/icons/alert-circle.js';
+import Square from 'lucide-react/dist/esm/icons/square.js';
+import ChevronDownCircle from 'lucide-react/dist/esm/icons/chevron-down-circle.js';
+import Copy from 'lucide-react/dist/esm/icons/copy.js';
+import Check from 'lucide-react/dist/esm/icons/check.js';
+import Clock from 'lucide-react/dist/esm/icons/clock.js';
+import Brain from 'lucide-react/dist/esm/icons/brain.js';
+import ThumbsUp from 'lucide-react/dist/esm/icons/thumbs-up.js';
+import ThumbsDown from 'lucide-react/dist/esm/icons/thumbs-down.js';
+import Zap from 'lucide-react/dist/esm/icons/zap.js';
+import Shield from 'lucide-react/dist/esm/icons/shield.js';
+import Eye from 'lucide-react/dist/esm/icons/eye.js';
+import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
+import X from 'lucide-react/dist/esm/icons/x.js';
 import type { Message, ToolCall, SSEEvent, AutonomyMode } from '../types';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
@@ -921,6 +934,9 @@ interface ChatInterfaceProps {
   initialMessages?: Message[];
   onMessagesChange?: (messages: Message[]) => void;
   autonomyMode?: AutonomyMode;
+  missionTitle?: string;
+  missionStatusLabel?: string;
+  onOpenMissionWorkspace?: () => void;
 }
 
 export default function ChatInterface({
@@ -928,6 +944,9 @@ export default function ChatInterface({
   initialMessages = [],
   onMessagesChange,
   autonomyMode = 'cautious',
+  missionTitle,
+  missionStatusLabel,
+  onOpenMissionWorkspace,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState('');
@@ -1320,6 +1339,17 @@ export default function ChatInterface({
             <span className="text-slate-700">•</span>
             <span>{messages.length === 0 ? 'Fresh workspace' : `${messages.length} messages`}</span>
           </div>
+          {missionTitle ? (
+            <button
+              type="button"
+              onClick={onOpenMissionWorkspace}
+              className="hidden min-w-0 max-w-[18rem] items-center gap-1.5 rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-[10px] font-medium text-violet-200 transition-colors hover:bg-violet-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 md:flex"
+              title="Open mission workspace"
+            >
+              <span className="truncate">{missionTitle}</span>
+              {missionStatusLabel ? <span className="flex-shrink-0 text-violet-200/60">· {missionStatusLabel}</span> : null}
+            </button>
+          ) : null}
           <div className="ml-auto flex items-center gap-1.5 text-[10px] text-slate-500 sm:gap-2">
             <span className="hidden uppercase tracking-[0.24em] text-slate-700 sm:inline">Mode</span>
             <div className={`flex items-center gap-1 rounded-full border px-2 py-1 ${modeConfig.bg} ${modeConfig.color} shadow-sm sm:gap-1.5 sm:px-2.5`}>

@@ -1,4 +1,5 @@
-import { Brain, Gauge } from 'lucide-react';
+import Brain from 'lucide-react/dist/esm/icons/brain.js';
+import Gauge from 'lucide-react/dist/esm/icons/gauge.js';
 import type {
   AutomationExecutionPolicyDraft,
   ExecutionMode,

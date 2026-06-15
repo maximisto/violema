@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { ArrowUpRight, CreditCard, Gift, Sparkles } from 'lucide-react';
+import ArrowUpRight from 'lucide-react/dist/esm/icons/arrow-up-right.js';
+import CreditCard from 'lucide-react/dist/esm/icons/credit-card.js';
+import Gift from 'lucide-react/dist/esm/icons/gift.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import {
   buildReferralMessage,
   buildTopUpRequest,

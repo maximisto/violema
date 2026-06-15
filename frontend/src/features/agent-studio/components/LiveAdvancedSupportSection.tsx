@@ -1,4 +1,6 @@
-import { Activity, Gauge, Layers3 } from 'lucide-react';
+import Activity from 'lucide-react/dist/esm/icons/activity.js';
+import Gauge from 'lucide-react/dist/esm/icons/gauge.js';
+import Layers3 from 'lucide-react/dist/esm/icons/layers-3.js';
 
 interface LiveAdvancedSupportSectionProps {
   livePulse: {

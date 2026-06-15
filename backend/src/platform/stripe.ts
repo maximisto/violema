@@ -1,5 +1,5 @@
 import path from 'path';
-import Stripe from 'stripe';
+import type Stripe from 'stripe';
 import { listLedgerEntries } from './store';
 import { addLedgerEntry } from './store';
 import { getBillingStatusSnapshot, getPlanDefinition, listPlanDefinitions, listTopUpOffers, purchaseTopUp, upsertBillingConfig } from './billing';
@@ -65,6 +65,7 @@ const DEFAULT_CANCEL_URL = `${getAppBaseUrl()}/plans?checkout=cancel`;
 
 let cachedStripe: Stripe | null = null;
 let cachedStripeKey: string | null = null;
+let cachedStripeConstructor: typeof import('stripe').default | null = null;
 
 function getEnv(name: string): string | null {
   const value = process.env[name]?.trim();
@@ -79,10 +80,17 @@ function getStripeClient(): Stripe | null {
   const key = getEnv('STRIPE_SECRET_KEY');
   if (!key) return null;
   if (!cachedStripe || cachedStripeKey !== key) {
-    cachedStripe = new Stripe(key);
+    cachedStripe = new (getStripeConstructor())(key);
     cachedStripeKey = key;
   }
   return cachedStripe;
+}
+
+function getStripeConstructor(): typeof import('stripe').default {
+  if (cachedStripeConstructor) return cachedStripeConstructor;
+  const loaded = require('stripe') as { default?: typeof import('stripe').default };
+  cachedStripeConstructor = loaded.default || (loaded as typeof import('stripe').default);
+  return cachedStripeConstructor;
 }
 
 function normalizeOfferKey(offerId: string): string {

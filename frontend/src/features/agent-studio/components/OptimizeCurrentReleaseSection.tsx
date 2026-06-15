@@ -1,4 +1,4 @@
-import { Gauge } from 'lucide-react';
+import Gauge from 'lucide-react/dist/esm/icons/gauge.js';
 
 interface OptimizeCurrentReleaseSectionProps {
   scorecard: {

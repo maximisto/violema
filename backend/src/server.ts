@@ -1,7 +1,13 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import Anthropic from '@anthropic-ai/sdk';
+import type AnthropicClient from '@anthropic-ai/sdk';
+import type {
+  MessageParam,
+  Tool,
+  ToolResultBlockParam,
+  ToolUseBlock,
+} from '@anthropic-ai/sdk/resources/messages/messages';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -27,6 +33,7 @@ import { executeComposioAction, getComposioConnectionUrl, isComposioEnabled, isC
 import {
   createAutomation,
   deleteAutomation,
+  ensureCoreAutomationSeeds,
   getAutomationById,
   listAutomations,
   loadPersistedAutomations,
@@ -50,6 +57,7 @@ import {
   type AutomationStepKind,
   type PersistedAutomationStep,
   buildCreditSnapshot,
+  buildMissionRecords,
   buildDelegationRuntimeContext,
   buildWorkerTopologySnapshot,
   createTask,
@@ -138,6 +146,8 @@ const ALLOWED_ORIGINS = [
   'http://nexus.purpleorange.io',
 ];
 const AUTH_COOKIE_NAME = 'violema_session';
+type AnthropicConstructor = typeof import('@anthropic-ai/sdk').default;
+let cachedAnthropicConstructor: AnthropicConstructor | null = null;
 
 function addTaskPanelStreamClient(workspaceId: string, res: Response) {
   const set = taskPanelStreamClients.get(workspaceId) || new Set<Response>();
@@ -396,6 +406,13 @@ function getProviderEnvToken(provider: 'anthropic' | 'openai' | 'openrouter' | '
   return process.env.MINIMAX_API_KEY?.trim() || process.env.ANTHROPIC_API_KEY?.trim();
 }
 
+function getAnthropicConstructor(): AnthropicConstructor {
+  if (cachedAnthropicConstructor) return cachedAnthropicConstructor;
+  const loaded = require('@anthropic-ai/sdk') as { default?: AnthropicConstructor };
+  cachedAnthropicConstructor = loaded.default || (loaded as AnthropicConstructor);
+  return cachedAnthropicConstructor;
+}
+
 async function testProviderConnection(input: {
   workspaceId: string;
   provider: 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax';
@@ -416,7 +433,7 @@ async function testProviderConnection(input: {
       };
     }
 
-    const client = new Anthropic({
+    const client = new (getAnthropicConstructor())({
       apiKey: token,
       baseURL: input.provider === 'minimax'
         ? process.env.MINIMAX_BASE_URL?.trim()
@@ -1037,9 +1054,9 @@ function buildOpenAITools() {
 }
 
 async function runAnthropicChatLoop(
-  client: Anthropic,
+  client: AnthropicClient,
   route: { model: string },
-  anthropicMessages: Anthropic.MessageParam[],
+  anthropicMessages: MessageParam[],
   autonomyMode: string,
   sendEvent: (data: Record<string, unknown>) => void
 ): Promise<{ toolCallsExecuted: number }> {
@@ -1056,7 +1073,7 @@ async function runAnthropicChatLoop(
       messages: currentMessages,
     });
 
-    const toolUseBlocks: Anthropic.ToolUseBlock[] = [];
+    const toolUseBlocks: ToolUseBlock[] = [];
     let currentToolUse: { id: string; name: string; input: string; startedAt: number } | null = null;
     let hasToolUse = false;
 
@@ -1120,7 +1137,7 @@ async function runAnthropicChatLoop(
     if (finalMessage.stop_reason === 'tool_use' && hasToolUse) {
       currentMessages.push({ role: 'assistant', content: finalMessage.content });
 
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      const toolResults: ToolResultBlockParam[] = [];
 
       for (const toolUseBlock of toolUseBlocks) {
         const toolInput = toolUseBlock.input as Record<string, unknown>;
@@ -1269,7 +1286,7 @@ async function runOpenAIChatLoop(
   return { toolCallsExecuted };
 }
 
-const NEXUS_TOOLS: Anthropic.Tool[] = [
+const NEXUS_TOOLS: Tool[] = [
   {
     name: 'web_search',
     description: 'Search the web for current information, news, data, or any topic. Returns top results with titles, URLs, and summaries.',
@@ -1833,7 +1850,7 @@ async function executeConversationTask(input: {
       modelSourceLabel: getModelSourceLabel(modelSource),
     },
   });
-  const anthropicMessages: Anthropic.MessageParam[] = messages.map((message) => ({
+  const anthropicMessages: MessageParam[] = messages.map((message) => ({
     role: message.role,
     content: message.content,
   }));
@@ -4765,6 +4782,18 @@ app.post('/api/billing/referrals/:id/reward', (req: Request, res: Response) => {
   });
 });
 
+app.get('/api/missions', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const items = buildMissionRecords({
+    workspaceId,
+    automations: listAutomations(),
+    tasks: listTasks(workspaceId),
+    taskRuns: listTaskRuns(workspaceId),
+  });
+
+  res.json({ items });
+});
+
 app.get('/api/automations', (_req: Request, res: Response) => {
   res.json({ items: listAutomations() });
 });
@@ -5038,6 +5067,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 loadPersistedAutomations(runAutomation);
+ensureCoreAutomationSeeds(runAutomation);
 
 app.listen(PORT, () => {
   console.log(`Violema by Purple Orange AI — backend running on http://localhost:${PORT}`);

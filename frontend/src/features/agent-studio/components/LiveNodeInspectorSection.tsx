@@ -1,4 +1,4 @@
-import { Bot } from 'lucide-react';
+import Bot from 'lucide-react/dist/esm/icons/bot.js';
 import type {
   DashboardTaskStepExecution,
   DashboardWorkerCard,

@@ -1,4 +1,5 @@
-import { Cpu, Sparkles } from 'lucide-react';
+import Cpu from 'lucide-react/dist/esm/icons/cpu.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import type { DashboardWorkerCard, WorkflowBlockKind } from '../types';
 
 export interface NextExperimentQueueItem {

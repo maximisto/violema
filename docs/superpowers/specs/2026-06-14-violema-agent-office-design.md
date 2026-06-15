@@ -153,32 +153,59 @@ There must always be a fast return to chat.
 
 ## Navigation
 
-Keep the persistent left navigation.
+Architecture locked on 2026-06-14.
 
-Recommended primary nav:
+The primary workspace navigation lives in the top bar. Source of truth:
 
-- Home
-- Missions
-- Board
-- Reviews
-- Calendar
-- Knowledge
-- Integrations
-- Credits
-- Settings
+- `frontend/src/features/missions/workspaceShell.ts`
 
-Within a selected mission, use local tabs:
+Primary areas:
 
 - Chat
-- Mission
-- Agents
+- Missions
 - Board
 - Map
 - Reviews
 - Calendar
 - Analytics
+- Integrations
+- Advanced
+
+The left rail is reserved for conversation history, search, compact utilities, and account/workspace controls. Credits should remain visible as a quiet utility, not a dominant navigation card.
+
+Each selected area has contextual top tabs:
+
+- Chat: Chat, Activity
+- Missions: Overview, Artifact, Agents, Steps, Evidence, Lessons, Schedule
+- Board: Active, Waiting, Review, Done
+- Map: Workflow, Integrations, Tools, MCP
+- Reviews: Approvals, Evidence, Outputs
+- Calendar: Upcoming, Recurring, History
+- Analytics: Credits, Efficiency, Run cost, Forecast
+- Integrations: Core, Suites, MCP
+- Advanced: Debug, Replay, Optimize
+
+Agent Studio belongs behind Advanced. The default user journey is Agent Office: chat, visible missions, steps, agents, reviews, calendar, analytics, and integrations. Agent Studio remains the deeper operator surface for replay, diagnostics, routing policy, and optimization.
 
 These tabs should change the contextual work surface, not make the user feel they have entered a separate product.
+
+## Backend Source Of Truth
+
+Mission/workflow domain types live in:
+
+- `backend/src/platform/types.ts`
+
+The backend source of truth is:
+
+- `MissionRecord`
+- `MissionPlan`
+- `MissionPlanStep`
+- `MissionReviewSettings`
+
+Frontend mission types remain view models derived from backend records:
+
+- `frontend/src/features/missions/types.ts`
+- `frontend/src/features/missions/missionPresenter.ts`
 
 ## Core Objects
 
@@ -195,10 +222,12 @@ Fields:
 - owner
 - source prompt
 - selected workflow template
+- mission plan
 - created at
 - updated at
 - schedule id, optional
 - automation id, optional
+- active task id, optional
 - active run id, optional
 - credit budget, optional
 - review policy

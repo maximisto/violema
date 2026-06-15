@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, BellRing, Bot, CheckCircle2, Github, Globe, Layers3, Link2, Loader2, Plug, Search, Shield, Slack, Sparkles } from 'lucide-react';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
+import Bot from 'lucide-react/dist/esm/icons/bot.js';
+import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2.js';
+import Globe from 'lucide-react/dist/esm/icons/globe.js';
+import Link2 from 'lucide-react/dist/esm/icons/link-2.js';
+import Loader2 from 'lucide-react/dist/esm/icons/loader-2.js';
+import Plug from 'lucide-react/dist/esm/icons/plug.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import { Link } from 'react-router-dom';
+import BrandIcon from '../components/BrandIcon';
 import PublicHeader from '../components/PublicHeader';
 
 interface PartnerApp {
@@ -27,53 +35,49 @@ interface IntegrationCatalog {
 const NATIVE_NOW = [
   {
     name: 'Slack',
-    icon: Slack,
     detail: 'Messaging and team coordination',
     description: 'Send updates, deliver summaries, and run Violema where teams already work.',
   },
   {
     name: 'Email',
-    icon: BellRing,
     detail: 'Outbound notifications and follow-ups',
     description: 'Route alerts, summaries, and human-facing messages through email when Slack is not the right surface.',
   },
   {
     name: 'Web search',
-    icon: Search,
     detail: 'Current information and research',
     description: 'Pull current web context into real tasks instead of relying on stale model memory.',
   },
   {
     name: 'Browser screenshots',
-    icon: Globe,
     detail: 'Visual inspection and capture',
     description: 'Inspect real pages, grab screenshots, and bring visual state back into the workflow.',
   },
   {
     name: 'Stripe',
-    icon: Layers3,
     detail: 'Billing and workspace purchases',
     description: 'Power subscriptions, top-ups, and billing state directly inside the Violema commercial surface.',
   },
   {
     name: 'GitHub',
-    icon: Github,
     detail: 'Issues, repos, and engineering context',
     description: 'Support engineering workflows where code, repo state, and shipping decisions matter.',
   },
 ];
 
 const NEXT_UP = [
-  'Notion and Linear workspace sync',
-  'Shared alerts into more team destinations',
-  'A cleaner long-tail integration layer for non-core business tools',
+  { name: 'Notion', body: 'Workspace knowledge sync' },
+  { name: 'Linear', body: 'Product issue and cycle sync' },
+  { name: 'Google Calendar', body: 'Calendar-aware scheduling and follow-up' },
+  { name: 'Microsoft Teams', body: 'Shared alerts into more team destinations' },
+  { name: 'Custom MCP tools', body: 'A cleaner long-tail layer for non-core business tools' },
 ];
 
 const CUSTOM = [
-  'Internal APIs and private systems',
-  'Customer-specific workflow tooling',
-  'Admin and approval-heavy back-office processes',
-  'Security-conscious rollouts that need tighter scoping',
+  { name: 'Custom MCP tools', body: 'Internal APIs and private systems' },
+  { name: 'Workflow automation', body: 'Customer-specific workflow tooling' },
+  { name: 'Workflow automation', body: 'Admin and approval-heavy back-office processes' },
+  { name: 'Security workflows', body: 'Security-conscious rollouts that need tighter scoping' },
 ];
 
 function ComposioConnectSection() {
@@ -184,8 +188,13 @@ function ComposioConnectSection() {
                       : 'border-navy-700/60 bg-navy-950/45 hover:border-violet-500/40 hover:bg-navy-800/60'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-white">{app.label}</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-100">
+                        <BrandIcon name={app.label || app.name} className="h-4 w-4" />
+                      </span>
+                      <p className="min-w-0 truncate text-sm font-semibold text-white">{app.label}</p>
+                    </div>
                     {connected ? (
                       <CheckCircle2 className="h-4 w-4 text-green-400" />
                     ) : isBusy ? (
@@ -286,11 +295,11 @@ export default function IntegrationsPage() {
               </div>
             </div>
             <div className="mt-6 grid gap-4 md:grid-cols-2">
-              {NATIVE_NOW.map(({ name, icon: Icon, detail, description }) => (
+              {NATIVE_NOW.map(({ name, detail, description }) => (
                 <div key={name} className="rounded-2xl border border-navy-700/60 bg-navy-950/45 p-4">
                   <div className="flex items-center gap-3">
-                    <div className="rounded-xl bg-violet-500/10 p-2.5 text-violet-300">
-                      <Icon className="h-4 w-4" />
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-100">
+                      <BrandIcon name={name} className="h-[1.05rem] w-[1.05rem]" />
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-white">{name}</p>
@@ -315,12 +324,12 @@ export default function IntegrationsPage() {
             </div>
             <div className="mt-5 space-y-3">
               {[
-                { label: 'Slack', note: 'Primary team-facing surface for alerts, summaries, approvals, and shared execution.', icon: Slack },
-                { label: 'Web app', note: 'Primary control surface for workflows, settings, task visibility, and full execution detail.', icon: Globe },
-              ].map(({ label, note, icon: Icon }) => (
+                { label: 'Slack', note: 'Primary team-facing surface for alerts, summaries, approvals, and shared execution.' },
+                { label: 'Web app', note: 'Primary control surface for workflows, settings, task visibility, and full execution detail.' },
+              ].map(({ label, note }) => (
                 <div key={label} className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
                   <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                    <Icon className="h-4 w-4 text-cyan-300" />
+                    <BrandIcon name={label} className="h-4 w-4 text-cyan-200" />
                     {label}
                   </div>
                   <p className="mt-2 text-sm leading-relaxed text-slate-400">{note}</p>
@@ -338,9 +347,14 @@ export default function IntegrationsPage() {
             <h3 className="mt-2 text-2xl font-semibold text-white">The next connector wave</h3>
             <div className="mt-5 space-y-3">
               {NEXT_UP.map((item) => (
-                <div key={item} className="flex items-start gap-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3 text-sm text-slate-400">
-                  <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-violet-400" />
-                  <span>{item}</span>
+                <div key={item.name} className="flex items-start gap-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3 text-sm text-slate-400">
+                  <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-100">
+                    <BrandIcon name={item.name} className="h-4 w-4" />
+                  </span>
+                  <span>
+                    <span className="block font-semibold text-slate-100">{item.name}</span>
+                    <span className="mt-0.5 block">{item.body}</span>
+                  </span>
                 </div>
               ))}
             </div>
@@ -351,9 +365,11 @@ export default function IntegrationsPage() {
             <h3 className="mt-2 text-2xl font-semibold text-white">Where custom integration work belongs</h3>
             <div className="mt-5 space-y-3">
               {CUSTOM.map((item) => (
-                <div key={item} className="flex items-start gap-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3 text-sm text-slate-400">
-                  <Shield className="mt-0.5 h-4 w-4 flex-shrink-0 text-cyan-300" />
-                  <span>{item}</span>
+                <div key={item.body} className="flex items-start gap-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3 text-sm text-slate-400">
+                  <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-200">
+                    <BrandIcon name={item.name} className="h-4 w-4" />
+                  </span>
+                  <span>{item.body}</span>
                 </div>
               ))}
             </div>

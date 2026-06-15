@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Check, CreditCard, Layers3, MessageSquare, Shield, Sparkles, Users } from 'lucide-react';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
+import Check from 'lucide-react/dist/esm/icons/check.js';
+import CreditCard from 'lucide-react/dist/esm/icons/credit-card.js';
+import Layers3 from 'lucide-react/dist/esm/icons/layers-3.js';
+import MessageSquare from 'lucide-react/dist/esm/icons/message-square.js';
+import Shield from 'lucide-react/dist/esm/icons/shield.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
+import Users from 'lucide-react/dist/esm/icons/users.js';
 import { TOP_UP_OPTIONS, createBillingCheckout, formatCredits, useCreditSnapshot } from '../lib/credits';
 import { fetchBackendAuthSession, getAuthSession } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';

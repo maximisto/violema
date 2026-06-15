@@ -15,6 +15,10 @@ const SlackSetup = lazy(() => import('./pages/SlackSetup'));
 const AgentStudio = lazy(() => import('./pages/AgentStudio'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const viteEnv = (import.meta as unknown as { env?: { DEV?: boolean } }).env;
+const enableLocalReviewRoutes = Boolean(viteEnv?.DEV)
+  && typeof window !== 'undefined'
+  && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 
 function RouteFallback() {
   return (
@@ -41,6 +45,7 @@ export default function App() {
           <Route path="/admin" element={<ProtectedRoute blockedRedirectPath="/login"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/dashboard/agents" element={<ProtectedRoute><AgentStudio /></ProtectedRoute>} />
+          {enableLocalReviewRoutes && <Route path="/dashboard-preview" element={<Dashboard />} />}
           <Route path="/faq" element={<FAQ />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />

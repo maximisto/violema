@@ -1,4 +1,6 @@
-import { CheckCircle2, FlaskConical, Sparkles } from 'lucide-react';
+import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2.js';
+import FlaskConical from 'lucide-react/dist/esm/icons/flask-conical.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 
 interface ReplayDecisionBriefSectionProps {
   brief: {

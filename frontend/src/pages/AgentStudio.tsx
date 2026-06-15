@@ -1,27 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import {
-  Activity,
-  ArrowLeft,
-  ArrowUpRight,
-  BarChart3,
-  Brain,
-  BookOpen,
-  CheckCircle2,
-  ChevronRight,
-  Clock3,
-  Cpu,
-  Flame,
-  Gauge,
-  Layers3,
-  LineChart,
-  Orbit,
-  Radar,
-  RotateCcw,
-  Sparkles,
-  Target,
-  Workflow,
-} from 'lucide-react';
+import Activity from 'lucide-react/dist/esm/icons/activity.js';
+import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left.js';
+import ArrowUpRight from 'lucide-react/dist/esm/icons/arrow-up-right.js';
+import BarChart3 from 'lucide-react/dist/esm/icons/bar-chart-3.js';
+import Brain from 'lucide-react/dist/esm/icons/brain.js';
+import BookOpen from 'lucide-react/dist/esm/icons/book-open.js';
+import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2.js';
+import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right.js';
+import Clock3 from 'lucide-react/dist/esm/icons/clock-3.js';
+import Cpu from 'lucide-react/dist/esm/icons/cpu.js';
+import Flame from 'lucide-react/dist/esm/icons/flame.js';
+import Gauge from 'lucide-react/dist/esm/icons/gauge.js';
+import Layers3 from 'lucide-react/dist/esm/icons/layers-3.js';
+import LineChart from 'lucide-react/dist/esm/icons/line-chart.js';
+import Orbit from 'lucide-react/dist/esm/icons/orbit.js';
+import Radar from 'lucide-react/dist/esm/icons/radar.js';
+import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
+import Target from 'lucide-react/dist/esm/icons/target.js';
+import Workflow from 'lucide-react/dist/esm/icons/workflow.js';
 import { formatCredits } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import type {

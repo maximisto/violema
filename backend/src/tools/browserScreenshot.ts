@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import dns from 'dns/promises';
-import { chromium } from 'playwright';
 
 const SCREENSHOT_DIR = path.join(process.cwd(), 'generated-screenshots');
 const PRIVATE_IPV4_PATTERNS = [
@@ -66,6 +65,7 @@ export interface BrowserScreenshotInput {
 }
 
 export async function takeBrowserScreenshot(input: BrowserScreenshotInput) {
+  const { chromium } = await import('playwright');
   const parsedUrl = await assertPublicUrl(input.url);
   const width = Math.min(Math.max(Number(input.width) || 1440, 320), 2400);
   const height = Math.min(Math.max(Number(input.height) || 900, 320), 2400);

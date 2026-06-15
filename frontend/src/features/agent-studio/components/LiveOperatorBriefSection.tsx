@@ -1,4 +1,6 @@
-import { Compass, History, Sparkles } from 'lucide-react';
+import Compass from 'lucide-react/dist/esm/icons/compass.js';
+import History from 'lucide-react/dist/esm/icons/history.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import type { AgentStudioOperationalContext } from '../contract';
 import type { WorkflowBlockKind } from '../types';
 

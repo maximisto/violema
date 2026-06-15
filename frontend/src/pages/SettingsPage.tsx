@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bot, KeyRound, Plug, RotateCcw, Save, Shield } from 'lucide-react';
+import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left.js';
+import Bot from 'lucide-react/dist/esm/icons/bot.js';
+import KeyRound from 'lucide-react/dist/esm/icons/key-round.js';
+import Plug from 'lucide-react/dist/esm/icons/plug.js';
+import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw.js';
+import Save from 'lucide-react/dist/esm/icons/save.js';
+import Shield from 'lucide-react/dist/esm/icons/shield.js';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import ViolemaLogo from '../components/ViolemaLogo';
 

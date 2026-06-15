@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { ArrowUpRight, CreditCard, Gift, Sparkles, ChevronRight, History, ExternalLink, TrendingUp } from 'lucide-react';
+import ArrowUpRight from 'lucide-react/dist/esm/icons/arrow-up-right.js';
+import CreditCard from 'lucide-react/dist/esm/icons/credit-card.js';
+import Gift from 'lucide-react/dist/esm/icons/gift.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
+import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right.js';
+import History from 'lucide-react/dist/esm/icons/history.js';
+import ExternalLink from 'lucide-react/dist/esm/icons/external-link.js';
+import TrendingUp from 'lucide-react/dist/esm/icons/trending-up.js';
 import {
   buildReferralMessage,
   formatCredits,

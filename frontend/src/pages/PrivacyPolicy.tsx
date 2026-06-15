@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
-import { Shield, Zap } from 'lucide-react';
+import Shield from 'lucide-react/dist/esm/icons/shield.js';
+import Zap from 'lucide-react/dist/esm/icons/zap.js';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 

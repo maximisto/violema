@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, KeyRound, Mail } from 'lucide-react';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
+import KeyRound from 'lucide-react/dist/esm/icons/key-round.js';
+import Mail from 'lucide-react/dist/esm/icons/mail.js';
 import { beginOAuthFlow, getAuthSession, isAdminEmail, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import PublicHeader from '../components/PublicHeader';

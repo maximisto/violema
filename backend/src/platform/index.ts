@@ -3,6 +3,7 @@ export * from './delegation';
 export * from './cost';
 export * from './jsonStore';
 export * from './ledger';
+export * from './missions';
 export * from './referrals';
 export * from './stripe';
 export * from './store';

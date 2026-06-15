@@ -254,6 +254,74 @@ export interface AutomationExecutionPlan {
   topology: WorkerTopologySnapshot;
 }
 
+export type MissionStatus =
+  | 'planned'
+  | 'running'
+  | 'waiting_review'
+  | 'blocked'
+  | 'completed'
+  | 'failed'
+  | 'paused'
+  | 'canceled';
+
+export type MissionReviewPolicy = 'none' | 'before_delivery' | 'strict';
+export type MissionSource = 'chat' | 'workflow_template' | 'automation' | 'manual';
+export type MissionPlanStepStatus = AutomationStepStatus | 'waiting_review';
+
+export interface MissionReviewSettings {
+  policy: MissionReviewPolicy;
+  requiredRoles?: AgentRole[];
+  approvalChannel?: 'slack' | 'email' | 'app' | string;
+}
+
+export interface MissionPlanStep {
+  id: string;
+  title: string;
+  objective: string;
+  kind: AutomationStepKind;
+  assignedRole: AgentRole;
+  toolName?: AutomationStepDefinition['toolName'];
+  integrationId?: string;
+  dependencies?: string[];
+  condition?: string;
+  inputs?: Record<string, unknown>;
+  deliveryTarget?: AutomationStepDeliveryTarget | null;
+  reviewGate?: boolean;
+  estimatedCredits?: number;
+  currentStatus: MissionPlanStepStatus;
+}
+
+export interface MissionPlan {
+  steps: MissionPlanStep[];
+  primaryRole: AgentRole;
+  supportingRoles: AgentRole[];
+  estimatedCredits?: number;
+  executionPolicy?: AutomationExecutionPolicy;
+  automationPlan?: AutomationExecutionPlan;
+}
+
+export interface MissionRecord {
+  id: string;
+  workspaceId: string;
+  title: string;
+  goal: string;
+  status: MissionStatus;
+  ownerRole?: AgentRole;
+  source?: MissionSource;
+  sourcePrompt?: string;
+  workflowTemplateId?: string;
+  scheduleId?: string;
+  automationId?: string;
+  activeTaskId?: string;
+  activeRunId?: string;
+  creditBudget?: number;
+  review: MissionReviewSettings;
+  plan: MissionPlan;
+  createdAt: string;
+  updatedAt: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface TaskRunRecord {
   id: string;
   workspaceId: string;

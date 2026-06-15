@@ -1,4 +1,4 @@
-import { Workflow } from 'lucide-react';
+import Workflow from 'lucide-react/dist/esm/icons/workflow.js';
 
 interface LiveActivationTrailItem {
   id: string;

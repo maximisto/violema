@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { FileText } from 'lucide-react';
+import FileText from 'lucide-react/dist/esm/icons/file-text.js';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 

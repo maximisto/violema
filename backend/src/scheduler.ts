@@ -52,6 +52,97 @@ export interface AutomationRecord {
 const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
 const scheduledTasks = new Map<string, ScheduledTask>();
 const DEFAULT_AUTOMATION_TIMEZONE = process.env.DEFAULT_AUTOMATION_TIMEZONE || 'UTC';
+type AutomationSeed = Omit<
+  AutomationRecord,
+  'created_at' | 'last_run_at' | 'last_run_status' | 'consecutive_failures' | 'next_run_at'
+>;
+
+const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
+  {
+    id: 'auto_weekly_founder_update',
+    version: 2,
+    name: 'Weekly founder update',
+    description: 'A source-linked operating brief that rolls up revenue, product, customer, calendar, email, market, and decision signals for founder review.',
+    authoring_mode: 'guided',
+    workflow_prompt: [
+      'Create the weekly founder update from connected company systems.',
+      'Pull revenue, delivery, customer, calendar, email, and market signals.',
+      'Draft the brief with source-backed evidence and wait for human approval before delivery.',
+    ].join('\n'),
+    schedule: 'every monday at 9am',
+    cron_expression: '0 9 * * 1',
+    timezone: 'America/Chicago',
+    actions: [
+      'Check Stripe revenue, churn, expansion, and failed-payment signals',
+      'Scan GitHub delivery progress, blockers, and unreviewed pull requests',
+      'Review founder-critical email commitments and unanswered threads',
+      'Review calendar for investor, customer, and team commitments this week',
+      'Scan market and competitor changes since the last update',
+      'Draft the weekly founder update with key decisions, risks, and next actions',
+      'Deliver latest result to #founders after approval',
+    ],
+    steps: [
+      {
+        id: 'step_stripe_revenue',
+        kind: 'query',
+        title: 'Check Stripe revenue',
+        objective: 'Pull MRR movement, failed payments, churn, expansion, and customer revenue signals from Stripe.',
+        inputs: { source: 'stripe', query_type: 'revenue_summary' },
+      },
+      {
+        id: 'step_github_delivery',
+        kind: 'query',
+        title: 'Scan GitHub delivery',
+        objective: 'Pull merged pull requests, blocked issues, stale reviews, and release risk from GitHub.',
+        inputs: { source: 'github', query_type: 'delivery_risk' },
+      },
+      {
+        id: 'step_email_commitments',
+        kind: 'query',
+        title: 'Review email commitments',
+        objective: 'Find founder-critical follow-ups, investor/customer commitments, and unanswered priority threads.',
+        inputs: { source: 'email', providers: ['google_workspace', 'microsoft_365'], query_type: 'commitments' },
+      },
+      {
+        id: 'step_calendar_commitments',
+        kind: 'query',
+        title: 'Review calendar commitments',
+        objective: 'Review upcoming meetings, deadlines, and relationship commitments for the next seven days.',
+        inputs: { source: 'calendar', providers: ['google_workspace', 'microsoft_365'], query_type: 'weekly_commitments' },
+      },
+      {
+        id: 'step_market_scan',
+        kind: 'search',
+        title: 'Scan market signals',
+        objective: 'Research meaningful customer, competitor, pricing, platform, and AI automation changes since the last update.',
+        inputs: { query: 'AI automation platform startup competitor pricing product launch founder update', num_results: 6 },
+      },
+      {
+        id: 'step_founder_brief',
+        kind: 'summarize',
+        title: 'Draft founder brief',
+        objective: 'Synthesize a concise founder-ready brief with revenue movement, product progress, customer signals, market context, risks, decisions needed, and next actions.',
+        inputs: { instruction: 'Draft the weekly founder update with source-linked evidence, clear risks, decisions, and next actions.' },
+      },
+      {
+        id: 'step_slack_delivery',
+        kind: 'deliver',
+        title: 'Deliver to Slack',
+        objective: 'Send the reviewed weekly founder update to the founder channel after approval.',
+        inputs: { approval_required: true },
+        deliveryTarget: { channel: 'slack', target: '#founders' },
+      },
+    ],
+    execution_policy: {
+      mode: 'recommended',
+      optimizationGoal: 'balanced',
+      reviewPolicy: 'standard',
+      maxElasticLanes: 2,
+    },
+    notify: '#founders',
+    status: 'active',
+  },
+];
 
 function readAutomations(): AutomationRecord[] {
   try {
@@ -381,6 +472,37 @@ export function loadPersistedAutomations(
     }
   }
   return items;
+}
+
+export function ensureCoreAutomationSeeds(
+  onTrigger: (record: AutomationRecord) => Promise<{ ok: boolean; error?: string } | void>
+) {
+  const current = readAutomations();
+  const existingIds = new Set(current.map((item) => item.id));
+  const now = new Date().toISOString();
+  const additions = CORE_AUTOMATION_SEEDS
+    .filter((seed) => !existingIds.has(seed.id))
+    .map((seed) => withAutomationDefaults({
+      ...seed,
+      timezone: normalizeTimeZone(seed.timezone),
+      created_at: now,
+    }));
+
+  if (additions.length > 0) {
+    writeAutomations([...current, ...additions]);
+  }
+
+  const seeded = readAutomations()
+    .map(withAutomationDefaults)
+    .filter((item) => CORE_AUTOMATION_SEEDS.some((seed) => seed.id === item.id));
+
+  for (const item of seeded) {
+    if (item.status !== 'paused') {
+      scheduleAutomationTask(item, onTrigger);
+    }
+  }
+
+  return seeded;
 }
 
 export function listAutomations() {

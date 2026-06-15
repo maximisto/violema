@@ -1,4 +1,4 @@
-import { Layers3 } from 'lucide-react';
+import Layers3 from 'lucide-react/dist/esm/icons/layers-3.js';
 import type { DashboardWorkerCard, DashboardWorkerTopology, StudioRoleDirective, WorkflowBlockKind } from '../types';
 
 type WorkerMapNode = DashboardWorkerCard & { positionClass: string };

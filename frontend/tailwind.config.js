@@ -25,10 +25,30 @@ export default {
           500: '#06b6d4',
           600: '#0891b2',
         },
+        // Brand "live / approved" signal — the single warm accent that cuts
+        // through the violet so the page stops reading as generic AI-SaaS.
+        signal: {
+          300: '#ffb488',
+          400: '#ff9a5c',
+          500: '#ff7a3c',
+          600: '#f2601d',
+          700: '#cf4a10',
+        },
+        // Layered ink surfaces (instrument-grade depth instead of one flat black).
+        ink: {
+          950: '#04060d',
+          900: '#070b16',
+          850: '#0a0f1d',
+          800: '#0e1426',
+          700: '#141b30',
+        },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        // Clash Display is reserved for large display headings ONLY.
+        display: ['Clash Display', 'Geist', 'system-ui', 'sans-serif'],
+        sans: ['Geist', 'system-ui', 'sans-serif'],
+        // Promoted to a signature "telemetry" role: run IDs, metrics, labels.
+        mono: ['Geist Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-in-out',

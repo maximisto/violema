@@ -1,16 +1,64 @@
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import type React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import {
-  Plus, MessageSquare, Settings, ChevronRight, Zap, LogOut,
-  X, CheckSquare, Clock, AlertCircle, Sparkles, PanelLeftClose, PanelLeftOpen, Trash2,
-  Eye, Shield, Search, CreditCard, ArrowUpRight, Pin, Archive, RotateCcw, ChevronUp, ChevronDown, Bot,
-} from 'lucide-react';
+import Plus from 'lucide-react/dist/esm/icons/plus.js';
+import MessageSquare from 'lucide-react/dist/esm/icons/message-square.js';
+import Settings from 'lucide-react/dist/esm/icons/settings.js';
+import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right.js';
+import Zap from 'lucide-react/dist/esm/icons/zap.js';
+import LogOut from 'lucide-react/dist/esm/icons/log-out.js';
+import X from 'lucide-react/dist/esm/icons/x.js';
+import CheckSquare from 'lucide-react/dist/esm/icons/check-square.js';
+import Clock from 'lucide-react/dist/esm/icons/clock.js';
+import AlertCircle from 'lucide-react/dist/esm/icons/alert-circle.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
+import PanelLeftClose from 'lucide-react/dist/esm/icons/panel-left-close.js';
+import PanelLeftOpen from 'lucide-react/dist/esm/icons/panel-left-open.js';
+import Trash2 from 'lucide-react/dist/esm/icons/trash-2.js';
+import Eye from 'lucide-react/dist/esm/icons/eye.js';
+import Shield from 'lucide-react/dist/esm/icons/shield.js';
+import Search from 'lucide-react/dist/esm/icons/search.js';
+import CreditCard from 'lucide-react/dist/esm/icons/credit-card.js';
+import ArrowUpRight from 'lucide-react/dist/esm/icons/arrow-up-right.js';
+import Pin from 'lucide-react/dist/esm/icons/pin.js';
+import Archive from 'lucide-react/dist/esm/icons/archive.js';
+import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw.js';
+import ChevronUp from 'lucide-react/dist/esm/icons/chevron-up.js';
+import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down.js';
+import Bot from 'lucide-react/dist/esm/icons/bot.js';
 import ChatInterface from '../components/ChatInterface';
+import { MissionWorkspacePanel } from '../features/missions/MissionWorkspacePanel';
+import { MissionOverview } from '../features/missions/MissionOverview';
+import { MissionBoard } from '../features/missions/MissionBoard';
+import { MissionCalendar } from '../features/missions/MissionCalendar';
+import { MissionMap } from '../features/missions/MissionMap';
+import { MissionReviews } from '../features/missions/MissionReviews';
+import { MissionAnalytics } from '../features/missions/MissionAnalytics';
+import { MissionIntegrationsStrip } from '../features/missions/MissionIntegrationsStrip';
+import { MissionArtifact } from '../features/missions/MissionArtifact';
+import { MissionLessons } from '../features/missions/MissionLessons';
+import { buildMissionWorkspaceView, type MissionSourceTask } from '../features/missions/missionPresenter';
+import { mapMissionRecordToSourceTask, type MissionApiRecord } from '../features/missions/missionApi';
+import {
+  applyMissionAction,
+  findMissionAction,
+  getMissionActionsStorageKey,
+  normalizeMissionActions,
+  type MissionActionKind,
+  type MissionActionRecord,
+} from '../features/missions/missionActions';
+import {
+  WORKSPACE_AREAS,
+  getWorkspaceArea,
+  type WorkspaceAreaId,
+  type WorkspaceTabId,
+} from '../features/missions/workspaceShell';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import { getAuthSession, hasSlackConnection, isAdminSession } from '../lib/auth';
 import ViolemaLogo from '../components/ViolemaLogo';
 import type { Conversation, Message, AutonomyMode } from '../types';
+import type { MissionLessonView, MissionWorkspaceTab } from '../features/missions/types';
 
 const LEGACY_CONVOS_KEY = 'nexus_convos';
 
@@ -126,6 +174,16 @@ function loadConvos(workspaceId: string): Conversation[] {
       messages: c.messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })),
     })));
   } catch { return []; }
+}
+
+function loadMissionActions(workspaceId: string): MissionActionRecord[] {
+  try {
+    const raw = localStorage.getItem(getMissionActionsStorageKey(workspaceId));
+    if (!raw) return [];
+    return normalizeMissionActions(JSON.parse(raw));
+  } catch {
+    return [];
+  }
 }
 
 const SCHEDULE_PRESETS = [
@@ -371,8 +429,11 @@ interface DashboardTaskItem {
 }
 
 interface DashboardTaskArtifact {
+  id?: string;
   kind: string;
   title: string;
+  source?: string;
+  summary?: string;
   payload: Record<string, unknown>;
 }
 
@@ -458,6 +519,259 @@ type ThreadFilter = 'all' | 'active' | 'pinned' | 'archived';
 interface CreditEstimatePreview {
   estimatedCredits: number;
   monthlyCredits: number;
+}
+
+function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
+  const nextRun = new Date();
+  nextRun.setHours(9, 0, 0, 0);
+  const daysUntilMonday = (8 - nextRun.getDay()) % 7;
+  nextRun.setDate(nextRun.getDate() + (daysUntilMonday === 0 && nextRun.getTime() <= Date.now() ? 7 : daysUntilMonday));
+
+  const lastRun = new Date(nextRun);
+  lastRun.setDate(lastRun.getDate() - 7);
+  lastRun.setMinutes(3);
+
+  const lastRunAt = lastRun.toISOString();
+  const nextRunAt = nextRun.toISOString();
+
+  return [
+    {
+      id: 'preview-weekly-founder-update',
+      automationId: 'preview-weekly-founder-update',
+      title: 'Weekly founder update',
+      status: 'complete',
+      time: 'Every Monday at 9am',
+      icon: CheckSquare,
+      description: 'Collect Stripe, GitHub, and market signals, synthesize the operator brief, then hold delivery for founder review.',
+      authoringMode: 'guided',
+      workflowPrompt: [
+        'Query Stripe revenue, churn, and failed-payment movement.',
+        'Query GitHub open issues and recently merged work.',
+        'Search competitor pricing and product moves this week.',
+        'Analyze the signal and identify founder-level decisions.',
+        'Generate the weekly founder update.',
+        'Deliver latest result to #founders after review.',
+      ].join('\n'),
+      source: 'sample',
+      modelTier: 'balanced',
+      modelSource: 'Violema routing',
+      agentRole: 'operator_manager',
+      runStatus: 'waiting_review',
+      schedule: 'Every Monday at 9am',
+      notify: '#founders',
+      condition: 'Only deliver after the evidence trail and summary are reviewed.',
+      actions: [
+        'Query Stripe revenue movement',
+        'Query GitHub open issues and merged work',
+        'Search competitor pricing changes',
+        'Analyze founder-level risks and opportunities',
+        'Generate the weekly founder update',
+        'Deliver latest result to #founders after review',
+      ],
+      steps: [
+        {
+          id: 'preview-step-stripe',
+          kind: 'query',
+          title: 'Query Stripe revenue movement',
+          objective: 'Pull revenue, churn, expansion, and failed-payment signals.',
+          inputs: { source: 'stripe', query_type: 'revenue_summary' },
+        },
+        {
+          id: 'preview-step-github',
+          kind: 'query',
+          title: 'Query GitHub workstream',
+          objective: 'Summarize open issues, recently merged work, and release blockers.',
+          inputs: { source: 'github', query_type: 'open_issues' },
+        },
+        {
+          id: 'preview-step-market',
+          kind: 'search',
+          title: 'Search competitor moves',
+          objective: 'Find pricing, launch, and positioning changes relevant to founders.',
+          inputs: { query: 'AI agent workflow competitors pricing product launch this week', num_results: 8 },
+        },
+        {
+          id: 'preview-step-brief',
+          kind: 'summarize',
+          title: 'Generate founder brief',
+          objective: 'Turn the evidence into a concise update with risks, decisions, and next actions.',
+        },
+        {
+          id: 'preview-step-deliver',
+          kind: 'deliver',
+          title: 'Hold for approval and deliver',
+          objective: 'Send the reviewed update to the founder channel.',
+          deliveryTarget: { channel: 'slack', target: '#founders' },
+        },
+      ],
+      executionPolicy: { ...DEFAULT_EXECUTION_POLICY },
+      automationStatus: 'active',
+      timezone: getLocalTimeZone(),
+      lastRunAt,
+      lastRunStatus: 'succeeded',
+      nextRunAt,
+      latestSummary: 'Revenue is steady, one GitHub blocker needs owner attention, and two competitor pricing shifts are worth watching before the next campaign.',
+      latestArtifacts: [
+        {
+          id: 'preview-artifact-founder-update',
+          kind: 'brief',
+          title: 'Weekly founder update',
+          source: 'Mission artifact',
+          summary: 'Founder-ready brief with revenue movement, product blockers, competitor changes, and recommended next actions.',
+          payload: {
+            markdown: 'Revenue grew 18% WoW, churn stayed flat, and expansion seats are driving most of the movement. GitHub shows one release blocker and two ready-to-ship fixes. Competitor pricing shifted upward on implementation support, which creates room to emphasize reviewable operations.',
+            links: [
+              { title: 'Stripe revenue summary', href: 'https://stripe.com' },
+              { title: 'GitHub issues', href: 'https://github.com' },
+              { title: 'Competitor pricing scan', href: 'https://www.gumloop.com' },
+            ],
+          },
+        },
+      ],
+      latestStepExecutions: [
+        {
+          stepId: 'preview-step-stripe',
+          kind: 'query',
+          title: 'Stripe revenue movement',
+          assignedRole: 'finance_checker',
+          status: 'succeeded',
+          summary: 'Revenue up 18% WoW with stable churn and stronger expansion seats.',
+          modelTier: 'fast',
+          modelSource: 'Stripe',
+          actualCredits: 18,
+          toolCalls: 1,
+          artifactCount: 1,
+          durationMs: 38000,
+          tokenUsage: { inputTokens: 2100, outputTokens: 620, totalTokens: 2720 },
+          output: { query: 'revenue_summary', resultCount: 18 },
+        },
+        {
+          stepId: 'preview-step-github',
+          kind: 'query',
+          title: 'GitHub workstream',
+          assignedRole: 'build_monitor',
+          status: 'succeeded',
+          summary: 'One release blocker needs owner attention; two fixes are ready to merge.',
+          modelTier: 'fast',
+          modelSource: 'GitHub',
+          actualCredits: 14,
+          toolCalls: 1,
+          durationMs: 29000,
+          tokenUsage: { inputTokens: 1640, outputTokens: 410, totalTokens: 2050 },
+          output: { query: 'open_issues', resultCount: 7 },
+        },
+        {
+          stepId: 'preview-step-market',
+          kind: 'search',
+          title: 'Competitor pricing scan',
+          assignedRole: 'market_researcher',
+          status: 'succeeded',
+          summary: 'Two competitors moved implementation support into higher-paid tiers.',
+          modelTier: 'balanced',
+          modelSource: 'Web search',
+          actualCredits: 24,
+          toolCalls: 3,
+          durationMs: 72000,
+          tokenUsage: { inputTokens: 4300, outputTokens: 980, totalTokens: 5280 },
+          output: { query: 'AI workflow pricing changes', resultCount: 12 },
+        },
+        {
+          stepId: 'preview-step-brief',
+          kind: 'summarize',
+          title: 'Founder brief synthesis',
+          assignedRole: 'brief_writer',
+          status: 'waiting_review',
+          summary: 'Draft is ready with revenue, build, market, and next-action sections.',
+          modelTier: 'balanced',
+          modelSource: 'Violema',
+          actualCredits: 28,
+          toolCalls: 0,
+          artifactCount: 1,
+          durationMs: 64000,
+          tokenUsage: { inputTokens: 5200, outputTokens: 1260, totalTokens: 6460 },
+          output: { markdown: 'Draft founder update is ready for review.' },
+        },
+        {
+          stepId: 'preview-step-deliver',
+          kind: 'deliver',
+          title: 'Deliver to #founders',
+          assignedRole: 'slack_messenger',
+          status: 'planned',
+          summary: 'Waiting for review approval before delivery.',
+          modelTier: 'fast',
+          modelSource: 'Slack',
+          actualCredits: 0,
+          toolCalls: 0,
+        },
+      ],
+      workerTopology: {
+        version: 'preview',
+        primaryRole: 'operator_manager',
+        primaryBand: 'balanced',
+        summary: 'One manager coordinates finance, build, research, writing, and delivery roles; delivery is gated until review.',
+        workers: [
+          {
+            role: 'operator_manager',
+            label: 'Operator Manager',
+            laneType: 'core',
+            assignedRole: 'operator_manager',
+            band: 'balanced',
+            modelLabel: 'Balanced',
+            status: 'active',
+            summary: 'Owns the mission plan and review state.',
+            reason: 'Keeps the whole workflow accountable.',
+          },
+          {
+            role: 'finance_checker',
+            label: 'Finance Checker',
+            laneType: 'core',
+            assignedRole: 'finance_checker',
+            band: 'fast',
+            modelLabel: 'Fast',
+            status: 'active',
+            summary: 'Reads revenue and churn signals.',
+            reason: 'Stripe data drives founder priorities.',
+          },
+          {
+            role: 'market_researcher',
+            label: 'Market Researcher',
+            laneType: 'elastic',
+            assignedRole: 'market_researcher',
+            band: 'balanced',
+            modelLabel: 'Balanced',
+            status: 'active',
+            summary: 'Scans competitor changes.',
+            reason: 'External motion changes what matters in the brief.',
+          },
+          {
+            role: 'brief_writer',
+            label: 'Brief Writer',
+            laneType: 'core',
+            assignedRole: 'brief_writer',
+            band: 'balanced',
+            modelLabel: 'Balanced',
+            status: 'active',
+            summary: 'Turns evidence into a reviewable artifact.',
+            reason: 'Founder work needs a useful output, not raw logs.',
+          },
+          {
+            role: 'slack_messenger',
+            label: 'Slack Messenger',
+            laneType: 'core',
+            assignedRole: 'slack_messenger',
+            band: 'fast',
+            modelLabel: 'Fast',
+            status: 'standby',
+            summary: 'Delivers after approval.',
+            reason: 'Delivery should not run before trust is cleared.',
+          },
+        ],
+      },
+      taskUpdatedAt: lastRunAt,
+      actualCredits: 84,
+      estimatedCredits: 96,
+    },
+  ];
 }
 
 // ─── Mode config (single source of truth) ────────────────────────────────────
@@ -858,11 +1172,18 @@ function readArtifacts(value: unknown): DashboardTaskArtifact[] {
   return value
     .map((item) => {
       if (!isRecord(item)) return null;
+      const id = readString(item.id);
       const title = readString(item.title);
       const kind = readString(item.kind);
+      const source = readString(item.source);
+      const summary = readString(item.summary) || readString(item.detail);
       const payload = isRecord(item.payload) ? item.payload : {};
       if (!title || !kind) return null;
-      return { title, kind, payload };
+      const artifact: DashboardTaskArtifact = { title, kind, payload };
+      if (id) artifact.id = id;
+      if (source) artifact.source = source;
+      if (summary) artifact.summary = summary;
+      return artifact;
     })
     .filter((item): item is DashboardTaskArtifact => Boolean(item));
 }
@@ -1320,11 +1641,24 @@ export default function Dashboard() {
     const saved = loadConvos(resolveWorkspaceContext().workspaceId);
     return saved;
   });
+  const [missionActions, setMissionActions] = useState<MissionActionRecord[]>(() =>
+    loadMissionActions(resolveWorkspaceContext().workspaceId)
+  );
   const [activeConvoId, setActiveConvoId] = useState<string>('new');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
   const [taskPanelOpen, setTaskPanelOpen] = useState(false); // hidden by default on mobile feel
+  const [missionWorkspaceOpen, setMissionWorkspaceOpen] = useState(false);
+  const [missionWorkspaceTab, setMissionWorkspaceTab] = useState<MissionWorkspaceTab>('mission');
+  const [workspaceArea, setWorkspaceArea] = useState<WorkspaceAreaId>('home');
+  const [workspaceTabs, setWorkspaceTabs] = useState<Record<WorkspaceAreaId, WorkspaceTabId>>(() => {
+    const initialTabs = {} as Record<WorkspaceAreaId, WorkspaceTabId>;
+    WORKSPACE_AREAS.forEach((area) => {
+      initialTabs[area.id] = area.defaultTab;
+    });
+    return initialTabs;
+  });
   const [selectedTaskId, setSelectedTaskId] = useState<string | number>('');
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
   const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
@@ -1335,6 +1669,7 @@ export default function Dashboard() {
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>('all');
   const [platformTasks, setPlatformTasks] = useState<DashboardTaskItem[]>([]);
   const [liveAutomations, setLiveAutomations] = useState<DashboardTaskItem[]>([]);
+  const [missionSourceTasks, setMissionSourceTasks] = useState<MissionSourceTask[]>([]);
   const [taskPanelLoaded, setTaskPanelLoaded] = useState(false);
   const [taskPanelRefreshing, setTaskPanelRefreshing] = useState(false);
   const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
@@ -1350,6 +1685,11 @@ export default function Dashboard() {
   const canLoadTestCredits = isAdminSession(authSession);
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
+  const activeWorkspaceArea = getWorkspaceArea(workspaceArea);
+  const activeWorkspaceTab = workspaceTabs[workspaceArea] || activeWorkspaceArea.defaultTab;
+  const activeWorkspaceTabElementId = `workspace-tab-${workspaceArea}-${activeWorkspaceTab}`;
+  const activeWorkspacePanelId = `workspace-panel-${workspaceArea}`;
+  const isLocalDashboardPreview = location.pathname === '/dashboard-preview';
 
   useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1377,6 +1717,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     try {
+      localStorage.setItem(getMissionActionsStorageKey(workspace.workspaceId), JSON.stringify(missionActions));
+    } catch {
+      // ignore localStorage failures
+    }
+  }, [missionActions, workspace.workspaceId]);
+
+  useEffect(() => {
+    try {
       localStorage.removeItem(LEGACY_CONVOS_KEY);
     } catch {
       // ignore localStorage failures
@@ -1395,12 +1743,68 @@ export default function Dashboard() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  useEffect(() => {
+    if (!missionWorkspaceOpen || !isMobileSidebar) return undefined;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMissionWorkspaceOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [isMobileSidebar, missionWorkspaceOpen]);
+
+  const setHomeChatTab = useCallback(() => {
+    setWorkspaceArea('home');
+    setWorkspaceTabs((current) => ({ ...current, home: 'chat' }));
+  }, []);
+
+  const openHomeChat = useCallback(() => {
+    setHomeChatTab();
+    setMissionWorkspaceOpen(false);
+    setTaskPanelOpen(false);
+    if (isMobileSidebar) setSidebarOpen(false);
+  }, [isMobileSidebar, setHomeChatTab]);
+
   const handleNewChat = useCallback(() => {
+    openHomeChat();
     setActiveConvoId('new');
     setNewConvoMessages([]);
     setSearchQuery('');
+  }, [openHomeChat]);
+
+  const selectWorkspaceArea = useCallback((areaId: WorkspaceAreaId) => {
+    setWorkspaceArea(areaId);
+    setWorkspaceTabs((current) => ({
+      ...current,
+      [areaId]: current[areaId] || getWorkspaceArea(areaId).defaultTab,
+    }));
+    setTaskPanelOpen(false);
+    if (areaId !== 'home') {
+      setMissionWorkspaceOpen(false);
+    }
     if (isMobileSidebar) setSidebarOpen(false);
-  }, []);
+  }, [isMobileSidebar]);
+
+  const selectWorkspaceTab = useCallback((tabId: WorkspaceTabId) => {
+    setWorkspaceTabs((current) => ({
+      ...current,
+      [workspaceArea]: tabId,
+    }));
+  }, [workspaceArea]);
+
+  const openConversation = useCallback((conversationId: string) => {
+    openHomeChat();
+    setActiveConvoId(conversationId);
+  }, [openHomeChat]);
 
   const handleDeleteConvo = useCallback(
     (id: string, e: React.MouseEvent) => {
@@ -1421,7 +1825,11 @@ export default function Dashboard() {
       'X-Workspace-Id': workspace.workspaceId,
       'X-Workspace-Name': workspace.workspaceName,
     };
-    const [automationPayload, taskPayload, runPayload] = await Promise.all([
+    const [missionPayload, automationPayload, taskPayload, runPayload] = await Promise.all([
+      fetch(`/api/missions?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
+        headers,
+        signal,
+      }).then((res) => (res.ok ? res.json() : { items: [] })).catch(() => ({ items: [] })),
       fetch('/api/automations', { headers, signal }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('automations')))),
       fetch(`/api/platform/tasks?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
         headers,
@@ -1433,9 +1841,11 @@ export default function Dashboard() {
       }).then((res) => (res.ok ? res.json() : Promise.reject(new Error('runs')))),
     ]);
 
+    const missionRecords = Array.isArray(missionPayload?.items) ? missionPayload.items as MissionApiRecord[] : [];
     const automations = Array.isArray(automationPayload?.items) ? automationPayload.items as AutomationApiRecord[] : [];
     const tasks = Array.isArray(taskPayload?.items) ? taskPayload.items as PlatformTaskRecord[] : [];
     const runs = Array.isArray(runPayload?.items) ? runPayload.items as PlatformTaskRunRecord[] : [];
+    setMissionSourceTasks(missionRecords.map(mapMissionRecordToSourceTask));
     const latestRunByTask = new Map<string, PlatformTaskRunRecord>();
 
     runs.forEach((run) => {
@@ -1539,9 +1949,12 @@ export default function Dashboard() {
         };
       });
 
-    if (automationItems.length > 0) {
-      setLiveAutomations(automationItems);
-      setSelectedTaskId((current) => current || automationItems[0].id);
+    const previewItems = isLocalDashboardPreview ? buildLocalPreviewAutomationItems() : [];
+    const visibleAutomationItems = automationItems.length > 0 ? automationItems : previewItems;
+
+    if (visibleAutomationItems.length > 0) {
+      setLiveAutomations(visibleAutomationItems);
+      setSelectedTaskId((current) => current || visibleAutomationItems[0].id);
     } else {
       setLiveAutomations([]);
     }
@@ -1552,19 +1965,24 @@ export default function Dashboard() {
       setPlatformTasks([]);
     }
     setTaskPanelLoaded(true);
-  }, []);
+  }, [isLocalDashboardPreview]);
 
   useEffect(() => {
     const controller = new AbortController();
     loadTaskPanelData(controller.signal)
       .catch(() => {
-        setLiveAutomations([]);
+        const previewItems = isLocalDashboardPreview ? buildLocalPreviewAutomationItems() : [];
+        setMissionSourceTasks([]);
+        setLiveAutomations(previewItems);
+        if (previewItems[0]) {
+          setSelectedTaskId((current) => current || previewItems[0].id);
+        }
         setPlatformTasks([]);
         setTaskPanelLoaded(true);
       });
 
     return () => controller.abort();
-  }, [loadTaskPanelData]);
+  }, [isLocalDashboardPreview, loadTaskPanelData]);
 
   // Close delete confirm on outside activity
   useEffect(() => {
@@ -1694,8 +2112,15 @@ export default function Dashboard() {
     }
   }, [refreshTaskPanel]);
 
+  const taskDataActive = taskPanelOpen || missionWorkspaceOpen || workspaceArea !== 'home' || activeWorkspaceTab === 'activity';
+
   useEffect(() => {
-    if (!taskPanelOpen) return undefined;
+    if (!taskDataActive) return;
+    void refreshTaskPanel({ silent: true }).catch(() => {});
+  }, [taskDataActive, refreshTaskPanel]);
+
+  useEffect(() => {
+    if (!taskDataActive) return undefined;
 
     const streamUrl = `/api/platform/stream?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`;
     const source = new EventSource(streamUrl);
@@ -1711,7 +2136,7 @@ export default function Dashboard() {
     return () => {
       source.close();
     };
-  }, [handleTaskPanelStreamMessage, taskPanelOpen, workspace.workspaceId, workspace.workspaceName]);
+  }, [handleTaskPanelStreamMessage, taskDataActive, workspace.workspaceId, workspace.workspaceName]);
 
   const hasRunningAutomation = useMemo(
     () => liveAutomations.some((task) => task.runStatus === 'running'),
@@ -1719,7 +2144,7 @@ export default function Dashboard() {
   );
 
   useEffect(() => {
-    if (!taskPanelOpen) return undefined;
+    if (!taskDataActive) return undefined;
 
     const refreshSilently = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
@@ -1738,7 +2163,7 @@ export default function Dashboard() {
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [hasRunningAutomation, taskPanelOpen, refreshTaskPanel]);
+  }, [hasRunningAutomation, taskDataActive, refreshTaskPanel]);
 
   const handleAutomationRun = useCallback(async (task: DashboardTaskItem | undefined) => {
     if (!task?.automationId) return;
@@ -2075,6 +2500,94 @@ export default function Dashboard() {
     { scheduled: 0, complete: 0, alert: 0 }
   );
   const selectedTask = taskItems.find((task) => task.id === selectedTaskId) ?? taskItems[0];
+  const selectedMissionSource = useMemo(() => {
+    if (!selectedTask) return missionSourceTasks[0];
+
+    return missionSourceTasks.find((mission) =>
+      mission.automationId === selectedTask.automationId ||
+      mission.automationId === String(selectedTask.id) ||
+      mission.taskId === selectedTask.taskId ||
+      mission.taskRunId === selectedTask.taskRunId ||
+      mission.id === selectedTask.id
+    ) || selectedTask;
+  }, [missionSourceTasks, selectedTask]);
+  const selectedMission = useMemo(
+    () => buildMissionWorkspaceView(selectedMissionSource),
+    [selectedMissionSource],
+  );
+  const selectedArtifactActionKind: MissionActionKind =
+    selectedMission.status === 'waiting_review' ? 'artifact_reviewed' : 'artifact_opened';
+  const selectedArtifactTargetId = useMemo(() => {
+    const artifact = selectedTask?.latestArtifacts?.[0];
+    return String(artifact?.id || artifact?.title || selectedMission.id);
+  }, [selectedMission.id, selectedTask?.latestArtifacts]);
+  const selectedArtifactAction = useMemo(
+    () => findMissionAction(missionActions, {
+      workspaceId: workspace.workspaceId,
+      missionId: selectedMission.id,
+      kind: selectedArtifactActionKind,
+      targetId: selectedArtifactTargetId,
+    }),
+    [missionActions, selectedArtifactActionKind, selectedArtifactTargetId, selectedMission.id, workspace.workspaceId],
+  );
+  const savedMissionLessonIds = useMemo(
+    () => new Set(
+      missionActions
+        .filter((action) =>
+          action.workspaceId === workspace.workspaceId &&
+          action.missionId === selectedMission.id &&
+          action.kind === 'lesson_saved'
+        )
+        .map((action) => action.targetId)
+    ),
+    [missionActions, selectedMission.id, workspace.workspaceId],
+  );
+  const recordMissionAction = useCallback((kind: MissionActionKind, targetId: string, label: string) => {
+    setMissionActions((current) =>
+      applyMissionAction(current, {
+        workspaceId: workspace.workspaceId,
+        missionId: selectedMission.id,
+        kind,
+        targetId,
+        label,
+      })
+    );
+  }, [selectedMission.id, workspace.workspaceId]);
+  const handleArtifactPrimaryAction = useCallback(() => {
+    if (!selectedTask) {
+      setTaskPanelOpen(true);
+      setMissionWorkspaceOpen(false);
+      showNotice('success', 'Schedule controls opened.');
+      return;
+    }
+
+    const label = selectedArtifactActionKind === 'artifact_reviewed'
+      ? 'Artifact reviewed'
+      : 'Artifact opened';
+    recordMissionAction(selectedArtifactActionKind, selectedArtifactTargetId, label);
+    showNotice('success', selectedArtifactActionKind === 'artifact_reviewed'
+      ? 'Artifact marked reviewed for this mission.'
+      : 'Artifact action saved for this mission.');
+  }, [recordMissionAction, selectedArtifactActionKind, selectedArtifactTargetId, selectedTask, showNotice]);
+  const handleLessonAction = useCallback((lesson: MissionLessonView) => {
+    recordMissionAction('lesson_saved', lesson.id, lesson.title);
+    showNotice('success', `${lesson.title} saved to mission memory.`);
+  }, [recordMissionAction, showNotice]);
+  const renderMissionArtifact = () => (
+    <MissionArtifact
+      mission={selectedMission}
+      actionSaved={Boolean(selectedArtifactAction)}
+      savedActionLabel={selectedArtifactActionKind === 'artifact_reviewed' ? 'Reviewed' : 'Opened'}
+      onPrimaryAction={handleArtifactPrimaryAction}
+    />
+  );
+  const renderMissionLessons = () => (
+    <MissionLessons
+      mission={selectedMission}
+      savedLessonIds={savedMissionLessonIds}
+      onLessonAction={handleLessonAction}
+    />
+  );
   const selectedTaskMeta = selectedTask ? getTaskStatusMeta(selectedTask.status as 'scheduled' | 'complete' | 'alert') : null;
   const selectedTaskOutcome = useMemo(() => getTaskRunOutcome(selectedTask), [selectedTask]);
   const selectedTaskSummary = useMemo(() => formatSummaryPreview(selectedTask?.latestSummary, 360), [selectedTask?.latestSummary]);
@@ -2237,6 +2750,7 @@ export default function Dashboard() {
     const createTarget = params.get('create');
 
     if (panel === 'schedules') {
+      setMissionWorkspaceOpen(false);
       setTaskPanelOpen(true);
     }
 
@@ -2274,7 +2788,7 @@ export default function Dashboard() {
           } ${
             autonomyMode === mode
               ? `${activeClass} border shadow-[0_8px_18px_rgba(2,6,23,0.18)]`
-              : 'text-slate-500 border-transparent hover:bg-navy-800/80 hover:text-slate-300'
+              : 'border-navy-800/60 bg-navy-950/25 text-slate-400 hover:border-navy-700 hover:bg-navy-800/80 hover:text-slate-100'
           }`}
         >
           <Icon className={mode === 'supervised' ? 'w-5 h-5 text-red-400' : 'w-3 h-3'} />
@@ -2362,6 +2876,742 @@ export default function Dashboard() {
     });
   }, [selectedTask]);
 
+  const openScheduleControls = (
+    <button
+      type="button"
+      onClick={() => {
+        setMissionWorkspaceOpen(false);
+        setTaskPanelOpen(true);
+      }}
+      className="w-full rounded-lg border border-navy-700/80 bg-navy-950/55 px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:border-violet-500/30 hover:bg-navy-900/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+    >
+      Open schedule controls
+    </button>
+  );
+
+  const noActiveMissionCard = (
+    <div className="rounded-lg border border-dashed border-navy-700/80 bg-navy-950/40 p-4">
+      <p className="text-[10px] font-medium text-violet-300/80">No active mission</p>
+      <h3 className="mt-2 text-base font-semibold leading-snug text-white">
+        Create a scheduled automation
+      </h3>
+      <p className="mt-2 text-sm leading-6 text-slate-500">
+        Mission steps, artifacts, lessons, evidence, and credit analytics will appear here after a workflow exists.
+      </p>
+    </div>
+  );
+
+  const renderMissionWorkspaceContent = () => {
+    if (!selectedTask) {
+      if (missionWorkspaceTab === 'artifact') {
+        return (
+          <div className="space-y-3">
+            {renderMissionArtifact()}
+            {openScheduleControls}
+          </div>
+        );
+      }
+
+      if (missionWorkspaceTab === 'lessons') {
+        return (
+          <div className="space-y-3">
+            {renderMissionLessons()}
+            {openScheduleControls}
+          </div>
+        );
+      }
+
+      return (
+        <div className="space-y-3">
+          {noActiveMissionCard}
+          {openScheduleControls}
+        </div>
+      );
+    }
+
+    const scheduleControlsFooter = openScheduleControls;
+    const missionSourcesFooter = (
+      <>
+        <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+        {openScheduleControls}
+      </>
+    );
+
+    if (missionWorkspaceTab === 'mission' || missionWorkspaceTab === 'agents') {
+      return (
+        <div className="space-y-3">
+          <MissionOverview
+            mission={selectedMission}
+            focus={missionWorkspaceTab === 'agents' ? 'agents' : 'mission'}
+          />
+          {missionSourcesFooter}
+        </div>
+      );
+    }
+
+    if (missionWorkspaceTab === 'artifact') {
+      return (
+        <div className="space-y-3">
+          {renderMissionArtifact()}
+          {missionSourcesFooter}
+        </div>
+      );
+    }
+
+    if (missionWorkspaceTab === 'board') {
+      return (
+        <div className="space-y-3">
+          <MissionBoard mission={selectedMission} />
+          {scheduleControlsFooter}
+        </div>
+      );
+    }
+
+    if (missionWorkspaceTab === 'map') {
+      return (
+        <div className="space-y-3">
+          <MissionMap mission={selectedMission} />
+          {missionSourcesFooter}
+        </div>
+      );
+    }
+
+    if (missionWorkspaceTab === 'reviews') {
+      return (
+        <div className="space-y-3">
+          <MissionReviews mission={selectedMission} />
+          {scheduleControlsFooter}
+        </div>
+      );
+    }
+
+    if (missionWorkspaceTab === 'lessons') {
+      return (
+        <div className="space-y-3">
+          {renderMissionLessons()}
+          {scheduleControlsFooter}
+        </div>
+      );
+    }
+
+    if (missionWorkspaceTab === 'calendar') {
+      return (
+        <div className="space-y-3">
+          <MissionCalendar
+            mission={selectedMission}
+            onRunNow={() => { void handleAutomationRun(selectedTask); }}
+            onPauseToggle={() => { void handleAutomationPauseToggle(selectedTask); }}
+            disabled={selectedTask.source !== 'live' || actionBusy !== null}
+          />
+          {scheduleControlsFooter}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        <MissionAnalytics mission={selectedMission} />
+        {scheduleControlsFooter}
+      </div>
+    );
+  };
+
+  const renderChatSurface = () => (
+    <ChatInterface
+      conversationId={activeConvoId}
+      initialMessages={currentMessages}
+      onMessagesChange={handleMessagesChange}
+      autonomyMode={autonomyMode}
+      missionTitle={selectedTask ? selectedMission.title : 'Open Mission'}
+      missionStatusLabel={selectedTask ? selectedMission.statusLabel : undefined}
+      onOpenMissionWorkspace={() => {
+        setMissionWorkspaceOpen(true);
+        setTaskPanelOpen(false);
+      }}
+    />
+  );
+
+  const workspaceSurface = (children: React.ReactNode) => (
+    <div className="panel-scroll min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.08),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.72),rgba(2,6,23,0.92))] px-4 py-4 sm:px-6 sm:py-5">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+        {children}
+      </div>
+    </div>
+  );
+
+  const workspaceHeaderCard = (
+    <div className="rounded-2xl border border-navy-800/80 bg-navy-900/48 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/80">
+        {activeWorkspaceArea.label}
+      </p>
+      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-[-0.03em] text-white sm:text-2xl">
+            {activeWorkspaceArea.shortLabel}
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
+            {activeWorkspaceArea.description}
+          </p>
+        </div>
+        <span className="inline-flex w-fit items-center rounded-full border border-navy-700 bg-navy-950/55 px-3 py-1 text-[11px] font-medium text-slate-400">
+          {activeWorkspaceArea.tabs.find((tab) => tab.id === activeWorkspaceTab)?.label || activeWorkspaceTab}
+        </span>
+      </div>
+    </div>
+  );
+
+  const renderEmptyWorkspaceSurface = (detail?: React.ReactNode) => workspaceSurface(
+    <>
+      {workspaceHeaderCard}
+      {noActiveMissionCard}
+      {detail}
+      {openScheduleControls}
+    </>
+  );
+  const tabFocusCard = (title: string, body: string, tone: 'violet' | 'cyan' | 'amber' | 'slate' = 'violet') => {
+    const toneClass = {
+      violet: 'border-violet-500/18 bg-violet-500/8 text-violet-200',
+      cyan: 'border-cyan-500/18 bg-cyan-500/8 text-cyan-200',
+      amber: 'border-amber-500/18 bg-amber-500/8 text-amber-200',
+      slate: 'border-navy-800/80 bg-navy-900/45 text-slate-300',
+    }[tone];
+
+    return (
+      <div className={`rounded-2xl border p-4 ${toneClass}`}>
+        <p className="text-sm font-semibold text-white">{title}</p>
+        <p className="mt-2 text-sm leading-6 text-slate-400">{body}</p>
+      </div>
+    );
+  };
+
+  const renderStepFocusList = (title: string, steps: typeof selectedMission.steps, emptyLabel: string) => (
+    <div className="rounded-2xl border border-navy-800/80 bg-navy-900/45 p-4">
+      <p className="text-sm font-semibold text-white">{title}</p>
+      <div className="mt-3 space-y-2">
+        {steps.length > 0 ? steps.map((step) => (
+          <div key={step.id} className="rounded-xl border border-navy-800/80 bg-navy-950/45 px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-slate-100">{step.title}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{step.objective}</p>
+              </div>
+              <span className="flex-shrink-0 rounded-full border border-navy-700 bg-navy-950/65 px-2 py-1 text-[10px] font-medium text-slate-400">
+                {step.status.replace('_', ' ')}
+              </span>
+            </div>
+          </div>
+        )) : (
+          <p className="rounded-xl border border-dashed border-navy-800/80 bg-navy-950/35 px-3 py-3 text-sm text-slate-500">
+            {emptyLabel}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderEvidenceList = () => (
+    <div className="rounded-2xl border border-navy-800/80 bg-navy-900/45 p-4">
+      <p className="text-sm font-semibold text-white">Evidence</p>
+      <div className="mt-3 space-y-2">
+        {selectedMission.evidence.length > 0 ? selectedMission.evidence.map((item) => (
+          <div key={item.id} className="rounded-xl border border-navy-800/80 bg-navy-950/45 px-3 py-2.5">
+            <p className="text-sm font-medium text-slate-100">{item.label}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{item.source} · {item.detail}</p>
+          </div>
+        )) : (
+          <p className="rounded-xl border border-dashed border-navy-800/80 bg-navy-950/35 px-3 py-3 text-sm text-slate-500">
+            Source-linked evidence appears after a mission produces artifacts.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderMetricsGrid = (title: string) => (
+    <div className="rounded-2xl border border-navy-800/80 bg-navy-900/45 p-4">
+      <p className="text-sm font-semibold text-white">{title}</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {selectedMission.metrics.map((metric) => (
+          <div key={metric.label} className="rounded-xl border border-navy-800/80 bg-navy-950/45 px-3 py-3">
+            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600">{metric.label}</p>
+            <p className="mt-2 text-lg font-semibold text-white">{metric.value}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{metric.detail}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderEmptyWorkspaceMain = () => {
+    if (workspaceArea === 'home') {
+      return renderEmptyWorkspaceSurface(
+        tabFocusCard('Activity', 'Mission activity appears here after a scheduled automation exists.', 'slate')
+      );
+    }
+
+    if (workspaceArea === 'missions') {
+      const title = activeWorkspaceTab === 'artifact'
+        ? 'Living artifact'
+        : activeWorkspaceTab === 'agents'
+        ? 'Agent roster'
+        : activeWorkspaceTab === 'steps'
+          ? 'Mission steps'
+          : activeWorkspaceTab === 'evidence'
+            ? 'Evidence trail'
+            : activeWorkspaceTab === 'lessons'
+              ? 'Learning loop'
+            : activeWorkspaceTab === 'controls'
+              ? 'Mission schedule'
+              : 'Mission overview';
+      return renderEmptyWorkspaceSurface(
+        <>
+          {activeWorkspaceTab === 'artifact' ? renderMissionArtifact() : null}
+          {activeWorkspaceTab === 'lessons' ? renderMissionLessons() : null}
+          {tabFocusCard(title, 'Create a scheduled workflow and Violema will turn it into a mission with a living artifact, workers, evidence, learning loop, and schedule controls.', 'violet')}
+        </>
+      );
+    }
+
+    if (workspaceArea === 'board') {
+      const title = activeWorkspaceTab === 'waiting'
+        ? 'Waiting work'
+        : activeWorkspaceTab === 'review'
+          ? 'Review queue'
+          : activeWorkspaceTab === 'done'
+            ? 'Completed work'
+            : 'Active work';
+      return renderEmptyWorkspaceSurface(
+        tabFocusCard(title, 'Kanban lanes fill in once a mission has runnable steps.', 'violet')
+      );
+    }
+
+    if (workspaceArea === 'map') {
+      if (activeWorkspaceTab === 'tools') {
+        return renderEmptyWorkspaceSurface(
+          tabFocusCard('Tools by step', 'Tool usage appears here after a mission defines executable steps.', 'cyan')
+        );
+      }
+      if (activeWorkspaceTab === 'mcp') {
+        return renderEmptyWorkspaceSurface(
+          tabFocusCard('MCP extension layer', 'Custom MCP tools belong here when Violema needs a founder-specific connector.', 'amber')
+        );
+      }
+      if (activeWorkspaceTab === 'integrations') {
+        return renderEmptyWorkspaceSurface(
+          <>
+            <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+            {tabFocusCard('Integration line', 'Slack, Stripe, GitHub, Google, Microsoft, email, calendar, and custom MCP connectors stay visible without crowded status badges.', 'cyan')}
+          </>
+        );
+      }
+      return renderEmptyWorkspaceSurface(
+        tabFocusCard('Workflow map', 'Visual workflow steps appear here after the first automation is created.', 'violet')
+      );
+    }
+
+    if (workspaceArea === 'reviews') {
+      const title = activeWorkspaceTab === 'evidence'
+        ? 'Evidence trail'
+        : activeWorkspaceTab === 'outputs'
+          ? 'Output review'
+          : 'Approval queue';
+      return renderEmptyWorkspaceSurface(
+        tabFocusCard(title, 'Approvals, outputs, and source-linked evidence appear after a mission produces work.', 'slate')
+      );
+    }
+
+    if (workspaceArea === 'calendar') {
+      const title = activeWorkspaceTab === 'recurring'
+        ? 'Recurring cadence'
+        : activeWorkspaceTab === 'history'
+          ? 'Run history'
+          : 'Upcoming runs';
+      return renderEmptyWorkspaceSurface(
+        tabFocusCard(title, 'Schedule a workflow and its next runs, cadence, and history will appear here.', 'violet')
+      );
+    }
+
+    if (workspaceArea === 'analytics') {
+      const title = activeWorkspaceTab === 'efficiency'
+        ? 'Efficiency signals'
+        : activeWorkspaceTab === 'run-cost'
+          ? 'Run cost by step'
+          : activeWorkspaceTab === 'forecast'
+            ? 'Credit forecast'
+            : 'Credit usage';
+      return renderEmptyWorkspaceSurface(
+        tabFocusCard(title, 'Credit analytics appear after Violema has a mission to run and measure.', 'amber')
+      );
+    }
+
+    if (workspaceArea === 'integrations') {
+      const title = activeWorkspaceTab === 'suites'
+        ? 'Google and Microsoft suites'
+        : activeWorkspaceTab === 'mcp'
+          ? 'Custom MCP tools'
+          : 'Core founder stack';
+      return renderEmptyWorkspaceSurface(
+        <>
+          <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+          {tabFocusCard(title, 'Slack, Stripe, GitHub, Google, Microsoft, email, calendar, and MCP integrations stay visible here as activation comes online.', 'cyan')}
+        </>
+      );
+    }
+
+    const title = activeWorkspaceTab === 'replay'
+      ? 'Replay important runs.'
+      : activeWorkspaceTab === 'optimize'
+        ? 'Optimize routing and cost.'
+        : 'Debug the mission system.';
+    return renderEmptyWorkspaceSurface(
+      tabFocusCard(title, 'Advanced controls stay available without making Agent Studio the default daily workspace.', 'cyan')
+    );
+  };
+
+  const renderWorkspaceMain = () => {
+    if (workspaceArea === 'home') {
+      if (activeWorkspaceTab === 'activity') {
+        if (!selectedTask) return renderEmptyWorkspaceMain();
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            <MissionOverview mission={selectedMission} focus="mission" />
+            <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+          </>
+        );
+      }
+      return renderChatSurface();
+    }
+
+    if (!selectedTask) return renderEmptyWorkspaceMain();
+
+    if (workspaceArea === 'missions') {
+      if (activeWorkspaceTab === 'artifact') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {renderMissionArtifact()}
+            <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'agents') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            <MissionOverview mission={selectedMission} focus="agents" />
+            <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'evidence') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            <MissionReviews mission={selectedMission} />
+            {openScheduleControls}
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'lessons') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {renderMissionLessons()}
+            {openScheduleControls}
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'controls') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            <MissionCalendar
+              mission={selectedMission}
+              onRunNow={() => { void handleAutomationRun(selectedTask); }}
+              onPauseToggle={() => { void handleAutomationPauseToggle(selectedTask); }}
+              disabled={!selectedTask || selectedTask.source !== 'live' || actionBusy !== null}
+            />
+            {openScheduleControls}
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'steps') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            <MissionBoard mission={selectedMission} />
+            {openScheduleControls}
+          </>
+        );
+      }
+      return workspaceSurface(
+        <>
+          {workspaceHeaderCard}
+          <MissionOverview mission={selectedMission} focus="mission" />
+          <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+          {openScheduleControls}
+        </>
+      );
+    }
+
+    if (workspaceArea === 'board') {
+      if (activeWorkspaceTab === 'waiting') {
+        const waitingSteps = selectedMission.steps.filter((step) => step.status === 'paused' || step.status === 'planned');
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            <MissionBoard mission={selectedMission} />
+            {renderStepFocusList('Waiting work', waitingSteps, 'No waiting steps for the selected mission.')}
+            {openScheduleControls}
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'review') {
+        const reviewSteps = selectedMission.steps.filter((step) => step.status === 'waiting_review');
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            <MissionBoard mission={selectedMission} />
+            {renderStepFocusList('Review queue', reviewSteps, 'No steps are waiting for review.')}
+            {openScheduleControls}
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'done') {
+        const doneSteps = selectedMission.steps.filter((step) => step.status === 'completed');
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            <MissionBoard mission={selectedMission} />
+            {renderStepFocusList('Completed work', doneSteps, 'Completed steps appear here after a mission runs.')}
+            {openScheduleControls}
+          </>
+        );
+      }
+      const activeSteps = selectedMission.steps.filter((step) => step.status === 'running');
+      return workspaceSurface(
+        <>
+          {workspaceHeaderCard}
+          <MissionBoard mission={selectedMission} />
+          {renderStepFocusList('Active work', activeSteps, 'No steps are actively running right now.')}
+          {openScheduleControls}
+        </>
+      );
+    }
+
+    if (workspaceArea === 'map') {
+      if (activeWorkspaceTab === 'integrations') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+            {tabFocusCard('Integration line', 'Slack, Stripe, GitHub, Google, Microsoft, email, calendar, and custom MCP connectors stay visible without status badges until they are activated.', 'cyan')}
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'tools') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {renderStepFocusList('Tools by step', selectedMission.steps.filter((step) => Boolean(step.toolLabel)), 'Tool usage appears here after a mission defines executable steps.')}
+            <MissionMap mission={selectedMission} />
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'mcp') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {tabFocusCard('MCP extension layer', 'Custom MCP tools belong here when Violema needs to connect to a founder-specific system without waiting for a packaged integration.', 'amber')}
+            <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+          </>
+        );
+      }
+      return workspaceSurface(
+        <>
+          {workspaceHeaderCard}
+          <MissionMap mission={selectedMission} />
+          <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+        </>
+      );
+    }
+
+    if (workspaceArea === 'reviews') {
+      if (activeWorkspaceTab === 'evidence') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {renderEvidenceList()}
+            {openScheduleControls}
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'outputs') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {tabFocusCard('Output review', selectedMission.reviewSummary || 'Mission outputs appear here once a run produces a draft, delivery, or source-linked artifact.', 'slate')}
+            {renderEvidenceList()}
+          </>
+        );
+      }
+      return workspaceSurface(
+        <>
+          {workspaceHeaderCard}
+          <MissionReviews mission={selectedMission} />
+          {openScheduleControls}
+        </>
+      );
+    }
+
+    if (workspaceArea === 'calendar') {
+      if (activeWorkspaceTab === 'recurring') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {tabFocusCard('Recurring cadence', `${selectedMission.scheduleLabel}. ${selectedMission.deliveryLabel}.`, 'violet')}
+            {openScheduleControls}
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'history') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {tabFocusCard('Run history', `${selectedMission.lastRunLabel}. ${selectedMission.analyticsSummary}`, 'slate')}
+            {renderEvidenceList()}
+          </>
+        );
+      }
+      return workspaceSurface(
+        <>
+          {workspaceHeaderCard}
+          <MissionCalendar
+            mission={selectedMission}
+            onRunNow={() => { void handleAutomationRun(selectedTask); }}
+            onPauseToggle={() => { void handleAutomationPauseToggle(selectedTask); }}
+            disabled={!selectedTask || selectedTask.source !== 'live' || actionBusy !== null}
+          />
+          {openScheduleControls}
+        </>
+      );
+    }
+
+    if (workspaceArea === 'analytics') {
+      if (activeWorkspaceTab === 'efficiency') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {renderMetricsGrid('Efficiency signals')}
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'run-cost') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {renderStepFocusList('Run cost by step', selectedMission.steps, 'Step-level run cost appears after a mission runs.')}
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'forecast') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {tabFocusCard('Credit forecast', selectedMission.analyticsSummary, 'amber')}
+            {openScheduleControls}
+          </>
+        );
+      }
+      return workspaceSurface(
+        <>
+          {workspaceHeaderCard}
+          <MissionAnalytics mission={selectedMission} />
+          {openScheduleControls}
+        </>
+      );
+    }
+
+    if (workspaceArea === 'integrations') {
+      if (activeWorkspaceTab === 'suites') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {tabFocusCard('Google and Microsoft suites', 'Email, calendar, Drive, Docs, Outlook, and Teams belong in the same clean integration line as the core founder stack.', 'cyan')}
+            <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+          </>
+        );
+      }
+      if (activeWorkspaceTab === 'mcp') {
+        return workspaceSurface(
+          <>
+            {workspaceHeaderCard}
+            {tabFocusCard('Custom MCP tools', 'Founder-specific systems can become Violema tools without waiting for a first-party integration.', 'amber')}
+            {openScheduleControls}
+          </>
+        );
+      }
+      return workspaceSurface(
+        <>
+          {workspaceHeaderCard}
+          <MissionIntegrationsStrip integrations={selectedMission.integrations} />
+          <div className="rounded-2xl border border-navy-800/80 bg-navy-900/45 p-4">
+            <p className="text-sm font-semibold text-white">Core founder stack</p>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Keep the list elegant in the app now; activate Slack, Stripe, GitHub, Google, Microsoft, email, calendar, and custom MCP tools as their connectors come online.
+            </p>
+          </div>
+        </>
+      );
+    }
+
+    const advancedCopy = {
+      debug: {
+        title: 'Debug the mission system.',
+        body: 'Inspect run analysis, routing, worker behavior, and failures without making that depth the default daily workspace.',
+      },
+      replay: {
+        title: 'Replay important runs.',
+        body: 'Review the path a mission took, compare decisions, and understand what changed before you trust the next automation.',
+      },
+      optimize: {
+        title: 'Optimize routing and cost.',
+        body: 'Tune presets, model paths, policy controls, and scenario behavior after the workflow proves it deserves deeper work.',
+      },
+    }[activeWorkspaceTab as 'debug' | 'replay' | 'optimize'] || {
+      title: 'Replay, optimize, and debug when the mission needs depth.',
+      body: 'This keeps daily work in the Agent Office while preserving the full Agent Studio for run analysis, routing, scenario replay, and optimization.',
+    };
+
+    return workspaceSurface(
+      <>
+        {workspaceHeaderCard}
+        <div className="rounded-2xl border border-cyan-500/18 bg-cyan-500/8 p-5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300/80">
+            Advanced layer
+          </p>
+          <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-white">
+            {advancedCopy.title}
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+            {advancedCopy.body}
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/agents')}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-100 transition-colors hover:bg-cyan-500/16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+          >
+            <Bot className="h-3.5 w-3.5" />
+            Open Advanced
+          </button>
+        </div>
+      </>
+    );
+  };
+
+  const chatTabActive = workspaceArea === 'home' && activeWorkspaceTab === 'chat';
+
   return (
     <div className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-navy-950 md:h-screen md:min-h-screen">
       {uiNotice && (
@@ -2429,69 +3679,8 @@ export default function Dashboard() {
             <ModeSelector compact />
           </div>
 
-          <div className="px-4 pb-3">
-            <div className="rounded-2xl border border-navy-700 bg-navy-950/42 px-3.5 py-3.5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Credits</p>
-                  <p className="mt-1 text-[1.35rem] font-semibold leading-none text-white">{formatCredits(snapshot.creditsRemaining)}</p>
-                  <p className="text-[11px] text-slate-500">{snapshot.planName} plan</p>
-                </div>
-                <div className={`rounded-full px-2 py-1 text-[10px] font-medium ${
-                  lowCreditRunway
-                    ? 'border border-amber-500/25 bg-amber-500/10 text-amber-200'
-                    : 'border border-violet-500/20 bg-violet-500/10 text-violet-200'
-                }`}>
-                  {snapshot.projectedDaysLeft}d left
-                </div>
-              </div>
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={openTopUp}
-                  className="flex-1 rounded-lg border border-navy-700 bg-navy-900/70 px-2.5 py-2 text-[11px] font-medium text-slate-300 transition-colors hover:border-violet-700 hover:text-white"
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <CreditCard className="h-3.5 w-3.5" />
-                    Top up
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { void openUpgrade(); }}
-                  className="flex-1 rounded-lg border border-violet-700/40 bg-violet-500/10 px-2.5 py-2 text-[11px] font-medium text-violet-200 transition-colors hover:bg-violet-500/16"
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <ArrowUpRight className="h-3.5 w-3.5" />
-                    Upgrade
-                  </span>
-                </button>
-              </div>
-              {canLoadTestCredits ? (
-                <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/8 p-2.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300/90">Founder testing</p>
-                      <p className="mt-1 text-[11px] leading-snug text-slate-300">
-                        Load a private 5k credit grant for admin-only testing on this workspace.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => { void grantTestCredits(); }}
-                      disabled={actionBusy === 'grant'}
-                      className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-2 text-[11px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/16 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {actionBusy === 'grant' ? 'Loading…' : 'Load 5k'}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Search */}
-          <div className="px-4 pb-3">
+	          {/* Search */}
+	          <div className="px-4 pb-3">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
               <input
@@ -2525,7 +3714,7 @@ export default function Dashboard() {
                     ? `${visibleFilteredConvos.length} result${visibleFilteredConvos.length !== 1 ? 's' : ''}`
                     : 'Threads'}
               </p>
-              <div className="flex items-center gap-1 rounded-full border border-navy-700/80 bg-navy-950/55 p-1">
+              <div className="flex items-center gap-1 rounded-full border border-navy-600/80 bg-navy-900/75 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                 {([
                   { value: 'all', label: 'All' },
                   { value: 'active', label: 'Now' },
@@ -2536,10 +3725,11 @@ export default function Dashboard() {
                     key={option.value}
                     type="button"
                     onClick={() => setThreadFilter(option.value)}
+                    aria-pressed={threadFilter === option.value}
                     className={`rounded-full px-2 py-1 text-[10px] font-medium transition-colors ${
                       threadFilter === option.value
-                        ? 'bg-violet-500/14 text-violet-200'
-                        : 'text-slate-500 hover:text-slate-300'
+                        ? 'bg-violet-500/22 text-white shadow-sm'
+                        : 'text-slate-300 hover:bg-navy-800/80 hover:text-white'
                     }`}
                   >
                     {option.label}
@@ -2566,8 +3756,7 @@ export default function Dashboard() {
                   >
                     <button
                       onClick={() => {
-                        setActiveConvoId(convo.id);
-                        if (isMobileSidebar) setSidebarOpen(false);
+                        openConversation(convo.id);
                       }}
                       className="w-full rounded-xl bg-navy-800 text-left text-white shadow-[0_10px_24px_rgba(2,6,23,0.18)] transition-all px-3.5 py-2.5 ring-1 ring-violet-500/20"
                     >
@@ -2638,8 +3827,7 @@ export default function Dashboard() {
                     >
                       <button
                         onClick={() => {
-                          setActiveConvoId(convo.id);
-                          if (isMobileSidebar) setSidebarOpen(false);
+                          openConversation(convo.id);
                         }}
                         className="w-full rounded-xl border border-amber-500/15 bg-gradient-to-br from-amber-500/8 to-navy-950/30 px-3.5 py-2.5 text-left text-slate-200 transition-all hover:border-amber-400/25 hover:bg-amber-500/[0.09]"
                       >
@@ -2697,7 +3885,7 @@ export default function Dashboard() {
 
             {threadFilter !== 'archived' && groupedConversations.sections.map((section) => (
               <div key={section.label} className="space-y-1">
-                <p className="px-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">{section.label}</p>
+                <p className="px-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">{section.label}</p>
                 {section.items.map((convo) => (
                   <div
                     key={convo.id}
@@ -2709,13 +3897,12 @@ export default function Dashboard() {
                   >
                     <button
                       onClick={() => {
-                        setActiveConvoId(convo.id);
-                        if (isMobileSidebar) setSidebarOpen(false);
+                        openConversation(convo.id);
                       }}
-                      className="w-full text-left px-3.5 py-2.5 rounded-xl transition-all text-slate-400 hover:bg-navy-800/60 hover:text-slate-200"
+                      className="w-full rounded-xl border border-navy-800/60 bg-navy-950/18 px-3.5 py-2.5 text-left text-slate-300 transition-all hover:border-navy-700 hover:bg-navy-800/70 hover:text-white"
                     >
                       <div className="flex items-start gap-2.5 pr-6">
-                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 opacity-45" />
+                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-slate-500" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
                             <p className="truncate text-sm font-medium leading-snug">{convo.title}</p>
@@ -2801,8 +3988,7 @@ export default function Dashboard() {
                   <div key={convo.id} className="relative">
                     <button
                       onClick={() => {
-                        setActiveConvoId(convo.id);
-                        if (isMobileSidebar) setSidebarOpen(false);
+                        openConversation(convo.id);
                       }}
                       className="w-full rounded-xl border border-navy-800/80 bg-navy-950/30 px-3.5 py-2.5 text-left text-slate-500 transition-all hover:border-navy-700 hover:text-slate-300"
                     >
@@ -2846,8 +4032,7 @@ export default function Dashboard() {
                   <div key={convo.id} className="relative">
                     <button
                       onClick={() => {
-                        setActiveConvoId(convo.id);
-                        if (isMobileSidebar) setSidebarOpen(false);
+                        openConversation(convo.id);
                       }}
                       className="w-full rounded-xl border border-navy-800/80 bg-navy-950/30 px-3.5 py-2.5 text-left text-slate-500 transition-all hover:border-navy-700 hover:text-slate-300"
                     >
@@ -2879,8 +4064,63 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Compact user footer */}
-          <div className="border-t border-navy-800 px-3 py-2.5">
+	          <div className="border-t border-navy-800 px-3 py-2">
+	            <div className="rounded-xl border border-navy-800/80 bg-navy-950/45 px-2.5 py-2">
+	              <div className="flex items-center gap-2">
+	                <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border ${
+	                  lowCreditRunway
+	                    ? 'border-amber-500/25 bg-amber-500/10 text-amber-200'
+	                    : 'border-navy-700 bg-navy-900/80 text-slate-400'
+	                }`}>
+	                  <CreditCard className="h-3.5 w-3.5" />
+	                </div>
+	                <div className="min-w-0 flex-1">
+	                  <p className="truncate text-[12px] font-medium leading-none text-slate-300">
+	                    {formatCredits(snapshot.creditsRemaining)} cr
+	                  </p>
+	                  <p className={`mt-0.5 truncate text-[10px] leading-none ${
+	                    lowCreditRunway ? 'text-amber-300/80' : 'text-slate-600'
+	                  }`}>
+	                    {snapshot.projectedDaysLeft}d runway · {snapshot.planName}
+	                  </p>
+	                </div>
+	                <button
+	                  type="button"
+	                  onClick={openTopUp}
+	                  aria-label="Top up credits"
+	                  title="Top up credits"
+	                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-navy-700 bg-navy-900/60 text-slate-500 transition-colors hover:border-violet-500/30 hover:text-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+	                >
+	                  <Plus className="h-3.5 w-3.5" />
+	                </button>
+	                <button
+	                  type="button"
+	                  onClick={() => { void openUpgrade(); }}
+	                  aria-label="Upgrade plan"
+	                  title="Upgrade plan"
+	                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-navy-700 bg-navy-900/60 text-slate-500 transition-colors hover:border-violet-500/30 hover:text-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+	                >
+	                  <ArrowUpRight className="h-3.5 w-3.5" />
+	                </button>
+	              </div>
+	              {canLoadTestCredits ? (
+	                <div className="mt-2 flex items-center justify-between gap-2 border-t border-navy-800/70 pt-2">
+	                  <p className="truncate text-[10px] font-medium text-emerald-300/80">Founder testing</p>
+	                  <button
+	                    type="button"
+	                    onClick={() => { void grantTestCredits(); }}
+	                    disabled={actionBusy === 'grant'}
+	                    className="rounded-md border border-emerald-500/25 bg-emerald-500/8 px-2 py-1 text-[10px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/14 disabled:cursor-not-allowed disabled:opacity-60"
+	                  >
+	                    {actionBusy === 'grant' ? 'Loading...' : 'Load 5k'}
+	                  </button>
+	                </div>
+	              ) : null}
+	            </div>
+	          </div>
+
+	          {/* Compact user footer */}
+	          <div className="border-t border-navy-800 px-3 py-2.5">
             <div className="flex items-center gap-2.5">
               {/* Avatar */}
               <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl border border-violet-800/40 bg-gradient-to-br from-violet-700/35 to-navy-700 text-[10px] font-bold text-violet-300">
@@ -2928,103 +4168,204 @@ export default function Dashboard() {
       )}
 
       {/* ── Main chat area ───────────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1 flex-col min-w-0">
-        {/* Top bar */}
-        <header className="flex items-center gap-3 border-b border-navy-800/80 bg-gradient-to-r from-navy-950/92 via-navy-900/70 to-navy-950/92 px-3 py-2.5 shadow-[0_12px_30px_rgba(2,6,23,0.16)] backdrop-blur-md flex-shrink-0 sm:px-5">
-          {(!sidebarOpen || isMobileSidebar) && (
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="text-slate-500 hover:text-slate-300 transition-colors mr-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded p-0.5"
-              aria-label="Open sidebar"
-            >
-              <PanelLeftOpen className="w-4 h-4" />
-            </button>
-          )}
+	      <div className="flex min-h-0 flex-1 flex-col min-w-0">
+	        {/* Top bar */}
+	        <header className="flex flex-shrink-0 flex-col gap-2 border-b border-navy-800/80 bg-gradient-to-r from-navy-950/94 via-navy-900/72 to-navy-950/94 px-3 py-2.5 shadow-[0_12px_30px_rgba(2,6,23,0.16)] backdrop-blur-md sm:px-5">
+	          <div className="flex min-w-0 items-center gap-2">
+	            {(!sidebarOpen || isMobileSidebar) && (
+	              <button
+	                onClick={() => setSidebarOpen(true)}
+	                className="mr-1 rounded p-0.5 text-slate-500 transition-colors hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+	                aria-label="Open sidebar"
+	              >
+	                <PanelLeftOpen className="w-4 h-4" />
+	              </button>
+	            )}
 
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-[13px] font-semibold tracking-[-0.01em] text-white sm:text-sm">{convoTitle}</h1>
-              <span className="rounded-full border border-green-500/15 bg-green-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-green-300">
-                Ready
-              </span>
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-green-400 rounded-full shadow-[0_0_0_4px_rgba(74,222,128,0.08)]" />
-              <span className="text-xs text-slate-500">Violema ready</span>
-              {currentMessages.length > 0 && (
-                <>
-                  <span className="text-slate-700">·</span>
-                  <span className="text-xs text-slate-600">{currentMessages.length} msgs</span>
-                </>
-              )}
-            </div>
-          </div>
+	            <nav
+	              aria-label="Workspace areas"
+              className="panel-scroll flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5"
+	            >
+	              {WORKSPACE_AREAS.map((area) => {
+	                const Icon = area.icon;
+	                const isActive = workspaceArea === area.id;
+	                return (
+	                  <button
+	                    key={area.id}
+	                    type="button"
+	                    onClick={() => selectWorkspaceArea(area.id)}
+	                    aria-pressed={isActive}
+                    className={`inline-flex min-w-fit items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 sm:px-3.5 ${
+                      isActive
+                        ? 'border-violet-400/60 bg-violet-500/22 text-white shadow-[0_10px_26px_rgba(124,58,237,0.16),inset_0_1px_0_rgba(255,255,255,0.06)]'
+                        : 'border-navy-700/80 bg-navy-900/62 text-slate-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] hover:border-navy-600 hover:bg-navy-800/88 hover:text-white'
+                    }`}
+                  >
+                    <Icon className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-violet-200' : 'text-slate-400'}`} />
+                    <span>{area.shortLabel}</span>
+                  </button>
+	                );
+	              })}
+	            </nav>
 
-          {/* Mode selector — desktop only (mobile uses sidebar) */}
-          <div className="hidden xl:block">
-            <ModeSelector />
-          </div>
+	            {/* Mode selector — desktop only (mobile uses sidebar) */}
+	            <div className="hidden xl:block">
+	              <ModeSelector />
+	            </div>
 
-          <button
-            onClick={() => setTaskPanelOpen((v) => !v)}
-            aria-pressed={taskPanelOpen}
-            aria-label="Toggle tasks panel"
-            className={`hidden sm:flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
-              taskPanelOpen
-                ? 'bg-violet-900/30 border-violet-700/50 text-violet-300 shadow-sm'
-                : 'bg-navy-800/80 border-navy-700 text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <CheckSquare className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">Schedules</span>
-          </button>
-          <button
-            onClick={() => navigate('/dashboard/agents')}
-            className="hidden sm:flex items-center gap-1.5 rounded-full border border-navy-700 bg-navy-800/80 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:border-cyan-500/30 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
-          >
-            <Bot className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">Agent Studio</span>
-          </button>
-        </header>
+	            <button
+	              onClick={() => {
+	                const next = !missionWorkspaceOpen;
+	                setMissionWorkspaceOpen(next);
+	                if (next) setTaskPanelOpen(false);
+	              }}
+	              aria-pressed={missionWorkspaceOpen}
+	              aria-label="Toggle contextual inspector"
+	              className={`hidden shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 sm:flex ${
+	                missionWorkspaceOpen
+	                  ? 'border-violet-700/50 bg-violet-900/30 text-violet-300 shadow-sm'
+	                  : 'border-navy-700 bg-navy-800/80 text-slate-400 hover:text-slate-200'
+	              }`}
+	            >
+	              <Eye className="w-3.5 h-3.5" />
+	              <span className="hidden lg:inline">Inspector</span>
+	            </button>
+	          </div>
+
+	          <div className="flex min-w-0 flex-col gap-1.5 lg:flex-row lg:items-end lg:justify-between">
+	            <div className="min-w-0">
+	              <div className="flex flex-wrap items-center gap-2">
+	                <h1 className="truncate text-[13px] font-semibold tracking-[-0.01em] text-white sm:text-sm">
+	                  {workspaceArea === 'home' ? convoTitle : activeWorkspaceArea.label}
+	                </h1>
+	                <span className="hidden rounded-full border border-green-500/15 bg-green-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-green-300 sm:inline-flex">
+	                  Ready
+	                </span>
+	              </div>
+	              <div className="mt-1 hidden flex-wrap items-center gap-2 sm:flex">
+	                <div className="h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_0_4px_rgba(74,222,128,0.08)]" />
+	                <span className="truncate text-xs text-slate-500">
+	                  {workspaceArea === 'home' ? 'Violema ready' : activeWorkspaceArea.description}
+	                </span>
+	                {currentMessages.length > 0 && (
+	                  <>
+	                    <span className="text-slate-700">·</span>
+	                    <span className="text-xs text-slate-600">{currentMessages.length} msgs</span>
+	                  </>
+	                )}
+	              </div>
+	            </div>
+
+	            <div
+	              role="tablist"
+	              aria-label={`${activeWorkspaceArea.label} workspace tabs`}
+              className="panel-scroll flex max-w-full gap-1.5 overflow-x-auto pb-0.5 lg:justify-end"
+	            >
+	              {activeWorkspaceArea.tabs.map((tab) => {
+	                const isActive = activeWorkspaceTab === tab.id;
+	                return (
+	                  <button
+	                    key={`${activeWorkspaceArea.id}-${tab.id}`}
+	                    id={`workspace-tab-${activeWorkspaceArea.id}-${tab.id}`}
+	                    type="button"
+	                    onClick={() => selectWorkspaceTab(tab.id)}
+	                    role="tab"
+	                    aria-selected={isActive}
+	                    aria-controls={activeWorkspacePanelId}
+                    className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                      isActive
+                        ? 'border-violet-400/55 bg-violet-500/20 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+                        : 'border-navy-700/60 bg-navy-950/34 text-slate-300 hover:border-navy-600 hover:bg-navy-800/78 hover:text-white'
+                    }`}
+	                  >
+	                    {tab.label}
+	                  </button>
+	                );
+	              })}
+	            </div>
+	          </div>
+	        </header>
 
         {isMobileSidebar && (
           <div className="border-b border-navy-800/70 bg-navy-950/55 px-3 py-2 backdrop-blur-sm sm:hidden">
             <div className="mx-auto flex max-w-3xl items-center gap-2">
               <button
                 onClick={() => setSidebarOpen(true)}
+                aria-expanded={sidebarOpen}
                 className="ui-button-ghost flex-1 justify-center py-2 text-[11px]"
               >
                 <MessageSquare className="h-3.5 w-3.5" />
-                Conversations
+                Workspace
               </button>
               <button
-                onClick={() => setTaskPanelOpen(true)}
+                onClick={() => {
+                  openHomeChat();
+                  setTaskPanelOpen(false);
+                }}
+                aria-pressed={workspaceArea === 'home' && activeWorkspaceTab === 'chat'}
                 className="ui-button-ghost flex-1 justify-center py-2 text-[11px]"
               >
-                <CheckSquare className="h-3.5 w-3.5" />
-                Schedules
+                <MessageSquare className="h-3.5 w-3.5" />
+                Chat
               </button>
               <button
-                onClick={() => navigate('/dashboard/agents')}
+                onClick={() => {
+                  setMissionWorkspaceOpen(true);
+                  setTaskPanelOpen(false);
+                }}
+                aria-pressed={missionWorkspaceOpen}
                 className="ui-button-ghost flex-1 justify-center py-2 text-[11px]"
               >
-                <Bot className="h-3.5 w-3.5" />
-                Agent Studio
+                <Eye className="h-3.5 w-3.5" />
+                Inspector
               </button>
             </div>
           </div>
         )}
 
-        {/* Chat body */}
+        {/* Workspace body */}
         <div className="flex flex-1 min-h-0">
-          <div className="flex min-h-0 flex-1 min-w-0">
-            <ChatInterface
-              conversationId={activeConvoId}
-              initialMessages={currentMessages}
-              onMessagesChange={handleMessagesChange}
-              autonomyMode={autonomyMode}
-            />
+          <div
+            id={chatTabActive ? activeWorkspacePanelId : undefined}
+            role={chatTabActive ? 'tabpanel' : undefined}
+            aria-labelledby={chatTabActive ? activeWorkspaceTabElementId : undefined}
+            aria-hidden={chatTabActive && missionWorkspaceOpen && isMobileSidebar ? true : !chatTabActive ? true : undefined}
+            className={`${chatTabActive ? 'flex' : 'hidden'} min-h-0 flex-1 min-w-0`}
+          >
+            {renderChatSurface()}
           </div>
+
+          <div
+            id={!chatTabActive ? activeWorkspacePanelId : undefined}
+            role={!chatTabActive ? 'tabpanel' : undefined}
+            aria-labelledby={!chatTabActive ? activeWorkspaceTabElementId : undefined}
+            aria-hidden={!chatTabActive && missionWorkspaceOpen && isMobileSidebar ? true : chatTabActive ? true : undefined}
+            className={`${chatTabActive ? 'hidden' : 'flex'} min-h-0 flex-1 min-w-0`}
+          >
+            {chatTabActive ? null : renderWorkspaceMain()}
+          </div>
+
+          {missionWorkspaceOpen && isMobileSidebar && (
+            <button
+              type="button"
+              onClick={() => setMissionWorkspaceOpen(false)}
+              aria-hidden="true"
+              tabIndex={-1}
+              className="absolute inset-0 z-30 bg-black/55 backdrop-blur-[1px] lg:hidden"
+            />
+          )}
+
+          {missionWorkspaceOpen && (
+            <MissionWorkspacePanel
+              mission={selectedMission}
+              activeTab={missionWorkspaceTab}
+              onTabChange={setMissionWorkspaceTab}
+              onClose={() => setMissionWorkspaceOpen(false)}
+              isModal={isMobileSidebar}
+            >
+              {renderMissionWorkspaceContent()}
+            </MissionWorkspacePanel>
+          )}
 
       {/* Task panel */}
       {taskPanelOpen && (
@@ -3152,7 +4493,7 @@ export default function Dashboard() {
                           <div>
                             <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-300/80">Agent policy</p>
                             <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-                              Workflow lives here. The full worker system lives in Agent Studio, where you can compare presets, inspect performance, and tune routing without burying it under schedule tracking.
+                              Mission work stays in this workspace. Advanced controls open the underlying run analysis, replay, and routing tools when you need deeper debugging.
                             </p>
                           </div>
                           <button
@@ -3160,7 +4501,7 @@ export default function Dashboard() {
                             onClick={() => navigate(`/dashboard/agents?automation=${selectedTask.automationId || selectedTask.id}`)}
                             className="ui-pill px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200"
                           >
-                            Open Agent Studio
+                            Open Advanced
                           </button>
                         </div>
                         <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
@@ -3581,7 +4922,7 @@ export default function Dashboard() {
             <div className="panel-scroll flex-1 space-y-4 px-5 py-5 pb-8">
               <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/80">Builder</p>
-                <p className="mt-1 text-sm text-white">Set the cadence, design the workflow here, and keep agent policy in Agent Studio.</p>
+                <p className="mt-1 text-sm text-white">Set the cadence, design the workflow here, and keep deeper agent controls in Advanced.</p>
               </div>
 
               <div className="grid gap-2 sm:grid-cols-3">
@@ -4360,7 +5701,7 @@ export default function Dashboard() {
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Control split</p>
                     <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-                      Workflow lives here. Agent policy, preset comparison, and worker tuning live in Agent Studio.
+                      Mission work stays here. Advanced holds run analysis, replay, preset comparison, and worker tuning.
                     </p>
                   </div>
                   {automationEditor.mode === 'edit' ? (
@@ -4369,7 +5710,7 @@ export default function Dashboard() {
                       onClick={() => navigate(`/dashboard/agents?automation=${automationEditor.id}`)}
                       className="ui-pill shrink-0 px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200"
                     >
-                      Open Agent Studio
+                      Open Advanced
                     </button>
                   ) : (
                     <span className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-slate-600">

@@ -1,4 +1,6 @@
-import { Activity, Clock3, Sparkles } from 'lucide-react';
+import Activity from 'lucide-react/dist/esm/icons/activity.js';
+import Clock3 from 'lucide-react/dist/esm/icons/clock-3.js';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import type { AgentStudioOperationalContext } from '../contract';
 import type { WorkflowBlockKind } from '../types';
 

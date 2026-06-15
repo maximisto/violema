@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 
 interface OptimizationRecommendation {
   title: string;
