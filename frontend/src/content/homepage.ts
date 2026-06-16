@@ -93,7 +93,7 @@ export const homepageNav: HomepageNavItem[] = [
   { label: 'Use cases', href: '#how-it-works' },
   { label: 'Integrations', href: '/integrations' },
   { label: 'Pricing', href: '#pricing' },
-  { label: 'Resources', href: '/faq' },
+  { label: 'Resources', href: '/blog/' },
 ];
 
 export const heroCopy = {

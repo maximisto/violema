@@ -24,6 +24,9 @@ export interface MissionSourceStep {
   toolName?: string;
   estimatedCredits?: number;
   actualCredits?: number;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
   summary?: string;
   error?: string;
 }
@@ -354,6 +357,9 @@ function buildSteps(task?: MissionSourceTask | null): MissionStepView[] {
         toolLabel: step.toolName || step.modelSource || step.modelTier,
         estimatedCredits: step.estimatedCredits,
         actualCredits: step.actualCredits,
+        startedAt: step.startedAt,
+        finishedAt: step.finishedAt,
+        durationMs: step.durationMs,
         summary: step.summary,
         error: step.error,
       };

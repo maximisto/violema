@@ -37,6 +37,10 @@ import { MissionAnalytics } from '../features/missions/MissionAnalytics';
 import { MissionIntegrationsStrip } from '../features/missions/MissionIntegrationsStrip';
 import { MissionArtifact } from '../features/missions/MissionArtifact';
 import { MissionLessons } from '../features/missions/MissionLessons';
+import { MissionCommandDashboard } from '../features/missions/MissionCommandDashboard';
+import { MissionProgressRail } from '../features/missions/MissionProgressRail';
+import { DashboardGuardian } from '../features/guardian/DimaDashboardGuardian';
+import { DimaSidebarNote } from '../features/guardian/DimaSidebarNote';
 import { buildMissionWorkspaceView, type MissionSourceTask } from '../features/missions/missionPresenter';
 import { mapMissionRecordToSourceTask, type MissionApiRecord } from '../features/missions/missionApi';
 import {
@@ -1801,6 +1805,17 @@ export default function Dashboard() {
     }));
   }, [workspaceArea]);
 
+  const openWorkspaceTarget = useCallback((areaId: WorkspaceAreaId, tabId?: WorkspaceTabId) => {
+    setWorkspaceArea(areaId);
+    setWorkspaceTabs((current) => ({
+      ...current,
+      [areaId]: tabId || current[areaId] || getWorkspaceArea(areaId).defaultTab,
+    }));
+    setTaskPanelOpen(false);
+    setMissionWorkspaceOpen(false);
+    if (isMobileSidebar) setSidebarOpen(false);
+  }, [isMobileSidebar]);
+
   const openConversation = useCallback((conversationId: string) => {
     openHomeChat();
     setActiveConvoId(conversationId);
@@ -3031,6 +3046,24 @@ export default function Dashboard() {
     />
   );
 
+  const renderCommandDashboard = () => (
+    <MissionCommandDashboard
+      mission={selectedMission}
+      creditBalanceLabel={`${formatCredits(snapshot.creditsRemaining)} cr`}
+      creditRunwayLabel={`${snapshot.projectedDaysLeft}d runway · ${snapshot.planName}`}
+      lowCreditRunway={lowCreditRunway}
+      onOpenWorkspace={() => {
+        setMissionWorkspaceOpen(true);
+        setTaskPanelOpen(false);
+      }}
+      onOpenSchedule={() => {
+        setMissionWorkspaceOpen(false);
+        setTaskPanelOpen(true);
+      }}
+      onOpenArea={openWorkspaceTarget}
+    />
+  );
+
   const workspaceSurface = (children: React.ReactNode) => (
     <div className="panel-scroll min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.08),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.72),rgba(2,6,23,0.92))] px-4 py-4 sm:px-6 sm:py-5">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
@@ -3057,6 +3090,9 @@ export default function Dashboard() {
           {activeWorkspaceArea.tabs.find((tab) => tab.id === activeWorkspaceTab)?.label || activeWorkspaceTab}
         </span>
       </div>
+      {selectedMission.steps.length > 0 ? (
+        <MissionProgressRail mission={selectedMission} className="mt-4" />
+      ) : null}
     </div>
   );
 
@@ -3094,6 +3130,7 @@ export default function Dashboard() {
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-slate-100">{step.title}</p>
                 <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{step.objective}</p>
+                <MissionProgressRail steps={[step]} variant="compact" className="mt-2" />
               </div>
               <span className="flex-shrink-0 rounded-full border border-navy-700 bg-navy-950/65 px-2 py-1 text-[10px] font-medium text-slate-400">
                 {step.status.replace('_', ' ')}
@@ -3144,9 +3181,7 @@ export default function Dashboard() {
 
   const renderEmptyWorkspaceMain = () => {
     if (workspaceArea === 'home') {
-      return renderEmptyWorkspaceSurface(
-        tabFocusCard('Activity', 'Mission activity appears here after a scheduled automation exists.', 'slate')
-      );
+      return workspaceSurface(renderCommandDashboard());
     }
 
     if (workspaceArea === 'missions') {
@@ -3271,14 +3306,7 @@ export default function Dashboard() {
   const renderWorkspaceMain = () => {
     if (workspaceArea === 'home') {
       if (activeWorkspaceTab === 'activity') {
-        if (!selectedTask) return renderEmptyWorkspaceMain();
-        return workspaceSurface(
-          <>
-            {workspaceHeaderCard}
-            <MissionOverview mission={selectedMission} focus="mission" />
-            <MissionIntegrationsStrip integrations={selectedMission.integrations} />
-          </>
-        );
+        return workspaceSurface(renderCommandDashboard());
       }
       return renderChatSurface();
     }
@@ -4064,6 +4092,8 @@ export default function Dashboard() {
             )}
           </div>
 
+          <DimaSidebarNote />
+
 	          <div className="border-t border-navy-800 px-3 py-2">
 	            <div className="rounded-xl border border-navy-800/80 bg-navy-950/45 px-2.5 py-2">
 	              <div className="flex items-center gap-2">
@@ -4366,6 +4396,15 @@ export default function Dashboard() {
               {renderMissionWorkspaceContent()}
             </MissionWorkspacePanel>
           )}
+
+          <DashboardGuardian
+            workspaceId={workspace.workspaceId}
+            area={workspaceArea}
+            tab={activeWorkspaceTab}
+            mission={selectedMission}
+            lowCreditRunway={lowCreditRunway}
+            panelOffset={taskPanelOpen || missionWorkspaceOpen}
+          />
 
       {/* Task panel */}
       {taskPanelOpen && (

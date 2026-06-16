@@ -27,6 +27,9 @@ export interface MissionStepView {
   toolLabel?: string;
   estimatedCredits?: number;
   actualCredits?: number;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
   summary?: string;
   error?: string;
 }

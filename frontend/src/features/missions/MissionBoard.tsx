@@ -4,6 +4,7 @@ import type {
   MissionStepView,
   MissionWorkspaceView,
 } from './types';
+import { MissionProgressRail } from './MissionProgressRail';
 
 interface MissionBoardProps {
   mission: MissionWorkspaceView;
@@ -76,6 +77,7 @@ function StepCard({ step }: { step: MissionStepView }) {
         </span>
       </div>
       <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-500">{step.objective}</p>
+      <MissionProgressRail steps={[step]} variant="compact" className="mt-2" />
       <div className="mt-2 flex flex-wrap gap-1.5">
         <span className="rounded-full border border-violet-400/20 bg-violet-400/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-200">
           {step.agentLabel}
@@ -118,6 +120,10 @@ export function MissionBoard({ mission }: MissionBoardProps) {
           {mission.steps.length} steps
         </span>
       </div>
+
+      {mission.steps.length > 0 ? (
+        <MissionProgressRail mission={mission} variant="compact" className="rounded-lg border border-navy-800/80 bg-navy-950/35 px-2.5 py-2" />
+      ) : null}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-3">
         {STEP_LANES.map((lane) => {

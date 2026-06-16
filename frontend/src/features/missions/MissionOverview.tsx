@@ -1,5 +1,6 @@
 import type { MissionAgentView, MissionStatus, MissionWorkspaceView } from './types';
 import { MissionControlDeck } from './MissionControlDeck';
+import { MissionProgressRail } from './MissionProgressRail';
 
 interface MissionOverviewProps {
   mission: MissionWorkspaceView;
@@ -81,6 +82,9 @@ export function MissionOverview({ mission, focus = 'mission' }: MissionOverviewP
               </span>
             </div>
             <p className="mt-2 text-sm leading-6 text-slate-400">{mission.description}</p>
+            {mission.steps.length > 0 ? (
+              <MissionProgressRail mission={mission} variant="compact" className="mt-3" />
+            ) : null}
             <p className="mt-2 text-[11px] leading-5 text-slate-500">Schedule: {mission.scheduleLabel}</p>
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
               {infoTiles.map((tile) => (

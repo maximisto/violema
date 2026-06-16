@@ -111,6 +111,9 @@ function readStepItems(value: unknown): MissionSourceTask['latestStepExecutions'
         toolName: readString(record.toolName),
         estimatedCredits: readNumber(record.estimatedCredits),
         actualCredits: readNumber(record.actualCredits),
+        startedAt: readString(record.startedAt),
+        finishedAt: readString(record.finishedAt),
+        durationMs: readNumber(record.durationMs),
         summary: readString(record.summary),
         error: readString(record.error),
       };

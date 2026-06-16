@@ -72,7 +72,7 @@ export const WORKSPACE_AREAS: WorkspaceAreaConfig[] = [
     defaultTab: 'chat',
     tabs: [
       { id: 'chat', label: 'Chat' },
-      { id: 'activity', label: 'Activity' },
+      { id: 'activity', label: 'Dashboard' },
     ],
   },
   {

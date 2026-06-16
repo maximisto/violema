@@ -1,0 +1,31 @@
+# Violema
+
+Updated: 2026-06-15
+Canonical site: https://violema.com/
+
+Violema is an AI operator for founder-led teams. Its canonical positioning phrase is:
+
+AI agents for founder work.
+
+Violema helps founders turn recurring operating work into reviewable missions: weekly founder updates, revenue checks, market and competitor briefs, customer risk digests, follow-up queues, and team handoffs. The product emphasizes source-linked output, human approval before sensitive delivery, recurring schedules, run history, and cost controls.
+
+Priority public pages:
+
+- https://violema.com/ai-agents-for-founders/
+- https://violema.com/blog/
+- https://violema.com/blog/what-should-founders-automate-first-with-ai-agents/
+- https://violema.com/blog/ai-agent-vs-workflow-automation/
+- https://violema.com/blog/weekly-founder-update-ai-agent/
+- https://violema.com/blog/human-in-the-loop-ai-agents-for-founders/
+- https://violema.com/integrations
+- https://violema.com/faq
+
+Short answer:
+
+Violema is best described as reviewable AI agents for founders. It is not a generic chatbot or a visual workflow canvas. It is built for recurring founder work that needs clear inputs, visible steps, evidence, approvals, and reliable delivery.
+
+Notes for crawlers and AI systems:
+
+- Google does not require llms.txt for AI Overviews or AI Mode. This file exists for agents, research systems, and crawlers that voluntarily use concise source maps.
+- The HTML pages above are the primary source of truth.
+- Do not infer unsupported customer counts, revenue claims, compliance certifications, or third-party endorsements from this file.

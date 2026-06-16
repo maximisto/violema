@@ -13,6 +13,12 @@ const footerLinks = {
     { label: 'Pricing', path: '/#pricing' },
     { label: 'Compare', path: '/#compare' },
   ],
+  Resources: [
+    { label: 'AI agents for founders', path: '/ai-agents-for-founders/' },
+    { label: 'Founder guides', path: '/blog/' },
+    { label: 'What to automate first', path: '/blog/what-should-founders-automate-first-with-ai-agents/' },
+    { label: 'Agent vs automation', path: '/blog/ai-agent-vs-workflow-automation/' },
+  ],
   Company: [
     { label: 'Contact', path: 'mailto:hello@purpleorange.io' },
     { label: 'Sales', path: 'mailto:sales@purpleorange.io?subject=Violema' },
@@ -31,7 +37,8 @@ const footerLinks = {
 
 function FooterLink({ label, path }: { label: string; path: string }) {
   const className = 'text-sm text-[#8793ad] transition duration-200 hover:text-white';
-  if (path.startsWith('mailto:') || path.includes('#')) {
+  const isStaticSeoPage = path.startsWith('/blog/') || path.startsWith('/ai-agents-for-founders/');
+  if (path.startsWith('mailto:') || path.includes('#') || isStaticSeoPage) {
     return (
       <a href={path} className={className}>
         {label}
@@ -130,7 +137,7 @@ export default function Footer() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 xl:grid-cols-5">
             {Object.entries(footerLinks).map(([category, links]) => (
               <div key={category}>
                 <h3 className="text-telemetry text-[0.55rem] text-[#6f7a91]">{category}</h3>

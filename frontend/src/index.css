@@ -1390,6 +1390,142 @@
   }
 }
 
+/* ── Dima dashboard guardian ─────────────────────────────────────── */
+.dima-guardian {
+  transform-origin: 88% 100%;
+}
+
+.dima-dog-image {
+  filter:
+    saturate(0.9)
+    contrast(1.08)
+    brightness(1.08)
+    drop-shadow(0 0 16px rgba(148, 163, 184, 0.16))
+    drop-shadow(0 0 30px rgba(124, 92, 255, 0.12));
+  mix-blend-mode: screen;
+  transform-origin: 74% 82%;
+  animation: dima-patrol 18s ease-in-out infinite;
+}
+
+.dima-guardian--kiss .dima-dog-image {
+  animation: dima-kiss 2.4s ease-in-out infinite;
+}
+
+.dima-guardian--chew .dima-dog-image {
+  animation: dima-chew 1.9s ease-in-out infinite;
+}
+
+.dima-guardian--mark .dima-dog-image {
+  animation: dima-watch 2.8s ease-in-out infinite;
+}
+
+.dima-code-scrap {
+  animation: dima-code-scrap 1.9s ease-in-out infinite;
+}
+
+.dima-mark-splash {
+  animation: dima-mark-splash 2.4s ease-in-out infinite;
+}
+
+.dima-kiss-signal {
+  animation: dima-kiss-signal 2.4s ease-in-out infinite;
+}
+
+.dima-sidebar-mark {
+  filter:
+    grayscale(1)
+    saturate(0.12)
+    contrast(1.12)
+    brightness(1.08)
+    drop-shadow(0 0 18px rgba(148, 163, 184, 0.12));
+}
+
+@keyframes dima-patrol {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  42% {
+    transform: translate3d(-0.75rem, -0.2rem, 0);
+  }
+  70% {
+    transform: translate3d(0.25rem, 0, 0);
+  }
+}
+
+@keyframes dima-kiss {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  42% {
+    transform: translate3d(-0.35rem, -0.35rem, 0) rotate(-1.8deg);
+  }
+  62% {
+    transform: translate3d(0.1rem, 0, 0) rotate(1deg);
+  }
+}
+
+@keyframes dima-chew {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  34% {
+    transform: translate3d(-0.18rem, 0.08rem, 0) rotate(-1.4deg);
+  }
+  48% {
+    transform: translate3d(0.12rem, 0, 0) rotate(1deg);
+  }
+}
+
+@keyframes dima-watch {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-0.15rem, 0, 0);
+  }
+}
+
+@keyframes dima-code-scrap {
+  0%, 100% {
+    transform: rotate(-7deg) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: rotate(-10deg) translate3d(-0.12rem, 0.08rem, 0);
+  }
+}
+
+@keyframes dima-mark-splash {
+  0%, 100% {
+    opacity: 0.52;
+    transform: scaleX(1);
+  }
+  50% {
+    opacity: 0.78;
+    transform: scaleX(1.1);
+  }
+}
+
+@keyframes dima-kiss-signal {
+  0%, 100% {
+    opacity: 0.72;
+    transform: translate3d(0, 0.15rem, 0) scale(0.96);
+  }
+  44% {
+    opacity: 1;
+    transform: translate3d(-0.25rem, -0.35rem, 0) scale(1.04);
+  }
+}
+
+@media (max-width: 639px), (prefers-reduced-motion: reduce) {
+  .dima-guardian,
+  .dima-dog-image,
+  .dima-code-scrap,
+  .dima-mark-splash,
+  .dima-kiss-signal {
+    animation: none !important;
+  }
+}
+
 /* ── Smooth sidebar collapse ──────────────────────────────────────── */
 .sidebar-enter {
   animation: sidebarSlideIn 0.2s ease-out;

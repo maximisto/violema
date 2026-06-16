@@ -54,6 +54,10 @@ export default function Navbar() {
   }
 
   function handleNavClick(event: MouseEvent<HTMLAnchorElement>, href: string) {
+    if (href.startsWith('/blog/') || href.startsWith('/ai-agents-for-founders/')) {
+      return;
+    }
+
     event.preventDefault();
 
     if (href.startsWith('/')) {
