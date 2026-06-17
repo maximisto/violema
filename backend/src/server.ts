@@ -4198,13 +4198,15 @@ app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
     assertEmailApprovedForAccess(email);
 
     const role = resolveAuthRole(email);
+    const sessionTermsAccepted = state.intent === 'login' || state.acceptedTerms;
+    const sessionEducationAccepted = state.intent === 'login' || state.acceptedEducation;
     const user = upsertAuthUser({
       email,
       name,
       role,
       method: provider,
-      acceptedTerms: state.acceptedTerms,
-      acceptedEducation: state.acceptedEducation,
+      acceptedTerms: sessionTermsAccepted,
+      acceptedEducation: sessionEducationAccepted,
     });
     const { token } = createAuthSession(user.id);
     res.setHeader('Set-Cookie', buildAuthCookie(token));
