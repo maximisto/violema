@@ -92,6 +92,9 @@ function readStepItems(value: unknown): MissionSourceTask['latestStepExecutions'
     .map((item) => {
       const record = readRecord(item);
       if (!record) return null;
+      const charge = readRecord(record.charge);
+      const output = readRecord(record.output);
+      const tokenUsage = readRecord(record.tokenUsage);
       const stepId = readString(record.stepId) || readString(record.id);
       const kind = readString(record.kind);
       const title = readString(record.title);
@@ -110,7 +113,29 @@ function readStepItems(value: unknown): MissionSourceTask['latestStepExecutions'
         modelSource: readString(record.modelSourceLabel) || readString(record.modelSource),
         toolName: readString(record.toolName),
         estimatedCredits: readNumber(record.estimatedCredits),
-        actualCredits: readNumber(record.actualCredits),
+        actualCredits: readNumber(record.actualCredits) ?? readNumber(charge?.actualCredits),
+        toolCalls: readNumber(record.toolCalls),
+        artifactCount: readNumber(record.artifactCount),
+        output,
+        tokenUsage: tokenUsage
+          ? {
+              inputTokens: readNumber(tokenUsage.inputTokens),
+              outputTokens: readNumber(tokenUsage.outputTokens),
+              totalTokens: readNumber(tokenUsage.totalTokens),
+            }
+          : undefined,
+        charge: charge
+          ? {
+              actualCredits: readNumber(charge.actualCredits),
+              tokenCredits: readNumber(charge.tokenCredits),
+              toolCredits: readNumber(charge.toolCredits),
+              artifactCredits: readNumber(charge.artifactCredits),
+              durationCredits: readNumber(charge.durationCredits),
+              complexityCredits: readNumber(charge.complexityCredits),
+              baseCredits: readNumber(charge.baseCredits),
+              rationale: readStringArray(charge.rationale),
+            }
+          : undefined,
         startedAt: readString(record.startedAt),
         finishedAt: readString(record.finishedAt),
         durationMs: readNumber(record.durationMs),

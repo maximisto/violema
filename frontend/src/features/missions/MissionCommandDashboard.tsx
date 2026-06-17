@@ -24,6 +24,7 @@ interface MissionCommandDashboardProps {
   onOpenWorkspace: () => void;
   onOpenSchedule: () => void;
   onOpenArea: (area: WorkspaceAreaId, tab?: WorkspaceTabId) => void;
+  onOpenCredits?: () => void;
 }
 
 const stepStatusClasses: Record<MissionStatus, string> = {
@@ -65,6 +66,7 @@ export function MissionCommandDashboard({
   onOpenWorkspace,
   onOpenSchedule,
   onOpenArea,
+  onOpenCredits,
 }: MissionCommandDashboardProps) {
   const summary = buildMissionDashboardSummary(mission);
   const visibleSteps = mission.steps.slice(0, 4);
@@ -145,7 +147,15 @@ export function MissionCommandDashboard({
             </div>
             <p className="mt-1 truncate text-[11px] text-slate-500">{mission.deliveryLabel}</p>
           </div>
-          <div className={`rounded-lg border px-3 py-3 ${lowCreditRunway ? 'border-amber-400/24 bg-amber-400/10' : 'border-navy-700/70 bg-navy-950/42'}`}>
+          <button
+            type="button"
+            onClick={onOpenCredits || (() => onOpenArea('analytics', 'credits'))}
+            className={`rounded-lg border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+              lowCreditRunway
+                ? 'border-amber-400/24 bg-amber-400/10 hover:bg-amber-400/14'
+                : 'border-navy-700/70 bg-navy-950/42 hover:border-violet-400/24 hover:bg-violet-400/8'
+            }`}
+          >
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">Credits</p>
             <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-white">
               <CreditCard className={`h-4 w-4 ${lowCreditRunway ? 'text-amber-200' : 'text-violet-200'}`} />
@@ -154,7 +164,7 @@ export function MissionCommandDashboard({
             <p className={`mt-1 truncate text-[11px] ${lowCreditRunway ? 'text-amber-200/80' : 'text-slate-500'}`}>
               {creditRunwayLabel}
             </p>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -234,7 +244,7 @@ export function MissionCommandDashboard({
               </button>
               <button
                 type="button"
-                onClick={() => onOpenArea('analytics', 'credits')}
+                onClick={onOpenCredits || (() => onOpenArea('analytics', 'credits'))}
                 className="flex w-full items-center justify-between gap-3 rounded-lg border border-navy-800/80 bg-navy-950/42 px-3 py-3 text-left transition-colors hover:border-violet-400/25 hover:bg-violet-400/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
               >
                 <span>

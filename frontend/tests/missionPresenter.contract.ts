@@ -26,14 +26,32 @@ const mission = buildMissionWorkspaceView({
       title: 'Weekly founder update',
       kind: 'brief',
       source: 'Slack draft',
-      summary: 'Revenue, product, and GTM narrative with source-linked claims.',
+      payload: {
+        markdown: 'Revenue, product, and GTM narrative with source-linked claims.',
+        sources: [
+          {
+            title: 'Stripe MRR report',
+            source: 'Stripe',
+            url: 'https://stripe.example/reports/mrr',
+            detail: 'Revenue is up 18% WoW.',
+          },
+        ],
+      },
     },
     {
       id: 'chart-1',
       title: 'Revenue movement chart',
       kind: 'chart',
       source: 'Stripe',
-      summary: 'Week-over-week revenue and churn movement.',
+      payload: {
+        results: [
+          {
+            title: 'Stripe churn export',
+            url: 'https://stripe.example/reports/churn',
+            snippet: 'Churn stayed flat this week.',
+          },
+        ],
+      },
     },
   ],
   latestStepExecutions: [
@@ -45,7 +63,16 @@ const mission = buildMissionWorkspaceView({
       status: 'completed',
       assignedRole: 'finance_checker',
       toolName: 'Stripe',
-      actualCredits: 18,
+      charge: { actualCredits: 18 },
+      output: {
+        sources: [
+          {
+            title: 'Failed payment queue',
+            source: 'Stripe',
+            detail: 'Three failed payments need follow-up.',
+          },
+        ],
+      },
       summary: 'Revenue up 18%.',
     },
     {
@@ -65,7 +92,7 @@ const mission = buildMissionWorkspaceView({
 assert(mission.artifact.title === 'Weekly founder update', 'uses the first artifact as the living artifact title');
 assert(mission.artifact.statusLabel === 'Ready for review', 'marks review-held artifacts clearly');
 assert(mission.artifact.sections.some((section) => section.label === 'Validation'), 'includes validation section');
-assert(mission.artifact.sections.some((section) => section.value.includes('2 evidence')), 'counts evidence-backed artifacts');
+assert(mission.artifact.sections.some((section) => section.value.includes('3 evidence')), 'counts source evidence from artifact and step payloads');
 assert(mission.artifact.sections.some((section) => section.label === 'Skills'), 'includes active skills/context');
 assert(mission.controlPrimitives.length === 6, 'builds the borrowed control primitive deck');
 assert(mission.controlPrimitives.some((item) => item.id === 'plan' && item.value === '2 checkpoints'), 'shows visible plan checkpoints');
@@ -77,6 +104,9 @@ assert(mission.controlPrimitives.some((item) => item.id === 'cost' && item.value
 assert(mission.lessons.length >= 3, 'builds a learning-loop queue');
 assert(mission.lessons.some((lesson) => lesson.status === 'proposed'), 'proposes a saved rule from the reviewed artifact');
 assert(mission.lessons.some((lesson) => lesson.title.includes('Credit pattern')), 'includes credit-utilization learning');
+assert(mission.steps[0]?.actualCredits === 18, 'reads actual credits from nested step charge');
+assert(mission.evidence.some((item) => item.label === 'Stripe MRR report'), 'extracts artifact source evidence');
+assert(mission.evidence.some((item) => item.label === 'Failed payment queue'), 'extracts step output source evidence');
 
 const emptyMission = buildMissionWorkspaceView(null);
 

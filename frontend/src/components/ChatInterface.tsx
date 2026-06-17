@@ -388,7 +388,7 @@ const MODE_CONFIG = {
     icon: Zap,
     color: 'text-green-400',
     bg: 'bg-green-900/20 border-green-800/40',
-    description: 'Full auto — acts without confirmation',
+    description: 'Full auto: acts without confirmation',
   },
   cautious: {
     label: 'Cautious',
@@ -984,8 +984,8 @@ export default function ChatInterface({
       setAgentStatus('idle');
     }
 
-    // When promoting 'new' → real ID, the stream is still in flight.
-    // Only update the ref so subsequent switches work correctly — do NOT
+    // When promoting 'new' to a real ID, the stream is still in flight.
+    // Only update the ref so subsequent switches work correctly. Do NOT
     // reset messages or suppress sync, which would wipe streamed content.
     if (isPromotingNewConversation) {
       previousConversationIdRef.current = conversationId;
@@ -1004,6 +1004,13 @@ export default function ChatInterface({
   }, [conversationId, initialMessages]);
 
   useEffect(() => {
+    if (messages.length === 0) {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+      return;
+    }
+
     if (isAtBottom) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
@@ -1327,7 +1334,7 @@ export default function ChatInterface({
     <div className="relative flex h-full min-h-0 w-full flex-1 flex-col">
       {/* Agent status bar */}
       <div className="flex-shrink-0 border-b border-navy-800/40 bg-gradient-to-r from-navy-900/30 via-navy-900/20 to-violet-950/10 px-3 py-2 backdrop-blur-sm sm:px-4">
-        <div className="mx-auto flex max-w-[72rem] items-center gap-2.5 rounded-2xl border border-white/5 bg-navy-950/35 px-3 py-2.5 shadow-[0_12px_34px_rgba(2,6,23,0.16)] backdrop-blur-sm sm:gap-3 sm:px-3.5">
+        <div className="mx-auto flex max-w-[72rem] flex-wrap items-center gap-2 rounded-2xl border border-white/5 bg-navy-950/35 px-3 py-2.5 shadow-[0_12px_34px_rgba(2,6,23,0.16)] backdrop-blur-sm sm:gap-3 sm:px-3.5">
           <div className="flex items-center gap-2.5">
             <div className={`w-2 h-2 rounded-full ${statusColor} ${agentStatus !== 'idle' ? 'animate-pulse' : ''}`} />
             <div className="leading-tight">
@@ -1343,11 +1350,15 @@ export default function ChatInterface({
             <button
               type="button"
               onClick={onOpenMissionWorkspace}
-              className="hidden min-w-0 max-w-[18rem] items-center gap-1.5 rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-[10px] font-medium text-violet-200 transition-colors hover:bg-violet-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 md:flex"
+              className="order-last flex min-w-0 w-full items-center justify-between gap-2 rounded-xl border border-violet-500/22 bg-violet-500/10 px-2.5 py-1.5 text-[10px] font-medium text-violet-100 transition-colors hover:bg-violet-500/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 sm:w-auto sm:max-w-[22rem] md:order-none"
               title="Open mission workspace"
             >
-              <span className="truncate">{missionTitle}</span>
-              {missionStatusLabel ? <span className="flex-shrink-0 text-violet-200/60">· {missionStatusLabel}</span> : null}
+              <span className="min-w-0 truncate">{missionTitle}</span>
+              {missionStatusLabel ? (
+                <span className="flex-shrink-0 rounded-full border border-violet-200/16 bg-violet-200/8 px-2 py-0.5 text-[9px] text-violet-100/75">
+                  {missionStatusLabel}
+                </span>
+              ) : null}
             </button>
           ) : null}
           <div className="ml-auto flex items-center gap-1.5 text-[10px] text-slate-500 sm:gap-2">
@@ -1360,7 +1371,7 @@ export default function ChatInterface({
         </div>
       </div>
 
-      <div className="flex-shrink-0 px-3 pt-2 sm:px-6 sm:pt-2.5">
+      <div className="hidden flex-shrink-0 px-3 pt-2 sm:block sm:px-6 sm:pt-2.5">
         <div className="mx-auto max-w-[72rem]">
           <BillingGateBar compact />
         </div>
@@ -1373,36 +1384,38 @@ export default function ChatInterface({
         className="flex-1 min-h-0 overflow-y-auto px-3 py-4 pb-16 sm:px-6 sm:py-5 sm:pb-20"
       >
         {messages.length === 0 ? (
-          <div className="flex min-h-full items-start justify-center px-1 py-3 sm:py-5">
-            <div className="ui-panel-strong relative w-full max-w-[72rem] overflow-hidden px-5 py-6 sm:px-8 sm:py-8">
+          <div className="flex min-h-full items-start justify-center px-1 py-2 sm:py-5">
+            <div className="ui-panel-strong relative w-full max-w-[72rem] overflow-hidden px-4 py-5 sm:px-8 sm:py-8">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.18),transparent_48%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.08),transparent_35%)]" />
-              <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:gap-8">
+              <div className="relative grid gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:gap-8">
                 <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
-                  <div className="ui-pill mb-4 px-3 py-1 text-violet-300">
+                  <div className="ui-pill mb-3 px-3 py-1 text-violet-300 sm:mb-4">
                     <Sparkles className="h-3 w-3" />
                     Violema workspace
                   </div>
-                  <ViolemaLogo className="mb-4 h-12 w-full max-w-[14rem] sm:h-14 sm:max-w-[16rem]" />
-                  <h2 className="text-[1.8rem] font-bold text-white sm:text-[2.4rem]">Hey, I'm Violema</h2>
+                  <ViolemaLogo className="mb-3 h-10 w-full max-w-[12rem] sm:mb-4 sm:h-14 sm:max-w-[16rem]" />
+                  <h2 className="text-[1.65rem] font-bold text-white sm:text-[2.4rem]">Hey, I'm Violema</h2>
                   <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.32em] text-violet-300/70 sm:text-[11px]">
                     Your AI operator
                   </p>
-                  <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-300">
+                  <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-300 sm:mt-4 sm:text-lg">
                     Violema doesn't just answer. It turns recurring work into monitored runs.
-                    <br />
-                    Research, execution, and automation stay tied to review state, delivery targets, and credit cost.
+                    <span className="hidden sm:inline">
+                      <br />
+                      Research, execution, and automation stay tied to review state, delivery targets, and credit cost.
+                    </span>
                   </p>
-                  <p className="mt-2 max-w-xl text-sm text-slate-500">
+                  <p className="mt-2 hidden max-w-xl text-sm text-slate-500 sm:block">
                     {modeConfig.description}. The routing layer chooses the lightest useful model path and escalates only when the run needs more depth.
                   </p>
 
-                  <div className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:mt-5 lg:justify-start">
                     <span className="ui-pill">Executes across your stack</span>
                     <span className="ui-pill">Automates follow-through</span>
-                    <span className="ui-pill">Keeps humans in the loop</span>
+                    <span className="ui-pill hidden sm:inline-flex">Keeps humans in the loop</span>
                   </div>
 
-                  <div className="mt-6 grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="mt-5 grid w-full grid-cols-1 gap-3 sm:mt-6 sm:grid-cols-2">
                     <div className="ui-panel p-4 text-left shadow-none">
                       <p className="text-[10px] uppercase tracking-[0.2em] text-violet-300/70">Start here</p>
                       <p className="mt-1 text-sm font-medium text-white">Ask for a search, an execution task, or an automation.</p>
@@ -1415,6 +1428,24 @@ export default function ChatInterface({
                 </div>
 
                 <div className="flex flex-col gap-3">
+                  {missionTitle ? (
+                    <button
+                      type="button"
+                      onClick={onOpenMissionWorkspace}
+                      className="rounded-2xl border border-violet-300/24 bg-violet-300/10 px-4 py-3 text-left transition-colors hover:bg-violet-300/14 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-100/70">Current mission</p>
+                      <div className="mt-1 flex items-center justify-between gap-3">
+                        <p className="truncate text-sm font-semibold text-white">{missionTitle}</p>
+                        {missionStatusLabel ? (
+                          <span className="flex-shrink-0 rounded-full border border-violet-200/16 bg-violet-200/8 px-2 py-0.5 text-[10px] text-violet-100/75">
+                            {missionStatusLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-2 text-[11px] leading-5 text-slate-400">Open the mission to inspect plan, progress, evidence, and delivery.</p>
+                    </button>
+                  ) : null}
                   <div className="rounded-2xl border border-navy-700/60 bg-navy-950/35 px-4 py-3 text-left">
                     <p className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Suggested prompts</p>
                     <p className="mt-1 text-sm text-slate-400">Start with one strong prompt and Violema will take it from there.</p>

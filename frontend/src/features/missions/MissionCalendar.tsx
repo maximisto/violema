@@ -16,6 +16,8 @@ interface MissionCalendarProps {
   onRunNow: () => void;
   onPauseToggle: () => void;
   disabled?: boolean;
+  selectedAgendaId?: string;
+  onSelectAgenda?: (item: FounderCalendarAgendaItem) => void;
 }
 
 const toneClasses: Record<FounderCalendarTone, {
@@ -155,15 +157,36 @@ function AgendaCard({
   item,
   disabled,
   progressSteps,
+  selected,
+  onSelect,
 }: {
   item: FounderCalendarAgendaItem;
   disabled: boolean;
   progressSteps?: MissionWorkspaceView['steps'];
+  selected?: boolean;
+  onSelect?: (item: FounderCalendarAgendaItem) => void;
 }) {
   const tone = toneClasses[item.tone];
 
   return (
-    <article className={`relative overflow-hidden rounded-xl border p-3 ${tone.card}`}>
+    <article
+      role="button"
+      tabIndex={0}
+      onClick={onSelect ? () => onSelect(item) : undefined}
+      onKeyDown={(event) => {
+        if (!onSelect) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect(item);
+        }
+      }}
+      aria-pressed={selected}
+      className={`relative overflow-hidden rounded-xl border p-3 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 ${
+        selected
+          ? 'border-violet-200/48 bg-violet-300/12 shadow-[0_0_30px_rgba(124,92,255,0.16)]'
+          : tone.card
+      } ${onSelect ? 'cursor-pointer hover:border-violet-200/38 hover:bg-white/[0.055]' : ''}`}
+    >
       <div className={`pointer-events-none absolute inset-y-0 left-0 w-20 bg-gradient-to-r ${tone.glow} to-transparent`} />
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -201,6 +224,10 @@ function AgendaCard({
         <button
           type="button"
           disabled={disabled}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect?.(item);
+          }}
           className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.045] px-2.5 text-[10px] font-semibold text-slate-200 transition-colors hover:bg-white/[0.075] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
         >
           {item.actionLabel}
@@ -232,6 +259,8 @@ export function MissionCalendar({
   onRunNow,
   onPauseToggle,
   disabled = false,
+  selectedAgendaId,
+  onSelectAgenda,
 }: MissionCalendarProps) {
   const pauseLabel = mission.status === 'paused' ? 'Resume' : 'Pause';
   const PauseIcon = mission.status === 'paused' ? Play : Pause;
@@ -322,6 +351,8 @@ export function MissionCalendar({
               item={item}
               disabled={disabled}
               progressSteps={item.id === `${mission.id}_primary` ? mission.steps : undefined}
+              selected={selectedAgendaId === item.id}
+              onSelect={onSelectAgenda}
             />
           ))}
         </div>

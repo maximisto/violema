@@ -192,7 +192,7 @@ export function DashboardGuardian({
       </div>
       ) : null}
 
-      <div className="relative ml-auto mt-1 h-20 w-32 overflow-visible sm:h-28 sm:w-48">
+      <div className={`relative ml-auto mt-1 h-20 w-32 overflow-visible sm:h-28 sm:w-48 ${!bubbleOpen ? 'hidden sm:block' : ''}`}>
         {cue.ritual === 'chew' ? (
           <div className="dima-code-scrap pointer-events-none absolute bottom-3 left-2 rounded-md border border-slate-500/25 bg-navy-950/88 px-2 py-1 font-mono text-[10px] text-slate-400 shadow-[0_10px_28px_rgba(2,6,23,0.28)]">
             bad_step()

@@ -17,7 +17,7 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
   const [status, setStatus] = useState<string | null>(null);
   const recommendation = getCreditRecommendation(snapshot);
 
-  if (compact && recommendation.tone === 'good' && !status) {
+  if (compact && recommendation.tone !== 'urgent' && !status) {
     return null;
   }
 

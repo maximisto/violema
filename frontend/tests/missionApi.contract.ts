@@ -49,7 +49,28 @@ const source = mapMissionRecordToSourceTask({
         id: 'artifact_weekly',
         title: 'Weekly founder update',
         kind: 'brief',
-        payload: { markdown: 'Founder-ready brief.' },
+        payload: {
+          markdown: 'Founder-ready brief.',
+          sources: [
+            { title: 'Stripe MRR report', url: 'https://stripe.example/report', source: 'Stripe' },
+          ],
+        },
+      },
+    ],
+    latestStepExecutions: [
+      {
+        stepId: 'step_stripe',
+        title: 'Query Stripe revenue movement',
+        objective: 'Pull revenue, churn, and failed-payment signals.',
+        kind: 'query',
+        assignedRole: 'analyst',
+        status: 'succeeded',
+        charge: { actualCredits: 17 },
+        output: {
+          sources: [
+            { title: 'Stripe failed payments', source: 'Stripe', detail: 'Three failed payments need follow-up.' },
+          ],
+        },
       },
     ],
   },
@@ -70,6 +91,7 @@ assert(
   'maps latest summary',
 );
 assert(source.actualCredits === 44, 'maps actual credits');
-assert(source.steps?.[0].id === 'step_stripe', 'maps plan step id');
-assert(source.steps?.[0].status === 'succeeded', 'maps plan step status');
-assert(source.steps?.[0].toolName === 'query_data', 'maps plan step tool');
+assert(source.latestArtifacts?.[0]?.payload?.sources, 'preserves artifact source payload');
+assert(source.latestStepExecutions?.[0]?.stepId === 'step_stripe', 'maps latest step execution id');
+assert(source.latestStepExecutions?.[0]?.actualCredits === 17, 'maps nested step charge actual credits');
+assert(source.latestStepExecutions?.[0]?.output?.sources, 'preserves step output source payload');

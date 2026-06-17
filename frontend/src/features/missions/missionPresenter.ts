@@ -24,6 +24,24 @@ export interface MissionSourceStep {
   toolName?: string;
   estimatedCredits?: number;
   actualCredits?: number;
+  toolCalls?: number;
+  artifactCount?: number;
+  output?: Record<string, unknown>;
+  tokenUsage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+  charge?: {
+    actualCredits?: number;
+    tokenCredits?: number;
+    toolCredits?: number;
+    artifactCredits?: number;
+    durationCredits?: number;
+    complexityCredits?: number;
+    baseCredits?: number;
+    rationale?: string[];
+  };
   startedAt?: string;
   finishedAt?: string;
   durationMs?: number;
@@ -215,6 +233,93 @@ function readArtifactPayloadText(payload?: Record<string, unknown>): string | un
   return undefined;
 }
 
+function readRecordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function readStringValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function readFirstString(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = readStringValue(record[key]);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function evidenceSlug(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 48) || 'item';
+}
+
+function evidenceItemFromRecord(
+  record: Record<string, unknown>,
+  fallbackSource: string,
+  idPrefix: string,
+  index: number,
+): MissionEvidenceItem | undefined {
+  const label = readFirstString(record, ['title', 'label', 'name', 'url', 'href']);
+  if (!label) return undefined;
+
+  const source = readFirstString(record, ['source', 'provider', 'domain', 'url', 'href']) || fallbackSource;
+  const detail =
+    readFirstString(record, ['detail', 'summary', 'snippet', 'description', 'text', 'markdown', 'content']) ||
+    'Source linked from the latest run.';
+
+  return {
+    id: `${idPrefix}-${index + 1}-${evidenceSlug(label)}`,
+    label,
+    source,
+    detail: detail.slice(0, 420),
+  };
+}
+
+function extractEvidenceItems(value: unknown, fallbackSource: string, idPrefix: string): MissionEvidenceItem[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item, index) => {
+        const record = readRecordValue(item);
+        return record ? evidenceItemFromRecord(record, fallbackSource, idPrefix, index) : undefined;
+      })
+      .filter((item): item is MissionEvidenceItem => Boolean(item));
+  }
+
+  const record = readRecordValue(value);
+  if (!record) return [];
+
+  const collectionKeys = ['sources', 'citations', 'evidence', 'links', 'results', 'references'];
+  const nestedItems = collectionKeys.flatMap((key) => {
+    const nestedValue = record[key];
+    if (Array.isArray(nestedValue)) return extractEvidenceItems(nestedValue, fallbackSource, `${idPrefix}-${key}`);
+    const nestedRecord = readRecordValue(nestedValue);
+    return nestedRecord ? extractEvidenceItems(nestedRecord, fallbackSource, `${idPrefix}-${key}`) : [];
+  });
+
+  if (nestedItems.length > 0) return nestedItems;
+
+  const directItem = evidenceItemFromRecord(record, fallbackSource, idPrefix, 0);
+  return directItem ? [directItem] : [];
+}
+
+function dedupeEvidenceItems(items: MissionEvidenceItem[]) {
+  const seen = new Set<string>();
+  const deduped: MissionEvidenceItem[] = [];
+
+  items.forEach((item) => {
+    const key = `${item.label.trim().toLowerCase()}::${item.source.trim().toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    deduped.push(item);
+  });
+
+  return deduped;
+}
+
 function artifactStatusLabel(status: MissionStatus, artifactCount: number) {
   if (status === 'running') return 'Updating now';
   if (status === 'waiting_review') return 'Ready for review';
@@ -356,7 +461,7 @@ function buildSteps(task?: MissionSourceTask | null): MissionStepView[] {
         agentLabel,
         toolLabel: step.toolName || step.modelSource || step.modelTier,
         estimatedCredits: step.estimatedCredits,
-        actualCredits: step.actualCredits,
+        actualCredits: step.actualCredits ?? step.charge?.actualCredits,
         startedAt: step.startedAt,
         finishedAt: step.finishedAt,
         durationMs: step.durationMs,
@@ -469,14 +574,38 @@ function buildAgents(task: MissionSourceTask | undefined | null, steps: MissionS
 
 function buildEvidence(task?: MissionSourceTask | null): MissionEvidenceItem[] {
   const artifacts = task?.latestArtifacts || [];
-  if (artifacts.length > 0) {
-    return artifacts.slice(0, 6).map((artifact, index) => ({
+  const evidence: MissionEvidenceItem[] = [];
+
+  artifacts.slice(0, 6).forEach((artifact, index) => {
+    const source = artifact.source || artifact.kind || 'Run artifact';
+    const payloadEvidence = extractEvidenceItems(
+      artifact.payload,
+      source,
+      artifact.id || `artifact-${index + 1}`,
+    );
+
+    if (payloadEvidence.length > 0) {
+      evidence.push(...payloadEvidence);
+      return;
+    }
+
+    evidence.push({
       id: artifact.id || `artifact-${index + 1}`,
       label: artifact.title || artifact.kind || `Artifact ${index + 1}`,
-      source: artifact.source || artifact.kind || 'Run artifact',
+      source,
       detail: readArtifactDetail(artifact),
-    }));
-  }
+    });
+  });
+
+  (task?.latestStepExecutions || []).forEach((step, index) => {
+    evidence.push(...extractEvidenceItems(
+      step.output,
+      step.toolName || step.modelSource || roleLabel(step.assignedRole),
+      step.id || step.stepId || `step-${index + 1}`,
+    ));
+  });
+
+  if (evidence.length > 0) return dedupeEvidenceItems(evidence).slice(0, 10);
 
   if (task) return [];
 

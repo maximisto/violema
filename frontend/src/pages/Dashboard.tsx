@@ -39,6 +39,8 @@ import { MissionArtifact } from '../features/missions/MissionArtifact';
 import { MissionLessons } from '../features/missions/MissionLessons';
 import { MissionCommandDashboard } from '../features/missions/MissionCommandDashboard';
 import { MissionProgressRail } from '../features/missions/MissionProgressRail';
+import { MissionDetailView } from '../features/missions/MissionDetailView';
+import { MissionCreditDrawer } from '../features/missions/MissionCreditDrawer';
 import { DashboardGuardian } from '../features/guardian/DimaDashboardGuardian';
 import { DimaSidebarNote } from '../features/guardian/DimaSidebarNote';
 import { buildMissionWorkspaceView, type MissionSourceTask } from '../features/missions/missionPresenter';
@@ -57,6 +59,20 @@ import {
   type WorkspaceAreaId,
   type WorkspaceTabId,
 } from '../features/missions/workspaceShell';
+import {
+  getDefaultMissionSelection,
+  isMissionSelectionAvailable,
+  type MissionSelection,
+} from '../features/missions/missionDetail';
+import {
+  buildSelectedMissionSearch,
+  findTaskByMissionTarget,
+  getMissionSelectionStorageKey,
+  getMissionTargetFromSearch,
+  getPreferredMissionTarget,
+  resolveInitialSelectedTaskId,
+  type MissionSelectableTask,
+} from '../features/missions/missionSelectionState';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
 import { getAuthSession, hasSlackConnection, isAdminSession } from '../lib/auth';
@@ -187,6 +203,22 @@ function loadMissionActions(workspaceId: string): MissionActionRecord[] {
     return normalizeMissionActions(JSON.parse(raw));
   } catch {
     return [];
+  }
+}
+
+function loadStoredMissionTarget(workspaceId: string) {
+  try {
+    return localStorage.getItem(getMissionSelectionStorageKey(workspaceId)) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveStoredMissionTarget(workspaceId: string, task: MissionSelectableTask) {
+  try {
+    localStorage.setItem(getMissionSelectionStorageKey(workspaceId), getPreferredMissionTarget(task));
+  } catch {
+    // Keep the selection usable even when storage is unavailable.
   }
 }
 
@@ -1216,6 +1248,7 @@ function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
 
   const items: Array<DashboardTaskStepExecution | null> = value.map((item) => {
     if (!isRecord(item)) return null;
+    const charge = isRecord(item.charge) ? item.charge : undefined;
     const stepId = readString(item.stepId);
     const kind = readString(item.kind);
     const title = readString(item.title);
@@ -1234,7 +1267,11 @@ function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
       finishedAt: readString(item.finishedAt),
       modelTier: readString(item.modelTier),
       modelSource: readString(item.modelSourceLabel) || readString(item.modelSource),
-      actualCredits: typeof item.actualCredits === 'number' ? item.actualCredits : undefined,
+      actualCredits: typeof item.actualCredits === 'number'
+        ? item.actualCredits
+        : typeof charge?.actualCredits === 'number'
+          ? charge.actualCredits
+          : undefined,
       toolCalls: typeof item.toolCalls === 'number' ? item.toolCalls : undefined,
       artifactCount: typeof item.artifactCount === 'number' ? item.artifactCount : undefined,
       durationMs: typeof item.durationMs === 'number' ? item.durationMs : undefined,
@@ -1245,17 +1282,17 @@ function readStepExecutions(value: unknown): DashboardTaskStepExecution[] {
             totalTokens: typeof item.tokenUsage.totalTokens === 'number' ? item.tokenUsage.totalTokens : undefined,
           }
         : undefined,
-      charge: isRecord(item.charge)
+      charge: charge
         ? {
-            actualCredits: typeof item.charge.actualCredits === 'number' ? item.charge.actualCredits : 0,
-            tokenCredits: typeof item.charge.tokenCredits === 'number' ? item.charge.tokenCredits : 0,
-            toolCredits: typeof item.charge.toolCredits === 'number' ? item.charge.toolCredits : 0,
-            artifactCredits: typeof item.charge.artifactCredits === 'number' ? item.charge.artifactCredits : 0,
-            durationCredits: typeof item.charge.durationCredits === 'number' ? item.charge.durationCredits : 0,
-            complexityCredits: typeof item.charge.complexityCredits === 'number' ? item.charge.complexityCredits : 0,
-            baseCredits: typeof item.charge.baseCredits === 'number' ? item.charge.baseCredits : 0,
-            rationale: Array.isArray(item.charge.rationale)
-              ? item.charge.rationale.filter((entry): entry is string => typeof entry === 'string')
+            actualCredits: typeof charge.actualCredits === 'number' ? charge.actualCredits : 0,
+            tokenCredits: typeof charge.tokenCredits === 'number' ? charge.tokenCredits : 0,
+            toolCredits: typeof charge.toolCredits === 'number' ? charge.toolCredits : 0,
+            artifactCredits: typeof charge.artifactCredits === 'number' ? charge.artifactCredits : 0,
+            durationCredits: typeof charge.durationCredits === 'number' ? charge.durationCredits : 0,
+            complexityCredits: typeof charge.complexityCredits === 'number' ? charge.complexityCredits : 0,
+            baseCredits: typeof charge.baseCredits === 'number' ? charge.baseCredits : 0,
+            rationale: Array.isArray(charge.rationale)
+              ? charge.rationale.filter((entry): entry is string => typeof entry === 'string')
               : [],
           }
         : undefined,
@@ -1664,6 +1701,9 @@ export default function Dashboard() {
     return initialTabs;
   });
   const [selectedTaskId, setSelectedTaskId] = useState<string | number>('');
+  const [missionSelection, setMissionSelection] = useState<MissionSelection | null>(null);
+  const [selectedCalendarItemId, setSelectedCalendarItemId] = useState<string | null>(null);
+  const [creditDrawerOpen, setCreditDrawerOpen] = useState(false);
   const [newConvoMessages, setNewConvoMessages] = useState<Message[]>([]);
   const [hoveredConvoId, setHoveredConvoId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -1816,6 +1856,33 @@ export default function Dashboard() {
     if (isMobileSidebar) setSidebarOpen(false);
   }, [isMobileSidebar]);
 
+  const selectDashboardTask = useCallback((taskId: string | number, task?: MissionSelectableTask) => {
+    setSelectedTaskId(taskId);
+    setMissionSelection(null);
+    setSelectedCalendarItemId(null);
+    setCreditDrawerOpen(false);
+
+    if (!task) return;
+
+    const nextSearch = buildSelectedMissionSearch(location.search, task);
+    if (nextSearch !== location.search) {
+      navigate({ pathname: location.pathname, search: nextSearch }, { replace: true });
+    }
+  }, [location.pathname, location.search, navigate]);
+
+  const openMissionDetail = useCallback((selection?: MissionSelection) => {
+    if (selection) {
+      setMissionSelection(selection);
+    }
+    openWorkspaceTarget('missions', 'overview');
+  }, [openWorkspaceTarget]);
+
+  const openMissionInspector = useCallback((tab: MissionWorkspaceTab = 'mission') => {
+    setMissionWorkspaceTab(tab);
+    setMissionWorkspaceOpen(true);
+    setTaskPanelOpen(false);
+  }, []);
+
   const openConversation = useCallback((conversationId: string) => {
     openHomeChat();
     setActiveConvoId(conversationId);
@@ -1966,10 +2033,17 @@ export default function Dashboard() {
 
     const previewItems = isLocalDashboardPreview ? buildLocalPreviewAutomationItems() : [];
     const visibleAutomationItems = automationItems.length > 0 ? automationItems : previewItems;
+    const storedMissionTarget = loadStoredMissionTarget(workspace.workspaceId);
+    const currentMissionSearch = typeof window !== 'undefined' ? window.location.search : '';
 
     if (visibleAutomationItems.length > 0) {
       setLiveAutomations(visibleAutomationItems);
-      setSelectedTaskId((current) => current || visibleAutomationItems[0].id);
+      setSelectedTaskId((current) =>
+        current || resolveInitialSelectedTaskId(visibleAutomationItems, {
+          search: currentMissionSearch,
+          storedTaskId: storedMissionTarget,
+        })
+      );
     } else {
       setLiveAutomations([]);
     }
@@ -1990,14 +2064,19 @@ export default function Dashboard() {
         setMissionSourceTasks([]);
         setLiveAutomations(previewItems);
         if (previewItems[0]) {
-          setSelectedTaskId((current) => current || previewItems[0].id);
+          setSelectedTaskId((current) =>
+            current || resolveInitialSelectedTaskId(previewItems, {
+              search: typeof window !== 'undefined' ? window.location.search : '',
+              storedTaskId: loadStoredMissionTarget(workspace.workspaceId),
+            })
+          );
         }
         setPlatformTasks([]);
         setTaskPanelLoaded(true);
       });
 
     return () => controller.abort();
-  }, [isLocalDashboardPreview, loadTaskPanelData]);
+  }, [isLocalDashboardPreview, loadTaskPanelData, workspace.workspaceId]);
 
   // Close delete confirm on outside activity
   useEffect(() => {
@@ -2515,6 +2594,11 @@ export default function Dashboard() {
     { scheduled: 0, complete: 0, alert: 0 }
   );
   const selectedTask = taskItems.find((task) => task.id === selectedTaskId) ?? taskItems[0];
+  useEffect(() => {
+    if (!selectedTask) return;
+    saveStoredMissionTarget(workspace.workspaceId, selectedTask);
+  }, [selectedTask, workspace.workspaceId]);
+
   const selectedMissionSource = useMemo(() => {
     if (!selectedTask) return missionSourceTasks[0];
 
@@ -2530,6 +2614,23 @@ export default function Dashboard() {
     () => buildMissionWorkspaceView(selectedMissionSource),
     [selectedMissionSource],
   );
+  const activeMissionSelection = useMemo<MissionSelection>(() => {
+    if (isMissionSelectionAvailable(selectedMission, missionSelection)) {
+      return missionSelection as MissionSelection;
+    }
+    return getDefaultMissionSelection(selectedMission);
+  }, [missionSelection, selectedMission]);
+  const selectedBoardStepId = activeMissionSelection.kind === 'step' ? activeMissionSelection.id : undefined;
+  const selectedBoardEvidenceId = activeMissionSelection.kind === 'evidence' ? activeMissionSelection.id : undefined;
+  const selectedAgendaId = activeMissionSelection.kind === 'calendar'
+    ? activeMissionSelection.id
+    : selectedCalendarItemId || undefined;
+  useEffect(() => {
+    setMissionSelection((current) => (
+      isMissionSelectionAvailable(selectedMission, current) ? current : null
+    ));
+    setSelectedCalendarItemId(null);
+  }, [selectedMission.id]);
   const selectedArtifactActionKind: MissionActionKind =
     selectedMission.status === 'waiting_review' ? 'artifact_reviewed' : 'artifact_opened';
   const selectedArtifactTargetId = useMemo(() => {
@@ -2759,7 +2860,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const automationId = params.get('automation');
+    const missionTarget = getMissionTargetFromSearch(location.search);
     const panel = params.get('panel');
     const editTarget = params.get('edit');
     const createTarget = params.get('create');
@@ -2774,15 +2875,15 @@ export default function Dashboard() {
       return;
     }
 
-    if (automationId) {
-      const match = taskItems.find((task) => task.automationId === automationId || String(task.id) === automationId);
+    if (missionTarget) {
+      const match = findTaskByMissionTarget(taskItems, missionTarget);
       if (match) {
         setSelectedTaskId(match.id);
       }
     }
 
-    if (editTarget === 'workflow' && automationId && !automationEditor) {
-      const match = taskItems.find((task) => task.automationId === automationId || String(task.id) === automationId);
+    if (editTarget === 'workflow' && missionTarget && !automationEditor) {
+      const match = findTaskByMissionTarget(taskItems, missionTarget);
       if (match) {
         void handleAutomationEdit(match, 'workflow');
       }
@@ -2916,6 +3017,34 @@ export default function Dashboard() {
     </div>
   );
 
+  const renderMissionBoardView = () => (
+    <MissionBoard
+      mission={selectedMission}
+      selectedStepId={selectedBoardStepId}
+      selectedEvidenceId={selectedBoardEvidenceId}
+      onSelectStep={(step) => openMissionDetail({ kind: 'step', id: step.id })}
+      onSelectEvidence={(item) => openMissionDetail({ kind: 'evidence', id: item.id })}
+    />
+  );
+
+  const renderMissionCalendarView = () => (
+    <MissionCalendar
+      mission={selectedMission}
+      selectedAgendaId={selectedAgendaId}
+      onSelectAgenda={(item) => {
+        setSelectedCalendarItemId(item.id);
+        openMissionDetail({ kind: 'calendar', id: item.id });
+      }}
+      onRunNow={() => {
+        if (selectedTask) void handleAutomationRun(selectedTask);
+      }}
+      onPauseToggle={() => {
+        if (selectedTask) void handleAutomationPauseToggle(selectedTask);
+      }}
+      disabled={!selectedTask || selectedTask.source !== 'live' || actionBusy !== null}
+    />
+  );
+
   const renderMissionWorkspaceContent = () => {
     if (!selectedTask) {
       if (missionWorkspaceTab === 'artifact') {
@@ -2976,7 +3105,7 @@ export default function Dashboard() {
     if (missionWorkspaceTab === 'board') {
       return (
         <div className="space-y-3">
-          <MissionBoard mission={selectedMission} />
+          {renderMissionBoardView()}
           {scheduleControlsFooter}
         </div>
       );
@@ -3012,12 +3141,7 @@ export default function Dashboard() {
     if (missionWorkspaceTab === 'calendar') {
       return (
         <div className="space-y-3">
-          <MissionCalendar
-            mission={selectedMission}
-            onRunNow={() => { void handleAutomationRun(selectedTask); }}
-            onPauseToggle={() => { void handleAutomationPauseToggle(selectedTask); }}
-            disabled={selectedTask.source !== 'live' || actionBusy !== null}
-          />
+          {renderMissionCalendarView()}
           {scheduleControlsFooter}
         </div>
       );
@@ -3061,6 +3185,7 @@ export default function Dashboard() {
         setTaskPanelOpen(true);
       }}
       onOpenArea={openWorkspaceTarget}
+      onOpenCredits={() => setCreditDrawerOpen(true)}
     />
   );
 
@@ -3354,12 +3479,7 @@ export default function Dashboard() {
         return workspaceSurface(
           <>
             {workspaceHeaderCard}
-            <MissionCalendar
-              mission={selectedMission}
-              onRunNow={() => { void handleAutomationRun(selectedTask); }}
-              onPauseToggle={() => { void handleAutomationPauseToggle(selectedTask); }}
-              disabled={!selectedTask || selectedTask.source !== 'live' || actionBusy !== null}
-            />
+            {renderMissionCalendarView()}
             {openScheduleControls}
           </>
         );
@@ -3368,7 +3488,7 @@ export default function Dashboard() {
         return workspaceSurface(
           <>
             {workspaceHeaderCard}
-            <MissionBoard mission={selectedMission} />
+            {renderMissionBoardView()}
             {openScheduleControls}
           </>
         );
@@ -3376,9 +3496,21 @@ export default function Dashboard() {
       return workspaceSurface(
         <>
           {workspaceHeaderCard}
-          <MissionOverview mission={selectedMission} focus="mission" />
-          <MissionIntegrationsStrip integrations={selectedMission.integrations} />
-          {openScheduleControls}
+          <MissionDetailView
+            mission={selectedMission}
+            selection={activeMissionSelection}
+            onSelect={setMissionSelection}
+            onOpenInspector={openMissionInspector}
+            onOpenArea={openWorkspaceTarget}
+            onOpenCredits={() => setCreditDrawerOpen(true)}
+            onRunNow={() => {
+              if (selectedTask) void handleAutomationRun(selectedTask);
+            }}
+            onPauseToggle={() => {
+              if (selectedTask) void handleAutomationPauseToggle(selectedTask);
+            }}
+            disabled={!selectedTask || selectedTask.source !== 'live' || actionBusy !== null}
+          />
         </>
       );
     }
@@ -3389,7 +3521,7 @@ export default function Dashboard() {
         return workspaceSurface(
           <>
             {workspaceHeaderCard}
-            <MissionBoard mission={selectedMission} />
+            {renderMissionBoardView()}
             {renderStepFocusList('Waiting work', waitingSteps, 'No waiting steps for the selected mission.')}
             {openScheduleControls}
           </>
@@ -3400,7 +3532,7 @@ export default function Dashboard() {
         return workspaceSurface(
           <>
             {workspaceHeaderCard}
-            <MissionBoard mission={selectedMission} />
+            {renderMissionBoardView()}
             {renderStepFocusList('Review queue', reviewSteps, 'No steps are waiting for review.')}
             {openScheduleControls}
           </>
@@ -3411,7 +3543,7 @@ export default function Dashboard() {
         return workspaceSurface(
           <>
             {workspaceHeaderCard}
-            <MissionBoard mission={selectedMission} />
+            {renderMissionBoardView()}
             {renderStepFocusList('Completed work', doneSteps, 'Completed steps appear here after a mission runs.')}
             {openScheduleControls}
           </>
@@ -3421,7 +3553,7 @@ export default function Dashboard() {
       return workspaceSurface(
         <>
           {workspaceHeaderCard}
-          <MissionBoard mission={selectedMission} />
+          {renderMissionBoardView()}
           {renderStepFocusList('Active work', activeSteps, 'No steps are actively running right now.')}
           {openScheduleControls}
         </>
@@ -3515,12 +3647,7 @@ export default function Dashboard() {
       return workspaceSurface(
         <>
           {workspaceHeaderCard}
-          <MissionCalendar
-            mission={selectedMission}
-            onRunNow={() => { void handleAutomationRun(selectedTask); }}
-            onPauseToggle={() => { void handleAutomationPauseToggle(selectedTask); }}
-            disabled={!selectedTask || selectedTask.source !== 'live' || actionBusy !== null}
-          />
+          {renderMissionCalendarView()}
           {openScheduleControls}
         </>
       );
@@ -3556,6 +3683,14 @@ export default function Dashboard() {
         <>
           {workspaceHeaderCard}
           <MissionAnalytics mission={selectedMission} />
+          <button
+            type="button"
+            onClick={() => setCreditDrawerOpen(true)}
+            className="inline-flex w-fit items-center gap-2 rounded-xl border border-violet-300/24 bg-violet-300/10 px-3 py-2 text-sm font-semibold text-violet-50 transition-colors hover:bg-violet-300/16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+          >
+            <CreditCard className="h-4 w-4" />
+            Open compact credits drawer
+          </button>
           {openScheduleControls}
         </>
       );
@@ -4104,7 +4239,11 @@ export default function Dashboard() {
 	                }`}>
 	                  <CreditCard className="h-3.5 w-3.5" />
 	                </div>
-	                <div className="min-w-0 flex-1">
+	                <button
+	                  type="button"
+	                  onClick={() => setCreditDrawerOpen(true)}
+	                  className="min-w-0 flex-1 rounded-lg text-left transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+	                >
 	                  <p className="truncate text-[12px] font-medium leading-none text-slate-300">
 	                    {formatCredits(snapshot.creditsRemaining)} cr
 	                  </p>
@@ -4113,7 +4252,7 @@ export default function Dashboard() {
 	                  }`}>
 	                    {snapshot.projectedDaysLeft}d runway · {snapshot.planName}
 	                  </p>
-	                </div>
+	                </button>
 	                <button
 	                  type="button"
 	                  onClick={openTopUp}
@@ -4238,8 +4377,8 @@ export default function Dashboard() {
 	              })}
 	            </nav>
 
-	            {/* Mode selector — desktop only (mobile uses sidebar) */}
-	            <div className="hidden xl:block">
+	            {/* Mode selector lives in the sidebar on common laptop widths so the area nav stays readable. */}
+	            <div className="hidden 2xl:block">
 	              <ModeSelector />
 	            </div>
 
@@ -4258,7 +4397,7 @@ export default function Dashboard() {
 	              }`}
 	            >
 	              <Eye className="w-3.5 h-3.5" />
-	              <span className="hidden lg:inline">Inspector</span>
+	              <span className="hidden 2xl:inline">Inspector</span>
 	            </button>
 	          </div>
 
@@ -4397,13 +4536,27 @@ export default function Dashboard() {
             </MissionWorkspacePanel>
           )}
 
+          {creditDrawerOpen && (
+            <MissionCreditDrawer
+              mission={selectedMission}
+              snapshot={snapshot}
+              onClose={() => setCreditDrawerOpen(false)}
+              onTopUp={openTopUp}
+              onUpgrade={() => { void openUpgrade(); }}
+              onOpenAnalytics={() => {
+                setCreditDrawerOpen(false);
+                openWorkspaceTarget('analytics', 'credits');
+              }}
+            />
+          )}
+
           <DashboardGuardian
             workspaceId={workspace.workspaceId}
             area={workspaceArea}
             tab={activeWorkspaceTab}
             mission={selectedMission}
             lowCreditRunway={lowCreditRunway}
-            panelOffset={taskPanelOpen || missionWorkspaceOpen}
+            panelOffset={taskPanelOpen || missionWorkspaceOpen || creditDrawerOpen}
           />
 
       {/* Task panel */}
@@ -4846,11 +4999,11 @@ export default function Dashboard() {
                       key={task.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => setSelectedTaskId(task.id)}
+                      onClick={() => selectDashboardTask(task.id, task)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
-                          setSelectedTaskId(task.id);
+                          selectDashboardTask(task.id, task);
                         }
                       }}
                       className={`relative border rounded-2xl p-3.5 transition-all cursor-pointer group shadow-[0_12px_28px_rgba(2,6,23,0.14)] hover:shadow-[0_16px_34px_rgba(2,6,23,0.22)] ${
@@ -4895,7 +5048,7 @@ export default function Dashboard() {
                           <button
                             onClick={(event) => {
                               event.stopPropagation();
-                              setSelectedTaskId(task.id);
+                              selectDashboardTask(task.id, task);
                               confirmAutomationDelete(task);
                             }}
                             className="rounded-lg p-1 text-slate-600 transition-colors hover:bg-navy-900/80 hover:text-red-300"

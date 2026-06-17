@@ -8,6 +8,10 @@ import { MissionProgressRail } from './MissionProgressRail';
 
 interface MissionBoardProps {
   mission: MissionWorkspaceView;
+  selectedStepId?: string;
+  selectedEvidenceId?: string;
+  onSelectStep?: (step: MissionStepView) => void;
+  onSelectEvidence?: (item: MissionEvidenceItem) => void;
 }
 
 type StepLane = {
@@ -65,9 +69,26 @@ const STEP_STATUS_COPY: Record<MissionStatus, string> = {
   paused: 'Paused',
 };
 
-function StepCard({ step }: { step: MissionStepView }) {
+function StepCard({
+  step,
+  selected,
+  onSelect,
+}: {
+  step: MissionStepView;
+  selected?: boolean;
+  onSelect?: (step: MissionStepView) => void;
+}) {
   return (
-    <article className="rounded-lg border border-navy-700/70 bg-navy-950/50 p-2.5">
+    <button
+      type="button"
+      onClick={onSelect ? () => onSelect(step) : undefined}
+      aria-pressed={selected}
+      className={`w-full rounded-lg border p-2.5 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+        selected
+          ? 'border-violet-300/45 bg-violet-400/12 shadow-[0_0_26px_rgba(124,92,255,0.14)]'
+          : 'border-navy-700/70 bg-navy-950/50 hover:border-violet-400/24 hover:bg-navy-900/62'
+      }`}
+    >
       <div className="flex items-start justify-between gap-2">
         <p className="min-w-0 flex-1 truncate text-[12px] font-semibold text-white" title={step.title}>
           {step.title}
@@ -88,13 +109,30 @@ function StepCard({ step }: { step: MissionStepView }) {
           </span>
         ) : null}
       </div>
-    </article>
+    </button>
   );
 }
 
-function EvidenceCard({ item }: { item: MissionEvidenceItem }) {
+function EvidenceCard({
+  item,
+  selected,
+  onSelect,
+}: {
+  item: MissionEvidenceItem;
+  selected?: boolean;
+  onSelect?: (item: MissionEvidenceItem) => void;
+}) {
   return (
-    <article className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 p-2.5">
+    <button
+      type="button"
+      onClick={onSelect ? () => onSelect(item) : undefined}
+      aria-pressed={selected}
+      className={`w-full rounded-lg border p-2.5 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 ${
+        selected
+          ? 'border-cyan-200/45 bg-cyan-300/14 shadow-[0_0_24px_rgba(34,211,238,0.12)]'
+          : 'border-cyan-400/20 bg-cyan-400/10 hover:border-cyan-300/35 hover:bg-cyan-400/14'
+      }`}
+    >
       <p className="truncate text-[12px] font-semibold text-white" title={item.label}>
         {item.label}
       </p>
@@ -102,11 +140,17 @@ function EvidenceCard({ item }: { item: MissionEvidenceItem }) {
         {item.source}
       </p>
       <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-500">{item.detail}</p>
-    </article>
+    </button>
   );
 }
 
-export function MissionBoard({ mission }: MissionBoardProps) {
+export function MissionBoard({
+  mission,
+  selectedStepId,
+  selectedEvidenceId,
+  onSelectStep,
+  onSelectEvidence,
+}: MissionBoardProps) {
   const followUpEvidence = mission.evidence.slice(0, 2);
 
   return (
@@ -140,7 +184,12 @@ export function MissionBoard({ mission }: MissionBoardProps) {
               {laneSteps.length > 0 ? (
                 <div className="space-y-2">
                   {laneSteps.map((step) => (
-                    <StepCard key={step.id} step={step} />
+                    <StepCard
+                      key={step.id}
+                      step={step}
+                      selected={selectedStepId === step.id}
+                      onSelect={onSelectStep}
+                    />
                   ))}
                 </div>
               ) : (
@@ -162,7 +211,12 @@ export function MissionBoard({ mission }: MissionBoardProps) {
           {followUpEvidence.length > 0 ? (
             <div className="space-y-2">
               {followUpEvidence.map((item) => (
-                <EvidenceCard key={item.id} item={item} />
+                <EvidenceCard
+                  key={item.id}
+                  item={item}
+                  selected={selectedEvidenceId === item.id}
+                  onSelect={onSelectEvidence}
+                />
               ))}
             </div>
           ) : (
