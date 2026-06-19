@@ -52,6 +52,9 @@ export interface AutomationRecord {
 const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
 const scheduledTasks = new Map<string, ScheduledTask>();
 const DEFAULT_AUTOMATION_TIMEZONE = process.env.DEFAULT_AUTOMATION_TIMEZONE || 'UTC';
+const LEGACY_DELIVERY_TARGETS: Record<string, string> = {
+  '#founders': '#all-purple-orange',
+};
 type AutomationSeed = Omit<
   AutomationRecord,
   'created_at' | 'last_run_at' | 'last_run_status' | 'consecutive_failures' | 'next_run_at'
@@ -244,20 +247,52 @@ function updateAutomationRecord(id: string, updater: (record: AutomationRecord) 
   const items = readAutomations();
   const index = items.findIndex((item) => item.id === id);
   if (index === -1) return null;
-  const next = updater(items[index]);
+  const next = withAutomationDefaults(updater(items[index]));
   items[index] = next;
   writeAutomations(items);
   return next;
 }
 
-function withAutomationDefaults(record: AutomationRecord): AutomationRecord {
-  const timezone = normalizeTimeZone(record.timezone);
+function normalizeDeliveryTargetText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return LEGACY_DELIVERY_TARGETS[trimmed.toLowerCase()] || trimmed;
+}
+
+function normalizeAutomationText(value: string) {
+  return value
+    .replace(/#founders\b/gi, '#all-purple-orange')
+    .replace(/#all-purple-orange\s+channel/gi, '#all-purple-orange channel');
+}
+
+function normalizeAutomationRecord(record: AutomationRecord): AutomationRecord {
   return {
     ...record,
+    actions: record.actions.map(normalizeAutomationText),
+    workflow_prompt: record.workflow_prompt ? normalizeAutomationText(record.workflow_prompt) : record.workflow_prompt,
+    notify: normalizeDeliveryTargetText(record.notify),
+    steps: record.steps?.map((step) => ({
+      ...step,
+      objective: normalizeAutomationText(step.objective),
+      deliveryTarget: step.deliveryTarget
+        ? {
+            ...step.deliveryTarget,
+            target: normalizeDeliveryTargetText(step.deliveryTarget.target) || step.deliveryTarget.target,
+          }
+        : step.deliveryTarget,
+    })),
+  };
+}
+
+function withAutomationDefaults(record: AutomationRecord): AutomationRecord {
+  const normalized = normalizeAutomationRecord(record);
+  const timezone = normalizeTimeZone(normalized.timezone);
+  return {
+    ...normalized,
     timezone,
-    next_run_at: record.status === 'paused'
+    next_run_at: normalized.status === 'paused'
       ? undefined
-      : record.next_run_at || computeNextRunAt(record.cron_expression, timezone),
+      : normalized.next_run_at || computeNextRunAt(normalized.cron_expression, timezone),
   };
 }
 
@@ -585,7 +620,7 @@ export function createAutomation(
 ) {
   const cronExpression = normalizeSchedule(input.schedule);
   const timezone = normalizeTimeZone(input.timezone);
-  const record: AutomationRecord = {
+  const record = withAutomationDefaults({
     id: `auto_${Date.now()}`,
     version: input.steps?.length ? 2 : undefined,
     name: input.name,
@@ -603,7 +638,7 @@ export function createAutomation(
     status: 'active',
     next_run_at: computeNextRunAt(cronExpression, timezone),
     created_at: new Date().toISOString(),
-  };
+  });
 
   const items = readAutomations();
   items.push(record);
