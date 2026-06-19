@@ -301,6 +301,8 @@ interface WorkflowBlockDraft {
   deliveryTarget?: { channel: 'slack' | 'email'; target: string } | null;
 }
 
+type WorkflowDeliveryTargetDraft = NonNullable<WorkflowBlockDraft['deliveryTarget']>;
+
 interface AutomationExecutionPolicyDraft {
   mode: ExecutionMode;
   optimizationGoal: OptimizationGoal;
@@ -550,6 +552,77 @@ interface AutomationEditorDraft {
   destinationType: 'slack' | 'email' | 'none';
 }
 
+function normalizeEditorDestinationTarget(value: string) {
+  return value.trim();
+}
+
+function inferDeliveryTargetFromText(value: string): WorkflowDeliveryTargetDraft | null {
+  const email = value.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0];
+  if (email) return { channel: 'email', target: email };
+
+  const slack = value.match(/(^|[\s([{"'])#([a-z0-9][a-z0-9_-]{1,79})\b/i)?.[2];
+  if (slack) return { channel: 'slack', target: `#${slack}` };
+
+  return null;
+}
+
+function readWorkflowDeliveryTarget(step: WorkflowBlockDraft): WorkflowDeliveryTargetDraft | null {
+  const explicitTarget = step.deliveryTarget?.target?.trim();
+  if (step.deliveryTarget && explicitTarget) {
+    return {
+      channel: step.deliveryTarget.channel,
+      target: explicitTarget,
+    };
+  }
+
+  return inferDeliveryTargetFromText(`${step.objective} ${step.title}`);
+}
+
+function getEditorCanonicalDeliveryTarget(
+  editor: AutomationEditorDraft,
+  sourceSteps: WorkflowBlockDraft[],
+): WorkflowDeliveryTargetDraft | null {
+  if (editor.destinationType === 'none') return null;
+
+  const stepTarget = sourceSteps
+    .filter((step) => step.kind === 'deliver')
+    .map(readWorkflowDeliveryTarget)
+    .find((target): target is WorkflowDeliveryTargetDraft => Boolean(target?.target));
+
+  if (stepTarget) return stepTarget;
+
+  const target = normalizeEditorDestinationTarget(editor.notify);
+  if (!target) return null;
+
+  return {
+    channel: editor.destinationType === 'email' || target.includes('@') ? 'email' : 'slack',
+    target,
+  };
+}
+
+function applyAutomationEditorDestination(
+  editor: AutomationEditorDraft,
+  destinationType: AutomationEditorDraft['destinationType'],
+  notify: string,
+): AutomationEditorDraft {
+  const target = normalizeEditorDestinationTarget(notify);
+  const deliveryTarget: WorkflowDeliveryTargetDraft | null = destinationType === 'none' || !target
+    ? null
+    : {
+        channel: destinationType === 'email' ? 'email' : 'slack',
+        target,
+      };
+
+  return {
+    ...editor,
+    destinationType,
+    notify: destinationType === 'none' ? '' : target,
+    steps: editor.steps.map((step) => step.kind === 'deliver'
+      ? { ...step, deliveryTarget }
+      : step),
+  };
+}
+
 type ThreadFilter = 'all' | 'active' | 'pinned' | 'archived';
 
 interface CreditEstimatePreview {
@@ -586,7 +659,7 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
         'Search competitor pricing and product moves this week.',
         'Analyze the signal and identify founder-level decisions.',
         'Generate the weekly founder update.',
-        'Deliver latest result to #founders after review.',
+        'Deliver latest result to #all-purple-orange after review.',
       ].join('\n'),
       source: 'sample',
       modelTier: 'balanced',
@@ -594,7 +667,7 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
       agentRole: 'operator_manager',
       runStatus: 'waiting_review',
       schedule: 'Every Monday at 9am',
-      notify: '#founders',
+      notify: '#all-purple-orange',
       condition: 'Only deliver after the evidence trail and summary are reviewed.',
       actions: [
         'Query Stripe revenue movement',
@@ -602,7 +675,7 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
         'Search competitor pricing changes',
         'Analyze founder-level risks and opportunities',
         'Generate the weekly founder update',
-        'Deliver latest result to #founders after review',
+        'Deliver latest result to #all-purple-orange after review',
       ],
       steps: [
         {
@@ -637,7 +710,7 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
           kind: 'deliver',
           title: 'Hold for approval and deliver',
           objective: 'Send the reviewed update to the founder channel.',
-          deliveryTarget: { channel: 'slack', target: '#founders' },
+          deliveryTarget: { channel: 'slack', target: '#all-purple-orange' },
         },
       ],
       executionPolicy: { ...DEFAULT_EXECUTION_POLICY },
@@ -730,7 +803,7 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
         {
           stepId: 'preview-step-deliver',
           kind: 'deliver',
-          title: 'Deliver to #founders',
+          title: 'Deliver to #all-purple-orange',
           assignedRole: 'slack_messenger',
           status: 'planned',
           summary: 'Waiting for review approval before delivery.',
@@ -2431,20 +2504,18 @@ export default function Dashboard() {
     setActionBusy('save');
     setAutomationEditorError(null);
     try {
-      const notifyTarget = automationEditor.destinationType === 'none' ? '' : automationEditor.notify.trim();
       const sourceSteps = automationEditor.authoringMode === 'describe'
         ? buildWorkflowBlocksFromPrompt(automationEditor.workflowPrompt)
         : automationEditor.steps;
+      const deliveryTarget = getEditorCanonicalDeliveryTarget(automationEditor, sourceSteps);
+      const notifyTarget = deliveryTarget?.target || '';
       const steps = sourceSteps
         .map((step) => ({
           ...step,
           title: step.title.trim(),
           objective: step.objective.trim(),
-          deliveryTarget: step.kind === 'deliver' && notifyTarget
-            ? {
-                channel: automationEditor.destinationType === 'email' ? 'email' as const : 'slack' as const,
-                target: notifyTarget,
-              }
+          deliveryTarget: step.kind === 'deliver'
+            ? (readWorkflowDeliveryTarget(step) || deliveryTarget)
             : (step.deliveryTarget || null),
         }))
         .filter((step) => workflowBlockHasContent(step));
@@ -2827,8 +2898,60 @@ export default function Dashboard() {
       if (!current) return current;
       const steps = [...current.steps];
       const step = steps[index];
-      steps[index] = { ...step, objective: value, title: step.title || value };
+      const inferredTarget = step.kind === 'deliver' ? inferDeliveryTargetFromText(value) : null;
+      steps[index] = {
+        ...step,
+        objective: value,
+        title: step.title || value,
+        deliveryTarget: inferredTarget || step.deliveryTarget,
+      };
+
+      if (inferredTarget) {
+        return {
+          ...current,
+          steps,
+          destinationType: inferredTarget.channel,
+          notify: inferredTarget.target,
+        };
+      }
+
       return { ...current, steps };
+    });
+  }, []);
+
+  const updateAutomationDestination = useCallback((
+    destinationType: AutomationEditorDraft['destinationType'],
+    notify: string,
+  ) => {
+    setAutomationEditor((current) => current
+      ? applyAutomationEditorDestination(current, destinationType, notify)
+      : current);
+  }, []);
+
+  const updateAutomationStepDeliveryTarget = useCallback((
+    index: number,
+    destinationType: AutomationEditorDraft['destinationType'],
+    notify: string,
+  ) => {
+    setAutomationEditor((current) => {
+      if (!current) return current;
+      const target = normalizeEditorDestinationTarget(notify);
+      const steps = [...current.steps];
+      const step = steps[index];
+      const deliveryTarget: WorkflowDeliveryTargetDraft | null = destinationType === 'none' || !target
+        ? null
+        : {
+            channel: destinationType === 'email' ? 'email' : 'slack',
+            target,
+          };
+
+      steps[index] = { ...step, deliveryTarget };
+      return {
+        ...current,
+        destinationType,
+        notify: destinationType === 'none' ? '' : target,
+        steps,
+      };
     });
   }, []);
 
@@ -5291,23 +5414,17 @@ export default function Dashboard() {
                     <p className="ui-section-label px-1">Result destination</p>
                     <div className="mt-2 flex flex-wrap gap-2 px-1">
                       {[
-                        { label: 'Slack', value: 'slack', placeholder: '#project-nexus or C0APS37V8V8' },
+                        { label: 'Slack', value: 'slack', placeholder: '#all-purple-orange or C0APS37V8V8' },
                         { label: 'Email', value: 'email', placeholder: 'max@purpleorange.io' },
                         { label: 'None', value: 'none', placeholder: '' },
                       ].map((option) => (
                         <button
                           key={option.value}
                           type="button"
-                          onClick={() => setAutomationEditor((current) => {
-                            if (!current) return current;
-                            return {
-                              ...current,
-                              destinationType: option.value as AutomationEditorDraft['destinationType'],
-                              notify: option.value === 'none'
-                                ? ''
-                                : current.notify || option.placeholder,
-                            };
-                          })}
+                          onClick={() => updateAutomationDestination(
+                            option.value as AutomationEditorDraft['destinationType'],
+                            option.value === 'none' ? '' : automationEditor.notify || option.placeholder,
+                          )}
                           className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                             automationEditor.destinationType === option.value
                               ? 'border-cyan-500/35 bg-cyan-500/14 text-cyan-100'
@@ -5321,7 +5438,7 @@ export default function Dashboard() {
                     <div className="ui-input-shell mt-2">
                       <input
                         value={automationEditor.notify}
-                        onChange={(event) => setAutomationEditor((current) => current ? { ...current, notify: event.target.value } : current)}
+                        onChange={(event) => updateAutomationDestination(automationEditor.destinationType, event.target.value)}
 	                        aria-label="Result destination"
 	                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none disabled:text-slate-600"
 	                        placeholder={automationEditor.destinationType === 'email' ? 'max@purpleorange.io' : 'Slack channel name or ID'}
@@ -5330,7 +5447,7 @@ export default function Dashboard() {
 	                    </div>
 	                    {automationEditor.destinationType === 'slack' && automationEditor.notify && !isLikelySlackTarget(automationEditor.notify) ? (
 	                      <p className="mt-2 px-1 text-xs leading-5 text-amber-300">
-	                        Use a Slack channel name like <span className="font-mono">#project-nexus</span> or an ID like <span className="font-mono">C0APS37V8V8</span>.
+	                        Use a Slack channel name like <span className="font-mono">#all-purple-orange</span> or an ID like <span className="font-mono">C0APS37V8V8</span>.
 	                      </p>
 	                    ) : (
 	                      <p className="mt-2 px-1 text-xs leading-5 text-slate-400">
@@ -5555,6 +5672,71 @@ export default function Dashboard() {
                               />
                             </div>
                           </details>
+                          {step.kind === 'deliver' && (() => {
+                            const stepTarget = step.deliveryTarget || (
+                              automationEditor.destinationType !== 'none' && automationEditor.notify
+                                ? {
+                                    channel: automationEditor.destinationType === 'email' ? 'email' as const : 'slack' as const,
+                                    target: automationEditor.notify,
+                                  }
+                                : null
+                            );
+                            const deliveryType = stepTarget?.channel || automationEditor.destinationType;
+                            const deliveryValue = stepTarget?.target || '';
+                            return (
+                              <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/[0.04] p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="px-1 text-xs font-medium text-cyan-100">Delivery destination</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {[
+                                      { label: 'Slack', value: 'slack' },
+                                      { label: 'Email', value: 'email' },
+                                      { label: 'None', value: 'none' },
+                                    ].map((option) => (
+                                      <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => updateAutomationStepDeliveryTarget(
+                                          index,
+                                          option.value as AutomationEditorDraft['destinationType'],
+                                          option.value === 'none' ? '' : deliveryValue || (option.value === 'email' ? 'max@purpleorange.io' : '#all-purple-orange'),
+                                        )}
+                                        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                                          deliveryType === option.value
+                                            ? 'border-cyan-400/35 bg-cyan-400/15 text-cyan-100'
+                                            : 'border-white/10 bg-navy-950/45 text-slate-400 hover:border-cyan-500/25 hover:text-white'
+                                        }`}
+                                      >
+                                        {option.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="ui-input-shell mt-2">
+                                  <input
+                                    value={deliveryValue}
+                                    onChange={(event) => updateAutomationStepDeliveryTarget(
+                                      index,
+                                      deliveryType === 'none' ? 'slack' : deliveryType,
+                                      event.target.value,
+                                    )}
+                                    className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none disabled:text-slate-600"
+                                    placeholder={deliveryType === 'email' ? 'max@purpleorange.io' : '#all-purple-orange or C0APS37V8V8'}
+                                    disabled={deliveryType === 'none'}
+                                  />
+                                </div>
+                                {deliveryType === 'slack' && deliveryValue && !isLikelySlackTarget(deliveryValue) ? (
+                                  <p className="mt-2 px-1 text-xs leading-5 text-amber-300">
+                                    Use a Slack channel like <span className="font-mono">#all-purple-orange</span> or a channel ID.
+                                  </p>
+                                ) : (
+                                  <p className="mt-2 px-1 text-xs leading-5 text-slate-400">
+                                    This stays synced with the workflow result destination, so saving from this tab sends the channel you see here.
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })()}
                           {step.kind === 'search' && (
                             <div>
                               <p className="mb-1 px-1 text-xs font-medium text-slate-400">Search query override</p>

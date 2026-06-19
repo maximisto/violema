@@ -79,7 +79,7 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
       'Review calendar for investor, customer, and team commitments this week',
       'Scan market and competitor changes since the last update',
       'Draft the weekly founder update with key decisions, risks, and next actions',
-      'Deliver latest result to #founders after approval',
+      'Deliver latest result to #all-purple-orange after approval',
     ],
     steps: [
       {
@@ -130,7 +130,7 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
         title: 'Deliver to Slack',
         objective: 'Send the reviewed weekly founder update to the founder channel after approval.',
         inputs: { approval_required: true },
-        deliveryTarget: { channel: 'slack', target: '#founders' },
+        deliveryTarget: { channel: 'slack', target: '#all-purple-orange' },
       },
     ],
     execution_policy: {
@@ -139,7 +139,7 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
       reviewPolicy: 'standard',
       maxElasticLanes: 2,
     },
-    notify: '#founders',
+    notify: '#all-purple-orange',
     status: 'active',
   },
 ];
