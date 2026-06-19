@@ -1,6 +1,7 @@
 import FileText from 'lucide-react/dist/esm/icons/file-text.js';
 import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check.js';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
+import { ChartRenderer } from '../../components/artifacts/ChartArtifact';
 import type { MissionArtifactSectionView, MissionWorkspaceView } from './types';
 
 interface MissionArtifactProps {
@@ -51,6 +52,12 @@ export function MissionArtifact({ mission, actionSaved = false, savedActionLabel
 
         <div className="px-4 py-4">
           <p className="text-sm leading-6 text-slate-300">{artifact.summary}</p>
+
+          {artifact.chart ? (
+            <div className="mt-4">
+              <ChartRenderer chart={artifact.chart} />
+            </div>
+          ) : null}
 
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
             {artifact.sections.map((section) => (

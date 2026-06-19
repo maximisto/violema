@@ -10,6 +10,7 @@ import Kanban from 'lucide-react/dist/esm/icons/kanban.js';
 import Network from 'lucide-react/dist/esm/icons/network.js';
 import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check.js';
 import Zap from 'lucide-react/dist/esm/icons/zap.js';
+import { ChartRenderer } from '../../components/artifacts/ChartArtifact';
 import BrandIcon from '../../components/BrandIcon';
 import type { WorkspaceAreaId, WorkspaceTabId } from './workspaceShell';
 import type { MissionStatus, MissionStepView, MissionWorkspaceView } from './types';
@@ -266,6 +267,26 @@ export function MissionCommandDashboard({
               </button>
             </div>
           </div>
+
+          {mission.artifact.chart ? (
+            <button
+              type="button"
+              onClick={() => onOpenArea('missions', 'artifact')}
+              className="block w-full rounded-lg border border-violet-400/20 bg-violet-500/8 p-4 text-left transition-colors hover:border-violet-300/34 hover:bg-violet-500/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300/80">Visual artifact</p>
+                  <h3 className="mt-1 truncate text-base font-semibold text-white">{mission.artifact.chart.title}</h3>
+                  {mission.artifact.chart.insight ? (
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-slate-500">{mission.artifact.chart.insight}</p>
+                  ) : null}
+                </div>
+                <BarChart3 className="h-4 w-4 flex-shrink-0 text-violet-100" />
+              </div>
+              <ChartRenderer chart={mission.artifact.chart} compact />
+            </button>
+          ) : null}
 
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
             {quickLinks.map(({ label, detail, area, tab, Icon }) => (

@@ -31,6 +31,10 @@ import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } from './integrations';
 import { executeComposioAction, getComposioConnectionUrl, isComposioEnabled, isComposioToolName, listConnectedApps } from './composioBridge';
 import {
+  buildAutomationChartArtifactFromQueryPayload,
+  selectReviewGateVisualArtifacts,
+} from './automationArtifacts';
+import {
   createAutomation,
   deleteAutomation,
   ensureCoreAutomationSeeds,
@@ -2086,7 +2090,7 @@ async function executeConversationTask(input: {
 }
 
 interface AutomationExecutionArtifact {
-  kind: 'web_search' | 'query_data' | 'summary' | 'delivery' | 'review_gate' | 'note' | 'analysis' | 'capture';
+  kind: 'web_search' | 'query_data' | 'summary' | 'delivery' | 'review_gate' | 'note' | 'analysis' | 'capture' | 'chart';
   title: string;
   payload: Record<string, unknown>;
 }
@@ -3383,17 +3387,24 @@ async function executeAutomationCore(
 
       if (step.kind === 'query') {
         const payload = JSON.parse(await runAutomationStepWithTimeout(`Query step "${step.title}"`, executeToolCall('query_data', step.inputs || {}))) as Record<string, unknown>;
+        const chartArtifact = buildAutomationChartArtifactFromQueryPayload({
+          stepTitle: step.title,
+          payload,
+        });
         artifacts.push({
           kind: 'query_data',
           title: step.title,
           payload,
         });
+        if (chartArtifact) {
+          artifacts.push(chartArtifact);
+        }
         stepExecution.status = 'succeeded';
         stepExecution.summary = 'Pulled the requested live data successfully.';
         stepExecution.output = payload;
         stepExecution.artifactKind = 'query_data';
         stepExecution.toolCalls = 1;
-        stepExecution.artifactCount = 1;
+        stepExecution.artifactCount = chartArtifact ? 2 : 1;
         continue;
       }
 
@@ -3493,6 +3504,7 @@ async function executeAutomationCore(
         const body = summaryText || buildAutomationDeliveryFallbackBody(automation, artifacts, stepExecutions, stepErrors);
 
         if (isAutomationDeliveryApprovalRequired(step)) {
+          const visualArtifacts = selectReviewGateVisualArtifacts(artifacts);
           delivery = {
             success: true,
             channel: step.deliveryTarget?.channel || (deliveryTarget.includes('@') ? 'email' : 'slack'),
@@ -3508,6 +3520,7 @@ async function executeAutomationCore(
               markdown: body,
               deliveryTarget,
               approvalRequired: true,
+              visualArtifacts,
             },
           });
           stepExecution.status = 'succeeded';

@@ -44,6 +44,20 @@ const mission = buildMissionWorkspaceView({
       kind: 'chart',
       source: 'Stripe',
       payload: {
+        artifact_type: 'chart',
+        chart: {
+          type: 'line',
+          title: 'Revenue movement chart',
+          subtitle: 'Weekly Stripe signal',
+          y_label: 'Revenue',
+          unit: '$',
+          insight: 'Revenue is moving up while churn stays flat.',
+          data: [
+            { label: 'Week 1', value: 12400 },
+            { label: 'Week 2', value: 14600 },
+            { label: 'Week 3', value: 17100 },
+          ],
+        },
         results: [
           {
             title: 'Stripe churn export',
@@ -94,6 +108,8 @@ assert(mission.artifact.statusLabel === 'Ready for review', 'marks review-held a
 assert(mission.artifact.sections.some((section) => section.label === 'Validation'), 'includes validation section');
 assert(mission.artifact.sections.some((section) => section.value.includes('3 evidence')), 'counts source evidence from artifact and step payloads');
 assert(mission.artifact.sections.some((section) => section.label === 'Skills'), 'includes active skills/context');
+assert(mission.artifact.chart?.title === 'Revenue movement chart', 'promotes stored chart payloads into reusable mission artifacts');
+assert(mission.artifact.chart?.data.length === 3, 'keeps chart data points available for mission rendering');
 assert(mission.controlPrimitives.length === 6, 'builds the borrowed control primitive deck');
 assert(mission.controlPrimitives.some((item) => item.id === 'plan' && item.value === '2 checkpoints'), 'shows visible plan checkpoints');
 assert(mission.controlPrimitives.some((item) => item.id === 'trust' && item.value === 'Human gate'), 'shows human approval boundary');

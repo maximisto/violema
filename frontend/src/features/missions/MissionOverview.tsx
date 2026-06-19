@@ -1,4 +1,5 @@
 import type { MissionAgentView, MissionStatus, MissionWorkspaceView } from './types';
+import { ChartRenderer } from '../../components/artifacts/ChartArtifact';
 import { MissionControlDeck } from './MissionControlDeck';
 import { MissionProgressRail } from './MissionProgressRail';
 
@@ -104,6 +105,11 @@ export function MissionOverview({ mission, focus = 'mission' }: MissionOverviewP
                   <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-slate-500">
                     {mission.artifact.summary}
                   </p>
+                  {mission.artifact.chart ? (
+                    <div className="mt-3">
+                      <ChartRenderer chart={mission.artifact.chart} compact />
+                    </div>
+                  ) : null}
                 </div>
                 <span className="flex-shrink-0 rounded-full border border-violet-300/25 bg-violet-300/10 px-2 py-0.5 text-[10px] font-medium text-violet-100">
                   {mission.artifact.statusLabel}

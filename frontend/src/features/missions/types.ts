@@ -1,3 +1,5 @@
+import type { ChartArtifactSpec } from '../../components/artifacts/ChartArtifact';
+
 export type MissionWorkspaceTab =
   | 'mission'
   | 'artifact'
@@ -112,6 +114,7 @@ export interface MissionArtifactView {
   sourceLabel: string;
   statusLabel: string;
   summary: string;
+  chart?: ChartArtifactSpec;
   lastUpdatedLabel: string;
   primaryActionLabel: string;
   skills: string[];

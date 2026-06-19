@@ -10,6 +10,7 @@ import type {
   MissionStepView,
   MissionWorkspaceView,
 } from './types';
+import { normalizeChartArtifactFromResult, type ChartArtifactSpec } from '../../components/artifacts/ChartArtifact';
 
 export interface MissionSourceStep {
   id?: string;
@@ -97,6 +98,16 @@ export interface MissionSourceTask {
 }
 
 type MissionSourceArtifact = NonNullable<MissionSourceTask['latestArtifacts']>[number];
+
+function readArtifactChart(artifact?: MissionSourceArtifact): ChartArtifactSpec | undefined {
+  if (!artifact?.payload) return undefined;
+  const chart = normalizeChartArtifactFromResult(artifact.payload);
+  if (!chart) return undefined;
+  return {
+    ...chart,
+    title: chart.title || artifact.title || 'Generated chart',
+  };
+}
 
 export function normalizeMissionStatus(task?: MissionSourceTask | null): MissionStatus {
   if (!task) return 'planned';
@@ -352,6 +363,9 @@ function buildArtifact(
 ): MissionArtifactView {
   const artifactCount = task?.latestArtifacts?.length || 0;
   const primaryArtifact = task?.latestArtifacts?.[0];
+  const chart = primaryArtifact
+    ? readArtifactChart(primaryArtifact) || task?.latestArtifacts?.map(readArtifactChart).find(Boolean)
+    : undefined;
   const creditMetric = metrics.find((metric) => metric.label === 'Credits');
   const efficiencyMetric = metrics.find((metric) => metric.label === 'Efficiency');
   const skills = buildArtifactSkills(steps);
@@ -398,7 +412,8 @@ function buildArtifact(
     kindLabel: artifactKindLabel(primaryArtifact?.kind),
     sourceLabel: primaryArtifact?.source || (artifactCount > 0 ? pluralize(artifactCount, 'stored output') : 'Run output'),
     statusLabel: artifactStatusLabel(status, artifactCount),
-    summary: primaryArtifact ? readArtifactDetail(primaryArtifact) : task.latestSummary || task.description || 'This mission has not produced a stored artifact yet.',
+    summary: chart?.insight || (primaryArtifact ? readArtifactDetail(primaryArtifact) : task.latestSummary || task.description || 'This mission has not produced a stored artifact yet.'),
+    chart,
     lastUpdatedLabel: task.lastRunAt ? formatMissionDateTime(task.lastRunAt, 'Latest run') : task.latestArtifacts?.length ? 'Latest run' : 'Not run yet',
     primaryActionLabel: status === 'waiting_review' ? 'Review artifact' : status === 'running' ? 'Watch run' : 'Open artifact',
     skills: skills.length > 0 ? skills : ['Planner', 'Reviewer', 'Delivery'],
