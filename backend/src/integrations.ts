@@ -30,6 +30,10 @@ interface SlackConversationListResponse {
   };
 }
 
+const DEFAULT_SLACK_CHANNEL_ALIASES: Record<string, string> = {
+  '#founders': '#all-purple-orange',
+};
+
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -147,19 +151,23 @@ function normalizeSlackChannelName(target: string) {
 }
 
 function readSlackAliasMap() {
+  const defaults = { ...DEFAULT_SLACK_CHANNEL_ALIASES };
   const raw = process.env.SLACK_CHANNEL_ALIASES?.trim();
-  if (!raw) return {} as Record<string, string>;
+  if (!raw) return defaults;
 
   try {
     const parsed = JSON.parse(raw) as Record<string, string>;
-    return Object.fromEntries(
-      Object.entries(parsed)
-        .filter((entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string')
-        .map(([key, value]) => [key.trim().toLowerCase(), value.trim()])
-        .filter(([, value]) => Boolean(value)),
-    );
+    return {
+      ...defaults,
+      ...Object.fromEntries(
+        Object.entries(parsed)
+          .filter((entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string')
+          .map(([key, value]) => [key.trim().toLowerCase(), value.trim()])
+          .filter(([, value]) => Boolean(value)),
+      ),
+    };
   } catch {
-    return {};
+    return defaults;
   }
 }
 
@@ -221,8 +229,15 @@ async function resolveSlackTarget(target: string) {
   const aliasKey = normalizedTarget.startsWith('#') ? normalizedTarget.toLowerCase() : `#${normalizedTarget.toLowerCase()}`;
   const aliasMap = readSlackAliasMap();
   const mappedTarget = aliasMap[aliasKey];
-  if (mappedTarget && (isSlackChannelId(mappedTarget) || isSlackUserId(mappedTarget))) {
-    return mappedTarget;
+  if (mappedTarget) {
+    if (isSlackChannelId(mappedTarget) || isSlackUserId(mappedTarget)) {
+      return mappedTarget;
+    }
+
+    const resolvedMappedChannelId = await findSlackChannelIdByName(mappedTarget);
+    if (resolvedMappedChannelId) {
+      return resolvedMappedChannelId;
+    }
   }
 
   const aliasEnv = process.env[toSlackAliasEnvName(aliasKey)];
