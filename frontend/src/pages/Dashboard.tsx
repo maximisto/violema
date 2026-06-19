@@ -547,7 +547,7 @@ interface AutomationEditorDraft {
   workflowPrompt: string;
   steps: WorkflowBlockDraft[];
   executionPolicy: AutomationExecutionPolicyDraft;
-  destinationType: 'slack' | 'email' | 'custom' | 'none';
+  destinationType: 'slack' | 'email' | 'none';
 }
 
 type ThreadFilter = 'all' | 'active' | 'pinned' | 'archived';
@@ -1202,6 +1202,18 @@ function readString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
+async function readApiError(response: Response, fallback: string) {
+  const payload = await response.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
+  return readString(payload?.error) || readString(payload?.message) || fallback;
+}
+
+function isLikelySlackTarget(value: string) {
+  const target = value.trim();
+  if (!target) return true;
+  if (/^[CGD][A-Z0-9]{8,}$/i.test(target)) return true;
+  return /^#?[a-z0-9][a-z0-9_-]{1,79}$/i.test(target);
+}
+
 function readArtifacts(value: unknown): DashboardTaskArtifact[] {
   if (!Array.isArray(value)) return [];
 
@@ -1719,6 +1731,7 @@ export default function Dashboard() {
   const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | 'delete' | 'grant' | null>(null);
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
+  const [automationEditorError, setAutomationEditorError] = useState<string | null>(null);
   const [automationEditorSection, setAutomationEditorSection] = useState<AutomationEditorSection>('setup');
   const [automationSetupOptionalOpen, setAutomationSetupOptionalOpen] = useState(false);
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
@@ -2355,14 +2368,16 @@ export default function Dashboard() {
           : task.notify?.includes('@')
             ? 'email'
             : task.notify
-              ? 'custom'
+              ? 'slack'
               : 'none',
     });
+    setAutomationEditorError(null);
   }, []);
 
   const handleAutomationCreate = useCallback(() => {
     setAutomationEditorSection('setup');
     setAutomationSetupOptionalOpen(false);
+    setAutomationEditorError(null);
     setAutomationEditor({
       mode: 'create',
       id: `draft-${Date.now()}`,
@@ -2385,6 +2400,7 @@ export default function Dashboard() {
 
   const closeAutomationEditor = useCallback(() => {
     setAutomationEditor(null);
+    setAutomationEditorError(null);
     setAutomationEditorSection('setup');
     setAutomationSetupOptionalOpen(false);
     setDraggedStepIndex(null);
@@ -2413,7 +2429,9 @@ export default function Dashboard() {
     const shouldRun = pendingRunAfterSave.current;
     pendingRunAfterSave.current = false;
     setActionBusy('save');
+    setAutomationEditorError(null);
     try {
+      const notifyTarget = automationEditor.destinationType === 'none' ? '' : automationEditor.notify.trim();
       const sourceSteps = automationEditor.authoringMode === 'describe'
         ? buildWorkflowBlocksFromPrompt(automationEditor.workflowPrompt)
         : automationEditor.steps;
@@ -2422,10 +2440,10 @@ export default function Dashboard() {
           ...step,
           title: step.title.trim(),
           objective: step.objective.trim(),
-          deliveryTarget: step.kind === 'deliver' && automationEditor.notify.trim()
+          deliveryTarget: step.kind === 'deliver' && notifyTarget
             ? {
                 channel: automationEditor.destinationType === 'email' ? 'email' as const : 'slack' as const,
-                target: automationEditor.notify.trim(),
+                target: notifyTarget,
               }
             : (step.deliveryTarget || null),
         }))
@@ -2443,14 +2461,16 @@ export default function Dashboard() {
           description: automationEditor.description.trim() || null,
           authoringMode: automationEditor.authoringMode,
           workflowPrompt: automationEditor.workflowPrompt.trim() || null,
-          notify: automationEditor.notify.trim() || null,
+          notify: notifyTarget || null,
           condition: automationEditor.condition.trim() || null,
           steps,
           actions,
           executionPolicy: automationEditor.executionPolicy,
         }),
       });
-      if (!response.ok) throw new Error('Could not save automation');
+      if (!response.ok) {
+        throw new Error(await readApiError(response, 'Could not save automation'));
+      }
       const payload = await response.json() as { item?: { id?: string } };
       await refreshAutomations();
       const savedId = automationEditor.mode === 'create' ? (payload.item?.id as string | undefined) : automationEditor.id;
@@ -2460,16 +2480,28 @@ export default function Dashboard() {
       closeAutomationEditor();
       if (shouldRun && savedId) {
         try {
-          await fetch(`/api/automations/${savedId}/run`, { method: 'POST' });
+          const runResponse = await fetch(`/api/automations/${savedId}/run`, { method: 'POST' });
+          if (!runResponse.ok) {
+            throw new Error(await readApiError(runResponse, 'Could not start run'));
+          }
           showNotice('success', `Saved and started "${automationEditor.name.trim() || 'automation'}"`);
-        } catch {
-          showNotice('success', `Saved "${automationEditor.name.trim() || 'automation'}" — could not start run`);
+        } catch (error) {
+          showNotice('error', `Saved "${automationEditor.name.trim() || 'automation'}" — ${error instanceof Error ? error.message : 'could not start run'}`);
         }
       } else {
         showNotice('success', `${automationEditor.mode === 'create' ? 'Created' : 'Updated'} "${automationEditor.name.trim() || 'automation'}"`);
       }
-    } catch {
-      showNotice('error', automationEditor.mode === 'create' ? 'Could not create automation' : 'Could not save automation changes');
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : automationEditor.mode === 'create'
+          ? 'Could not create automation'
+          : 'Could not save automation changes';
+      setAutomationEditorError(message);
+      if (/slack|message target|email/i.test(message)) {
+        setAutomationEditorSection('setup');
+      }
+      showNotice('error', message);
     } finally {
       setActionBusy(null);
     }
@@ -2968,6 +3000,7 @@ export default function Dashboard() {
         : [createWorkflowBlock('summarize')];
     setAutomationEditorSection('setup');
     setAutomationSetupOptionalOpen(Boolean(selectedTask.description || selectedTask.condition));
+    setAutomationEditorError(null);
     setAutomationEditor({
       mode: 'create',
       id: `draft-${Date.now()}`,
@@ -2986,7 +3019,7 @@ export default function Dashboard() {
           : selectedTask.notify?.includes('@')
             ? 'email'
             : selectedTask.notify
-              ? 'custom'
+              ? 'slack'
               : 'none',
       timezone: selectedTask.timezone || getLocalTimeZone(),
     });
@@ -5111,11 +5144,23 @@ export default function Dashboard() {
               </button>
             </div>
 
-            <div className="panel-scroll flex-1 space-y-4 px-5 py-5 pb-8">
-              <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/80">Builder</p>
-                <p className="mt-1 text-sm text-white">Set the cadence, design the workflow here, and keep deeper agent controls in Advanced.</p>
-              </div>
+              <div className="panel-scroll flex-1 space-y-4 px-5 py-5 pb-8">
+                <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-300/80">Builder</p>
+                  <p className="mt-1 text-sm text-white">Set the cadence, design the workflow here, and keep deeper agent controls in Advanced.</p>
+                </div>
+
+                {automationEditorError ? (
+                  <div className="rounded-2xl border border-red-500/25 bg-red-500/10 p-3">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-300" />
+                      <div>
+                        <p className="text-sm font-semibold text-red-100">Save needs attention</p>
+                        <p className="mt-1 text-xs leading-5 text-red-100/80">{automationEditorError}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
 
               <div className="grid gap-2 sm:grid-cols-3">
                 {AUTOMATION_EDITOR_SECTIONS.map((section) => {
@@ -5246,9 +5291,8 @@ export default function Dashboard() {
                     <p className="ui-section-label px-1">Result destination</p>
                     <div className="mt-2 flex flex-wrap gap-2 px-1">
                       {[
-                        { label: 'Slack', value: 'slack', placeholder: 'C0123456789' },
+                        { label: 'Slack', value: 'slack', placeholder: '#project-nexus or C0APS37V8V8' },
                         { label: 'Email', value: 'email', placeholder: 'max@purpleorange.io' },
-                        { label: 'Custom', value: 'custom', placeholder: '' },
                         { label: 'None', value: 'none', placeholder: '' },
                       ].map((option) => (
                         <button
@@ -5278,19 +5322,25 @@ export default function Dashboard() {
                       <input
                         value={automationEditor.notify}
                         onChange={(event) => setAutomationEditor((current) => current ? { ...current, notify: event.target.value } : current)}
-                        aria-label="Result destination"
-                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none disabled:text-slate-600"
-                        placeholder="Slack channel ID, email, or webhook target"
-                        disabled={automationEditor.destinationType === 'none'}
-                      />
-                    </div>
-                    {automationEditor.destinationType === 'slack' && automationEditor.notify && !/^([CGD])[A-Z0-9]{8,}$/i.test(automationEditor.notify.trim()) ? (
-                      <p className="mt-2 px-1 text-xs leading-5 text-amber-300">Slack IDs start with C, G, or D and are 9+ characters.</p>
-                    ) : (
-                      <p className="mt-2 px-1 text-xs leading-5 text-slate-400">
-                        Slack channel IDs like <span className="font-mono text-slate-300">C0123456789</span> are more reliable than channel names.
-                      </p>
-                    )}
+	                        aria-label="Result destination"
+	                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none disabled:text-slate-600"
+	                        placeholder={automationEditor.destinationType === 'email' ? 'max@purpleorange.io' : 'Slack channel name or ID'}
+	                        disabled={automationEditor.destinationType === 'none'}
+	                      />
+	                    </div>
+	                    {automationEditor.destinationType === 'slack' && automationEditor.notify && !isLikelySlackTarget(automationEditor.notify) ? (
+	                      <p className="mt-2 px-1 text-xs leading-5 text-amber-300">
+	                        Use a Slack channel name like <span className="font-mono">#project-nexus</span> or an ID like <span className="font-mono">C0APS37V8V8</span>.
+	                      </p>
+	                    ) : (
+	                      <p className="mt-2 px-1 text-xs leading-5 text-slate-400">
+	                        {automationEditor.destinationType === 'slack'
+	                          ? <>Slack names and IDs work when the Violema app can see the channel. Invite it to private channels first.</>
+	                          : automationEditor.destinationType === 'email'
+	                            ? 'Email delivery uses the configured Postmark sender.'
+	                            : 'No delivery target will be attached until you add one.'}
+	                      </p>
+	                    )}
                   </div>
 
                   <details

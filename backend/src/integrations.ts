@@ -14,6 +14,22 @@ interface ValidatedMessageTarget {
   normalizedTarget: string;
 }
 
+interface SlackConversation {
+  id?: string;
+  name?: string;
+  name_normalized?: string;
+}
+
+interface SlackConversationListResponse {
+  ok?: boolean;
+  error?: string;
+  needed?: string;
+  channels?: SlackConversation[];
+  response_metadata?: {
+    next_cursor?: string;
+  };
+}
+
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -126,6 +142,10 @@ function toSlackAliasEnvName(target: string) {
   return normalized ? `SLACK_CHANNEL_${normalized}` : '';
 }
 
+function normalizeSlackChannelName(target: string) {
+  return target.trim().replace(/^#/, '').toLowerCase();
+}
+
 function readSlackAliasMap() {
   const raw = process.env.SLACK_CHANNEL_ALIASES?.trim();
   if (!raw) return {} as Record<string, string>;
@@ -141,6 +161,51 @@ function readSlackAliasMap() {
   } catch {
     return {};
   }
+}
+
+async function findSlackChannelIdByName(target: string) {
+  const token = process.env.SLACK_BOT_TOKEN?.trim();
+  const targetName = normalizeSlackChannelName(target);
+  if (!token || !targetName) return null;
+
+  let cursor = '';
+  for (let page = 0; page < 10; page += 1) {
+    const params = new URLSearchParams({
+      types: 'public_channel,private_channel',
+      exclude_archived: 'true',
+      limit: '200',
+    });
+    if (cursor) params.set('cursor', cursor);
+
+    const response = await fetch(`https://slack.com/api/conversations.list?${params.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const payload = await response.json().catch(() => null) as SlackConversationListResponse | null;
+
+    if (!response.ok || !payload?.ok) {
+      if (payload?.error === 'missing_scope') {
+        const needed = payload.needed ? ` Missing scope: ${payload.needed}.` : '';
+        throw new Error(`Slack channel names need channels:read/groups:read access, or use a channel ID like C0123456789.${needed}`);
+      }
+      return null;
+    }
+
+    const match = (payload.channels || []).find((channel) => {
+      const names = [channel.name, channel.name_normalized].filter((name): name is string => Boolean(name));
+      return names.some((name) => normalizeSlackChannelName(name) === targetName);
+    });
+
+    if (match?.id && isSlackChannelId(match.id)) {
+      return match.id;
+    }
+
+    cursor = payload.response_metadata?.next_cursor || '';
+    if (!cursor) break;
+  }
+
+  return null;
 }
 
 async function resolveSlackTarget(target: string) {
@@ -165,9 +230,14 @@ async function resolveSlackTarget(target: string) {
     return aliasEnv.trim();
   }
 
+  const resolvedChannelId = await findSlackChannelIdByName(normalizedTarget);
+  if (resolvedChannelId) {
+    return resolvedChannelId;
+  }
+
   throw new Error(
-    `Slack target "${normalizedTarget}" is not resolvable. Use a Slack channel ID like C1234567890 or set ${toSlackAliasEnvName(aliasKey)} / SLACK_CHANNEL_ALIASES. ` +
-    'If you want name-based resolution, add channels:read and invite the bot or add chat:write.public as needed.',
+    `Slack target "${normalizedTarget}" is not visible to Violema. Use a visible channel name like #project-nexus, a channel ID like C0123456789, or invite the Violema Slack app to private channels. ` +
+    `Admins can also set ${toSlackAliasEnvName(aliasKey)} or SLACK_CHANNEL_ALIASES.`,
   );
 }
 

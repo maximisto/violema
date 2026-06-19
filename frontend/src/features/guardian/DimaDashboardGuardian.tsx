@@ -54,7 +54,7 @@ export function DashboardGuardian({
   const [mischiefEnabled, setMischiefEnabled] = useState(() => readBooleanPreference(mischiefKey, true));
   const [bubbleOpen, setBubbleOpen] = useState(() => {
     if (typeof window === 'undefined') return true;
-    return isChatSurface && window.matchMedia('(min-width: 640px)').matches;
+    return isChatSurface && !panelOffset && window.matchMedia('(min-width: 640px)').matches;
   });
   const dockPositionClass = `${isChatSurface ? 'bottom-[7.25rem] sm:bottom-[7.25rem]' : 'bottom-3 sm:bottom-4'} ${panelOffset ? 'right-3 lg:right-[23.25rem]' : 'right-3 sm:right-4'}`;
 
@@ -68,11 +68,11 @@ export function DashboardGuardian({
 
   useEffect(() => {
     const query = window.matchMedia('(min-width: 640px)');
-    const syncBubbleState = () => setBubbleOpen(isChatSurface && query.matches);
+    const syncBubbleState = () => setBubbleOpen(isChatSurface && !panelOffset && query.matches);
     syncBubbleState();
     query.addEventListener('change', syncBubbleState);
     return () => query.removeEventListener('change', syncBubbleState);
-  }, [isChatSurface]);
+  }, [isChatSurface, panelOffset]);
 
   const activeAgent = mission.agents.find((agent) => agent.id === mission.activeAgentId) || mission.agents[0];
   const completedSteps = mission.steps.filter((step) => step.status === 'completed').length;
