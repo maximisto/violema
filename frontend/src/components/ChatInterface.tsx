@@ -240,6 +240,7 @@ const TOOL_ICONS: Record<string, string> = {
   create_task: '✅',
   send_message: '📨',
   query_data: '📊',
+  render_chart: '📈',
   generate_report: '📋',
   schedule_automation: '🔁',
 };
@@ -251,6 +252,7 @@ const TOOL_LABELS: Record<string, string> = {
   create_task: 'Creating task',
   send_message: 'Sending message',
   query_data: 'Querying data',
+  render_chart: 'Rendering chart',
   generate_report: 'Generating report',
   schedule_automation: 'Scheduling automation',
 };
@@ -304,12 +306,32 @@ function extractResultMetrics(result?: Record<string, unknown>) {
     }));
 }
 
+type ChartType = 'bar' | 'line' | 'area' | 'pie';
+
+interface ChartPoint {
+  label: string;
+  value: number;
+  series?: string;
+}
+
+interface ChartArtifactSpec {
+  type: ChartType;
+  title: string;
+  subtitle?: string;
+  xLabel?: string;
+  yLabel?: string;
+  unit?: string;
+  insight?: string;
+  data: ChartPoint[];
+}
+
 interface ToolArtifact {
-  kind: 'screenshot' | 'report' | 'link';
+  kind: 'screenshot' | 'report' | 'chart' | 'link';
   title: string;
   subtitle?: string;
   href?: string;
   imageUrl?: string;
+  chart?: ChartArtifactSpec;
   summary?: string;
   metrics?: Array<{ label: string; value: string }>;
 }
@@ -317,6 +339,46 @@ interface ToolArtifact {
 function resolveArtifactHref(href: string) {
   if (/^https?:\/\//.test(href)) return href;
   return href.startsWith('/') ? href : `/${href}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeChartArtifact(result: Record<string, unknown>): ChartArtifactSpec | null {
+  const chart = isRecord(result.chart) ? result.chart : null;
+  if (!chart) return null;
+
+  const rows = Array.isArray(chart.data)
+    ? chart.data
+        .filter(isRecord)
+        .map((row, index): ChartPoint | null => {
+          const value = typeof row.value === 'number' ? row.value : Number(row.value);
+          if (!Number.isFinite(value)) return null;
+          const series = typeof row.series === 'string' && row.series.trim() ? row.series.trim() : undefined;
+          return {
+            label: typeof row.label === 'string' && row.label.trim() ? row.label.trim() : `Point ${index + 1}`,
+            value,
+            ...(series ? { series } : {}),
+          };
+        })
+        .filter((row): row is ChartPoint => row !== null)
+    : [];
+
+  if (rows.length === 0) return null;
+  const rawType = typeof chart.type === 'string' ? chart.type : 'bar';
+  const type: ChartType = rawType === 'line' || rawType === 'area' || rawType === 'pie' ? rawType : 'bar';
+
+  return {
+    type,
+    title: typeof chart.title === 'string' && chart.title.trim() ? chart.title.trim() : 'Generated chart',
+    subtitle: typeof chart.subtitle === 'string' ? chart.subtitle.trim() : undefined,
+    xLabel: typeof chart.x_label === 'string' ? chart.x_label.trim() : undefined,
+    yLabel: typeof chart.y_label === 'string' ? chart.y_label.trim() : undefined,
+    unit: typeof chart.unit === 'string' ? chart.unit.trim() : undefined,
+    insight: typeof chart.insight === 'string' ? chart.insight.trim() : undefined,
+    data: rows.slice(0, 48),
+  };
 }
 
 function extractToolArtifacts(toolName: string, result?: Record<string, unknown>): ToolArtifact[] {
@@ -340,6 +402,23 @@ function extractToolArtifacts(toolName: string, result?: Record<string, unknown>
           : null,
       ].filter((item): item is { label: string; value: string } => Boolean(item)),
     });
+  }
+
+  if (toolName === 'render_chart' || result.artifact_type === 'chart') {
+    const chart = normalizeChartArtifact(result);
+    if (chart) {
+      artifacts.push({
+        kind: 'chart',
+        title: chart.title,
+        subtitle: chart.subtitle || chart.yLabel,
+        chart,
+        summary: chart.insight,
+        metrics: [
+          { label: 'Rows', value: String(chart.data.length) },
+          { label: 'Type', value: chart.type },
+        ],
+      });
+    }
   }
 
   if (toolName === 'generate_report' && result.report && typeof result.report === 'object') {
@@ -529,6 +608,185 @@ function ThinkingBlock({
   );
 }
 
+const CHART_COLORS = ['#8b5cf6', '#22d3ee', '#f59e0b', '#34d399', '#f472b6', '#a78bfa', '#60a5fa', '#fb7185'];
+
+function formatChartValue(value: number, unit?: string) {
+  const abs = Math.abs(value);
+  const compact =
+    abs >= 1_000_000 ? `${(value / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`
+    : abs >= 1_000 ? `${(value / 1_000).toFixed(abs >= 10_000 ? 0 : 1)}K`
+    : Number.isInteger(value) ? String(value)
+    : value.toFixed(1);
+
+  if (!unit) return compact;
+  if (unit === '$' || unit === '€' || unit === '£') return `${unit}${compact}`;
+  if (unit === '%') return `${compact}%`;
+  return `${compact} ${unit}`;
+}
+
+function ChartRenderer({ chart, compact = false }: { chart: ChartArtifactSpec; compact?: boolean }) {
+  const data = chart.data.filter((point) => Number.isFinite(point.value)).slice(0, compact ? 12 : 24);
+  if (data.length === 0) return null;
+
+  const width = 720;
+  const height = compact ? 230 : 320;
+  const pad = { top: 28, right: 28, bottom: compact ? 48 : 62, left: 62 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const maxValue = Math.max(...data.map((point) => point.value), 1);
+  const minValue = Math.min(...data.map((point) => point.value), 0);
+  const range = Math.max(maxValue - minValue, 1);
+  const yFor = (value: number) => pad.top + plotHeight - ((value - minValue) / range) * plotHeight;
+  const xFor = (index: number) => pad.left + (data.length === 1 ? plotWidth / 2 : (index / (data.length - 1)) * plotWidth);
+  const seriesNames = Array.from(new Set(data.map((point) => point.series).filter(Boolean))) as string[];
+  const colorFor = (point: ChartPoint, index: number) => {
+    const seriesIndex = point.series ? Math.max(0, seriesNames.indexOf(point.series)) : index;
+    return CHART_COLORS[seriesIndex % CHART_COLORS.length];
+  };
+
+  if (chart.type === 'pie') {
+    const positiveData = data.filter((point) => point.value > 0);
+    const total = positiveData.reduce((sum, point) => sum + point.value, 0) || 1;
+    let cursor = -90;
+    const radius = compact ? 74 : 94;
+    const centerX = compact ? 166 : 210;
+    const centerY = compact ? 112 : 150;
+    const slices = positiveData.map((point, index) => {
+      const angle = (point.value / total) * 360;
+      const start = cursor;
+      const end = cursor + angle;
+      cursor = end;
+      const largeArc = angle > 180 ? 1 : 0;
+      const startRad = (Math.PI / 180) * start;
+      const endRad = (Math.PI / 180) * end;
+      const x1 = centerX + radius * Math.cos(startRad);
+      const y1 = centerY + radius * Math.sin(startRad);
+      const x2 = centerX + radius * Math.cos(endRad);
+      const y2 = centerY + radius * Math.sin(endRad);
+      return {
+        point,
+        color: CHART_COLORS[index % CHART_COLORS.length],
+        d: `M ${centerX} ${centerY} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`,
+      };
+    });
+
+    return (
+      <div className="rounded-2xl border border-navy-700/70 bg-gradient-to-br from-navy-950/85 via-navy-950/64 to-cyan-950/18 p-4">
+        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={chart.title} className="h-auto w-full">
+          <defs>
+            <filter id={`chart-glow-${chart.title.replace(/[^a-z0-9]/gi, '')}`} x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <circle cx={centerX} cy={centerY} r={radius + 12} fill="rgba(15,23,42,0.72)" stroke="rgba(148,163,184,0.18)" />
+          {slices.map((slice, index) => (
+            <path key={`${slice.point.label}-${index}`} d={slice.d} fill={slice.color} opacity="0.84" />
+          ))}
+          <circle cx={centerX} cy={centerY} r={radius * 0.52} fill="#020617" stroke="rgba(148,163,184,0.18)" />
+          <text x={centerX} y={centerY - 4} textAnchor="middle" fill="#f8fafc" fontSize="22" fontWeight="700">
+            {formatChartValue(total, chart.unit)}
+          </text>
+          <text x={centerX} y={centerY + 18} textAnchor="middle" fill="#64748b" fontSize="11" fontWeight="600" letterSpacing="2">
+            TOTAL
+          </text>
+          <g transform={`translate(${compact ? 330 : 390}, ${compact ? 42 : 60})`}>
+            {positiveData.slice(0, compact ? 5 : 8).map((point, index) => (
+              <g key={`${point.label}-${index}`} transform={`translate(0, ${index * 26})`}>
+                <circle cx="0" cy="0" r="5" fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                <text x="16" y="4" fill="#cbd5e1" fontSize="12" fontWeight="600">{point.label}</text>
+                <text x="220" y="4" textAnchor="end" fill="#94a3b8" fontSize="12">{formatChartValue(point.value, chart.unit)}</text>
+              </g>
+            ))}
+          </g>
+        </svg>
+      </div>
+    );
+  }
+
+  const linePoints = data.map((point, index) => `${xFor(index)},${yFor(point.value)}`).join(' ');
+  const areaPoints = `${pad.left},${pad.top + plotHeight} ${linePoints} ${pad.left + plotWidth},${pad.top + plotHeight}`;
+  const gridTicks = Array.from({ length: 4 }, (_, index) => minValue + (range / 3) * index);
+
+  return (
+    <div className="rounded-2xl border border-navy-700/70 bg-gradient-to-br from-navy-950/85 via-navy-950/64 to-violet-950/20 p-4">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={chart.title} className="h-auto w-full">
+        <defs>
+          <linearGradient id={`chart-fill-${chart.title.replace(/[^a-z0-9]/gi, '')}`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.36" />
+            <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.03" />
+          </linearGradient>
+        </defs>
+        {gridTicks.map((tick, index) => {
+          const y = yFor(tick);
+          return (
+            <g key={tick}>
+              <line x1={pad.left} x2={pad.left + plotWidth} y1={y} y2={y} stroke="rgba(148,163,184,0.13)" />
+              {!compact && (
+                <text x={pad.left - 10} y={y + 4} textAnchor="end" fill="#64748b" fontSize="11">
+                  {formatChartValue(tick, chart.unit)}
+                </text>
+              )}
+              {index === 0 && <line x1={pad.left} x2={pad.left + plotWidth} y1={y} y2={y} stroke="rgba(148,163,184,0.28)" />}
+            </g>
+          );
+        })}
+        {chart.type === 'bar' ? (
+          data.map((point, index) => {
+            const gap = Math.max(8, plotWidth / data.length * 0.18);
+            const barWidth = Math.max(12, Math.min(48, plotWidth / data.length - gap));
+            const x = pad.left + index * (plotWidth / data.length) + gap / 2;
+            const y = yFor(point.value);
+            const barHeight = pad.top + plotHeight - y;
+            return (
+              <g key={`${point.label}-${index}`}>
+                <rect
+                  x={x}
+                  y={y}
+                  width={barWidth}
+                  height={Math.max(2, barHeight)}
+                  rx="7"
+                  fill={colorFor(point, index)}
+                  opacity="0.88"
+                />
+                {!compact && (
+                  <text x={x + barWidth / 2} y={Math.max(pad.top + 14, y - 8)} textAnchor="middle" fill="#cbd5e1" fontSize="11" fontWeight="600">
+                    {formatChartValue(point.value, chart.unit)}
+                  </text>
+                )}
+              </g>
+            );
+          })
+        ) : (
+          <>
+            {chart.type === 'area' && <polygon points={areaPoints} fill={`url(#chart-fill-${chart.title.replace(/[^a-z0-9]/gi, '')})`} />}
+            <polyline points={linePoints} fill="none" stroke="#22d3ee" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+            {data.map((point, index) => (
+              <circle key={`${point.label}-${index}`} cx={xFor(index)} cy={yFor(point.value)} r={compact ? 4 : 5} fill={colorFor(point, index)} stroke="#020617" strokeWidth="2" />
+            ))}
+          </>
+        )}
+        {data.map((point, index) => {
+          if (compact && index % Math.ceil(data.length / 4) !== 0) return null;
+          const x = chart.type === 'bar'
+            ? pad.left + index * (plotWidth / data.length) + (plotWidth / data.length) / 2
+            : xFor(index);
+          return (
+            <text key={`${point.label}-label`} x={x} y={height - 24} textAnchor="middle" fill="#94a3b8" fontSize="11">
+              {point.label.length > 12 ? `${point.label.slice(0, 11)}…` : point.label}
+            </text>
+          );
+        })}
+        {!compact && chart.xLabel && <text x={pad.left + plotWidth / 2} y={height - 6} textAnchor="middle" fill="#64748b" fontSize="11">{chart.xLabel}</text>}
+        {!compact && chart.yLabel && <text x="16" y={pad.top + 8} fill="#64748b" fontSize="11">{chart.yLabel}</text>}
+      </svg>
+    </div>
+  );
+}
+
 const ArtifactPreview = memo(function ArtifactPreview({
   artifact,
   onClose,
@@ -548,7 +806,7 @@ const ArtifactPreview = memo(function ArtifactPreview({
         <div className="flex items-center justify-between border-b border-navy-800/80 px-5 py-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">
-              {artifact.kind === 'screenshot' ? 'Capture preview' : artifact.kind === 'report' ? 'Report preview' : 'Deliverable preview'}
+              {artifact.kind === 'screenshot' ? 'Capture preview' : artifact.kind === 'report' ? 'Report preview' : artifact.kind === 'chart' ? 'Chart preview' : 'Deliverable preview'}
             </p>
             <h3 className="mt-1 text-lg font-semibold text-white">{artifact.title}</h3>
             {artifact.subtitle && <p className="mt-1 text-sm text-slate-500">{artifact.subtitle}</p>}
@@ -578,6 +836,9 @@ const ArtifactPreview = memo(function ArtifactPreview({
             <div className="overflow-hidden rounded-[1.5rem] border border-navy-700/70 bg-navy-950/60">
               <img src={artifact.imageUrl} alt={artifact.title} className="max-h-[28rem] w-full object-contain bg-black/20" />
             </div>
+          )}
+          {artifact.chart && (
+            <ChartRenderer chart={artifact.chart} />
           )}
           {artifact.summary && (
             <div className="mt-4 rounded-2xl border border-navy-700/70 bg-navy-950/40 p-4">
@@ -618,6 +879,11 @@ const ToolCallBlock = memo(function ToolCallBlock({
   const resultImages = extractResultImages(toolCall.result);
   const resultMetrics = extractResultMetrics(toolCall.result);
   const artifacts = extractToolArtifacts(toolCall.name, toolCall.result);
+  const hasChartArtifact = artifacts.some((artifact) => artifact.kind === 'chart');
+
+  useEffect(() => {
+    if (hasChartArtifact) setExpanded(true);
+  }, [hasChartArtifact]);
 
   const inputSummary = toolCall.input
     ? (Object.values(toolCall.input)[0] as string | undefined)
@@ -667,6 +933,15 @@ const ToolCallBlock = memo(function ToolCallBlock({
               ))}
             </div>
           )}
+          {!expanded && artifacts.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {artifacts.map((artifact) => (
+                <span key={`${artifact.kind}-${artifact.title}`} className="ui-pill px-2 py-0.5 text-[9px] normal-case tracking-normal text-cyan-300">
+                  {artifact.kind === 'chart' ? 'Chart ready' : artifact.title}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <ChevronDown
           className={`w-4 h-4 text-slate-600 transition-transform duration-200 flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
@@ -701,16 +976,21 @@ const ToolCallBlock = memo(function ToolCallBlock({
                           <img src={artifact.imageUrl} alt={artifact.title} className="h-40 w-full object-cover" />
                         </a>
                       )}
+                      {artifact.chart && (
+                        <div className="p-2 pb-0">
+                          <ChartRenderer chart={artifact.chart} compact />
+                        </div>
+                      )}
                       <div className="p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-[10px] uppercase tracking-[0.2em] text-slate-600">
-                              {artifact.kind === 'screenshot' ? 'Capture' : artifact.kind === 'report' ? 'Report' : 'Deliverable'}
+                              {artifact.kind === 'screenshot' ? 'Capture' : artifact.kind === 'report' ? 'Report' : artifact.kind === 'chart' ? 'Chart' : 'Deliverable'}
                             </p>
                             <h4 className="mt-1 text-sm font-semibold text-white">{artifact.title}</h4>
                             {artifact.subtitle && <p className="mt-1 text-xs text-slate-500">{artifact.subtitle}</p>}
                           </div>
-                          {artifact.href && (
+                          {(artifact.href || artifact.chart) && (
                             <button
                               type="button"
                               onClick={() => onArtifactOpen?.(artifact)}
@@ -1048,7 +1328,7 @@ export default function ChatInterface({
         : /search|research|find/.test(lowered) ? 'research'
         : 'chat';
       const toolCalls =
-        (/search|find|browser|screenshot|slack|email|schedule|report|data/.test(lowered) ? 1 : 0) +
+        (/search|find|browser|screenshot|slack|email|schedule|report|data|chart|graph|plot|visuali/.test(lowered) ? 1 : 0) +
         (/ and | then | compare | summarize /.test(lowered) ? 1 : 0);
       const complexity =
         trimmed.length > 320 || /step-by-step|multi-step|compare|debug|architecture/.test(lowered)

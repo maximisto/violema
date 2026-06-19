@@ -281,6 +281,7 @@ function buildSystemPrompt(autonomyMode: string): string {
 - Task management: Create, assign, and track tasks in Linear/Jira
 - Communication: Draft and send Slack messages, emails, team updates
 - Data queries: Pull live data from Stripe, HubSpot, GitHub, Linear, Salesforce
+- Visual output: Render charts and visual data artifacts directly inside the workspace
 - Report generation: Create structured reports, analyses, summaries
 - Automation scheduling: Set up recurring tasks and monitoring workflows
 - Model routing: Match harder tasks to stronger models and cheaper tasks to more efficient models
@@ -293,7 +294,8 @@ function buildSystemPrompt(autonomyMode: string): string {
 5. Flag any uncertainties clearly
 6. Use \`browser_screenshot\` when the user asks to inspect a page visually or compare UI states
 7. Use \`web_search\` for current information instead of inventing citations or market facts
-8. If a real integration is missing configuration, say exactly which credential is missing
+8. Use \`render_chart\` when the user asks for a chart, graph, plot, visual output, dashboard tile, or data visualization
+9. If a real integration is missing configuration, say exactly which credential is missing
 
 Format responses with markdown: **bold** for key data points, bullet lists for clarity, code blocks for code. Be action-oriented.`;
 }
@@ -1380,6 +1382,42 @@ const NEXUS_TOOLS: Tool[] = [
     },
   },
   {
+    name: 'render_chart',
+    description: 'Create an inline visual chart artifact from structured data. Use this whenever the user asks for a chart, graph, plot, visual output, dashboard tile, or data visualization.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        title: { type: 'string', description: 'Short chart title' },
+        subtitle: { type: 'string', description: 'Optional context or time period' },
+        chart_type: {
+          type: 'string',
+          enum: ['bar', 'line', 'area', 'pie'],
+          description: 'Best chart type for the data',
+        },
+        data: {
+          type: 'array',
+          description: 'Rows to visualize. Each row should include a label/x value and a numeric value/y value.',
+          items: {
+            type: 'object',
+            properties: {
+              label: { type: 'string', description: 'Category or x-axis label' },
+              value: { type: 'number', description: 'Numeric value' },
+              series: { type: 'string', description: 'Optional series/group name' },
+            },
+          },
+        },
+        x_key: { type: 'string', description: 'Optional key to read x labels from data rows' },
+        y_key: { type: 'string', description: 'Optional key to read numeric values from data rows' },
+        series_key: { type: 'string', description: 'Optional key to group rows into multiple series' },
+        x_label: { type: 'string', description: 'Optional x-axis label' },
+        y_label: { type: 'string', description: 'Optional y-axis label' },
+        unit: { type: 'string', description: 'Optional unit or prefix/suffix, e.g. $, %, credits, users' },
+        insight: { type: 'string', description: 'One sentence explaining the visible takeaway' },
+      },
+      required: ['title', 'chart_type', 'data'],
+    },
+  },
+  {
     name: 'generate_report',
     description: 'Generate a structured report or analysis document. Creates formatted markdown output suitable for sharing.',
     input_schema: {
@@ -1424,6 +1462,7 @@ const TOOL_CONFIDENCE: Record<string, [number, number]> = {
   create_task: [94, 99],
   send_message: [96, 99],
   query_data: [87, 97],
+  render_chart: [90, 98],
   generate_report: [82, 94],
   schedule_automation: [93, 99],
 };
@@ -1431,6 +1470,131 @@ const TOOL_CONFIDENCE: Record<string, [number, number]> = {
 function randomConfidence(toolName: string): number {
   const [min, max] = TOOL_CONFIDENCE[toolName] || [75, 90];
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+type RenderableChartType = 'bar' | 'line' | 'area' | 'pie';
+
+function normalizeChartType(value: unknown): RenderableChartType {
+  const type = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (type === 'line' || type === 'area' || type === 'pie') return type;
+  return 'bar';
+}
+
+function parseChartNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string') return null;
+  const match = value.trim().toLowerCase().match(/^[$€£]?\s*(-?\d+(?:,\d{3})*(?:\.\d+)?|-?\d+(?:\.\d+)?)([kmb%])?/);
+  if (!match) return null;
+  const base = Number(match[1].replace(/,/g, ''));
+  if (!Number.isFinite(base)) return null;
+  const suffix = match[2];
+  if (suffix === 'k') return base * 1_000;
+  if (suffix === 'm') return base * 1_000_000;
+  if (suffix === 'b') return base * 1_000_000_000;
+  return base;
+}
+
+function normalizeChartDataInput(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    return value.filter(isObjectRecord).slice(0, 48);
+  }
+
+  if (isObjectRecord(value)) {
+    return Object.entries(value)
+      .filter(([, entry]) => ['number', 'string'].includes(typeof entry) || isObjectRecord(entry))
+      .map(([key, entry]) => {
+        if (isObjectRecord(entry)) return { label: key, ...entry };
+        return { label: key, value: entry };
+      })
+      .slice(0, 48);
+  }
+
+  return [];
+}
+
+function readChartLabel(row: Record<string, unknown>, xKey?: string, index = 0) {
+  const candidates = [
+    xKey ? row[xKey] : undefined,
+    row.label,
+    row.x,
+    row.name,
+    row.date,
+    row.period,
+    row.category,
+  ];
+  const value = candidates.find((candidate) => typeof candidate === 'string' || typeof candidate === 'number');
+  return value === undefined ? `Point ${index + 1}` : String(value).trim().slice(0, 80);
+}
+
+function readChartValue(row: Record<string, unknown>, yKey?: string): number | null {
+  const candidates = [
+    yKey ? row[yKey] : undefined,
+    row.value,
+    row.y,
+    row.amount,
+    row.count,
+    row.total,
+    row.revenue,
+    row.credits,
+    row.users,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseChartNumber(candidate);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+}
+
+function buildChartArtifact(toolInput: Record<string, unknown>) {
+  const xKey = typeof toolInput.x_key === 'string' ? toolInput.x_key : undefined;
+  const yKey = typeof toolInput.y_key === 'string' ? toolInput.y_key : undefined;
+  const seriesKey = typeof toolInput.series_key === 'string' ? toolInput.series_key : undefined;
+  const rows = normalizeChartDataInput(toolInput.data);
+  const data = rows
+    .map((row, index): { label: string; value: number; series?: string } | null => {
+      const value = readChartValue(row, yKey);
+      if (value === null) return null;
+      const seriesValue = seriesKey ? row[seriesKey] : row.series;
+      const series = typeof seriesValue === 'string' && seriesValue.trim() ? seriesValue.trim().slice(0, 64) : undefined;
+      return {
+        label: readChartLabel(row, xKey, index),
+        value,
+        ...(series ? { series } : {}),
+      };
+    })
+    .filter((row): row is { label: string; value: number; series?: string } => row !== null);
+
+  if (data.length === 0) {
+    return {
+      success: false,
+      artifact_type: 'chart',
+      error: 'render_chart needs at least one row with a label/x value and a numeric value/y value.',
+      expected_shape: [{ label: 'Jan', value: 1200 }],
+    };
+  }
+
+  const values = data.map((row) => row.value);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return {
+    success: true,
+    artifact_type: 'chart',
+    chart: {
+      type: normalizeChartType(toolInput.chart_type),
+      title: typeof toolInput.title === 'string' && toolInput.title.trim() ? toolInput.title.trim().slice(0, 120) : 'Generated chart',
+      subtitle: typeof toolInput.subtitle === 'string' ? toolInput.subtitle.trim().slice(0, 160) : undefined,
+      x_label: typeof toolInput.x_label === 'string' ? toolInput.x_label.trim().slice(0, 80) : undefined,
+      y_label: typeof toolInput.y_label === 'string' ? toolInput.y_label.trim().slice(0, 80) : undefined,
+      unit: typeof toolInput.unit === 'string' ? toolInput.unit.trim().slice(0, 24) : undefined,
+      insight: typeof toolInput.insight === 'string' ? toolInput.insight.trim().slice(0, 220) : undefined,
+      data,
+      generated_at: new Date().toISOString(),
+    },
+    row_count: data.length,
+    min: Math.min(...values),
+    max: Math.max(...values),
+    total,
+    render_target: 'inline_workspace_artifact',
+  };
 }
 
 async function executeToolCall(
@@ -1626,6 +1790,10 @@ async function executeToolCall(
         latency_ms: Math.floor(Math.random() * 200) + 80,
         cache_hit: Math.random() > 0.6,
       });
+    }
+
+    case 'render_chart': {
+      return JSON.stringify(buildChartArtifact(toolInput));
     }
 
     case 'generate_report': {
