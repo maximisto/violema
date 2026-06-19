@@ -442,7 +442,7 @@ async function testProviderConnection(input: {
     const response = await client.messages.create({
       model: input.provider === 'minimax'
         ? process.env.MODEL_OPS_MODEL?.trim() || 'minimax/minimax-m2.7'
-        : process.env.MODEL_DEFAULT_MODEL?.trim() || 'claude-sonnet-4-20250514',
+        : process.env.MODEL_DEFAULT_MODEL?.trim() || 'claude-sonnet-4-6',
       max_tokens: 8,
       system: 'Return only the word OK.',
       messages: [{ role: 'user', content: 'ping' }],
@@ -451,7 +451,7 @@ async function testProviderConnection(input: {
       ok: true,
       provider: input.provider,
       mode: 'verified' as const,
-      detail: `Verified with model ${response.model || (input.provider === 'minimax' ? 'minimax/minimax-m2.7' : 'claude-sonnet-4-20250514')}.`,
+      detail: `Verified with model ${response.model || (input.provider === 'minimax' ? 'minimax/minimax-m2.7' : 'claude-sonnet-4-6')}.`,
     };
   }
 
@@ -463,7 +463,7 @@ async function testProviderConnection(input: {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        model: process.env.MODEL_MICRO_MODEL?.trim() || 'gpt-5.4-nano',
+        model: process.env.MODEL_MICRO_MODEL?.trim() || 'gpt-4.1-mini',
         max_completion_tokens: 8,
         messages: [
           { role: 'system', content: 'Return only the word OK.' },
@@ -473,7 +473,7 @@ async function testProviderConnection(input: {
     });
     const data = await response.json() as { error?: { message?: string } };
     if (!response.ok) throw new Error(data.error?.message || 'OpenAI test failed');
-    return { ok: true, provider: input.provider, mode: 'verified' as const, detail: `Verified with ${process.env.MODEL_MICRO_MODEL?.trim() || 'gpt-5.4-nano'}.` };
+    return { ok: true, provider: input.provider, mode: 'verified' as const, detail: `Verified with ${process.env.MODEL_MICRO_MODEL?.trim() || 'gpt-4.1-mini'}.` };
   }
 
   if (input.provider === 'openrouter') {
@@ -1918,7 +1918,7 @@ async function executeConversationTask(input: {
 }
 
 interface AutomationExecutionArtifact {
-  kind: 'web_search' | 'query_data' | 'summary' | 'delivery' | 'note' | 'analysis' | 'capture';
+  kind: 'web_search' | 'query_data' | 'summary' | 'delivery' | 'review_gate' | 'note' | 'analysis' | 'capture';
   title: string;
   payload: Record<string, unknown>;
 }
@@ -3044,6 +3044,46 @@ function buildAutomationDeliveryFallbackBody(
   ].filter(Boolean).join('\n');
 }
 
+function buildDeterministicAutomationSummary(
+  automation: { name: string; description?: string; condition?: string; actions: string[] },
+  artifacts: AutomationExecutionArtifact[],
+  stepExecutions: AutomationStepExecution[],
+  stepErrors: string[],
+) {
+  const completed = stepExecutions.filter((step) => step.status === 'succeeded').length;
+  const failed = stepExecutions.filter((step) => step.status === 'failed').length;
+  const skipped = stepExecutions.filter((step) => step.status === 'skipped').length;
+  const latestSummary = [...artifacts].reverse().find((artifact) => artifact.kind === 'summary');
+  const latestMarkdown = typeof latestSummary?.payload?.markdown === 'string'
+    ? latestSummary.payload.markdown.trim()
+    : '';
+
+  const stepLines = stepExecutions
+    .filter((step) => step.status !== 'planned' && step.status !== 'running')
+    .map((step) => {
+      const detail = step.summary || step.error || '';
+      return `- ${step.status.toUpperCase()} · ${step.title}${detail ? `: ${detail}` : ''}`;
+    });
+
+  return [
+    `# ${automation.name}`,
+    automation.description ? automation.description : null,
+    `Run produced ${artifacts.length} artifact${artifacts.length === 1 ? '' : 's'} across ${stepExecutions.length} step${stepExecutions.length === 1 ? '' : 's'}. ${completed} succeeded, ${failed} failed, ${skipped} skipped.`,
+    latestMarkdown ? `## Latest Generated Output\n${latestMarkdown}` : null,
+    stepLines.length > 0 ? `## Step Results\n${stepLines.join('\n')}` : null,
+    stepErrors.length > 0 ? `## Needs Attention\n${stepErrors.map((error) => `- ${error}`).join('\n')}` : null,
+  ].filter(Boolean).join('\n\n');
+}
+
+function isAutomationDeliveryApprovalRequired(step: AutomationStepDefinition) {
+  const explicit = step.inputs?.approval_required;
+  if (explicit === true) return true;
+  if (typeof explicit === 'string' && explicit.trim().toLowerCase() === 'true') return true;
+  return /(approval|required|reviewed|review before|after review|after approval|hold for approval)/i.test(
+    `${step.title} ${step.objective}`,
+  );
+}
+
 async function ensureAutomationSummaryText(
   automation: { name: string; description?: string; condition?: string; actions: string[] },
   plan: AutomationExecutionPlan,
@@ -3053,18 +3093,24 @@ async function ensureAutomationSummaryText(
 ) {
   if (artifacts.length === 0 && stepErrors.length === 0) return '';
 
-  const fallbackSummaryResult = await runAutomationStepWithTimeout(
-    `Fallback summary for "${automation.name}"`,
-    generateTextDetailed(
-      plan.suggestedModelTier,
-      'Summarize the completed automation run in concise markdown. Lead with the highest-value outcome, then note any failure or delivery issue briefly.',
-      [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
-      600,
-      DEFAULT_WORKSPACE_ID,
-    ),
-  );
+  try {
+    const fallbackSummaryResult = await runAutomationStepWithTimeout(
+      `Fallback summary for "${automation.name}"`,
+      generateTextDetailed(
+        plan.suggestedModelTier,
+        'Summarize the completed automation run in concise markdown. Lead with the highest-value outcome, then note any failure or delivery issue briefly.',
+        [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
+        600,
+        DEFAULT_WORKSPACE_ID,
+      ),
+    );
 
-  return fallbackSummaryResult.text;
+    return fallbackSummaryResult.text || buildDeterministicAutomationSummary(automation, artifacts, stepExecutions, stepErrors);
+  } catch (error) {
+    const summaryError = error instanceof Error ? error.message : 'Unknown summary generation error';
+    stepErrors.push(`Fallback summary: ${summaryError}`);
+    return buildDeterministicAutomationSummary(automation, artifacts, stepExecutions, stepErrors);
+  }
 }
 
 async function runAutomationStepWithTimeout<T>(label: string, operation: Promise<T>) {
@@ -3266,22 +3312,45 @@ async function executeAutomationCore(
         }
 
         if (!summaryText && (artifacts.length > 0 || stepErrors.length > 0)) {
-          try {
-            summaryText = await ensureAutomationSummaryText(automation, plan, artifacts, stepExecutions, stepErrors);
-            if (summaryText) {
-              artifacts.push({
-                kind: 'summary',
-                title: `${automation.name} summary`,
-                payload: { markdown: summaryText },
-              });
-            }
-          } catch (error) {
-            const summaryError = error instanceof Error ? error.message : 'Unknown summary generation error';
-            stepErrors.push(`Fallback summary: ${summaryError}`);
+          summaryText = await ensureAutomationSummaryText(automation, plan, artifacts, stepExecutions, stepErrors);
+          if (summaryText) {
+            artifacts.push({
+              kind: 'summary',
+              title: `${automation.name} summary`,
+              payload: { markdown: summaryText },
+            });
           }
         }
 
         const body = summaryText || buildAutomationDeliveryFallbackBody(automation, artifacts, stepExecutions, stepErrors);
+
+        if (isAutomationDeliveryApprovalRequired(step)) {
+          delivery = {
+            success: true,
+            channel: step.deliveryTarget?.channel || (deliveryTarget.includes('@') ? 'email' : 'slack'),
+            to: deliveryTarget,
+            status: 'waiting_review',
+            approval_required: true,
+            prepared_at: new Date().toISOString(),
+          };
+          artifacts.push({
+            kind: 'review_gate',
+            title: `Ready for review: ${automation.name}`,
+            payload: {
+              markdown: body,
+              deliveryTarget,
+              approvalRequired: true,
+            },
+          });
+          stepExecution.status = 'succeeded';
+          stepExecution.summary = `Prepared delivery for review. Waiting for approval before sending to ${deliveryTarget}.`;
+          stepExecution.output = delivery;
+          stepExecution.artifactKind = 'review_gate';
+          stepExecution.toolCalls = 0;
+          stepExecution.artifactCount = 1;
+          continue;
+        }
+
         delivery = await runAutomationStepWithTimeout(`Delivery step "${step.title}"`, sendMessage({
           to: deliveryTarget,
           subject: `Automation run: ${automation.name}`,
@@ -3543,6 +3612,12 @@ async function runAutomation(automation: {
     };
 
     const execution = await executeAutomationCore(automation, executionPlan, persistProgress);
+    const deliveryWaitingForReview = execution.stepExecutions.some((step) =>
+      step.kind === 'deliver' &&
+      step.status === 'succeeded' &&
+      typeof step.output?.status === 'string' &&
+      step.output.status === 'waiting_review'
+    );
     const fallbackSummary = [
       `Automation: ${automation.name}`,
       automation.description ? `Description: ${automation.description}` : null,
@@ -3598,11 +3673,12 @@ async function runAutomation(automation: {
         workerTopology: applyWorkerRuntimeActivity(execution.plan.topology, execution.stepExecutions),
         delivery: execution.delivery,
         deliveryError: execution.deliveryError,
+        reviewRequired: deliveryWaitingForReview,
       },
     });
     updateTask(task.id, {
-      status: 'completed',
-      delegationState: 'completed',
+      status: deliveryWaitingForReview ? 'waiting_review' : 'completed',
+      delegationState: deliveryWaitingForReview ? 'review' : 'completed',
       metadata: {
         automationId: automation.id,
         notify: deliveryTarget || null,
@@ -3636,6 +3712,7 @@ async function runAutomation(automation: {
         },
         workerTopology: applyWorkerRuntimeActivity(execution.plan.topology, execution.stepExecutions),
         deliveryError: execution.deliveryError,
+        reviewRequired: deliveryWaitingForReview,
       },
     });
     addLedgerEntry({
@@ -3658,6 +3735,7 @@ async function runAutomation(automation: {
           actualCredits: step.actualCredits || 0,
         })),
         deliveryError: execution.deliveryError,
+        reviewRequired: deliveryWaitingForReview,
       },
     });
     const completedSnapshot = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, 'completed');

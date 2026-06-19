@@ -79,60 +79,57 @@ function getTextRouteDefault(profile: TextProfile): ModelRoute {
   const defaults: Record<CanonicalTextProfile, ModelRoute> = {
     micro: {
       provider: 'openai',
-      model: 'gpt-5.4-nano',
+      model: 'gpt-4.1-mini',
       apiKeyEnv: 'OPENAI_API_KEY',
       baseUrl: env('OPENAI_BASE_URL') || 'https://api.openai.com/v1',
-      reasoningEffort: 'minimal',
     },
     default: {
       provider: 'anthropic',
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       baseUrl: env('ANTHROPIC_BASE_URL'),
     },
     hard: {
-      provider: 'openai',
-      model: 'gpt-5.4',
-      apiKeyEnv: 'OPENAI_API_KEY',
-      baseUrl: env('OPENAI_BASE_URL') || 'https://api.openai.com/v1',
-      reasoningEffort: 'medium',
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      apiKeyEnv: 'ANTHROPIC_API_KEY',
+      baseUrl: env('ANTHROPIC_BASE_URL'),
     },
     critical: {
       provider: 'anthropic',
-      model: 'claude-opus-4-1-20250805',
+      model: 'claude-opus-4-8',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       baseUrl: env('ANTHROPIC_BASE_URL'),
     },
     ops: {
-      provider: 'openrouter',
-      model: 'minimax/minimax-m2.7',
-      apiKeyEnv: 'OPENROUTER_API_KEY',
-      baseUrl: env('OPENROUTER_BASE_URL') || 'https://openrouter.ai/api/v1',
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      apiKeyEnv: 'ANTHROPIC_API_KEY',
+      baseUrl: env('ANTHROPIC_BASE_URL'),
     },
   };
 
   const legacyOverrides: Partial<Record<LegacyTextProfile, Partial<ModelRoute>>> = {
     balanced: {
       provider: 'anthropic',
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
     },
     frontier: {
       provider: 'anthropic',
-      model: 'claude-opus-4-1-20250805',
+      model: 'claude-opus-4-8',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
     },
     operations: {
-      provider: 'openrouter',
-      model: 'minimax/minimax-m2.7',
-      apiKeyEnv: 'OPENROUTER_API_KEY',
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      apiKeyEnv: 'ANTHROPIC_API_KEY',
     },
     utility: {
       provider: 'openai',
-      model: 'gpt-5.4-nano',
+      model: 'gpt-4.1-mini',
       apiKeyEnv: 'OPENAI_API_KEY',
       baseUrl: env('OPENAI_BASE_URL') || 'https://api.openai.com/v1',
-      reasoningEffort: 'minimal',
     },
   };
 
