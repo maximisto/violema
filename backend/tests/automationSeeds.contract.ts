@@ -28,7 +28,7 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
     assert.equal(weekly.cron_expression, '0 9 * * 1');
     assert.equal(weekly.timezone, 'America/Chicago');
     assert.equal(weekly.execution_policy?.reviewPolicy, 'standard');
-    assert.equal(weekly.notify, '#founders');
+    assert.equal(weekly.notify, '#all-purple-orange');
     assert.ok(weekly.steps?.some((step) => step.inputs?.source === 'stripe'), 'Expected Stripe revenue step.');
     assert.ok(weekly.steps?.some((step) => step.inputs?.source === 'github'), 'Expected GitHub delivery/risk step.');
     assert.ok(weekly.steps?.some((step) => step.inputs?.source === 'calendar'), 'Expected calendar step.');
