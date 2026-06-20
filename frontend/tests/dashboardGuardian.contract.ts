@@ -1,7 +1,9 @@
 import {
   getDimaHiddenStorageKey,
   getDimaMischiefStorageKey,
+  getDimaBubbleDefaultOpen,
   getDimaPatternNotes,
+  getDimaPatrolOffset,
   getDimaQuoteForDay,
   getDimaSpritePath,
   selectDimaCue,
@@ -15,6 +17,9 @@ function assert(condition: unknown, message: string) {
 
 assert(getDimaHiddenStorageKey('acme') === 'violema_dima_hidden_acme', 'scopes hidden preference by workspace');
 assert(getDimaMischiefStorageKey('acme') === 'violema_dima_mischief_acme', 'scopes mischief preference by workspace');
+assert(getDimaBubbleDefaultOpen({ desktop: true, panelOffset: false }) === true, 'desktop Dima defaults to the advice box');
+assert(getDimaBubbleDefaultOpen({ desktop: false, panelOffset: false }) === false, 'mobile Dima defaults to compact mode');
+assert(getDimaBubbleDefaultOpen({ desktop: true, panelOffset: true }) === false, 'open panels default Dima to compact mode');
 
 const chatCue = selectDimaCue({
   area: 'home',
@@ -26,6 +31,46 @@ const chatCue = selectDimaCue({
 assert(chatCue.ritual === 'guard', 'chat defaults to guardian advice');
 assert(chatCue.sprite === 'patrol', 'chat uses patrol sprite');
 assert(chatCue.message.includes('outcome'), 'chat advice nudges the user toward outcomes');
+
+const morningHomeCue = selectDimaCue({
+  area: 'home',
+  tab: 'chat',
+  hourOfDay: 8,
+  spriteStep: 0,
+  hasEvidence: true,
+  totalSteps: 4,
+});
+assert(morningHomeCue.sprite === 'action', 'morning home patrol uses action sprite');
+
+const morningRotatedHomeCue = selectDimaCue({
+  area: 'home',
+  tab: 'chat',
+  hourOfDay: 8,
+  spriteStep: 1,
+  hasEvidence: true,
+  totalSteps: 4,
+});
+assert(morningRotatedHomeCue.sprite === 'patrol', 'home patrol rotates images after the first beat');
+
+const eveningHomeCue = selectDimaCue({
+  area: 'home',
+  tab: 'chat',
+  hourOfDay: 19,
+  spriteStep: 0,
+  hasEvidence: true,
+  totalSteps: 4,
+});
+assert(eveningHomeCue.sprite === 'thinking', 'evening home patrol uses thinking sprite');
+
+const overnightHomeCue = selectDimaCue({
+  area: 'home',
+  tab: 'chat',
+  hourOfDay: 23,
+  spriteStep: 0,
+  hasEvidence: true,
+  totalSteps: 4,
+});
+assert(overnightHomeCue.sprite === 'swarm', 'overnight home patrol uses swarm sprite');
 
 const boardCue = selectDimaCue({
   area: 'board',
@@ -82,6 +127,16 @@ assert(lowCreditCue.ritual === 'mark', 'low credit runway gets warning marker');
 assert(lowCreditCue.tone === 'warning', 'low credit runway uses warning tone');
 assert(lowCreditCue.sprite === 'credits', 'low credit runway uses credits sprite');
 
+const lowCreditMorningCue = selectDimaCue({
+  area: 'home',
+  tab: 'chat',
+  hourOfDay: 8,
+  lowCreditRunway: true,
+  hasEvidence: true,
+  totalSteps: 3,
+});
+assert(lowCreditMorningCue.sprite === 'credits', 'low credit image overrides time-of-day image');
+
 const solvedCue = selectDimaCue({
   area: 'board',
   tab: 'done',
@@ -121,6 +176,20 @@ assert(!professionalCue.message.includes('refused'), 'professional mode keeps ad
 assert(getDimaSpritePath('swarm') === '/brand/dima/dima-swarm.png', 'returns public sprite path');
 assert(getDimaQuoteForDay(0) === 'Guard the work before you ship it.', 'selects deterministic first quote');
 assert(getDimaQuoteForDay(7) === 'Guard the work before you ship it.', 'wraps quote selection by day');
+
+const anchoredPatrol = getDimaPatrolOffset({ motionAllowed: true, panelOffset: false, ritual: 'guard', step: 0 });
+const roamingPatrol = getDimaPatrolOffset({ motionAllowed: true, panelOffset: false, ritual: 'guard', step: 1 });
+const wrappedPatrol = getDimaPatrolOffset({ motionAllowed: true, panelOffset: false, ritual: 'guard', step: 5 });
+assert(anchoredPatrol.x === '0rem' && anchoredPatrol.y === '0rem', 'first patrol step starts from the dock');
+assert(roamingPatrol.x !== '0rem' || roamingPatrol.y !== '0rem', 'desktop patrol moves Dima away from one fixed position');
+assert(wrappedPatrol.x === roamingPatrol.x && wrappedPatrol.y === roamingPatrol.y, 'patrol steps wrap deterministically');
+
+const noMotionPatrol = getDimaPatrolOffset({ motionAllowed: false, panelOffset: false, ritual: 'guard', step: 1 });
+const panelPatrol = getDimaPatrolOffset({ motionAllowed: true, panelOffset: true, ritual: 'guard', step: 1 });
+const ritualPatrol = getDimaPatrolOffset({ motionAllowed: true, panelOffset: false, ritual: 'kiss', step: 1 });
+assert(noMotionPatrol.x === '0rem' && noMotionPatrol.y === '0rem', 'reduced-motion users keep Dima docked');
+assert(panelPatrol.x === '0rem' && panelPatrol.y === '0rem', 'open panels keep Dima from patrolling into controls');
+assert(ritualPatrol.x === '0rem' && ritualPatrol.y === '0rem', 'special rituals own their own motion');
 
 const notes = getDimaPatternNotes();
 assert(notes.some((note) => note.includes('never mutates real code')), 'documents that Dima never mutates real code');

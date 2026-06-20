@@ -1393,6 +1393,9 @@
 /* ── Dima dashboard guardian ─────────────────────────────────────── */
 .dima-guardian {
   transform-origin: 88% 100%;
+  transform: translate3d(var(--dima-patrol-x, 0rem), var(--dima-patrol-y, 0rem), 0);
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
 
 .dima-dog-image {
@@ -1523,6 +1526,11 @@
   .dima-mark-splash,
   .dima-kiss-signal {
     animation: none !important;
+  }
+
+  .dima-guardian {
+    transform: translate3d(0, 0, 0) !important;
+    transition: none !important;
   }
 }
 

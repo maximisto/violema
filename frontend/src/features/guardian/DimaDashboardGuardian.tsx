@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Shield from 'lucide-react/dist/esm/icons/shield.js';
-import X from 'lucide-react/dist/esm/icons/x.js';
+import Minimize2 from 'lucide-react/dist/esm/icons/minimize-2.js';
+import Power from 'lucide-react/dist/esm/icons/power.js';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import EyeOff from 'lucide-react/dist/esm/icons/eye-off.js';
 import type { MissionWorkspaceView } from '../missions/types';
 import type { WorkspaceAreaId, WorkspaceTabId } from '../missions/workspaceShell';
 import {
+  getDimaBubbleDefaultOpen,
   getDimaHiddenStorageKey,
   getDimaMischiefStorageKey,
+  getDimaPatrolOffset,
   getDimaSpritePath,
   selectDimaCue,
 } from './dashboardGuardian';
@@ -39,6 +42,21 @@ function writeBooleanPreference(key: string, value: boolean) {
   }
 }
 
+function getGuardianMotionAllowed() {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(min-width: 640px)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function getGuardianDesktopViewport() {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(min-width: 640px)').matches;
+}
+
+function getGuardianHourOfDay() {
+  if (typeof window === 'undefined') return undefined;
+  return new Date().getHours();
+}
+
 export function DashboardGuardian({
   workspaceId,
   area,
@@ -52,9 +70,12 @@ export function DashboardGuardian({
   const mischiefKey = useMemo(() => getDimaMischiefStorageKey(workspaceId), [workspaceId]);
   const [hidden, setHidden] = useState(() => readBooleanPreference(hiddenKey, false));
   const [mischiefEnabled, setMischiefEnabled] = useState(() => readBooleanPreference(mischiefKey, true));
+  const [desktopViewport, setDesktopViewport] = useState(getGuardianDesktopViewport);
+  const [motionAllowed, setMotionAllowed] = useState(getGuardianMotionAllowed);
+  const [patrolStep, setPatrolStep] = useState(0);
+  const [hourOfDay, setHourOfDay] = useState(getGuardianHourOfDay);
   const [bubbleOpen, setBubbleOpen] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    return isChatSurface && !panelOffset && window.matchMedia('(min-width: 640px)').matches;
+    return getDimaBubbleDefaultOpen({ desktop: getGuardianDesktopViewport(), panelOffset });
   });
   const dockPositionClass = `${isChatSurface ? 'bottom-[7.25rem] sm:bottom-[7.25rem]' : 'bottom-3 sm:bottom-4'} ${panelOffset ? 'right-3 lg:right-[23.25rem]' : 'right-3 sm:right-4'}`;
 
@@ -67,12 +88,34 @@ export function DashboardGuardian({
   }, [mischiefKey]);
 
   useEffect(() => {
-    const query = window.matchMedia('(min-width: 640px)');
-    const syncBubbleState = () => setBubbleOpen(isChatSurface && !panelOffset && query.matches);
-    syncBubbleState();
-    query.addEventListener('change', syncBubbleState);
-    return () => query.removeEventListener('change', syncBubbleState);
-  }, [isChatSurface, panelOffset]);
+    const desktopQuery = window.matchMedia('(min-width: 640px)');
+    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const syncMotionPreference = () => {
+      setDesktopViewport(desktopQuery.matches);
+      setMotionAllowed(desktopQuery.matches && !reducedMotionQuery.matches);
+    };
+    syncMotionPreference();
+    desktopQuery.addEventListener('change', syncMotionPreference);
+    reducedMotionQuery.addEventListener('change', syncMotionPreference);
+    return () => {
+      desktopQuery.removeEventListener('change', syncMotionPreference);
+      reducedMotionQuery.removeEventListener('change', syncMotionPreference);
+    };
+  }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setHourOfDay(getGuardianHourOfDay());
+    }, 5 * 60 * 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    if (!getDimaBubbleDefaultOpen({ desktop: desktopViewport, panelOffset })) {
+      setBubbleOpen(false);
+    }
+  }, [desktopViewport, panelOffset]);
 
   const activeAgent = mission.agents.find((agent) => agent.id === mission.activeAgentId) || mission.agents[0];
   const completedSteps = mission.steps.filter((step) => step.status === 'completed').length;
@@ -91,11 +134,47 @@ export function DashboardGuardian({
     failedSteps,
     totalSteps: mission.steps.length,
     mischiefEnabled,
+    hourOfDay,
+    spriteStep: patrolStep,
   });
+
+  const patrolEnabled = motionAllowed && !panelOffset && cue.ritual === 'guard';
+  const patrolOffset = getDimaPatrolOffset({
+    motionAllowed,
+    panelOffset,
+    ritual: cue.ritual,
+    step: patrolStep,
+  });
+  const guardianStyle = {
+    '--dima-patrol-x': patrolOffset.x,
+    '--dima-patrol-y': patrolOffset.y,
+  } as CSSProperties;
+
+  useEffect(() => {
+    if (!patrolEnabled) {
+      setPatrolStep(0);
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setPatrolStep((current) => current + 1);
+    }, 8500);
+
+    return () => window.clearInterval(intervalId);
+  }, [patrolEnabled]);
 
   const updateHidden = (next: boolean) => {
     setHidden(next);
     writeBooleanPreference(hiddenKey, next);
+  };
+
+  const turnDimaOn = () => {
+    updateHidden(false);
+    setBubbleOpen(getDimaBubbleDefaultOpen({ desktop: desktopViewport, panelOffset }));
+  };
+
+  const turnDimaOff = () => {
+    updateHidden(true);
   };
 
   const toggleMischief = () => {
@@ -109,13 +188,13 @@ export function DashboardGuardian({
       <div className={`pointer-events-none fixed z-40 ${dockPositionClass}`}>
         <button
           type="button"
-          onClick={() => updateHidden(false)}
+          onClick={turnDimaOn}
           className="pointer-events-auto inline-flex h-10 items-center gap-2 rounded-xl border border-slate-600/40 bg-navy-950/84 px-3 text-[11px] font-semibold text-slate-200 shadow-[0_18px_48px_rgba(2,6,23,0.34)] backdrop-blur-md transition-colors hover:border-violet-400/45 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-          aria-label="Show Dima guardian"
-          title="Show Dima guardian"
+          aria-label="Turn on Dima guardian"
+          title="Turn on Dima guardian"
         >
           <Shield className="h-3.5 w-3.5 text-slate-300" />
-          Dima
+          Turn on Dima
         </button>
       </div>
     );
@@ -124,13 +203,14 @@ export function DashboardGuardian({
   return (
     <div
       className={`dima-guardian dima-guardian--${cue.ritual} pointer-events-none fixed z-40 w-[18rem] max-w-[calc(100vw-1.5rem)] ${dockPositionClass}`}
+      style={guardianStyle}
       aria-live="polite"
     >
       {!bubbleOpen ? (
         <button
           type="button"
           onClick={() => setBubbleOpen(true)}
-          className="pointer-events-auto ml-auto flex h-9 w-fit items-center gap-2 rounded-xl border border-slate-500/24 bg-navy-950/84 px-3 text-[11px] font-semibold text-slate-200 shadow-[0_18px_48px_rgba(2,6,23,0.32)] backdrop-blur-md transition-colors hover:border-violet-400/45 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 sm:hidden"
+          className="pointer-events-auto ml-auto flex h-9 w-fit items-center gap-2 rounded-xl border border-slate-500/24 bg-navy-950/84 px-3 text-[11px] font-semibold text-slate-200 shadow-[0_18px_48px_rgba(2,6,23,0.32)] backdrop-blur-md transition-colors hover:border-violet-400/45 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
           aria-label="Open Dima advice"
           title="Open Dima advice"
         >
@@ -165,12 +245,12 @@ export function DashboardGuardian({
           </div>
           <button
             type="button"
-            onClick={() => updateHidden(true)}
+            onClick={() => setBubbleOpen(false)}
             className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-white/8 bg-white/[0.03] text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-            aria-label="Hide Dima"
-            title="Hide Dima"
+            aria-label="Collapse Dima message"
+            title="Collapse Dima message"
           >
-            <X className="h-3.5 w-3.5" />
+            <Minimize2 className="h-3.5 w-3.5" />
           </button>
         </div>
         <div className="mt-3 flex items-center justify-between gap-2">
@@ -187,7 +267,16 @@ export function DashboardGuardian({
             {mischiefEnabled ? <Sparkles className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
             {mischiefEnabled ? 'Mischief on' : 'Professional'}
           </button>
-          <span className="text-[10px] font-medium text-slate-600">Guardian layer</span>
+          <button
+            type="button"
+            onClick={turnDimaOff}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-500/16 bg-slate-500/8 px-2.5 py-1.5 text-[10px] font-semibold text-slate-400 transition-colors hover:border-slate-400/28 hover:bg-slate-500/12 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            aria-label="Turn off Dima guardian"
+            title="Turn off Dima guardian"
+          >
+            <Power className="h-3 w-3" />
+            Off
+          </button>
         </div>
       </div>
       ) : null}

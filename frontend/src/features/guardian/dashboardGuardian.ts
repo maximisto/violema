@@ -4,6 +4,23 @@ export type GuardianRitual = 'guard' | 'kiss' | 'chew' | 'mark';
 export type GuardianTone = 'neutral' | 'success' | 'warning' | 'mischief';
 export type DimaSprite = 'patrol' | 'thinking' | 'kiss' | 'action' | 'chew' | 'mark' | 'credits' | 'swarm';
 
+export interface DimaPatrolContext {
+  motionAllowed?: boolean;
+  panelOffset?: boolean;
+  ritual?: GuardianRitual;
+  step?: number;
+}
+
+export interface DimaPatrolOffset {
+  x: string;
+  y: string;
+}
+
+export interface DimaBubbleDefaultContext {
+  desktop?: boolean;
+  panelOffset?: boolean;
+}
+
 export interface GuardianContext {
   area: WorkspaceAreaId;
   tab?: WorkspaceTabId;
@@ -16,6 +33,8 @@ export interface GuardianContext {
   totalSteps?: number;
   failedSteps?: number;
   mischiefEnabled?: boolean;
+  hourOfDay?: number;
+  spriteStep?: number;
 }
 
 export interface GuardianCue {
@@ -27,6 +46,13 @@ export interface GuardianCue {
 }
 
 const DEFAULT_WORKSPACE_ID = 'default';
+const DIMA_DOCKED_PATROL_OFFSET: DimaPatrolOffset = { x: '0rem', y: '0rem' };
+const DIMA_PATROL_OFFSETS: DimaPatrolOffset[] = [
+  DIMA_DOCKED_PATROL_OFFSET,
+  { x: '-2.25rem', y: '-1.4rem' },
+  { x: '-4.5rem', y: '-0.25rem' },
+  { x: '-1.2rem', y: '-2.35rem' },
+];
 const DIMA_QUOTES = [
   'Guard the work before you ship it.',
   'Good systems protect good taste.',
@@ -43,6 +69,10 @@ export function getDimaHiddenStorageKey(workspaceId = DEFAULT_WORKSPACE_ID) {
 
 export function getDimaMischiefStorageKey(workspaceId = DEFAULT_WORKSPACE_ID) {
   return `violema_dima_mischief_${workspaceId || DEFAULT_WORKSPACE_ID}`;
+}
+
+export function getDimaBubbleDefaultOpen(context: DimaBubbleDefaultContext) {
+  return Boolean(context.desktop && !context.panelOffset);
 }
 
 function normalizeStatus(value?: string) {
@@ -109,7 +139,23 @@ function getGuardSprite(context: GuardianContext): DimaSprite {
   if (context.area === 'analytics') return 'credits';
   if (context.area === 'integrations') return 'swarm';
   if (context.area === 'advanced') return 'action';
+  if (context.area === 'home') return getHomeSpriteForHour(context.hourOfDay, context.spriteStep);
   return 'patrol';
+}
+
+function getHomeSpriteForHour(hourOfDay?: number, spriteStep = 0): DimaSprite {
+  if (typeof hourOfDay !== 'number' || !Number.isFinite(hourOfDay)) return getSteppedSprite(['patrol', 'action', 'thinking', 'swarm'], spriteStep);
+
+  const normalizedHour = ((Math.floor(hourOfDay) % 24) + 24) % 24;
+  if (normalizedHour >= 5 && normalizedHour < 11) return getSteppedSprite(['action', 'patrol', 'swarm', 'thinking'], spriteStep);
+  if (normalizedHour >= 17 && normalizedHour < 22) return getSteppedSprite(['thinking', 'patrol', 'action', 'swarm'], spriteStep);
+  if (normalizedHour >= 22 || normalizedHour < 5) return getSteppedSprite(['swarm', 'thinking', 'patrol', 'action'], spriteStep);
+  return getSteppedSprite(['patrol', 'action', 'thinking', 'swarm'], spriteStep);
+}
+
+function getSteppedSprite(sequence: DimaSprite[], spriteStep = 0): DimaSprite {
+  const index = Math.abs(Math.floor(spriteStep)) % sequence.length;
+  return sequence[index];
 }
 
 export function selectDimaCue(context: GuardianContext): GuardianCue {
@@ -178,6 +224,15 @@ export function getDimaSpritePath(sprite: DimaSprite) {
   return `/brand/dima/dima-${sprite}.png`;
 }
 
+export function getDimaPatrolOffset(context: DimaPatrolContext): DimaPatrolOffset {
+  if (!context.motionAllowed || context.panelOffset || context.ritual !== 'guard') {
+    return DIMA_DOCKED_PATROL_OFFSET;
+  }
+
+  const index = Math.abs(Math.floor(context.step || 0)) % DIMA_PATROL_OFFSETS.length;
+  return DIMA_PATROL_OFFSETS[index];
+}
+
 export function getDimaQuoteForDay(daySeed: number) {
   const index = Math.abs(Math.floor(daySeed)) % DIMA_QUOTES.length;
   return DIMA_QUOTES[index];
@@ -187,10 +242,12 @@ export function getDimaPatternNotes() {
   return [
     'Dima uses the existing Cane Corso homepage asset as the brand/sidebar guardian mark.',
     'Dima uses a cleaner expressive sprite set for in-product state changes.',
+    'Dima rotates the Home guardian image on a slow beat, with the time of day deciding which sprite leads the cycle.',
     'Dima can chew a decorative code strip, but never mutates real code or mission data.',
     'Dima marks risk as a tasteful warning ritual, not a literal gross gag.',
     'Dima kisses the owner only for solved, completed, or approved work.',
     'Dima keeps the left sidebar Corso as a static homepage mark while the bottom-right sprite changes by workspace mood.',
+    'Dima lightly patrols from the lower-right dock on desktop, but stays docked for panels, reduced motion, and special rituals.',
     'Dima can be hidden per workspace and mischief can be disabled separately.',
   ];
 }
