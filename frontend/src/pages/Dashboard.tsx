@@ -44,6 +44,8 @@ import { MissionDetailView } from '../features/missions/MissionDetailView';
 import { MissionCreditDrawer } from '../features/missions/MissionCreditDrawer';
 import { DashboardGuardian } from '../features/guardian/DimaDashboardGuardian';
 import { DimaSidebarNote } from '../features/guardian/DimaSidebarNote';
+import { WorkflowTemplateGallery } from '../features/templates/WorkflowTemplateGallery';
+import { WORKFLOW_TEMPLATES, getWorkflowTemplateById } from '../content/workflowTemplates';
 import { buildMissionWorkspaceView, type MissionSourceTask } from '../features/missions/missionPresenter';
 import { mapMissionRecordToSourceTask, type MissionApiRecord } from '../features/missions/missionApi';
 import {
@@ -349,87 +351,6 @@ const ACTION_TEMPLATES: Array<{ label: string; block: WorkflowBlockDraft }> = [
   {
     label: 'Email digest',
     block: { id: 'template-deliver-email', kind: 'deliver', title: 'Send email digest', objective: 'Deliver the latest result by email', deliveryTarget: { channel: 'email', target: '' } },
-  },
-];
-
-const FOUNDER_WORKFLOW_TEMPLATES: Array<{
-  id: string;
-  title: string;
-  cadence: string;
-  destination: 'slack' | 'email' | 'none';
-  notify: string;
-  description: string;
-  steps: Array<Omit<WorkflowBlockDraft, 'id'>>;
-}> = [
-  {
-    id: 'weekly-founder-brief',
-    title: 'Weekly founder brief',
-    cadence: 'every monday at 9am',
-    destination: 'slack',
-    notify: '#all-purple-orange',
-    description: 'Roll up revenue, delivery, customers, calendar, email, and market signals into a reviewed founder update.',
-    steps: [
-      { kind: 'query', title: 'Check Stripe revenue', objective: 'Pull MRR movement, failed payments, churn, expansion, and customer revenue signals from Stripe.', inputs: { source: 'stripe', query_type: 'revenue_summary' } },
-      { kind: 'query', title: 'Scan GitHub delivery', objective: 'Pull merged pull requests, blocked issues, stale reviews, and release risk from GitHub.', inputs: { source: 'github', query_type: 'delivery_risk' } },
-      { kind: 'search', title: 'Scan market signals', objective: 'Research customer, competitor, pricing, platform, and AI automation changes since the last update.', inputs: { query: 'AI automation platform startup competitor pricing product launch founder update', num_results: 6 } },
-      { kind: 'summarize', title: 'Draft founder brief', objective: 'Synthesize a founder-ready brief with signals, risks, decisions needed, and next actions.' },
-      { kind: 'deliver', title: 'Hold for approval and deliver', objective: 'Send the reviewed weekly founder update after approval.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#all-purple-orange' } },
-    ],
-  },
-  {
-    id: 'revenue-watch',
-    title: 'Revenue watch',
-    cadence: 'daily at 9am',
-    destination: 'slack',
-    notify: '#all-purple-orange',
-    description: 'Monitor revenue movement, failed payments, churn risk, and expansion signals before they become surprises.',
-    steps: [
-      { kind: 'query', title: 'Pull Stripe revenue pulse', objective: 'Check revenue, failed payments, churn events, and upgrades.', inputs: { source: 'stripe', query_type: 'revenue_summary' } },
-      { kind: 'analyze', title: 'Analyze revenue risk', objective: 'Identify what changed, what matters, and where founder attention is needed.' },
-      { kind: 'summarize', title: 'Create revenue brief', objective: 'Write a short risk/opportunity brief with next actions.' },
-      { kind: 'deliver', title: 'Send revenue watch', objective: 'Send the reviewed revenue watch to the founder channel.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#all-purple-orange' } },
-    ],
-  },
-  {
-    id: 'competitor-monitor',
-    title: 'Competitor monitor',
-    cadence: 'every monday at 8am',
-    destination: 'slack',
-    notify: '#all-purple-orange',
-    description: 'Track pricing, launches, positioning changes, and messaging shifts across key competitors.',
-    steps: [
-      { kind: 'search', title: 'Search competitor moves', objective: 'Find pricing, launch, and positioning changes from key competitors.', inputs: { query: 'AI agent automation platform competitor pricing launches positioning', num_results: 8 } },
-      { kind: 'analyze', title: 'Extract strategic signals', objective: 'Separate noise from moves that affect positioning, roadmap, or sales.' },
-      { kind: 'summarize', title: 'Draft competitor memo', objective: 'Create a concise founder memo with implications and recommended action.' },
-      { kind: 'deliver', title: 'Deliver competitor memo', objective: 'Send the reviewed competitor memo after approval.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#all-purple-orange' } },
-    ],
-  },
-  {
-    id: 'customer-risk-digest',
-    title: 'Customer risk digest',
-    cadence: 'daily at 8am',
-    destination: 'slack',
-    notify: '#all-purple-orange',
-    description: 'Watch customer signals, product friction, unanswered threads, and usage changes that could affect retention.',
-    steps: [
-      { kind: 'query', title: 'Check product usage', objective: 'Pull usage, activation, and retention signals.', inputs: { source: 'posthog', query_type: 'active_users' } },
-      { kind: 'query', title: 'Review open customer issues', objective: 'Find customer-facing bugs, stale tickets, and blocked support work.', inputs: { source: 'github', query_type: 'open_issues' } },
-      { kind: 'analyze', title: 'Score customer risk', objective: 'Identify the accounts or themes that need attention today.' },
-      { kind: 'summarize', title: 'Draft customer risk digest', objective: 'Write a practical digest with owners and recommended follow-up.' },
-    ],
-  },
-  {
-    id: 'investor-follow-up',
-    title: 'Investor follow-up queue',
-    cadence: 'daily at 4pm',
-    destination: 'email',
-    notify: '',
-    description: 'Collect investor commitments, open replies, meeting notes, and follow-up actions into a founder-ready queue.',
-    steps: [
-      { kind: 'query', title: 'Review email commitments', objective: 'Find investor follow-ups, unanswered threads, and promised materials.', inputs: { source: 'email', query_type: 'commitments' } },
-      { kind: 'query', title: 'Review calendar commitments', objective: 'Find upcoming investor meetings and relationship deadlines.', inputs: { source: 'calendar', query_type: 'weekly_commitments' } },
-      { kind: 'summarize', title: 'Draft follow-up queue', objective: 'Turn commitments into a prioritized queue with next messages to send.' },
-    ],
   },
 ];
 
@@ -2571,7 +2492,7 @@ export default function Dashboard() {
   }, []);
 
   const applyFounderWorkflowTemplate = useCallback((templateId: string) => {
-    const template = FOUNDER_WORKFLOW_TEMPLATES.find((item) => item.id === templateId);
+    const template = getWorkflowTemplateById(templateId);
     if (!template) return;
 
     setAutomationEditorSection('workflow');
@@ -3836,7 +3757,12 @@ export default function Dashboard() {
   const renderWorkspaceMain = () => {
     if (workspaceArea === 'home') {
       if (activeWorkspaceTab === 'activity') {
-        return workspaceSurface(renderCommandDashboard());
+        return workspaceSurface(
+          <>
+            {renderCommandDashboard()}
+            <WorkflowTemplateGallery templates={WORKFLOW_TEMPLATES} onUse={applyFounderWorkflowTemplate} />
+          </>
+        );
       }
       return renderChatSurface();
     }
@@ -5596,7 +5522,7 @@ export default function Dashboard() {
                       <Layers3 className="h-4 w-4 flex-shrink-0 text-cyan-200/80" />
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {FOUNDER_WORKFLOW_TEMPLATES.map((template) => (
+                      {WORKFLOW_TEMPLATES.map((template) => (
                         <button
                           key={template.id}
                           type="button"
