@@ -1,0 +1,202 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+  approveAutomationReview,
+  buildAutomationPreflightReport,
+  classifyAutomationRunOutcome,
+  requestAutomationChanges,
+  validateAutomationDeliveryDraft,
+} from '../src/platform/automationLifecycle';
+import type { TaskRecord, TaskRunRecord } from '../src/platform/types';
+
+const task = {
+  id: 'task_weekly',
+  workspaceId: 'purpleorangehq',
+  title: 'Weekly founder update',
+  description: 'Create a source-linked weekly operating brief.',
+  kind: 'automation',
+  status: 'waiting_review',
+  priority: 'medium',
+  delegationState: 'review',
+  createdAt: '2026-06-18T14:00:00.000Z',
+  updatedAt: '2026-06-18T14:04:00.000Z',
+  metadata: {
+    automationId: 'auto_weekly_founder_update',
+    latestSummary: 'Weekly update is ready for review.',
+    latestArtifacts: [
+      {
+        kind: 'review_gate',
+        title: 'Ready for review: Weekly founder update',
+        payload: {
+          markdown: '## Weekly founder update\nRevenue is steady. One blocker needs ownership.',
+          deliveryTarget: '#founders',
+          approvalRequired: true,
+        },
+      },
+    ],
+    latestStepExecutions: [
+      {
+        stepId: 'step_deliver',
+        kind: 'deliver',
+        title: 'Deliver to Slack',
+        assignedRole: 'messenger',
+        status: 'succeeded',
+        output: {
+          status: 'waiting_review',
+          to: '#founders',
+          channel: 'slack',
+        },
+        artifactKind: 'review_gate',
+      },
+    ],
+    reviewRequired: true,
+  },
+} satisfies TaskRecord;
+
+const run = {
+  id: 'run_weekly',
+  workspaceId: 'purpleorangehq',
+  taskId: 'task_weekly',
+  agentRole: 'analyst',
+  modelTier: 'default',
+  status: 'succeeded',
+  estimatedCredits: 84,
+  actualCredits: 62,
+  startedAt: '2026-06-18T14:00:00.000Z',
+  finishedAt: '2026-06-18T14:04:00.000Z',
+  metadata: {
+    automationId: 'auto_weekly_founder_update',
+    summary: 'Weekly update is ready for review.',
+    artifacts: task.metadata.latestArtifacts,
+    stepExecutions: task.metadata.latestStepExecutions,
+    reviewRequired: true,
+  },
+} satisfies TaskRunRecord;
+
+test('approveAutomationReview delivers waiting review content and records a run receipt', async () => {
+  const result = await approveAutomationReview({
+    task,
+    taskRun: run,
+    reviewer: 'max@purpleorange.io',
+    now: () => '2026-06-18T15:00:00.000Z',
+    send: async ({ to, body, subject }: { to: string; body: string; subject?: string }) => ({
+      success: true,
+      channel: 'slack',
+      to,
+      body,
+      subject,
+      status: 'delivered',
+      slack_ts: '1718722800.000000',
+    }),
+  });
+
+  assert.equal(result.taskPatch.status, 'completed');
+  assert.equal(result.taskPatch.delegationState, 'completed');
+  assert.equal(result.runPatch.metadata?.reviewRequired, false);
+  assert.equal(result.receipt.status, 'delivered');
+  assert.equal(result.receipt.reviewer, 'max@purpleorange.io');
+  assert.equal(result.receipt.deliveryTarget, '#founders');
+  assert.equal(result.receipt.artifactTitle, 'Ready for review: Weekly founder update');
+  assert.match(String(result.delivery.body), /Revenue is steady/);
+});
+
+test('requestAutomationChanges keeps delivery held and records reviewer instructions', () => {
+  const result = requestAutomationChanges({
+    task,
+    taskRun: run,
+    reviewer: 'max@purpleorange.io',
+    note: 'Tighten the revenue claim and add GitHub evidence.',
+    now: () => '2026-06-18T15:05:00.000Z',
+  });
+
+  assert.equal(result.taskPatch.status, 'blocked');
+  assert.equal(result.taskPatch.delegationState, 'review');
+  assert.equal(result.runPatch.metadata?.reviewRequired, true);
+  assert.equal(result.reviewRequest.status, 'changes_requested');
+  assert.match(String(result.reviewRequest.note), /GitHub evidence/);
+});
+
+test('buildAutomationPreflightReport flags missing credentials before a mission runs', () => {
+  const report = buildAutomationPreflightReport({
+    automation: {
+      id: 'auto_weekly_founder_update',
+      name: 'Weekly founder update',
+      schedule: 'every monday at 9am',
+      actions: [],
+      notify: '#founders',
+      steps: [
+        {
+          id: 'step_market',
+          kind: 'search',
+          objective: 'Scan market signals.',
+        },
+        {
+          id: 'step_summary',
+          kind: 'summarize',
+          objective: 'Draft founder brief.',
+        },
+        {
+          id: 'step_deliver',
+          kind: 'deliver',
+          objective: 'Deliver to Slack.',
+          deliveryTarget: { channel: 'slack', target: '#founders' },
+        },
+      ],
+    },
+    env: {},
+  });
+
+  assert.equal(report.ready, false);
+  assert.deepEqual(
+    report.blockers.map((item: { key: string }) => item.key),
+    ['TAVILY_API_KEY', 'ANTHROPIC_API_KEY or OPENROUTER_API_KEY', 'SLACK_BOT_TOKEN'],
+  );
+  assert.match(report.summary, /3 blockers/);
+});
+
+test('validateAutomationDeliveryDraft allows Slack names at save time but validates email shape', () => {
+  const draft = validateAutomationDeliveryDraft({
+    notify: '#all-purple-orange',
+    steps: [
+      {
+        id: 'deliver',
+        kind: 'deliver',
+        objective: 'Send the reviewed output.',
+        deliveryTarget: { channel: 'slack', target: '#private-founders' },
+      },
+    ],
+  });
+
+  assert.equal(draft.ok, true);
+  assert.equal(draft.warnings.length, 2);
+  assert.doesNotThrow(() => validateAutomationDeliveryDraft({ notify: 'max@purpleorange.io', steps: [] }));
+  assert.throws(
+    () => validateAutomationDeliveryDraft({ notify: 'not-an-email', steps: [{ id: 'deliver', kind: 'deliver', objective: 'Email result.', deliveryTarget: { channel: 'email', target: 'not-an-email' } }] }),
+    /valid email/i,
+  );
+});
+
+test('classifyAutomationRunOutcome blocks failed delivery but preserves review gates', () => {
+  const reviewOutcome = classifyAutomationRunOutcome({
+    deliveryWaitingForReview: true,
+    stepExecutions: [
+      { kind: 'deliver', title: 'Deliver', status: 'succeeded' },
+    ],
+  });
+
+  assert.equal(reviewOutcome.taskStatus, 'waiting_review');
+  assert.equal(reviewOutcome.runStatus, 'succeeded');
+  assert.equal(reviewOutcome.schedulerOk, true);
+
+  const failedDeliveryOutcome = classifyAutomationRunOutcome({
+    deliveryError: 'Slack target "#all-purple-orange" is not visible to Violema.',
+    stepExecutions: [
+      { kind: 'deliver', title: 'Deliver', status: 'failed' },
+    ],
+  });
+
+  assert.equal(failedDeliveryOutcome.taskStatus, 'blocked');
+  assert.equal(failedDeliveryOutcome.runStatus, 'failed');
+  assert.equal(failedDeliveryOutcome.schedulerOk, false);
+  assert.match(String(failedDeliveryOutcome.reviewSummary), /Slack target/);
+});

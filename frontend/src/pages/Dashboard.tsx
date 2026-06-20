@@ -26,6 +26,7 @@ import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw.js';
 import ChevronUp from 'lucide-react/dist/esm/icons/chevron-up.js';
 import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down.js';
 import Bot from 'lucide-react/dist/esm/icons/bot.js';
+import Layers3 from 'lucide-react/dist/esm/icons/layers-3.js';
 import ChatInterface from '../components/ChatInterface';
 import { MissionWorkspacePanel } from '../features/missions/MissionWorkspacePanel';
 import { MissionOverview } from '../features/missions/MissionOverview';
@@ -351,6 +352,87 @@ const ACTION_TEMPLATES: Array<{ label: string; block: WorkflowBlockDraft }> = [
   },
 ];
 
+const FOUNDER_WORKFLOW_TEMPLATES: Array<{
+  id: string;
+  title: string;
+  cadence: string;
+  destination: 'slack' | 'email' | 'none';
+  notify: string;
+  description: string;
+  steps: Array<Omit<WorkflowBlockDraft, 'id'>>;
+}> = [
+  {
+    id: 'weekly-founder-brief',
+    title: 'Weekly founder brief',
+    cadence: 'every monday at 9am',
+    destination: 'slack',
+    notify: '#all-purple-orange',
+    description: 'Roll up revenue, delivery, customers, calendar, email, and market signals into a reviewed founder update.',
+    steps: [
+      { kind: 'query', title: 'Check Stripe revenue', objective: 'Pull MRR movement, failed payments, churn, expansion, and customer revenue signals from Stripe.', inputs: { source: 'stripe', query_type: 'revenue_summary' } },
+      { kind: 'query', title: 'Scan GitHub delivery', objective: 'Pull merged pull requests, blocked issues, stale reviews, and release risk from GitHub.', inputs: { source: 'github', query_type: 'delivery_risk' } },
+      { kind: 'search', title: 'Scan market signals', objective: 'Research customer, competitor, pricing, platform, and AI automation changes since the last update.', inputs: { query: 'AI automation platform startup competitor pricing product launch founder update', num_results: 6 } },
+      { kind: 'summarize', title: 'Draft founder brief', objective: 'Synthesize a founder-ready brief with signals, risks, decisions needed, and next actions.' },
+      { kind: 'deliver', title: 'Hold for approval and deliver', objective: 'Send the reviewed weekly founder update after approval.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#all-purple-orange' } },
+    ],
+  },
+  {
+    id: 'revenue-watch',
+    title: 'Revenue watch',
+    cadence: 'daily at 9am',
+    destination: 'slack',
+    notify: '#all-purple-orange',
+    description: 'Monitor revenue movement, failed payments, churn risk, and expansion signals before they become surprises.',
+    steps: [
+      { kind: 'query', title: 'Pull Stripe revenue pulse', objective: 'Check revenue, failed payments, churn events, and upgrades.', inputs: { source: 'stripe', query_type: 'revenue_summary' } },
+      { kind: 'analyze', title: 'Analyze revenue risk', objective: 'Identify what changed, what matters, and where founder attention is needed.' },
+      { kind: 'summarize', title: 'Create revenue brief', objective: 'Write a short risk/opportunity brief with next actions.' },
+      { kind: 'deliver', title: 'Send revenue watch', objective: 'Send the reviewed revenue watch to the founder channel.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#all-purple-orange' } },
+    ],
+  },
+  {
+    id: 'competitor-monitor',
+    title: 'Competitor monitor',
+    cadence: 'every monday at 8am',
+    destination: 'slack',
+    notify: '#all-purple-orange',
+    description: 'Track pricing, launches, positioning changes, and messaging shifts across key competitors.',
+    steps: [
+      { kind: 'search', title: 'Search competitor moves', objective: 'Find pricing, launch, and positioning changes from key competitors.', inputs: { query: 'AI agent automation platform competitor pricing launches positioning', num_results: 8 } },
+      { kind: 'analyze', title: 'Extract strategic signals', objective: 'Separate noise from moves that affect positioning, roadmap, or sales.' },
+      { kind: 'summarize', title: 'Draft competitor memo', objective: 'Create a concise founder memo with implications and recommended action.' },
+      { kind: 'deliver', title: 'Deliver competitor memo', objective: 'Send the reviewed competitor memo after approval.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#all-purple-orange' } },
+    ],
+  },
+  {
+    id: 'customer-risk-digest',
+    title: 'Customer risk digest',
+    cadence: 'daily at 8am',
+    destination: 'slack',
+    notify: '#all-purple-orange',
+    description: 'Watch customer signals, product friction, unanswered threads, and usage changes that could affect retention.',
+    steps: [
+      { kind: 'query', title: 'Check product usage', objective: 'Pull usage, activation, and retention signals.', inputs: { source: 'posthog', query_type: 'active_users' } },
+      { kind: 'query', title: 'Review open customer issues', objective: 'Find customer-facing bugs, stale tickets, and blocked support work.', inputs: { source: 'github', query_type: 'open_issues' } },
+      { kind: 'analyze', title: 'Score customer risk', objective: 'Identify the accounts or themes that need attention today.' },
+      { kind: 'summarize', title: 'Draft customer risk digest', objective: 'Write a practical digest with owners and recommended follow-up.' },
+    ],
+  },
+  {
+    id: 'investor-follow-up',
+    title: 'Investor follow-up queue',
+    cadence: 'daily at 4pm',
+    destination: 'email',
+    notify: '',
+    description: 'Collect investor commitments, open replies, meeting notes, and follow-up actions into a founder-ready queue.',
+    steps: [
+      { kind: 'query', title: 'Review email commitments', objective: 'Find investor follow-ups, unanswered threads, and promised materials.', inputs: { source: 'email', query_type: 'commitments' } },
+      { kind: 'query', title: 'Review calendar commitments', objective: 'Find upcoming investor meetings and relationship deadlines.', inputs: { source: 'calendar', query_type: 'weekly_commitments' } },
+      { kind: 'summarize', title: 'Draft follow-up queue', objective: 'Turn commitments into a prioritized queue with next messages to send.' },
+    ],
+  },
+];
+
 const DEFAULT_EXECUTION_POLICY: AutomationExecutionPolicyDraft = {
   mode: 'recommended',
   optimizationGoal: 'balanced',
@@ -426,6 +508,21 @@ interface AutomationApiRecord {
   last_run_status?: 'succeeded' | 'failed';
   next_run_at?: string;
   created_at: string;
+  preflight?: AutomationPreflightReport;
+}
+
+interface AutomationPreflightBlocker {
+  key: string;
+  label: string;
+  detail: string;
+  severity: 'blocking' | 'warning';
+}
+
+interface AutomationPreflightReport {
+  ready: boolean;
+  summary: string;
+  blockers: AutomationPreflightBlocker[];
+  warnings: AutomationPreflightBlocker[];
 }
 
 interface DashboardTaskItem {
@@ -464,6 +561,7 @@ interface DashboardTaskItem {
   failureReason?: string;
   actualCredits?: number;
   estimatedCredits?: number;
+  preflight?: AutomationPreflightReport;
 }
 
 interface DashboardTaskArtifact {
@@ -1802,7 +1900,7 @@ export default function Dashboard() {
   const [taskPanelLoaded, setTaskPanelLoaded] = useState(false);
   const [taskPanelRefreshing, setTaskPanelRefreshing] = useState(false);
   const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
-  const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | 'delete' | 'grant' | null>(null);
+  const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | 'delete' | 'grant' | 'review-approve' | 'review-change' | 'review-rerun' | null>(null);
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
   const [automationEditorError, setAutomationEditorError] = useState<string | null>(null);
   const [automationEditorSection, setAutomationEditorSection] = useState<AutomationEditorSection>('setup');
@@ -2114,6 +2212,7 @@ export default function Dashboard() {
           taskUpdatedAt: task?.updatedAt,
           actualCredits: latestRun?.actualCredits,
           estimatedCredits: latestRun?.estimatedCredits,
+          preflight: automation.preflight,
         };
       });
 
@@ -2471,6 +2570,45 @@ export default function Dashboard() {
     });
   }, []);
 
+  const applyFounderWorkflowTemplate = useCallback((templateId: string) => {
+    const template = FOUNDER_WORKFLOW_TEMPLATES.find((item) => item.id === templateId);
+    if (!template) return;
+
+    setAutomationEditorSection('workflow');
+    setAutomationSetupOptionalOpen(false);
+    setAutomationEditorError(null);
+    setAutomationEditor((current) => {
+      const timezone = current?.timezone || getLocalTimeZone();
+      const steps = template.steps.map((step, index) =>
+        createWorkflowBlock(step.kind, {
+          ...step,
+          id: `${template.id}-step-${index + 1}`,
+          deliveryTarget: step.kind === 'deliver'
+            ? step.deliveryTarget || (template.notify
+              ? { channel: template.destination === 'email' ? 'email' : 'slack', target: template.notify }
+              : null)
+            : step.deliveryTarget || null,
+        })
+      );
+
+      return {
+        mode: 'create',
+        id: current?.id || `draft-${Date.now()}`,
+        name: template.title,
+        schedule: template.cadence,
+        timezone,
+        description: template.description,
+        notify: template.notify,
+        condition: current?.condition || '',
+        authoringMode: 'guided',
+        workflowPrompt: buildWorkflowPromptFromBlocks(steps),
+        steps,
+        executionPolicy: current?.executionPolicy || { ...DEFAULT_EXECUTION_POLICY },
+        destinationType: template.destination,
+      };
+    });
+  }, []);
+
   const closeAutomationEditor = useCallback(() => {
     setAutomationEditor(null);
     setAutomationEditorError(null);
@@ -2717,6 +2855,10 @@ export default function Dashboard() {
     () => buildMissionWorkspaceView(selectedMissionSource),
     [selectedMissionSource],
   );
+  const selectedReviewTarget = useMemo(() => ({
+    automationId: selectedMission.automationId || selectedTask?.automationId,
+    taskRunId: selectedMission.taskRunId || selectedTask?.taskRunId,
+  }), [selectedMission.automationId, selectedMission.taskRunId, selectedTask?.automationId, selectedTask?.taskRunId]);
   const activeMissionSelection = useMemo<MissionSelection>(() => {
     if (isMissionSelectionAvailable(selectedMission, missionSelection)) {
       return missionSelection as MissionSelection;
@@ -2734,6 +2876,94 @@ export default function Dashboard() {
     ));
     setSelectedCalendarItemId(null);
   }, [selectedMission.id]);
+  const reviewerLabel = authSession?.email || authSession?.name || 'Violema reviewer';
+  const handleReviewApprove = useCallback(async () => {
+    if (!selectedReviewTarget.automationId || !selectedReviewTarget.taskRunId) {
+      showNotice('error', 'No reviewable run is selected.');
+      return;
+    }
+    setActionBusy('review-approve');
+    try {
+      const response = await fetch(
+        `/api/automations/${selectedReviewTarget.automationId}/reviews/${selectedReviewTarget.taskRunId}/approve`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Workspace-Id': workspace.workspaceId,
+            'X-Workspace-Name': workspace.workspaceName,
+          },
+          body: JSON.stringify({ reviewer: reviewerLabel }),
+        },
+      );
+      if (!response.ok) throw new Error(await readApiError(response, 'Could not approve delivery'));
+      await refreshAutomations();
+      showNotice('success', 'Approved and delivered.');
+    } catch (error) {
+      await refreshAutomations();
+      showNotice('error', error instanceof Error ? error.message : 'Could not approve delivery');
+    } finally {
+      setActionBusy(null);
+    }
+  }, [refreshAutomations, reviewerLabel, selectedReviewTarget.automationId, selectedReviewTarget.taskRunId, showNotice, workspace.workspaceId, workspace.workspaceName]);
+  const handleReviewRequestChanges = useCallback(async () => {
+    if (!selectedReviewTarget.automationId || !selectedReviewTarget.taskRunId) {
+      showNotice('error', 'No reviewable run is selected.');
+      return;
+    }
+    const note = window.prompt('What should Violema change before delivery?');
+    if (!note?.trim()) return;
+    setActionBusy('review-change');
+    try {
+      const response = await fetch(
+        `/api/automations/${selectedReviewTarget.automationId}/reviews/${selectedReviewTarget.taskRunId}/request-changes`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Workspace-Id': workspace.workspaceId,
+            'X-Workspace-Name': workspace.workspaceName,
+          },
+          body: JSON.stringify({ reviewer: reviewerLabel, note }),
+        },
+      );
+      if (!response.ok) throw new Error(await readApiError(response, 'Could not request changes'));
+      await refreshAutomations();
+      showNotice('success', 'Change request saved.');
+    } catch (error) {
+      showNotice('error', error instanceof Error ? error.message : 'Could not request changes');
+    } finally {
+      setActionBusy(null);
+    }
+  }, [refreshAutomations, reviewerLabel, selectedReviewTarget.automationId, selectedReviewTarget.taskRunId, showNotice, workspace.workspaceId, workspace.workspaceName]);
+  const handleReviewRerun = useCallback(async () => {
+    if (!selectedReviewTarget.automationId || !selectedReviewTarget.taskRunId) {
+      showNotice('error', 'No reviewable run is selected.');
+      return;
+    }
+    setActionBusy('review-rerun');
+    try {
+      const response = await fetch(
+        `/api/automations/${selectedReviewTarget.automationId}/reviews/${selectedReviewTarget.taskRunId}/rerun`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Workspace-Id': workspace.workspaceId,
+            'X-Workspace-Name': workspace.workspaceName,
+          },
+          body: JSON.stringify({ reviewer: reviewerLabel }),
+        },
+      );
+      if (!response.ok) throw new Error(await readApiError(response, 'Could not rerun mission'));
+      await refreshAutomations();
+      showNotice('success', 'Fresh run requested.');
+    } catch (error) {
+      showNotice('error', error instanceof Error ? error.message : 'Could not rerun mission');
+    } finally {
+      setActionBusy(null);
+    }
+  }, [refreshAutomations, reviewerLabel, selectedReviewTarget.automationId, selectedReviewTarget.taskRunId, showNotice, workspace.workspaceId, workspace.workspaceName]);
   const selectedArtifactActionKind: MissionActionKind =
     selectedMission.status === 'waiting_review' ? 'artifact_reviewed' : 'artifact_opened';
   const selectedArtifactTargetId = useMemo(() => {
@@ -3201,6 +3431,25 @@ export default function Dashboard() {
     />
   );
 
+  const renderMissionReviewsView = () => (
+    <MissionReviews
+      mission={selectedMission}
+      preflight={selectedTask?.preflight}
+      busyAction={
+        actionBusy === 'review-approve'
+          ? 'approve'
+          : actionBusy === 'review-change'
+            ? 'changes'
+            : actionBusy === 'review-rerun'
+              ? 'rerun'
+              : null
+      }
+      onApproveDelivery={handleReviewApprove}
+      onRequestChanges={handleReviewRequestChanges}
+      onRerunFailedStep={handleReviewRerun}
+    />
+  );
+
   const renderMissionWorkspaceContent = () => {
     if (!selectedTask) {
       if (missionWorkspaceTab === 'artifact') {
@@ -3279,7 +3528,7 @@ export default function Dashboard() {
     if (missionWorkspaceTab === 'reviews') {
       return (
         <div className="space-y-3">
-          <MissionReviews mission={selectedMission} />
+          {renderMissionReviewsView()}
           {scheduleControlsFooter}
         </div>
       );
@@ -3617,7 +3866,7 @@ export default function Dashboard() {
         return workspaceSurface(
           <>
             {workspaceHeaderCard}
-            <MissionReviews mission={selectedMission} />
+            {renderMissionReviewsView()}
             {openScheduleControls}
           </>
         );
@@ -3775,7 +4024,7 @@ export default function Dashboard() {
       return workspaceSurface(
         <>
           {workspaceHeaderCard}
-          <MissionReviews mission={selectedMission} />
+          {renderMissionReviewsView()}
           {openScheduleControls}
         </>
       );
@@ -5336,6 +5585,37 @@ export default function Dashboard() {
 
               {automationEditorSection === 'setup' && (
                 <>
+                  <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/6 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300/90">Founder templates</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-300">
+                          Start from a proven operating loop, then edit the cadence, destination, and steps.
+                        </p>
+                      </div>
+                      <Layers3 className="h-4 w-4 flex-shrink-0 text-cyan-200/80" />
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {FOUNDER_WORKFLOW_TEMPLATES.map((template) => (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => applyFounderWorkflowTemplate(template.id)}
+                          className="rounded-xl border border-white/10 bg-navy-950/45 p-3 text-left transition-colors hover:border-cyan-400/35 hover:bg-cyan-500/10"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-white">{template.title}</p>
+                            <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">
+                              {template.steps.length} steps
+                            </span>
+                          </div>
+                          <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-slate-400">{template.description}</p>
+                          <p className="mt-2 text-[10px] font-medium text-cyan-200/80">{template.cadence}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="rounded-2xl border border-violet-500/15 bg-violet-500/6 p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-300/90">Required setup</p>
                     <p className="mt-1 text-sm leading-6 text-slate-200">

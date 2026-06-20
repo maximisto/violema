@@ -134,6 +134,9 @@ export interface MissionLessonView {
 
 export interface MissionWorkspaceView {
   id: string;
+  taskId?: string;
+  taskRunId?: string;
+  automationId?: string;
   title: string;
   description: string;
   status: MissionStatus;

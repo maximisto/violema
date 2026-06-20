@@ -28,12 +28,20 @@ import {
 import { registerAdminRoutes } from './adminRoutes';
 import { isPublicBetaApiPath } from './betaAccess';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
-import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } from './integrations';
+import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
 import { executeComposioAction, getComposioConnectionUrl, isComposioEnabled, isComposioToolName, listConnectedApps } from './composioBridge';
 import {
   buildAutomationChartArtifactFromQueryPayload,
   selectReviewGateVisualArtifacts,
 } from './automationArtifacts';
+import {
+  approveAutomationReview,
+  buildAutomationPreflightReport,
+  classifyAutomationRunOutcome,
+  requestAutomationChanges,
+  validateAutomationDeliveryDraft,
+} from './platform/automationLifecycle';
+import { extractToolArtifactsFromResult, type StoredToolArtifact } from './platform/toolArtifacts';
 import {
   createAutomation,
   deleteAutomation,
@@ -1946,9 +1954,13 @@ async function executeConversationTask(input: {
   const noop = () => {};
   const sendEvent = input.sendEvent || noop;
   const textParts: string[] = [];
+  const toolArtifacts: StoredToolArtifact[] = [];
   const collectEvent = (data: Record<string, unknown>) => {
     if (data.type === 'text' && typeof data.content === 'string' && data.content.trim()) {
       textParts.push(data.content);
+    }
+    if (data.type === 'tool_result' && typeof data.tool_name === 'string') {
+      toolArtifacts.push(...extractToolArtifactsFromResult(data.tool_name, data.result));
     }
     sendEvent(data);
   };
@@ -2065,9 +2077,21 @@ async function executeConversationTask(input: {
   finalizeTaskRun(taskRun.id, {
     status: 'succeeded',
     actualCredits: actualCost.estimatedCredits,
-    metadata: { toolCallsExecuted },
+    metadata: {
+      toolCallsExecuted,
+      summary: textParts.join('').trim() || undefined,
+      artifacts: toolArtifacts,
+    },
   });
-  updateTask(task.id, { status: 'completed', delegationState: 'completed' });
+  updateTask(task.id, {
+    status: 'completed',
+    delegationState: 'completed',
+    metadata: {
+      ...(task.metadata || {}),
+      latestSummary: textParts.join('').trim() || undefined,
+      latestArtifacts: toolArtifacts,
+    },
+  });
   addLedgerEntry({
     workspaceId,
     source: 'task_run',
@@ -3806,6 +3830,11 @@ async function runAutomation(automation: {
       automation.condition ? `Condition note: ${automation.condition}` : null,
     ].filter(Boolean).join('\n\n');
     const summary = execution.summaryText || fallbackSummary;
+    const outcome = classifyAutomationRunOutcome({
+      deliveryWaitingForReview,
+      deliveryError: execution.deliveryError,
+      stepExecutions: execution.stepExecutions,
+    });
 
     const inferredActionDeliveryTarget = executionPlan.steps.find((step) => step.kind === 'deliver')?.deliveryTarget?.target;
     const deliveryTarget = automation.notify?.trim() || inferredActionDeliveryTarget || null;
@@ -3818,11 +3847,13 @@ async function runAutomation(automation: {
     const actualCredits = estimateSuccessfulAutomationCredits(execution.stepExecutions);
 
     finalizeTaskRun(taskRun.id, {
-      status: 'succeeded',
+      status: outcome.runStatus,
       actualCredits,
       metadata: {
         automationId: automation.id,
-        summary,
+        summary: outcome.reviewSummary && outcome.runStatus === 'failed'
+          ? `${summary}\n\n${outcome.reviewSummary}`
+          : summary,
         modelSource: runModelSource,
         modelSourceLabel: getModelSourceLabel(runModelSource),
         artifacts: execution.artifacts,
@@ -3854,12 +3885,13 @@ async function runAutomation(automation: {
         workerTopology: applyWorkerRuntimeActivity(execution.plan.topology, execution.stepExecutions),
         delivery: execution.delivery,
         deliveryError: execution.deliveryError,
-        reviewRequired: deliveryWaitingForReview,
+        reviewRequired: outcome.reviewRequired,
+        runOutcome: outcome,
       },
     });
     updateTask(task.id, {
-      status: deliveryWaitingForReview ? 'waiting_review' : 'completed',
-      delegationState: deliveryWaitingForReview ? 'review' : 'completed',
+      status: outcome.taskStatus,
+      delegationState: outcome.delegationState,
       metadata: {
         automationId: automation.id,
         notify: deliveryTarget || null,
@@ -3893,7 +3925,8 @@ async function runAutomation(automation: {
         },
         workerTopology: applyWorkerRuntimeActivity(execution.plan.topology, execution.stepExecutions),
         deliveryError: execution.deliveryError,
-        reviewRequired: deliveryWaitingForReview,
+        reviewRequired: outcome.reviewRequired,
+        runOutcome: outcome,
       },
     });
     addLedgerEntry({
@@ -3916,15 +3949,16 @@ async function runAutomation(automation: {
           actualCredits: step.actualCredits || 0,
         })),
         deliveryError: execution.deliveryError,
-        reviewRequired: deliveryWaitingForReview,
+        reviewRequired: outcome.reviewRequired,
+        runOutcome: outcome,
       },
     });
-    const completedSnapshot = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, 'completed');
+    const completedSnapshot = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, outcome.runStatus === 'failed' ? 'failed' : 'completed');
     if (completedSnapshot) {
       broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, completedSnapshot);
     }
     return {
-      ok: true as const,
+      ok: outcome.schedulerOk,
       deliveryError: execution.deliveryError || undefined,
     };
   } catch (error) {
@@ -5043,6 +5077,55 @@ app.post('/api/billing/referrals/:id/reward', (req: Request, res: Response) => {
   });
 });
 
+function readBodyString(value: unknown, fallback = '') {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function findAutomationReviewContext(workspaceId: string, automationId: string, runId: string) {
+  const automation = getAutomationById(automationId);
+  if (!automation) return { error: 'Automation not found' as const };
+
+  const taskRun = listTaskRuns(workspaceId).find((run) =>
+    run.id === runId &&
+    typeof run.metadata?.automationId === 'string' &&
+    run.metadata.automationId === automationId
+  );
+  if (!taskRun) return { error: 'Automation run not found' as const };
+
+  const task = listTasks(workspaceId).find((item) => item.id === taskRun.taskId);
+  if (!task) return { error: 'Mission task not found' as const };
+
+  return { automation, task, taskRun };
+}
+
+function applyReviewTaskPatch(taskId: string, currentMetadata: Record<string, unknown> | undefined, patch: {
+  status: 'completed' | 'blocked';
+  delegationState: 'completed' | 'review';
+  metadata?: Record<string, unknown>;
+}) {
+  return updateTask(taskId, {
+    ...patch,
+    metadata: {
+      ...(currentMetadata || {}),
+      ...(patch.metadata || {}),
+    },
+  });
+}
+
+function broadcastAutomationReviewUpdate(workspaceId: string, automationId: string, taskRunId: string, type: string) {
+  const snapshotEvent = buildTaskRunSnapshotEvent(workspaceId, taskRunId, 'progress');
+  if (snapshotEvent) {
+    broadcastTaskPanelEvent(workspaceId, snapshotEvent);
+    return;
+  }
+
+  broadcastTaskPanelEvent(workspaceId, {
+    type,
+    automationId,
+    taskRunId,
+  });
+}
+
 app.get('/api/missions', (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const items = buildMissionRecords({
@@ -5056,7 +5139,25 @@ app.get('/api/missions', (req: Request, res: Response) => {
 });
 
 app.get('/api/automations', (_req: Request, res: Response) => {
-  res.json({ items: listAutomations() });
+  res.json({
+    items: listAutomations().map((automation) => ({
+      ...automation,
+      preflight: buildAutomationPreflightReport({ automation }),
+    })),
+  });
+});
+
+app.get('/api/automations/:id/preflight', (req: Request, res: Response) => {
+  const automation = getAutomationById(req.params.id);
+  if (!automation) {
+    res.status(404).json({ error: 'Automation not found' });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    report: buildAutomationPreflightReport({ automation }),
+  });
 });
 
 app.post('/api/automations', async (req: Request, res: Response) => {
@@ -5088,9 +5189,10 @@ app.post('/api/automations', async (req: Request, res: Response) => {
   }
 
   try {
-    if (typeof body.notify === 'string' && body.notify.trim()) {
-      await validateMessageTarget({ to: body.notify.trim() });
-    }
+    const deliveryDraft = validateAutomationDeliveryDraft({
+      notify: typeof body.notify === 'string' ? body.notify.trim() : undefined,
+      steps: normalizedSteps,
+    });
     const record = createAutomation({
       name: body.name.trim(),
       description: typeof body.description === 'string' ? body.description.trim() || undefined : undefined,
@@ -5110,7 +5212,7 @@ app.post('/api/automations', async (req: Request, res: Response) => {
       type: 'automation_created',
       automationId: record.id,
     });
-    res.status(201).json({ ok: true, item: record });
+    res.status(201).json({ ok: true, item: record, warnings: deliveryDraft.warnings });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Could not create automation' });
   }
@@ -5128,6 +5230,82 @@ app.post('/api/automations/:id/run', (req: Request, res: Response) => {
     automationId: record.id,
   });
   res.json({ ok: true, item: record, message: `Triggered ${record.name}` });
+});
+
+app.post('/api/automations/:id/reviews/:runId/approve', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const context = findAutomationReviewContext(workspaceId, req.params.id, req.params.runId);
+  if ('error' in context) {
+    res.status(context.error === 'Automation not found' ? 404 : 400).json({ error: context.error });
+    return;
+  }
+
+  try {
+    const result = await approveAutomationReview({
+      task: context.task,
+      taskRun: context.taskRun,
+      reviewer: readBodyString(req.body?.reviewer, 'Violema reviewer'),
+      send: ({ to, body, subject, channel }) => sendMessage({ to, body, subject, channel }),
+    });
+    const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
+    const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
+    broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_approved');
+    res.json({ ok: true, receipt: result.receipt, delivery: result.delivery, task, taskRun });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not approve delivery' });
+  }
+});
+
+app.post('/api/automations/:id/reviews/:runId/request-changes', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const context = findAutomationReviewContext(workspaceId, req.params.id, req.params.runId);
+  if ('error' in context) {
+    res.status(context.error === 'Automation not found' ? 404 : 400).json({ error: context.error });
+    return;
+  }
+
+  try {
+    const result = requestAutomationChanges({
+      task: context.task,
+      taskRun: context.taskRun,
+      reviewer: readBodyString(req.body?.reviewer, 'Violema reviewer'),
+      note: readBodyString(req.body?.note, 'Changes requested before delivery.'),
+    });
+    const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
+    const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
+    broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_changes_requested');
+    res.json({ ok: true, reviewRequest: result.reviewRequest, task, taskRun });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not request changes' });
+  }
+});
+
+app.post('/api/automations/:id/reviews/:runId/rerun', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const context = findAutomationReviewContext(workspaceId, req.params.id, req.params.runId);
+  if ('error' in context) {
+    res.status(context.error === 'Automation not found' ? 404 : 400).json({ error: context.error });
+    return;
+  }
+
+  const reviewer = readBodyString(req.body?.reviewer, 'Violema reviewer');
+  const note = readBodyString(req.body?.note, 'Reviewer requested a fresh run.');
+  updateTask(context.task.id, {
+    status: 'running',
+    delegationState: 'in_progress',
+    metadata: {
+      ...(context.task.metadata || {}),
+      reviewRerun: {
+        reviewer,
+        note,
+        requestedAt: new Date().toISOString(),
+        previousRunId: context.taskRun.id,
+      },
+    },
+  });
+  const record = triggerAutomationNow(req.params.id, runAutomation);
+  broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_rerun_requested');
+  res.json({ ok: true, item: record, message: `Requested a fresh run for ${context.automation.name}` });
 });
 
 app.patch('/api/automations/:id', async (req: Request, res: Response) => {
@@ -5169,9 +5347,10 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
   }
 
   try {
-    if (typeof patch.notify === 'string' && patch.notify.trim()) {
-      await validateMessageTarget({ to: patch.notify });
-    }
+    const deliveryDraft = validateAutomationDeliveryDraft({
+      notify: typeof patch.notify === 'string' ? patch.notify : undefined,
+      steps: Array.isArray(patch.steps) ? patch.steps as PersistedAutomationStep[] : undefined,
+    });
     const updated = updateAutomation(req.params.id, patch, runAutomation);
     if (!updated) {
       res.status(404).json({ error: 'Automation not found' });
@@ -5181,7 +5360,7 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
       type: 'automation_updated',
       automationId: updated.id,
     });
-    res.json({ ok: true, item: updated });
+    res.json({ ok: true, item: updated, warnings: deliveryDraft.warnings });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Could not update automation' });
   }

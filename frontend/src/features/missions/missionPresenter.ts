@@ -834,6 +834,9 @@ export function buildMissionWorkspaceView(task?: MissionSourceTask | null): Miss
 
   return {
     id: String(task?.id ?? 'weekly-founder-brief'),
+    taskId: task?.taskId,
+    taskRunId: task?.taskRunId,
+    automationId: task?.automationId,
     title,
     description: task?.description || (task
       ? 'Collect revenue, product, and team signals into a reviewed founder-ready operating brief.'

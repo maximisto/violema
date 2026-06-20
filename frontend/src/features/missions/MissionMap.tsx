@@ -114,6 +114,82 @@ function StepAnatomyRow({
   );
 }
 
+const topologyStatusClasses: Record<MissionStepView['status'], string> = {
+  planned: 'border-slate-600/30 bg-slate-500/10 text-slate-300',
+  running: 'border-cyan-300/45 bg-cyan-400/15 text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.14)]',
+  waiting_review: 'border-amber-300/45 bg-amber-400/15 text-amber-100',
+  failed: 'border-red-300/45 bg-red-400/15 text-red-100',
+  completed: 'border-green-300/40 bg-green-400/14 text-green-100',
+  paused: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+};
+
+function TopologyNode({
+  step,
+  index,
+  total,
+  agent,
+  integration,
+}: {
+  step: MissionStepView;
+  index: number;
+  total: number;
+  agent?: MissionAgentView;
+  integration?: MissionIntegrationView;
+}) {
+  return (
+    <div className="relative min-w-[10rem] flex-1">
+      {index < total - 1 ? (
+        <span className="absolute left-[calc(50%+2.25rem)] top-7 hidden h-px w-[calc(100%-4.5rem)] bg-gradient-to-r from-violet-400/55 via-cyan-300/35 to-transparent sm:block" />
+      ) : null}
+      <article className={`relative z-10 rounded-xl border p-3 ${topologyStatusClasses[step.status]}`}>
+        <div className="flex items-start justify-between gap-2">
+          <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-white/12 bg-navy-950/55 font-mono text-[11px] font-semibold">
+            {index + 1}
+          </span>
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium">
+            {step.status.replace('_', ' ')}
+          </span>
+        </div>
+        <p className="mt-3 line-clamp-2 text-[12px] font-semibold text-white">{step.title}</p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <Pill>{agent ? agent.label : step.agentLabel}</Pill>
+          <Pill iconName={integration?.label}>{integration ? integration.shortLabel : step.toolLabel || step.kind}</Pill>
+        </div>
+      </article>
+    </div>
+  );
+}
+
+function MissionTopology({ mission }: { mission: MissionWorkspaceView }) {
+  if (mission.steps.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-violet-400/18 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.16),transparent_38%),rgba(2,6,23,0.42)] p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-violet-200/80">Live topology</p>
+          <h4 className="mt-1 text-[13px] font-semibold text-white">Step → agent → tool → review → delivery</h4>
+        </div>
+        <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">
+          {mission.steps.length} nodes
+        </span>
+      </div>
+      <div className="panel-scroll -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+        {mission.steps.map((step, index) => (
+          <TopologyNode
+            key={step.id}
+            step={step}
+            index={index}
+            total={mission.steps.length}
+            agent={agentForStep(step, mission.agents)}
+            integration={integrationForStep(step, mission.integrations)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function MissionMap({ mission }: MissionMapProps) {
   const firstEvidence = mission.evidence[0];
 
@@ -123,6 +199,8 @@ export function MissionMap({ mission }: MissionMapProps) {
         <p className="text-[10px] font-medium text-violet-300/80">Mission map</p>
         <h3 className="mt-1 text-base font-semibold leading-snug text-white">{mission.title}</h3>
       </div>
+
+      <MissionTopology mission={mission} />
 
       <div>
         <div className="mb-2 flex items-center justify-between gap-3">

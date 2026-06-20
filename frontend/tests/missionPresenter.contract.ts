@@ -8,6 +8,9 @@ function assert(condition: unknown, message: string) {
 
 const mission = buildMissionWorkspaceView({
   id: 'weekly-founder-update',
+  taskId: 'task_weekly',
+  taskRunId: 'run_weekly',
+  automationId: 'auto_weekly',
   title: 'Weekly founder update',
   description: 'Refresh revenue, product, and market signals into one founder-ready brief.',
   status: 'waiting_review',
@@ -103,6 +106,9 @@ const mission = buildMissionWorkspaceView({
   ],
 });
 
+assert(mission.taskId === 'task_weekly', 'preserves task id for mission actions');
+assert(mission.taskRunId === 'run_weekly', 'preserves task run id for review actions');
+assert(mission.automationId === 'auto_weekly', 'preserves automation id for schedule/review actions');
 assert(mission.artifact.title === 'Weekly founder update', 'uses the first artifact as the living artifact title');
 assert(mission.artifact.statusLabel === 'Ready for review', 'marks review-held artifacts clearly');
 assert(mission.artifact.sections.some((section) => section.label === 'Validation'), 'includes validation section');
