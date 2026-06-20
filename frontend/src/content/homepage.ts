@@ -97,20 +97,20 @@ export const homepageNav: HomepageNavItem[] = [
 ];
 
 export const heroCopy = {
-  eyebrow: 'AI operations for founder-led teams',
+  eyebrow: 'Reviewable AI operator for founder-led teams',
   headline: 'AI agents for founder work.',
   subhead:
-    'Violema turns weekly updates, revenue checks, research briefs, and follow-up into monitored runs your team can review, approve, and schedule.',
+    'Violema turns weekly updates, revenue checks, competitor briefs, customer-risk digests, follow-up queues, and team handoffs into source-linked missions you can verify before anything sensitive ships.',
   primaryCta: 'Set up beta access',
   secondaryCta: 'See a workflow run',
   surfaceNote: 'Slack ready today. Discord, Telegram, and iMessage coming soon.',
 };
 
 export const heroBullets: HeroBullet[] = [
-  { label: 'Recurring work on autopilot' },
-  { label: 'Human approvals before delivery' },
-  { label: 'Source-linked output and audit trail' },
-  { label: 'Cost and policy controls' },
+  { label: 'Recurring founder workflows' },
+  { label: 'Human-in-the-loop approval' },
+  { label: 'Source-linked AI output' },
+  { label: 'Run history and cost controls' },
 ];
 
 export const proofPoints = [

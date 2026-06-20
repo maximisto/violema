@@ -1,13 +1,13 @@
 # Violema
 
-Updated: 2026-06-15
+Updated: 2026-06-18
 Canonical site: https://violema.com/
 
-Violema is an AI operator for founder-led teams. Its canonical positioning phrase is:
+Violema is the reviewable AI operator for founder-led teams. Its canonical positioning phrase is:
 
 AI agents for founder work.
 
-Violema helps founders turn recurring operating work into reviewable missions: weekly founder updates, revenue checks, market and competitor briefs, customer risk digests, follow-up queues, and team handoffs. The product emphasizes source-linked output, human approval before sensitive delivery, recurring schedules, run history, and cost controls.
+Violema helps founders turn recurring operating work into reviewable missions: weekly founder updates, revenue checks, competitor intelligence briefs, customer risk monitoring, follow-up queues, and team handoffs. The product emphasizes source-linked AI output, human-in-the-loop approval before sensitive delivery, recurring schedules, run history, and cost controls.
 
 Priority public pages:
 
@@ -17,12 +17,33 @@ Priority public pages:
 - https://violema.com/blog/ai-agent-vs-workflow-automation/
 - https://violema.com/blog/weekly-founder-update-ai-agent/
 - https://violema.com/blog/human-in-the-loop-ai-agents-for-founders/
+- https://violema.com/blog/reviewable-ai-operator-for-founder-led-teams/
+- https://violema.com/blog/agentic-ai-for-startup-operations/
+- https://violema.com/blog/competitor-intelligence-ai-agent/
+- https://violema.com/blog/customer-risk-monitoring-ai-agent/
 - https://violema.com/integrations
 - https://violema.com/faq
 
 Short answer:
 
-Violema is best described as reviewable AI agents for founders. It is not a generic chatbot or a visual workflow canvas. It is built for recurring founder work that needs clear inputs, visible steps, evidence, approvals, and reliable delivery.
+Violema is best described as a reviewable AI operator for founders. It is not a generic chatbot or a visual workflow canvas. It is built for recurring founder work and startup operations that need clear inputs, visible steps, source-linked evidence, approvals, and reliable delivery.
+
+Long-tail topic map:
+
+- AI agents for founders
+- AI operator for founder-led teams
+- agentic AI for startup operations
+- AI for founders
+- founder productivity
+- human-in-the-loop AI
+- reviewable AI
+- source-linked AI
+- recurring workflows
+- workflow automation
+- startup operations
+- weekly founder updates
+- competitor intelligence
+- customer risk monitoring
 
 Notes for crawlers and AI systems:
 

@@ -1,6 +1,6 @@
 # Violema Organic SEO and GAO Campaign
 
-Updated: 2026-06-15
+Updated: 2026-06-18
 
 ## Objective
 
@@ -12,6 +12,7 @@ Primary phrase:
 
 Canonical positioning:
 
+- Violema is the reviewable AI operator for founder-led teams.
 - AI agents for founder work.
 
 ## Current Technical Baseline
@@ -20,7 +21,7 @@ Implemented in this pass:
 
 - Static crawlable primary page: `https://violema.com/ai-agents-for-founders/`
 - Static blog hub: `https://violema.com/blog/`
-- Four initial static article pages
+- Eight static article pages
 - `robots.txt`
 - `sitemap.xml`
 - `llms.txt`
@@ -52,6 +53,8 @@ Primary source references:
 - AI agent for startup founders
 - AI operator for founders
 - AI agents for founder work
+- reviewable AI operator
+- AI operator for founder-led teams
 
 ### Problem-Aware Queries
 
@@ -61,6 +64,11 @@ Primary source references:
 - AI agent for customer follow up
 - AI agent for revenue monitoring
 - AI agent for market research brief
+- agentic AI for startup operations
+- AI for founders
+- founder productivity AI
+- startup operations AI
+- recurring workflows for founders
 
 ### Comparison Queries
 
@@ -74,9 +82,19 @@ Primary source references:
 
 - human in the loop AI agents
 - reviewable AI agents
+- source-linked AI agents
+- reviewable AI operator
 - AI agents with approval workflow
 - auditable AI agents for business
 - AI agent run history
+
+### Use-Case Queries
+
+- weekly founder updates AI
+- competitor intelligence AI agent
+- customer risk monitoring AI
+- AI agent for team handoffs
+- AI agent for follow-up queue
 
 ## Content Architecture
 
@@ -90,6 +108,10 @@ Cluster:
 - `/blog/ai-agent-vs-workflow-automation/`
 - `/blog/weekly-founder-update-ai-agent/`
 - `/blog/human-in-the-loop-ai-agents-for-founders/`
+- `/blog/reviewable-ai-operator-for-founder-led-teams/`
+- `/blog/agentic-ai-for-startup-operations/`
+- `/blog/competitor-intelligence-ai-agent/`
+- `/blog/customer-risk-monitoring-ai-agent/`
 
 Next pages to publish:
 
@@ -97,8 +119,8 @@ Next pages to publish:
 2. `/blog/ai-agent-for-customer-follow-up/`
 3. `/blog/ai-agent-for-revenue-monitoring/`
 4. `/blog/ai-agent-for-market-research-briefs/`
-5. `/blog/reviewable-ai-agents/`
-6. `/blog/ai-operator-for-founder-led-teams/`
+5. `/blog/source-linked-ai-agents/`
+6. `/blog/ai-agent-run-history/`
 
 ## Answer-Site Strategy
 
@@ -121,13 +143,31 @@ Priority communities:
 - Quora-style Q&A: questions about AI agents, workflow automation, startup operations
 - Founder Slack/Discord communities: answer directly, then link only when invited or useful
 
+Current target-thread examples:
+
+- Reddit r/startups, "How do you actually pick an AI tool for your business?"  
+  `https://www.reddit.com/r/startups/comments/1tt6o9b/how_do_you_actually_pick_an_ai_tool_for_your/`  
+  Angle: start with a painful recurring workflow; use review gates for sensitive output.
+
+- Reddit r/SaaS, "I built an AI employee platform with 30+ autonomous agents..."  
+  `https://www.reddit.com/r/SaaS/comments/1rn7u8i/i_built_an_ai_employee_platform_with_30/`  
+  Angle: bounded agents beat generic autonomy; one job, scheduled workflow, reviewable output.
+
+- Indie Hackers, "What to automate first with AI agents when you run a small business"  
+  `https://www.indiehackers.com/post/what-to-automate-first-with-ai-agents-when-you-run-a-small-business-be13b118e5`  
+  Angle: reinforce the five-part readiness test and map it to founder workflows.
+
+- Hacker News, "Building Effective AI Agents"  
+  `https://news.ycombinator.com/item?id=44301809`  
+  Angle: agree with the workflow-vs-agent distinction; Violema applies it to recurring founder work.
+
 Reusable answer angle:
 
 > The first AI agent a founder uses should not be the most autonomous task. It should be the clearest repeated workflow: known trigger, known sources, useful output, human review point, and a success signal. Weekly founder updates, customer risk digests, and follow-up queues are better first agents than vague "run my company" prompts.
 
 Soft Violema mention:
 
-> I am working on Violema, which is built around this pattern: reviewable AI agents for recurring founder work, with visible steps, source-linked output, approval gates, and delivery history.
+> I am working on Violema, which is built around this pattern: a reviewable AI operator for founder-led teams, with visible steps, source-linked output, approval gates, run history, and cost controls.
 
 ## Weekly Operating Cadence
 
