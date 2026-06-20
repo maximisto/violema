@@ -1,4 +1,6 @@
 import express, { Request, Response } from 'express';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import type AnthropicClient from '@anthropic-ai/sdk';
@@ -27,6 +29,13 @@ import {
 } from './auth';
 import { registerAdminRoutes } from './adminRoutes';
 import { isPublicBetaApiPath } from './betaAccess';
+import {
+  GENERAL_RATE_LIMIT_MAX,
+  RATE_LIMIT_WINDOW_MS,
+  SENSITIVE_RATE_LIMIT_MAX,
+  isRateLimitExempt,
+  isSensitiveRateLimitPath,
+} from './security';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
 import { executeComposioAction, getComposioConnectionUrl, isComposioEnabled, isComposioToolName, listConnectedApps } from './composioBridge';
@@ -140,6 +149,9 @@ import { registerAgentStudioRoutes } from './agent-studio/violemaStudio';
 dotenv.config();
 
 const app = express();
+// Behind nginx: trust the first proxy hop so req.ip and rate limiting key on the
+// real client IP (from X-Forwarded-For) instead of the proxy's loopback address.
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 const SCREENSHOT_DIR = path.join(process.cwd(), 'generated-screenshots');
 const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
@@ -213,6 +225,10 @@ function buildTaskRunSnapshotEvent(
   };
 }
 
+app.use(helmet({
+  contentSecurityPolicy: false, // JSON API behind nginx; the CSP belongs on the HTML host
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow gated screenshot assets to embed
+}));
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (curl, Postman, same-origin nginx proxy)
@@ -221,6 +237,39 @@ app.use(cors({
   },
   credentials: true,
 }));
+
+const generalApiLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: GENERAL_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please slow down and try again shortly.', code: 'rate_limited' },
+});
+const sensitiveApiLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: SENSITIVE_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please wait a few minutes and try again.', code: 'rate_limited' },
+});
+
+// Throttle before auth so floods are rejected cheaply. Both middlewares read the
+// full req.path (no mount prefix) so the security.ts predicates match exactly.
+app.use((req: Request, res: Response, next: () => void) => {
+  if (isSensitiveRateLimitPath(req.path)) {
+    sensitiveApiLimiter(req, res, next);
+    return;
+  }
+  next();
+});
+app.use((req: Request, res: Response, next: () => void) => {
+  if (req.path.startsWith('/api/') && !isRateLimitExempt(req.path)) {
+    generalApiLimiter(req, res, next);
+    return;
+  }
+  next();
+});
+
 app.use(express.json({
   verify: (req, _res, buf) => {
     (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
