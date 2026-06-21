@@ -129,11 +129,22 @@ function DeviceCluster() {
   };
 
   return (
-    <div className="tilt-stage relative" onMouseMove={handleMove} onMouseLeave={reset}>
-      <div aria-hidden className="absolute -inset-12 -z-10">
-        <div className="absolute left-1/4 top-0 h-64 w-64 rounded-full bg-violet-600/25 blur-[90px]" />
-        <div className="absolute bottom-2 right-4 h-56 w-56 rounded-full bg-signal-500/15 blur-[90px]" />
+    <>
+      {/* Mobile: feature the live Slack phone — Violema's own UI, legible at full
+          size, instead of a tiny dark desktop screenshot. */}
+      <div className="relative mx-auto w-full max-w-[20rem] sm:hidden">
+        <div aria-hidden className="absolute -inset-8 -z-10">
+          <div className="absolute left-6 top-2 h-44 w-44 rounded-full bg-violet-600/30 blur-[80px]" />
+          <div className="absolute bottom-6 right-4 h-40 w-40 rounded-full bg-signal-500/18 blur-[80px]" />
+        </div>
+        <SlackPhone />
       </div>
+
+      <div className="tilt-stage relative hidden sm:block" onMouseMove={handleMove} onMouseLeave={reset}>
+        <div aria-hidden className="absolute -inset-12 -z-10">
+          <div className="absolute left-1/4 top-0 h-64 w-64 rounded-full bg-violet-600/25 blur-[90px]" />
+          <div className="absolute bottom-2 right-4 h-56 w-56 rounded-full bg-signal-500/15 blur-[90px]" />
+        </div>
 
       <div ref={innerRef} className="tilt-inner relative mx-auto w-full max-w-[40rem]">
         <div className="signal-orbit relative overflow-hidden rounded-[1.3rem] border border-white/12 bg-ink-850/95 shadow-[0_50px_140px_-32px_rgba(0,0,0,0.9)] backdrop-blur-xl">
@@ -174,6 +185,7 @@ function DeviceCluster() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

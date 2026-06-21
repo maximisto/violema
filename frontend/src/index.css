@@ -577,12 +577,12 @@
   }
 
   .founder-hero-grid {
-    opacity: 0.18;
+    opacity: 0.32;
     background-image:
-      linear-gradient(rgba(148, 163, 184, 0.24) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(148, 163, 184, 0.20) 1px, transparent 1px);
-    background-size: 72px 72px;
-    mask-image: linear-gradient(180deg, black 0%, black 82%, transparent 100%);
+      linear-gradient(rgba(148, 163, 184, 0.26) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.22) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(120% 90% at 50% 0%, black 0%, black 55%, transparent 88%);
   }
 
   .founder-hero-noise {
