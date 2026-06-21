@@ -85,7 +85,27 @@ function HeroCopy() {
         </span>
       </h1>
 
-      <p className="mt-5 max-w-[34rem] text-lg leading-7 text-[#aeb7cd]">{heroCopy.subhead}</p>
+      {/* Mobile/tablet: the real product right after the headline — a clean
+          framed screenshot (no mockup chrome) that fades into the page. */}
+      <div className="relative mt-7 lg:hidden">
+        <div aria-hidden className="absolute -inset-5 -z-10">
+          <div className="absolute inset-x-4 top-0 h-40 rounded-[44%] bg-violet-600/22 blur-[70px]" />
+          <div className="absolute -bottom-4 right-6 h-28 w-28 rounded-full bg-signal-500/12 blur-[60px]" />
+        </div>
+        <div className="relative overflow-hidden rounded-2xl border border-white/12 shadow-[0_34px_80px_-30px_rgba(0,0,0,0.85)]">
+          <img
+            src="/brand/violema-dashboard-ui.png"
+            alt="Violema dashboard running a weekly founder update with evidence and an approval gate."
+            width={1600}
+            height={888}
+            className="block w-full"
+          />
+          <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.10)]" />
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-ink-900 to-transparent" />
+        </div>
+      </div>
+
+      <p className="mt-7 max-w-[34rem] text-lg leading-7 text-[#aeb7cd]">{heroCopy.subhead}</p>
 
       <div className="mt-7 grid max-w-[34rem] grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
         {heroBullets.map((item) => (
@@ -229,22 +249,23 @@ function MobileStickyCta() {
   const navigate = useNavigate();
 
   return (
-    <div className="mobile-sticky-cta fixed inset-x-0 bottom-0 z-40 border-t border-violet-300/20 bg-[#070b16]/92 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-22px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl lg:hidden">
-      <div className="grid grid-cols-2 gap-3">
+    <div className="mobile-sticky-cta fixed inset-x-0 bottom-0 z-40 border-t border-violet-300/20 bg-[#070b16]/94 px-4 pb-[calc(0.9rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-22px_70px_rgba(0,0,0,0.5)] backdrop-blur-xl lg:hidden">
+      <div className="flex items-center gap-2.5">
         <button
           type="button"
           onClick={() => {
             trackHeroCta('set_up_access', 'mobile_sticky');
             navigate('/signup?next=%2Fplans');
           }}
-          className="rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 py-3.5 text-base font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
+          className="group flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] py-4 text-base font-bold text-white shadow-[0_14px_40px_-10px_rgba(124,58,237,0.7)] transition active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
         >
-          Start setup
+          Set up beta access
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </button>
         <button
           type="button"
           onClick={() => navigate('/login')}
-          className="rounded-2xl border border-white/14 bg-white/[0.05] py-3.5 text-base font-bold text-[#e7ebf7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
+          className="rounded-2xl border border-white/14 bg-white/[0.05] px-5 py-4 text-base font-semibold text-[#e7ebf7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
         >
           Sign in
         </button>
@@ -259,8 +280,8 @@ function useMobileSticky() {
   useEffect(() => {
     const onScroll = () => {
       const isSmall = window.matchMedia('(max-width: 1023px)').matches;
-      const nearFooter = window.scrollY > document.body.scrollHeight - window.innerHeight - 520;
-      setShow(isSmall && window.scrollY > 640 && !nearFooter);
+      // Permanent once the inline hero CTA scrolls away — stays for the journey.
+      setShow(isSmall && window.scrollY > 520);
     };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -285,34 +306,6 @@ export default function Hero() {
       <h1 className="sr-only">{heroCopy.headline}</h1>
 
       <div className="mx-auto max-w-[88rem] px-4 pb-16 pt-28 sm:px-6 lg:px-8 xl:pb-24 xl:pt-36">
-        {/* Mobile/tablet: open with the product itself — a framed dashboard shot
-            as the first statement, before the headline. Hidden on lg, where the
-            2-col layout shows the live console on the right. */}
-        <Reveal className="mb-9 lg:hidden">
-          <div className="relative mx-auto w-full max-w-[34rem]">
-            <div aria-hidden className="absolute -inset-6 -z-10">
-              <div className="absolute inset-x-6 top-0 h-44 rounded-[44%] bg-violet-600/25 blur-[80px]" />
-              <div className="absolute -bottom-2 right-8 h-32 w-32 rounded-full bg-signal-500/14 blur-[70px]" />
-            </div>
-            <div className="signal-orbit overflow-hidden rounded-[1.2rem] border border-white/12 bg-ink-850/95 shadow-[0_44px_100px_-34px_rgba(0,0,0,0.85)] backdrop-blur-xl">
-              <div className="flex items-center gap-2.5 border-b border-white/[0.07] bg-white/[0.025] px-4 py-2.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
-                <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
-                <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
-                <span className="text-telemetry ml-2 truncate text-[0.56rem] text-[#8793ad]">violema.app / runs / 7241</span>
-                <span className="ml-auto flex items-center gap-1.5 rounded-full border border-signal-500/30 bg-signal-500/10 px-2 py-0.5">
-                  <span className="relative flex h-1.5 w-1.5 items-center justify-center">
-                    <span className="live-dot absolute inset-0 rounded-full" />
-                    <span className="relative h-1.5 w-1.5 rounded-full bg-signal-400" />
-                  </span>
-                  <span className="text-telemetry text-[0.5rem] text-signal-300">Live</span>
-                </span>
-              </div>
-              <img src="/brand/violema-dashboard-ui.png" alt="" width={1600} height={888} className="block w-full" />
-            </div>
-          </div>
-        </Reveal>
-
         <div className="grid items-center gap-x-12 gap-y-14 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]">
           <Reveal className="min-w-0">
             <HeroCopy />
