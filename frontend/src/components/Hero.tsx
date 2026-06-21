@@ -165,7 +165,7 @@ function DeviceCluster() {
           />
         </div>
 
-        <div className="absolute -bottom-14 -right-3 w-[19.5rem] origin-bottom-right scale-[0.5] sm:-right-8 sm:scale-[0.58] lg:scale-[0.64]">
+        <div className="absolute -bottom-24 -right-5 w-[19.5rem] origin-bottom-right scale-[0.46] sm:-bottom-28 sm:-right-10 sm:scale-[0.52] lg:scale-[0.58]">
           <SlackPhone />
         </div>
 
