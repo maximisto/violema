@@ -90,13 +90,16 @@ export default function SlackPhone({ className = '' }: { className?: string }) {
   return (
     <div ref={rootRef} className={`relative mx-auto w-full max-w-[19.5rem] ${className}`}>
       {/* titanium frame */}
-      <div className="relative rounded-[3rem] bg-gradient-to-b from-[#45474e] via-[#26282d] to-[#141519] p-[3px] shadow-[0_50px_110px_-34px_rgba(0,0,0,0.75)]">
-        <div className="rounded-[2.85rem] bg-[#0a0b0e] p-[2px]">
+      <div className="relative rounded-[3rem] bg-gradient-to-b from-[#52555d] via-[#26282d] to-[#0f1014] p-[3px] shadow-[0_50px_110px_-34px_rgba(0,0,0,0.78),inset_0_1px_1.5px_rgba(255,255,255,0.28),inset_0_0_0_1px_rgba(124,58,237,0.10)]">
+        {/* violet rim glow */}
+        <div aria-hidden className="pointer-events-none absolute -inset-px z-0 rounded-[3rem] bg-[linear-gradient(140deg,rgba(167,139,250,0.35),transparent_30%,transparent_72%,rgba(255,122,60,0.18))] opacity-60 blur-[2px]" />
+        <div className="relative rounded-[2.85rem] bg-[#0a0b0e] p-[2px]">
           <div className="relative overflow-hidden rounded-[2.7rem] bg-[#0b0e14]">
             {/* dynamic island */}
             <div className="absolute left-1/2 top-[0.7rem] z-30 h-[1.5rem] w-[5.6rem] -translate-x-1/2 rounded-full bg-black shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" />
-            {/* screen gloss */}
-            <div aria-hidden className="pointer-events-none absolute inset-0 z-20 rounded-[2.7rem] bg-[linear-gradient(125deg,rgba(255,255,255,0.10),transparent_18%,transparent_70%,rgba(255,255,255,0.05))] mix-blend-screen" />
+            {/* screen glass: layered sheen for a wet-glass read */}
+            <div aria-hidden className="pointer-events-none absolute inset-0 z-20 rounded-[2.7rem] bg-[linear-gradient(122deg,rgba(255,255,255,0.18)_0%,transparent_20%,transparent_68%,rgba(255,255,255,0.08)_100%)] mix-blend-screen" />
+            <div aria-hidden className="pointer-events-none absolute inset-0 z-20 rounded-[2.7rem] bg-[radial-gradient(120%_60%_at_15%_-5%,rgba(255,255,255,0.14),transparent_55%)] mix-blend-screen" />
 
             {/* status bar */}
             <div className="flex items-center justify-between px-6 pb-1.5 pt-3.5 text-[0.62rem] font-semibold text-white">

@@ -1726,3 +1726,26 @@
 .theme-light ::-webkit-scrollbar-track { background-color: #f1e9dc; }
 .theme-light ::-webkit-scrollbar-thumb { background-color: #d8ccb8; }
 .theme-light ::-webkit-scrollbar-thumb:hover { background-color: #c8bca6; }
+
+/* ── Glassy, 3D-tilted phone (mobile hero showcase) ─────────────────
+   A premium product-shot tilt: the phone sits angled in space and floats
+   gently, with a violet rim and a layered shadow for depth. Legibility is
+   preserved (~8deg). Collapses flatter under reduced motion. */
+.phone-3d {
+  transform: perspective(1600px) rotateY(-9deg) rotateX(5deg) rotateZ(0.4deg);
+  transform-style: preserve-3d;
+  transform-origin: 50% 50%;
+  animation: phoneFloat3d 8s ease-in-out infinite;
+  filter: drop-shadow(0 38px 70px rgba(0, 0, 0, 0.6))
+          drop-shadow(0 0 60px rgba(124, 58, 237, 0.18));
+}
+@keyframes phoneFloat3d {
+  0%, 100% { transform: perspective(1600px) rotateY(-9deg) rotateX(5deg) rotateZ(0.4deg) translateY(0); }
+  50%      { transform: perspective(1600px) rotateY(-6.5deg) rotateX(3.5deg) rotateZ(0deg) translateY(-12px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .phone-3d {
+    transform: perspective(1600px) rotateY(-7deg) rotateX(4deg);
+    animation: none;
+  }
+}

@@ -100,7 +100,7 @@ function HeroCopy() {
         <HeroActions />
       </div>
 
-      <p className="mt-5 flex items-center gap-2 text-sm text-[#8793ad]">
+      <p className="mt-5 hidden items-center gap-2 text-sm text-[#8793ad] sm:flex">
         <ShieldCheck className="h-4 w-4 flex-none text-signal-400/90" />
         {heroCopy.surfaceNote}
       </p>
@@ -130,17 +130,18 @@ function DeviceCluster() {
 
   return (
     <>
-      {/* Mobile: feature the live Slack phone — Violema's own UI, legible at full
-          size, instead of a tiny dark desktop screenshot. */}
-      <div className="relative mx-auto w-full max-w-[20rem] sm:hidden">
-        <div aria-hidden className="absolute -inset-8 -z-10">
-          <div className="absolute left-6 top-2 h-44 w-44 rounded-full bg-violet-600/30 blur-[80px]" />
-          <div className="absolute bottom-6 right-4 h-40 w-40 rounded-full bg-signal-500/18 blur-[80px]" />
+      {/* Mobile + tablet: feature the live Slack phone as a glassy, 3D-tilted
+          product shot — Violema's own UI, legible, instead of a tiny dark
+          screenshot. */}
+      <div className="relative mx-auto w-full max-w-[19rem] py-4 lg:hidden">
+        <div aria-hidden className="absolute -inset-10 -z-10">
+          <div className="absolute left-1/2 top-4 h-52 w-52 -translate-x-1/2 rounded-full bg-violet-600/30 blur-[90px]" />
+          <div className="absolute bottom-6 right-2 h-40 w-40 rounded-full bg-signal-500/18 blur-[80px]" />
         </div>
-        <SlackPhone />
+        <SlackPhone className="phone-3d" />
       </div>
 
-      <div className="tilt-stage relative hidden sm:block" onMouseMove={handleMove} onMouseLeave={reset}>
+      <div className="tilt-stage relative hidden lg:block" onMouseMove={handleMove} onMouseLeave={reset}>
         <div aria-hidden className="absolute -inset-12 -z-10">
           <div className="absolute left-1/4 top-0 h-64 w-64 rounded-full bg-violet-600/25 blur-[90px]" />
           <div className="absolute bottom-2 right-4 h-56 w-56 rounded-full bg-signal-500/15 blur-[90px]" />
@@ -284,6 +285,34 @@ export default function Hero() {
       <h1 className="sr-only">{heroCopy.headline}</h1>
 
       <div className="mx-auto max-w-[88rem] px-4 pb-16 pt-28 sm:px-6 lg:px-8 xl:pb-24 xl:pt-36">
+        {/* Mobile/tablet: open with the product itself — a framed dashboard shot
+            as the first statement, before the headline. Hidden on lg, where the
+            2-col layout shows the live console on the right. */}
+        <Reveal className="mb-9 lg:hidden">
+          <div className="relative mx-auto w-full max-w-[34rem]">
+            <div aria-hidden className="absolute -inset-6 -z-10">
+              <div className="absolute inset-x-6 top-0 h-44 rounded-[44%] bg-violet-600/25 blur-[80px]" />
+              <div className="absolute -bottom-2 right-8 h-32 w-32 rounded-full bg-signal-500/14 blur-[70px]" />
+            </div>
+            <div className="signal-orbit overflow-hidden rounded-[1.2rem] border border-white/12 bg-ink-850/95 shadow-[0_44px_100px_-34px_rgba(0,0,0,0.85)] backdrop-blur-xl">
+              <div className="flex items-center gap-2.5 border-b border-white/[0.07] bg-white/[0.025] px-4 py-2.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+                <span className="text-telemetry ml-2 truncate text-[0.56rem] text-[#8793ad]">violema.app / runs / 7241</span>
+                <span className="ml-auto flex items-center gap-1.5 rounded-full border border-signal-500/30 bg-signal-500/10 px-2 py-0.5">
+                  <span className="relative flex h-1.5 w-1.5 items-center justify-center">
+                    <span className="live-dot absolute inset-0 rounded-full" />
+                    <span className="relative h-1.5 w-1.5 rounded-full bg-signal-400" />
+                  </span>
+                  <span className="text-telemetry text-[0.5rem] text-signal-300">Live</span>
+                </span>
+              </div>
+              <img src="/brand/violema-dashboard-ui.png" alt="" width={1600} height={888} className="block w-full" />
+            </div>
+          </div>
+        </Reveal>
+
         <div className="grid items-center gap-x-12 gap-y-14 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]">
           <Reveal className="min-w-0">
             <HeroCopy />
