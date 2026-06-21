@@ -10,6 +10,7 @@ import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import { Link } from 'react-router-dom';
 import BrandIcon from '../components/BrandIcon';
 import PublicHeader from '../components/PublicHeader';
+import { useTheme } from '../lib/useTheme';
 
 interface PartnerApp {
   name: string;
@@ -218,8 +219,9 @@ function ComposioConnectSection() {
 }
 
 export default function IntegrationsPage() {
+  const { scopeClass } = useTheme();
   return (
-    <div className="min-h-screen bg-hero-gradient">
+    <div className={`min-h-screen bg-hero-gradient ${scopeClass}`}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
       <PublicHeader backHref="/" backLabel="Home" actionHref="/signup?next=%2Fplans" actionLabel="Get access" />
 

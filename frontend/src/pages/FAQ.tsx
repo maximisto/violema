@@ -11,6 +11,7 @@ import Search from 'lucide-react/dist/esm/icons/search.js';
 import X from 'lucide-react/dist/esm/icons/x.js';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { useTheme } from '../lib/useTheme';
 
 const CATEGORIES = [
   {
@@ -204,8 +205,9 @@ export default function FAQ() {
     });
   }
 
+  const { scopeClass } = useTheme();
   return (
-    <div className="min-h-screen bg-navy-900">
+    <div className={`min-h-screen bg-navy-900 ${scopeClass}`}>
       <Navbar />
 
       {/* Hero */}

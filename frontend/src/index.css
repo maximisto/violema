@@ -128,6 +128,67 @@
     box-sizing: border-box;
   }
 
+  /* ── Theme tokens ──────────────────────────────────────────────────
+     :root holds the original DARK values as "R G B" triplets, consumed by
+     the variable-backed navy/ink/slate colors in tailwind.config.js. Because
+     the triplets equal the previous hardcoded hexes exactly, the dark app
+     (dashboard included) renders pixel-identical. `.theme-light` (applied only
+     to marketing wrappers) remaps the same tokens to a warm editorial ramp, so
+     every shade and every opacity variant flips with zero per-class work. */
+  :root {
+    --c-navy-950: 2 8 23;
+    --c-navy-900: 15 23 42;
+    --c-navy-800: 30 41 59;
+    --c-navy-700: 51 65 85;
+    --c-navy-600: 71 85 105;
+
+    --c-ink-950: 4 6 13;
+    --c-ink-900: 7 11 22;
+    --c-ink-850: 10 15 29;
+    --c-ink-800: 14 20 38;
+    --c-ink-700: 20 27 48;
+
+    --c-slate-50: 248 250 252;
+    --c-slate-100: 241 245 249;
+    --c-slate-200: 226 232 240;
+    --c-slate-300: 203 213 225;
+    --c-slate-400: 148 163 184;
+    --c-slate-500: 100 116 139;
+    --c-slate-600: 71 85 105;
+    --c-slate-700: 51 65 85;
+    --c-slate-800: 30 41 59;
+    --c-slate-900: 15 23 42;
+    --c-slate-950: 2 6 23;
+  }
+
+  /* Warm editorial off-white. Surfaces (navy/ink) go light; slate INVERTS so
+     light text shades become deep ink, keeping body copy readable on bone. */
+  .theme-light {
+    --c-ink-950: 250 247 242;  /* page  — warm bone */
+    --c-ink-900: 250 247 242;  /* page  — warm bone */
+    --c-ink-850: 255 255 255;  /* card  — white pops on bone */
+    --c-ink-800: 251 247 240;  /* card alt */
+    --c-ink-700: 244 236 223;  /* raised */
+
+    --c-navy-950: 250 247 242; /* page  — warm bone */
+    --c-navy-900: 255 255 255; /* card  — white */
+    --c-navy-800: 244 236 223; /* alt surface */
+    --c-navy-700: 228 218 202; /* warm hairline / raised */
+    --c-navy-600: 214 201 180; /* stronger border */
+
+    --c-slate-50: 36 31 24;    /* (rare) near-black ink */
+    --c-slate-100: 20 17 14;   /* primary text — ink */
+    --c-slate-200: 28 24 19;   /* primary text */
+    --c-slate-300: 75 67 55;   /* secondary text — warm */
+    --c-slate-400: 107 98 83;  /* muted text */
+    --c-slate-500: 117 107 91; /* muted text */
+    --c-slate-600: 138 128 113;/* faint text */
+    --c-slate-700: 90 82 69;   /* dark warm gray */
+    --c-slate-800: 201 189 168;/* light warm surface */
+    --c-slate-900: 231 222 207;/* light warm surface */
+    --c-slate-950: 243 237 227;/* bone surface */
+  }
+
   html {
     height: 100%;
     scroll-behavior: smooth;
@@ -1542,3 +1603,106 @@
   from { transform: translateX(-100%); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — warm editorial off-white
+   Scoped to `.theme-light` (marketing wrappers only; the dashboard never gets
+   it). Most colors flip via the variable swap above; the rules below cover what
+   variables can't reach: the wrapper base, white-alpha "glass", a few arbitrary
+   neutral hexes, and the clip-text headline. Selectors use `.theme-light .x`
+   (specificity 0,2,0) so they win over Tailwind utilities without !important.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.theme-light {
+  background-color: #faf7f2;
+  color: #14110e;
+  color-scheme: light;
+}
+
+/* Arbitrary dark page/surface hexes used directly in the marketing markup. */
+.theme-light .bg-\[\#070b16\],
+.theme-light .bg-\[\#070b18\],
+.theme-light .bg-\[\#090a0c\],
+.theme-light .bg-\[\#0a0b0e\],
+.theme-light .bg-\[\#0b0e14\],
+.theme-light .bg-\[\#0d1117\],
+.theme-light .bg-black { background-color: #faf7f2; }
+
+/* Translucent variants of those hexes (e.g. bg-[#070b16]/92) on sticky bars. */
+.theme-light [class*="bg-[#070b16]/"],
+.theme-light [class*="bg-[#090a0c]/"],
+.theme-light [class*="bg-[#070b18]/"] { background-color: rgba(250, 247, 242, 0.92); }
+
+/* Arbitrary neutral text hexes → warm ink ramp. */
+.theme-light .text-\[\#f4f1ec\],
+.theme-light .text-\[\#dbe2f4\] { color: #14110e; }
+.theme-light .text-\[\#c2cadb\],
+.theme-light .text-\[\#aeb7cd\],
+.theme-light .text-\[\#aab2c5\] { color: #4b4337; }
+.theme-light .text-\[\#8793ad\],
+.theme-light .text-\[\#9aa4ba\],
+.theme-light .text-\[\#7c8aa3\],
+.theme-light .text-\[\#828ea4\],
+.theme-light .text-\[\#6f7a91\] { color: #6b6253; }
+
+/* Arbitrary borders / dark gradient stop. */
+.theme-light .border-\[\#0b0e14\] { border-color: #e4daca; }
+.theme-light .border-white { border-color: #d8ccb8; }
+.theme-light .to-\[\#141519\] { --tw-gradient-to: #f1e9dc var(--tw-gradient-to-position); }
+
+/* "Glass" built from white alpha → warm ink alpha so it reads on bone. */
+.theme-light [class*="bg-white/"] { background-color: rgba(20, 17, 14, 0.05); }
+.theme-light [class*="border-white/"] { border-color: rgba(20, 17, 14, 0.10); }
+
+/* Solid white veil chip used as an inverted badge in dark → warm raised. */
+.theme-light .bg-\[\#f4f1ec\] { background-color: #ece3d4; }
+
+/* `text-white` is used both as readable copy on dark surfaces (headings, stat
+   numerals, section defaults) AND on violet CTAs. On bone the copy must become
+   ink; the CTAs must stay white. Flip to ink, then re-whiten violet buttons. */
+.theme-light .text-white { color: #14110e; }
+/* Re-whiten only SOLID violet CTAs (a/button). Exact `.bg-violet-600` and the
+   `from-violet-6` gradient avoid catching translucent highlights like
+   `bg-violet-500/10` or decorative `from-violet-400/30` chips. */
+.theme-light a[class*="from-violet-6"],
+.theme-light button[class*="from-violet-6"],
+.theme-light a.bg-violet-600,
+.theme-light button.bg-violet-600,
+.theme-light a.bg-violet-500,
+.theme-light button.bg-violet-500 { color: #fff; }
+
+/* Light-violet accent text (on translucent-violet chips that go light) → deep
+   violet so it stays legible and on-brand. */
+.theme-light .text-violet-50,
+.theme-light .text-violet-100,
+.theme-light .text-violet-200 { color: #6d28d9; }
+.theme-light .text-violet-300 { color: #7c3aed; }
+
+/* Black-alpha chips (cost/code badges) → warm ink alpha so they read on bone. */
+.theme-light [class*="bg-black/"] { background-color: rgba(20, 17, 14, 0.06); }
+
+/* The static dark hero radial (used on /plans and /integrations) → warm bone. */
+.theme-light .bg-hero-gradient {
+  background-image: radial-gradient(ellipse at top, #ffffff 0%, #faf7f2 55%, #f1e9dc 100%);
+}
+
+/* Logo swap: dark mark by default, violet-tagline mark inside the light scope. */
+.violema-logo-light { display: none; }
+.theme-light .violema-logo-dark { display: none; }
+.theme-light .violema-logo-light { display: block; }
+
+/* The Hero headline is a clip-text gradient (white → lilac → violet on dark).
+   On light, drive it ink → violet so it stays legible and on-brand. */
+.theme-light .bg-clip-text {
+  --tw-gradient-from: #1b1410 var(--tw-gradient-from-position);
+  --tw-gradient-to: #7c3aed var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), #6d28d9 var(--tw-gradient-via-position, 55%), var(--tw-gradient-to);
+}
+
+/* Heavy black ambient shadows read as dirty smudges on bone — soften them. */
+.theme-light [class*="shadow-[0_"] { --tw-shadow-color: rgba(76, 60, 38, 0.16); }
+
+/* Light-theme scrollbar to match the bone surface. */
+.theme-light ::-webkit-scrollbar-track { background-color: #f1e9dc; }
+.theme-light ::-webkit-scrollbar-thumb { background-color: #d8ccb8; }
+.theme-light ::-webkit-scrollbar-thumb:hover { background-color: #c8bca6; }

@@ -3,6 +3,7 @@ import Shield from 'lucide-react/dist/esm/icons/shield.js';
 import Zap from 'lucide-react/dist/esm/icons/zap.js';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { useTheme } from '../lib/useTheme';
 
 const SECTIONS = [
   {
@@ -191,9 +192,10 @@ function renderContent(text: string) {
 
 export default function PrivacyPolicy() {
   const navigate = useNavigate();
+  const { scopeClass } = useTheme();
 
   return (
-    <div className="min-h-screen bg-navy-900">
+    <div className={`min-h-screen bg-navy-900 ${scopeClass}`}>
       <Navbar />
 
       {/* Hero */}

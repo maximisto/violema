@@ -12,6 +12,7 @@ import { TOP_UP_OPTIONS, createBillingCheckout, formatCredits, useCreditSnapshot
 import { fetchBackendAuthSession, getAuthSession } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
+import { useTheme } from '../lib/useTheme';
 
 const PLANS = [
   {
@@ -48,6 +49,7 @@ const PLANS = [
 export default function Billing() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { scopeClass } = useTheme();
   const [session, setSession] = useState(() => getAuthSession());
   const { snapshot, refresh } = useCreditSnapshot();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -110,7 +112,7 @@ export default function Billing() {
   }
 
   return (
-    <div className="min-h-screen bg-hero-gradient">
+    <div className={`min-h-screen bg-hero-gradient ${scopeClass}`}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
         <PublicHeader
         backHref="/"

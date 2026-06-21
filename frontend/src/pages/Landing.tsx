@@ -5,10 +5,12 @@ import Integrations from '../components/Integrations';
 import Navbar from '../components/Navbar';
 import Pricing from '../components/Pricing';
 import SignalBand from '../components/SignalBand';
+import { useTheme } from '../lib/useTheme';
 
 export default function Landing() {
+  const { scopeClass } = useTheme();
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#070b16] text-[#f4f1ec]">
+    <div className={`min-h-screen overflow-x-hidden bg-[#070b16] text-[#f4f1ec] ${scopeClass}`}>
       <Navbar />
       <main>
         <Hero />

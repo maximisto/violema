@@ -6,6 +6,7 @@ import { useEffect, useState, type MouseEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { homepageNav } from '../content/homepage';
 import ViolemaLogo from './ViolemaLogo';
+import ThemeToggle from './ThemeToggle';
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -111,6 +112,7 @@ export default function Navbar() {
           </div>
 
           <div className="hidden items-center gap-2 xl:flex">
+            <ThemeToggle />
             <button
               type="button"
               onClick={() => navigate('/login')}
@@ -128,15 +130,18 @@ export default function Navbar() {
             </button>
           </div>
 
-          <button
-            type="button"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#f4f1ec] transition duration-200 hover:border-violet-200/40 xl:hidden"
-            onClick={() => setMobileOpen((open) => !open)}
-            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-            aria-expanded={mobileOpen}
-          >
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
+          <div className="flex items-center gap-2 xl:hidden">
+            <ThemeToggle />
+            <button
+              type="button"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#f4f1ec] transition duration-200 hover:border-violet-200/40"
+              onClick={() => setMobileOpen((open) => !open)}
+              aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileOpen}
+            >
+              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
       </div>
 

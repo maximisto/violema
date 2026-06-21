@@ -1,6 +1,7 @@
 import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left.js';
 import { Link, useNavigate } from 'react-router-dom';
 import ViolemaLogo from './ViolemaLogo';
+import ThemeToggle from './ThemeToggle';
 
 type PublicHeaderProps = {
   backHref?: string;
@@ -41,6 +42,7 @@ export default function PublicHeader({
         </nav>
 
         <div className="flex items-center gap-2">
+          <ThemeToggle className="h-10 w-10" />
           <Link
             to={backHref}
             className="inline-flex items-center gap-2 rounded-full border border-navy-700/80 bg-navy-900/55 px-4 py-2 text-[0.82rem] font-medium text-slate-300 transition-colors hover:border-navy-600 hover:text-white"

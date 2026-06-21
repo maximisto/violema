@@ -7,13 +7,41 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Neutral surfaces/text are variable-backed so a single set of CSS
+        // custom properties (defined in index.css) drives every shade AND every
+        // opacity variant. :root holds the original dark values (so the app is
+        // pixel-identical), and `.theme-light` remaps them for the light theme.
         navy: {
-          950: '#020817',
-          900: '#0f172a',
-          800: '#1e293b',
-          700: '#334155',
-          600: '#475569',
+          950: 'rgb(var(--c-navy-950) / <alpha-value>)',
+          900: 'rgb(var(--c-navy-900) / <alpha-value>)',
+          800: 'rgb(var(--c-navy-800) / <alpha-value>)',
+          700: 'rgb(var(--c-navy-700) / <alpha-value>)',
+          600: 'rgb(var(--c-navy-600) / <alpha-value>)',
         },
+        // Layered ink surfaces (instrument-grade depth instead of one flat black).
+        ink: {
+          950: 'rgb(var(--c-ink-950) / <alpha-value>)',
+          900: 'rgb(var(--c-ink-900) / <alpha-value>)',
+          850: 'rgb(var(--c-ink-850) / <alpha-value>)',
+          800: 'rgb(var(--c-ink-800) / <alpha-value>)',
+          700: 'rgb(var(--c-ink-700) / <alpha-value>)',
+        },
+        // Slate (neutral text workhorse) is also variable-backed and scales
+        // INVERT under `.theme-light` (light text shades become dark ink).
+        slate: {
+          50: 'rgb(var(--c-slate-50) / <alpha-value>)',
+          100: 'rgb(var(--c-slate-100) / <alpha-value>)',
+          200: 'rgb(var(--c-slate-200) / <alpha-value>)',
+          300: 'rgb(var(--c-slate-300) / <alpha-value>)',
+          400: 'rgb(var(--c-slate-400) / <alpha-value>)',
+          500: 'rgb(var(--c-slate-500) / <alpha-value>)',
+          600: 'rgb(var(--c-slate-600) / <alpha-value>)',
+          700: 'rgb(var(--c-slate-700) / <alpha-value>)',
+          800: 'rgb(var(--c-slate-800) / <alpha-value>)',
+          900: 'rgb(var(--c-slate-900) / <alpha-value>)',
+          950: 'rgb(var(--c-slate-950) / <alpha-value>)',
+        },
+        // Accents are intentionally static across themes.
         violet: {
           400: '#a78bfa',
           500: '#8b5cf6',
@@ -33,14 +61,6 @@ export default {
           500: '#ff7a3c',
           600: '#f2601d',
           700: '#cf4a10',
-        },
-        // Layered ink surfaces (instrument-grade depth instead of one flat black).
-        ink: {
-          950: '#04060d',
-          900: '#070b16',
-          850: '#0a0f1d',
-          800: '#0e1426',
-          700: '#141b30',
         },
       },
       fontFamily: {
