@@ -1,6 +1,5 @@
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
 import CalendarDays from 'lucide-react/dist/esm/icons/calendar-days.js';
-import Check from 'lucide-react/dist/esm/icons/check.js';
 import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2.js';
 import DollarSign from 'lucide-react/dist/esm/icons/dollar-sign.js';
 import Link2 from 'lucide-react/dist/esm/icons/link-2.js';
@@ -14,6 +13,7 @@ import { heroBullets, heroCopy, proofPoints } from '../content/homepage';
 import BrandMarquee from './BrandMarquee';
 import Reveal from './Reveal';
 import SlackPhone from './SlackPhone';
+import HeroActivityFeed from './HeroActivityFeed';
 
 type HeroCtaAction = 'set_up_access' | 'watch_workflow_run';
 
@@ -169,14 +169,8 @@ function DeviceCluster() {
           <SlackPhone />
         </div>
 
-        <div className="absolute -left-3 bottom-10 hidden items-center gap-3 rounded-2xl border border-white/10 bg-ink-800/92 px-4 py-3 shadow-[0_26px_64px_-22px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:flex">
-          <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-signal-500/16 text-signal-300">
-            <Check className="h-4 w-4" />
-          </span>
-          <div>
-            <p className="text-[0.82rem] font-semibold leading-tight text-white">Approved &amp; delivered</p>
-            <p className="text-telemetry mt-0.5 text-[0.5rem] text-[#8793ad]">#FOUNDER-OPS · 9:05 AM</p>
-          </div>
+        <div className="absolute -left-6 top-[15%] hidden sm:block lg:-left-10">
+          <HeroActivityFeed className="animate-float" />
         </div>
       </div>
     </div>
