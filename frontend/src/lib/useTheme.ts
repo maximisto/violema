@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import {
+  DEFAULT_THEME,
+  LIGHT_THEME_ENABLED,
   getServerSnapshot,
   getThemeSnapshot,
   setTheme,
@@ -19,7 +21,10 @@ export interface UseThemeResult {
 }
 
 export function useTheme(): UseThemeResult {
-  const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getServerSnapshot);
+  const stored = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getServerSnapshot);
+  // While the light theme is disabled, force dark everywhere regardless of any
+  // stored preference, so no one is stranded on the unfinished light site.
+  const theme = LIGHT_THEME_ENABLED ? stored : DEFAULT_THEME;
   return {
     theme,
     isLight: theme === 'light',

@@ -1,4 +1,5 @@
 import { Moon, Sun } from 'lucide-react';
+import { LIGHT_THEME_ENABLED } from '../lib/theme';
 import { useTheme } from '../lib/useTheme';
 
 interface ThemeToggleProps {
@@ -11,6 +12,9 @@ interface ThemeToggleProps {
  */
 export default function ThemeToggle({ className = '' }: ThemeToggleProps) {
   const { isLight, toggleTheme } = useTheme();
+
+  // Light theme is disabled for now — hide the switch entirely.
+  if (!LIGHT_THEME_ENABLED) return null;
 
   return (
     <button
