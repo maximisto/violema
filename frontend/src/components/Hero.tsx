@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { heroBullets, heroCopy, proofPoints } from '../content/homepage';
 import BrandMarquee from './BrandMarquee';
 import Reveal from './Reveal';
+import SlackPhone from './SlackPhone';
 
 type HeroCtaAction = 'set_up_access' | 'watch_workflow_run';
 
@@ -158,19 +159,15 @@ function DeviceCluster() {
           <img
             src="/brand/violema-dashboard-ui.png"
             alt="Violema web command center running a weekly founder update with workers, evidence, and an approval gate."
-            width={804}
-            height={590}
+            width={1600}
+            height={888}
             className="block w-full"
           />
         </div>
 
-        <img
-          src="/brand/violema-slack-phone-ui.png"
-          alt="Violema mobile Slack approval card for the run."
-          width={214}
-          height={460}
-          className="absolute -bottom-10 -right-2 w-[26%] min-w-[7.5rem] rounded-[1.4rem] border border-white/10 shadow-[0_34px_80px_-18px_rgba(0,0,0,0.85)] sm:-right-6"
-        />
+        <div className="absolute -bottom-14 -right-3 w-[19.5rem] origin-bottom-right scale-[0.5] sm:-right-8 sm:scale-[0.58] lg:scale-[0.64]">
+          <SlackPhone />
+        </div>
 
         <div className="absolute -left-3 bottom-10 hidden items-center gap-3 rounded-2xl border border-white/10 bg-ink-800/92 px-4 py-3 shadow-[0_26px_64px_-22px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:flex">
           <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-signal-500/16 text-signal-300">

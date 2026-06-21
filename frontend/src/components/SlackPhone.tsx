@@ -2,19 +2,93 @@ import ChevronLeft from 'lucide-react/dist/esm/icons/chevron-left.js';
 import Hash from 'lucide-react/dist/esm/icons/hash.js';
 import Plus from 'lucide-react/dist/esm/icons/plus.js';
 import Search from 'lucide-react/dist/esm/icons/search.js';
-import type { CSSProperties } from 'react';
-
-function delay(ms: number): CSSProperties {
-  return { animationDelay: `${ms}ms` };
-}
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * A built (not screenshotted) iPhone running Slack dark mode, showing the
- * Violema run-approval card. Reused in the hero and the light showcase.
+ * A built (not screenshotted) iPhone running Slack dark mode that plays the
+ * Violema reviewable-approval loop live: Violema posts the weekly update card →
+ * the founder approves → Violema confirms delivery. Messages populate with
+ * typing indicators so the hero feels alive. The Approve button is clickable;
+ * the loop auto-plays when in view and collapses to the delivered state under
+ * reduced motion.
  */
+type Phase = 'typing1' | 'card' | 'approved' | 'typing2' | 'delivered';
+
+const SEQUENCE: { phase: Phase; ms: number }[] = [
+  { phase: 'typing1', ms: 1400 },
+  { phase: 'card', ms: 3200 },
+  { phase: 'approved', ms: 1500 },
+  { phase: 'typing2', ms: 1400 },
+  { phase: 'delivered', ms: 4400 },
+];
+const APPROVED_INDEX = SEQUENCE.findIndex((s) => s.phase === 'approved');
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
+const TypingBubble = ({ initial }: { initial: string }) => (
+  <div className="slackphone-in flex items-center gap-2">
+    <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-gradient-to-br from-violet-500 to-[#7c3cff] text-[0.6rem] font-black text-white">{initial}</span>
+    <span className="flex items-center gap-1 rounded-2xl rounded-bl-md bg-white/[0.06] px-2.5 py-2">
+      {[0, 0.16, 0.32].map((d) => (
+        <span key={d} className="slackphone-dot h-1 w-1 rounded-full bg-[#7c8aa3]" style={{ animationDelay: `${d}s` }} />
+      ))}
+    </span>
+  </div>
+);
+
 export default function SlackPhone({ className = '' }: { className?: string }) {
+  const [index, setIndex] = useState(0);
+  const [active, setActive] = useState(false);
+  const reduced = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    reduced.current = prefersReducedMotion();
+    const node = rootRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setActive(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => entries.forEach((e) => e.isIntersecting && setActive(true)),
+      { threshold: 0.35 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    if (reduced.current) {
+      setIndex(SEQUENCE.length - 1);
+      return;
+    }
+    timer.current = setTimeout(
+      () => setIndex((i) => (i + 1) % SEQUENCE.length),
+      SEQUENCE[index].ms,
+    );
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [active, index]);
+
+  const phase = SEQUENCE[index].phase;
+  const showCard = phase !== 'typing1';
+  const approvedState = phase === 'approved' || phase === 'typing2' || phase === 'delivered';
+  const showReply = approvedState;
+  const showDelivered = phase === 'delivered';
+
+  const approve = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    setIndex(APPROVED_INDEX);
+  }, []);
+
   return (
-    <div className={`relative mx-auto w-full max-w-[19.5rem] ${className}`}>
+    <div ref={rootRef} className={`relative mx-auto w-full max-w-[19.5rem] ${className}`}>
       {/* titanium frame */}
       <div className="relative rounded-[3rem] bg-gradient-to-b from-[#45474e] via-[#26282d] to-[#141519] p-[3px] shadow-[0_50px_110px_-34px_rgba(0,0,0,0.75)]">
         <div className="rounded-[2.85rem] bg-[#0a0b0e] p-[2px]">
@@ -54,84 +128,113 @@ export default function SlackPhone({ className = '' }: { className?: string }) {
             </div>
 
             {/* thread */}
-            <div className="space-y-3 px-3.5 py-3.5">
+            <div className="flex min-h-[19rem] flex-col gap-3 px-3.5 py-3.5">
               <div className="flex items-center gap-2">
                 <span className="h-px flex-1 bg-white/8" />
                 <span className="text-[0.5rem] font-bold uppercase tracking-[0.12em] text-[#7c8aa3]">Today</span>
                 <span className="h-px flex-1 bg-white/8" />
               </div>
 
-              {/* Violema app message */}
-              <div className="founder-chat-message">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-gradient-to-br from-violet-500 to-[#7c3cff] text-[0.6rem] font-black text-white">V</span>
-                  <span className="text-[0.68rem] font-bold text-white">Violema</span>
-                  <span className="rounded bg-white/10 px-1 text-[0.42rem] font-bold uppercase tracking-[0.08em] text-[#aab2c5]">App</span>
-                  <span className="text-[0.5rem] text-[#7c8aa3]">9:05 AM</span>
-                </div>
+              {phase === 'typing1' && <TypingBubble initial="V" />}
 
-                {/* approval attachment card */}
-                <div className="mt-2 overflow-hidden rounded-lg border border-white/10 bg-white/[0.035]">
-                  <div className="flex">
-                    <span className="w-[3px] flex-none bg-gradient-to-b from-violet-400 to-signal-500" />
-                    <div className="min-w-0 flex-1 p-3">
-                      <p className="text-[0.72rem] font-bold leading-tight text-white">Weekly founder update — ready for review</p>
-                      <p className="mt-0.5 text-[0.56rem] text-violet-200">Run #7241 · 12 sources · 38 credits</p>
+              {/* Violema app message + approval card */}
+              {showCard && (
+                <div className="slackphone-in">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-gradient-to-br from-violet-500 to-[#7c3cff] text-[0.6rem] font-black text-white">V</span>
+                    <span className="text-[0.68rem] font-bold text-white">Violema</span>
+                    <span className="rounded bg-white/10 px-1 text-[0.42rem] font-bold uppercase tracking-[0.08em] text-[#aab2c5]">App</span>
+                    <span className="text-[0.5rem] text-[#7c8aa3]">9:05 AM</span>
+                  </div>
 
-                      <div className="mt-2.5 grid gap-1.5">
-                        {[
-                          ['Revenue', '▲ 18% WoW', 'text-emerald-300'],
-                          ['Churn', 'Steady', 'text-[#c2cadb]'],
-                          ['Signals', '2 enterprise wins', 'text-[#c2cadb]'],
-                        ].map(([label, value, color]) => (
-                          <div key={label} className="flex items-center justify-between text-[0.56rem]">
-                            <span className="text-[#8793ad]">{label}</span>
-                            <span className={`font-semibold ${color}`}>{value}</span>
-                          </div>
-                        ))}
-                      </div>
+                  <div className="mt-2 overflow-hidden rounded-lg border border-white/10 bg-white/[0.035]">
+                    <div className="flex">
+                      <span className="w-[3px] flex-none bg-gradient-to-b from-violet-400 to-signal-500" />
+                      <div className="min-w-0 flex-1 p-3">
+                        <p className="text-[0.72rem] font-bold leading-tight text-white">Weekly founder update — ready for review</p>
+                        <p className="mt-0.5 text-[0.56rem] text-violet-200">Run #7241 · 12 sources · 38 credits</p>
 
-                      <div className="mt-2.5 flex items-center gap-2">
-                        <span className="text-[0.5rem] font-semibold text-[#8793ad]">Sources</span>
-                        <div className="flex -space-x-1">
-                          {['S', 'P', 'C', 'A'].map((s, i) => (
-                            <span
-                              key={s}
-                              className={`flex h-4 w-4 items-center justify-center rounded-[4px] border border-[#0b0e14] text-[0.42rem] font-black text-white ${
-                                ['bg-violet-500', 'bg-slate-600', 'bg-blue-500', 'bg-sky-500'][i]
-                              }`}
-                            >
-                              {s}
-                            </span>
+                        <div className="mt-2.5 grid gap-1.5">
+                          {[
+                            ['Revenue', '▲ 18% WoW', 'text-emerald-300'],
+                            ['Churn', 'Steady', 'text-[#c2cadb]'],
+                            ['Signals', '2 enterprise wins', 'text-[#c2cadb]'],
+                          ].map(([label, value, color]) => (
+                            <div key={label} className="flex items-center justify-between text-[0.56rem]">
+                              <span className="text-[#8793ad]">{label}</span>
+                              <span className={`font-semibold ${color}`}>{value}</span>
+                            </div>
                           ))}
-                          <span className="flex h-4 w-4 items-center justify-center rounded-[4px] border border-[#0b0e14] bg-white/12 text-[0.42rem] font-black text-white">+9</span>
                         </div>
-                      </div>
 
-                      <div className="mt-3 grid grid-cols-2 gap-1.5">
-                        <button type="button" className="rounded-md bg-[#1aa172] px-2 py-1.5 text-[0.56rem] font-bold text-white shadow-[0_4px_14px_-4px_rgba(26,161,114,0.8)]">
-                          Approve &amp; deliver
-                        </button>
-                        <button type="button" className="rounded-md border border-white/14 bg-white/[0.04] px-2 py-1.5 text-[0.56rem] font-bold text-[#dbe2f4]">
-                          Request changes
-                        </button>
+                        <div className="mt-2.5 flex items-center gap-2">
+                          <span className="text-[0.5rem] font-semibold text-[#8793ad]">Sources</span>
+                          <div className="flex -space-x-1">
+                            {['S', 'P', 'C', 'A'].map((s, i) => (
+                              <span
+                                key={s}
+                                className={`flex h-4 w-4 items-center justify-center rounded-[4px] border border-[#0b0e14] text-[0.42rem] font-black text-white ${
+                                  ['bg-violet-500', 'bg-slate-600', 'bg-blue-500', 'bg-sky-500'][i]
+                                }`}
+                              >
+                                {s}
+                              </span>
+                            ))}
+                            <span className="flex h-4 w-4 items-center justify-center rounded-[4px] border border-[#0b0e14] bg-white/12 text-[0.42rem] font-black text-white">+9</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={approve}
+                            className={`rounded-md px-2 py-1.5 text-[0.56rem] font-bold transition-colors ${
+                              approvedState
+                                ? 'bg-[#1aa172]/15 text-emerald-300'
+                                : 'bg-[#1aa172] text-white shadow-[0_4px_14px_-4px_rgba(26,161,114,0.8)] hover:bg-[#15875f]'
+                            }`}
+                          >
+                            {approvedState ? '✓ Approved' : 'Approve & deliver'}
+                          </button>
+                          {!approvedState && (
+                            <button type="button" className="rounded-md border border-white/14 bg-white/[0.04] px-2 py-1.5 text-[0.56rem] font-bold text-[#dbe2f4]">
+                              Request changes
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* human reply */}
-              <div className="founder-chat-message flex items-start gap-2" style={delay(420)}>
-                <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-gradient-to-br from-signal-500 to-[#cf4a10] text-[0.6rem] font-black text-white">M</span>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[0.68rem] font-bold text-white">Max</span>
-                    <span className="text-[0.5rem] text-[#7c8aa3]">9:06 AM</span>
+              {showReply && (
+                <div className="slackphone-in flex items-start gap-2">
+                  <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-gradient-to-br from-signal-500 to-[#cf4a10] text-[0.6rem] font-black text-white">M</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[0.68rem] font-bold text-white">Max</span>
+                      <span className="text-[0.5rem] text-[#7c8aa3]">9:06 AM</span>
+                    </div>
+                    <p className="mt-0.5 text-[0.62rem] leading-snug text-[#c2cadb]">Approved ✅ ship it to #founder-updates</p>
                   </div>
-                  <p className="mt-0.5 text-[0.62rem] leading-snug text-[#c2cadb]">Approved ✅ ship it to #founder-updates</p>
                 </div>
-              </div>
+              )}
+
+              {phase === 'typing2' && <TypingBubble initial="V" />}
+
+              {/* delivery confirmation */}
+              {showDelivered && (
+                <div className="slackphone-in flex items-start gap-2">
+                  <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-gradient-to-br from-violet-500 to-[#7c3cff] text-[0.6rem] font-black text-white">V</span>
+                  <div className="min-w-0">
+                    <p className="text-[0.62rem] leading-snug text-[#c2cadb]">
+                      <span className="font-semibold text-emerald-300">Delivered</span> to <span className="font-semibold text-white">#founder-updates</span> · run logged with 12 sources.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* composer */}

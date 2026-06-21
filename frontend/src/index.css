@@ -1691,6 +1691,26 @@
 .theme-light .violema-logo-dark { display: none; }
 .theme-light .violema-logo-light { display: block; }
 
+/* ── Live Slack phone (hero) ──────────────────────────────────────── */
+.slackphone-in {
+  animation: slackphoneIn 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes slackphoneIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.slackphone-dot {
+  animation: slackphoneDot 1.1s ease-in-out infinite;
+}
+@keyframes slackphoneDot {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  30%           { opacity: 1; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slackphone-in { animation: none !important; }
+  .slackphone-dot { animation: none !important; }
+}
+
 /* The Hero headline is a clip-text gradient (white → lilac → violet on dark).
    On light, drive it ink → violet so it stays legible and on-brand. */
 .theme-light .bg-clip-text {
