@@ -16,13 +16,13 @@ export default function ViolemaLogo({
       <img
         src="/brand/violema-logo-20260510.png"
         alt=""
-        className={`violema-logo-dark h-full w-full object-contain object-left drop-shadow-[0_0_18px_rgba(168,85,247,0.22)] ${imageClassName}`}
+        className={`violema-logo-dark h-full w-full object-contain drop-shadow-[0_0_18px_rgba(168,85,247,0.22)] ${imageClassName}`}
         decoding="async"
       />
       <img
-        src="/brand/violema-logo.png"
+        src="/brand/violema-logo-light.png"
         alt=""
-        className={`violema-logo-light h-full w-full object-contain object-left ${imageClassName}`}
+        className={`violema-logo-light h-full w-full object-contain ${imageClassName}`}
         decoding="async"
         loading="lazy"
       />
