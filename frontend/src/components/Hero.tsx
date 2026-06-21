@@ -94,7 +94,7 @@ function HeroCopy() {
         </div>
         <div className="relative overflow-hidden rounded-2xl border border-white/12 shadow-[0_34px_80px_-30px_rgba(0,0,0,0.85)]">
           <img
-            src="/brand/violema-dashboard-ui.png"
+            src="/brand/violema-dashboard-ui.png?v=2"
             alt="Violema dashboard running a weekly founder update with evidence and an approval gate."
             width={1600}
             height={888}
@@ -189,7 +189,7 @@ function DeviceCluster() {
           </div>
 
           <img
-            src="/brand/violema-dashboard-ui.png"
+            src="/brand/violema-dashboard-ui.png?v=2"
             alt="Violema web command center running a weekly founder update with workers, evidence, and an approval gate."
             width={1600}
             height={888}
