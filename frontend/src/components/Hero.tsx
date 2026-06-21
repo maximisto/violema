@@ -169,7 +169,7 @@ function DeviceCluster() {
           <SlackPhone />
         </div>
 
-        <div className="absolute -left-6 top-[15%] hidden sm:block lg:-left-10">
+        <div className="absolute -left-6 bottom-[-4.5%] hidden sm:block lg:-left-10">
           <HeroActivityFeed className="animate-float" />
         </div>
       </div>
