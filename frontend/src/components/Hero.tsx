@@ -92,7 +92,7 @@ function HeroCopy() {
           <div className="absolute inset-x-4 top-0 h-40 rounded-[44%] bg-violet-600/22 blur-[70px]" />
           <div className="absolute -bottom-4 right-6 h-28 w-28 rounded-full bg-signal-500/12 blur-[60px]" />
         </div>
-        <div className="relative overflow-hidden rounded-2xl border border-white/12 shadow-[0_34px_80px_-30px_rgba(0,0,0,0.85)]">
+        <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] shadow-[0_34px_80px_-30px_rgba(0,0,0,0.85)]">
           <img
             src="/brand/violema-dashboard-ui.png?v=2"
             alt="Violema dashboard running a weekly founder update with evidence and an approval gate."

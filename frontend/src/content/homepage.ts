@@ -97,7 +97,7 @@ export const homepageNav: HomepageNavItem[] = [
 ];
 
 export const heroCopy = {
-  eyebrow: 'Reviewable AI operator for founder-led teams',
+  eyebrow: 'Runs the week so you can build',
   headline: 'AI agents for founder work.',
   subhead:
     'Violema turns weekly updates, revenue checks, competitor briefs, customer-risk digests, follow-up queues, and team handoffs into source-linked missions you can verify before anything sensitive ships.',
