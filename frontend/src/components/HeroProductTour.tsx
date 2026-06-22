@@ -7,16 +7,19 @@ export type HeroTourSlide = {
   alt: string;
 };
 
+export const HERO_IMAGE_VERSION = '20260622';
+export const heroImageSrc = (name: `P${1 | 2 | 3 | 4 | 5}`) => `/brand/${name}.jpg?v=${HERO_IMAGE_VERSION}`;
+
 /**
  * A slow, ambient walk-through of the live product. Each frame is a real
  * Violema view, ordered to tell the founder workflow from home to scheduling.
  */
 export const heroTourSlides: HeroTourSlide[] = [
-  { src: '/brand/P1.jpg', path: 'violema.com / chat', alt: 'Violema home chat with mission context inspector and Dima approval state.' },
-  { src: '/brand/P2.jpg', path: 'violema.com / missions', alt: 'Violema mission cockpit showing weekly founder update progress, review, and cost controls.' },
-  { src: '/brand/P3.jpg', path: 'violema.com / map', alt: 'Violema workflow map showing steps, tools, integrations, and agent handoff path.' },
-  { src: '/brand/P4.jpg', path: 'violema.com / calendar', alt: 'Violema calendar for scheduling recurring founder workflows with connected stack context.' },
-  { src: '/brand/P5.jpg', path: 'violema.com / workflow builder', alt: 'Violema workflow builder for creating and saving a recurring automation.' },
+  { src: heroImageSrc('P1'), path: 'violema.com / chat', alt: 'Violema home chat with mission context inspector and Dima approval state.' },
+  { src: heroImageSrc('P2'), path: 'violema.com / missions', alt: 'Violema mission cockpit showing weekly founder update progress, review, and cost controls.' },
+  { src: heroImageSrc('P3'), path: 'violema.com / map', alt: 'Violema workflow map showing steps, tools, integrations, and agent handoff path.' },
+  { src: heroImageSrc('P4'), path: 'violema.com / calendar', alt: 'Violema calendar for scheduling recurring founder workflows with connected stack context.' },
+  { src: heroImageSrc('P5'), path: 'violema.com / workflow builder', alt: 'Violema workflow builder for creating and saving a recurring automation.' },
 ];
 
 export const HERO_TOUR_MS = 7200;

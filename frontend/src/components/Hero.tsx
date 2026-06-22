@@ -14,7 +14,7 @@ import BrandMarquee from './BrandMarquee';
 import Reveal from './Reveal';
 import SlackPhone from './SlackPhone';
 import HeroActivityFeed from './HeroActivityFeed';
-import { HeroTourImages, HERO_TOUR_MS, useHeroTour } from './HeroProductTour';
+import { HeroTourImages, HERO_TOUR_MS, heroImageSrc, useHeroTour } from './HeroProductTour';
 
 type HeroCtaAction = 'set_up_access' | 'watch_workflow_run';
 
@@ -93,7 +93,7 @@ function HeroCopy() {
         </div>
         <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-[0_34px_80px_-30px_rgba(0,0,0,0.9)]">
           <img
-            src="/brand/P1.jpg"
+            src={heroImageSrc('P1')}
             alt="Violema desktop workspace with chat, mission context, and founder workflow controls."
             width={1800}
             height={1010}
