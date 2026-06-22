@@ -86,23 +86,23 @@ function HeroCopy() {
         </span>
       </h1>
 
-      {/* Mobile/tablet: the real product right after the headline — a clean
-          framed screenshot (no mockup chrome) that fades into the page. */}
       <div className="relative mt-7 lg:hidden">
-        <div aria-hidden className="absolute -inset-5 -z-10">
-          <div className="absolute inset-x-4 top-0 h-40 rounded-[44%] bg-violet-600/22 blur-[70px]" />
-          <div className="absolute -bottom-4 right-6 h-28 w-28 rounded-full bg-signal-500/12 blur-[60px]" />
+        <div aria-hidden className="absolute -inset-x-5 -inset-y-6 -z-10">
+          <div className="absolute inset-x-4 top-2 h-40 rounded-[44%] bg-violet-600/20 blur-[72px]" />
+          <div className="absolute -bottom-3 right-8 h-24 w-24 rounded-full bg-signal-500/12 blur-[58px]" />
         </div>
-        <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] shadow-[0_34px_80px_-30px_rgba(0,0,0,0.85)]">
+        <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-[0_34px_80px_-30px_rgba(0,0,0,0.9)]">
           <img
-            src="/brand/violema-dashboard-ui.png?v=2"
-            alt="Violema dashboard running a weekly founder update with evidence and an approval gate."
-            width={1600}
-            height={888}
+            src="/brand/P1.avif"
+            alt="Violema desktop workspace with chat, mission context, and founder workflow controls."
+            width={2200}
+            height={1379}
             className="block w-full"
+            decoding="async"
+            fetchPriority="high"
           />
-          <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.10)]" />
-          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-ink-900 to-transparent" />
+          <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-ink-900/95 to-transparent" />
         </div>
       </div>
 
@@ -151,23 +151,11 @@ function DeviceCluster() {
   };
 
   return (
-    <>
-      {/* Mobile + tablet: feature the live Slack phone as a glassy, 3D-tilted
-          product shot — Violema's own UI, legible, instead of a tiny dark
-          screenshot. */}
-      <div className="relative mx-auto w-full max-w-[19rem] py-4 lg:hidden">
-        <div aria-hidden className="absolute -inset-10 -z-10">
-          <div className="absolute left-1/2 top-4 h-52 w-52 -translate-x-1/2 rounded-full bg-violet-600/30 blur-[90px]" />
-          <div className="absolute bottom-6 right-2 h-40 w-40 rounded-full bg-signal-500/18 blur-[80px]" />
-        </div>
-        <SlackPhone className="phone-3d" />
+    <div className="tilt-stage relative hidden lg:block" onMouseMove={handleMove} onMouseLeave={reset}>
+      <div aria-hidden className="absolute -inset-12 -z-10">
+        <div className="absolute left-1/4 top-0 h-64 w-64 rounded-full bg-violet-600/25 blur-[90px]" />
+        <div className="absolute bottom-2 right-4 h-56 w-56 rounded-full bg-signal-500/15 blur-[90px]" />
       </div>
-
-      <div className="tilt-stage relative hidden lg:block" onMouseMove={handleMove} onMouseLeave={reset}>
-        <div aria-hidden className="absolute -inset-12 -z-10">
-          <div className="absolute left-1/4 top-0 h-64 w-64 rounded-full bg-violet-600/25 blur-[90px]" />
-          <div className="absolute bottom-2 right-4 h-56 w-56 rounded-full bg-signal-500/15 blur-[90px]" />
-        </div>
 
       <div ref={innerRef} className="tilt-inner relative mx-auto w-full max-w-[40rem]">
         <div className="signal-orbit relative overflow-hidden rounded-[1.3rem] border border-white/12 bg-ink-850/95 shadow-[0_50px_140px_-32px_rgba(0,0,0,0.9)] backdrop-blur-xl">
@@ -210,7 +198,6 @@ function DeviceCluster() {
         </div>
       </div>
     </div>
-    </>
   );
 }
 
