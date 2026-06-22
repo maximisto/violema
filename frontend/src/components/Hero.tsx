@@ -14,6 +14,7 @@ import BrandMarquee from './BrandMarquee';
 import Reveal from './Reveal';
 import SlackPhone from './SlackPhone';
 import HeroActivityFeed from './HeroActivityFeed';
+import { HeroTourImages, HERO_TOUR_MS, useHeroTour } from './HeroProductTour';
 
 type HeroCtaAction = 'set_up_access' | 'watch_workflow_run';
 
@@ -130,6 +131,7 @@ function HeroCopy() {
 
 function DeviceCluster() {
   const innerRef = useRef<HTMLDivElement>(null);
+  const { index, active } = useHeroTour();
 
   const handleMove = (event: MouseEvent<HTMLDivElement>) => {
     const el = innerRef.current;
@@ -169,7 +171,7 @@ function DeviceCluster() {
 
       <div ref={innerRef} className="tilt-inner relative mx-auto w-full max-w-[40rem]">
         <div className="signal-orbit relative overflow-hidden rounded-[1.3rem] border border-white/12 bg-ink-850/95 shadow-[0_50px_140px_-32px_rgba(0,0,0,0.9)] backdrop-blur-xl">
-          <div className="flex items-center gap-3 border-b border-white/[0.07] bg-white/[0.025] px-4 py-3">
+          <div className="relative flex items-center gap-3 border-b border-white/[0.07] bg-white/[0.025] px-4 py-3">
             <div className="flex items-center gap-1.5">
               <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
               <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
@@ -177,7 +179,9 @@ function DeviceCluster() {
             </div>
             <div className="ml-2 flex flex-1 items-center gap-2 rounded-lg border border-white/[0.07] bg-black/30 px-3 py-1.5">
               <Lock className="h-3 w-3 flex-none text-[#7c8aa3]" />
-              <span className="text-telemetry truncate text-[0.56rem] text-[#8793ad]">violema.app / runs / 7241</span>
+              <span key={active.path} className="hero-tour-path text-telemetry truncate text-[0.56rem] text-[#8793ad]">
+                {active.path}
+              </span>
             </div>
             <span className="flex items-center gap-1.5 rounded-full border border-signal-500/30 bg-signal-500/10 px-2.5 py-1">
               <span className="relative flex h-1.5 w-1.5 items-center justify-center">
@@ -186,15 +190,15 @@ function DeviceCluster() {
               </span>
               <span className="text-telemetry text-[0.52rem] text-signal-300">Live</span>
             </span>
+            <span
+              key={index}
+              aria-hidden
+              className="hero-tour-progress pointer-events-none absolute inset-x-0 bottom-0 h-px origin-left bg-gradient-to-r from-signal-400/70 via-violet-300/60 to-transparent"
+              style={{ animationDuration: `${HERO_TOUR_MS}ms` }}
+            />
           </div>
 
-          <img
-            src="/brand/violema-dashboard-ui.png?v=2"
-            alt="Violema web command center running a weekly founder update with workers, evidence, and an approval gate."
-            width={1600}
-            height={888}
-            className="block w-full"
-          />
+          <HeroTourImages index={index} />
         </div>
 
         <div className="absolute -bottom-24 -right-5 w-[19.5rem] origin-bottom-right scale-[0.46] sm:-bottom-28 sm:-right-10 sm:scale-[0.52] lg:scale-[0.58]">
