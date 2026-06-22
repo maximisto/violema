@@ -62,6 +62,16 @@ export default {
           600: '#f2601d',
           700: '#cf4a10',
         },
+        // Semantic body-text ramp (variable-backed, theme-aware like `slate`).
+        // Replaces ad-hoc hex on dark marketing surfaces; `.theme-light` remaps
+        // each step to its warm-ink equivalent in index.css.
+        copy: {
+          hi: 'rgb(var(--c-copy-hi) / <alpha-value>)',
+          DEFAULT: 'rgb(var(--c-copy) / <alpha-value>)',
+          muted: 'rgb(var(--c-copy-muted) / <alpha-value>)',
+          soft: 'rgb(var(--c-copy-soft) / <alpha-value>)',
+          faint: 'rgb(var(--c-copy-faint) / <alpha-value>)',
+        },
       },
       fontFamily: {
         // Clash Display is reserved for large display headings ONLY.

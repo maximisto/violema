@@ -159,6 +159,13 @@
     --c-slate-800: 30 41 59;
     --c-slate-900: 15 23 42;
     --c-slate-950: 2 6 23;
+
+    /* Body-text ramp on dark marketing surfaces (backs the `copy` tokens). */
+    --c-copy-hi: 231 235 247;   /* high-emphasis    (#e7ebf7) */
+    --c-copy: 194 202 219;      /* primary body     (#c2cadb) */
+    --c-copy-muted: 174 183 205;/* secondary body   (#aeb7cd) */
+    --c-copy-soft: 135 147 173; /* captions / paths (#8793ad) */
+    --c-copy-faint: 130 142 164;/* faint labels     (#828ea4, AA-safe) */
   }
 
   /* Warm editorial off-white. Surfaces (navy/ink) go light; slate INVERTS so
@@ -187,6 +194,13 @@
     --c-slate-800: 201 189 168;/* light warm surface */
     --c-slate-900: 231 222 207;/* light warm surface */
     --c-slate-950: 243 237 227;/* bone surface */
+
+    /* Body-text ramp remapped to warm ink for the light theme. */
+    --c-copy-hi: 20 17 14;     /* primary ink    (#14110e) */
+    --c-copy: 75 67 55;        /* secondary warm (#4b4337) */
+    --c-copy-muted: 75 67 55;  /* secondary warm (#4b4337) */
+    --c-copy-soft: 107 98 83;  /* muted warm     (#6b6253) */
+    --c-copy-faint: 107 98 83; /* faint warm     (#6b6253) */
   }
 
   html {

@@ -59,7 +59,7 @@ function HeroActions({ placement = 'hero' }: { placement?: 'hero' | 'mobile_stic
           trackHeroCta('watch_workflow_run', placement);
           scrollToDemo();
         }}
-        className="inline-flex min-h-[3.5rem] items-center justify-center gap-2.5 rounded-2xl border border-white/14 bg-white/[0.04] px-6 text-base font-semibold tracking-[-0.01em] text-[#dbe2f4] transition duration-200 hover:border-violet-200/40 hover:bg-white/[0.07] active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 sm:min-h-[3.25rem]"
+        className="inline-flex min-h-[3.5rem] items-center justify-center gap-2.5 rounded-2xl border border-white/14 bg-white/[0.04] px-6 text-base font-semibold tracking-[-0.01em] text-copy-hi transition duration-200 hover:border-violet-200/40 hover:bg-white/[0.07] active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 sm:min-h-[3.25rem]"
       >
         <Play className="h-[1.1rem] w-[1.1rem]" />
         {heroCopy.secondaryCta}
@@ -76,7 +76,7 @@ function HeroCopy() {
           <span className="live-dot absolute inset-0 rounded-full" />
           <span className="relative h-2.5 w-2.5 rounded-full bg-signal-400 shadow-[0_0_10px_rgba(255,122,60,0.85)]" />
         </span>
-        <span className="text-telemetry text-[0.62rem] text-[#aeb7cd]">{heroCopy.eyebrow}</span>
+        <span className="text-telemetry text-[0.62rem] text-copy-muted">{heroCopy.eyebrow}</span>
       </div>
 
       <h1 className="mt-6 font-display text-[3.3rem] font-semibold leading-[0.95] tracking-[-0.03em] text-white sm:text-[4.1rem] xl:text-[4.5rem]">
@@ -97,8 +97,8 @@ function HeroCopy() {
             <img
               src="/brand/P1.jpg"
               alt="Violema desktop workspace with chat, mission context, and founder workflow controls."
-              width={2200}
-              height={1379}
+              width={1508}
+              height={798}
               className="block w-full"
               decoding="async"
               fetchPriority="high"
@@ -109,11 +109,11 @@ function HeroCopy() {
         </div>
       </div>
 
-      <p className="mt-7 max-w-[34rem] text-lg leading-7 text-[#aeb7cd]">{heroCopy.subhead}</p>
+      <p className="mt-7 max-w-[34rem] text-lg leading-7 text-copy-muted">{heroCopy.subhead}</p>
 
       <div className="mt-7 grid max-w-[34rem] grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
         {heroBullets.map((item) => (
-          <div key={item.label} className="flex items-center gap-2.5 text-[0.95rem] font-medium text-[#c2cadb]">
+          <div key={item.label} className="flex items-center gap-2.5 text-[0.95rem] font-medium text-copy">
             <CheckCircle2 className="h-[1.05rem] w-[1.05rem] flex-none text-violet-300" />
             <span>{item.label}</span>
           </div>
@@ -124,7 +124,7 @@ function HeroCopy() {
         <HeroActions />
       </div>
 
-      <p className="mt-5 hidden items-center gap-2 text-sm text-[#8793ad] sm:flex">
+      <p className="mt-5 hidden items-center gap-2 text-sm text-copy-soft sm:flex">
         <ShieldCheck className="h-4 w-4 flex-none text-signal-400/90" />
         {heroCopy.surfaceNote}
       </p>
@@ -169,8 +169,8 @@ function DeviceCluster() {
               <span className="h-3 w-3 rounded-full bg-[#28c840]" />
             </div>
             <div className="ml-2 flex flex-1 items-center gap-2 rounded-lg border border-white/[0.07] bg-black/30 px-3 py-1.5">
-              <Lock className="h-3 w-3 flex-none text-[#7c8aa3]" />
-              <span key={active.path} className="hero-tour-path text-telemetry truncate text-[0.56rem] text-[#8793ad]">
+              <Lock className="h-3 w-3 flex-none text-copy-soft" />
+              <span key={active.path} className="hero-tour-path text-telemetry truncate text-[0.56rem] text-copy-soft">
                 {active.path}
               </span>
             </div>
@@ -215,11 +215,11 @@ function ProofRail() {
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/14 text-violet-200">
                 <Icon className="h-4 w-4" />
               </span>
-              <span className="text-telemetry text-[0.55rem] text-[#6f7a91]">{String(index + 1).padStart(2, '0')}</span>
+              <span className="text-telemetry text-[0.55rem] text-copy-faint">{String(index + 1).padStart(2, '0')}</span>
             </div>
             <div>
               <p className="text-[0.95rem] font-semibold text-white">{point.title}</p>
-              <p className="mt-1 text-sm leading-5 text-[#8793ad]">{point.body}</p>
+              <p className="mt-1 text-sm leading-5 text-copy-soft">{point.body}</p>
             </div>
           </div>
         );
@@ -231,7 +231,7 @@ function ProofRail() {
 function LogoRail() {
   return (
     <div>
-      <p className="text-telemetry text-[0.6rem] text-[#6f7a91]">Built to work across the founder stack</p>
+      <p className="text-telemetry text-[0.6rem] text-copy-faint">Built to work across the founder stack</p>
       <div className="relative left-1/2 mt-6 w-screen -translate-x-1/2">
         <BrandMarquee />
       </div>
@@ -259,7 +259,7 @@ function MobileStickyCta() {
         <button
           type="button"
           onClick={() => navigate('/login')}
-          className="rounded-2xl border border-white/14 bg-white/[0.05] px-5 py-4 text-base font-semibold text-[#e7ebf7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
+          className="rounded-2xl border border-white/14 bg-white/[0.05] px-5 py-4 text-base font-semibold text-copy-hi focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
         >
           Sign in
         </button>
@@ -292,12 +292,21 @@ function useMobileSticky() {
 export default function Hero() {
   const showSticky = useMobileSticky();
 
+  // Reserve space so the fixed mobile CTA never covers the page's last content.
+  useEffect(() => {
+    if (!showSticky) return;
+    const previous = document.body.style.paddingBottom;
+    document.body.style.paddingBottom = 'calc(5.5rem + env(safe-area-inset-bottom))';
+    return () => {
+      document.body.style.paddingBottom = previous;
+    };
+  }, [showSticky]);
+
   return (
     <section className="founder-hero relative overflow-hidden bg-ink-900 text-white">
       <div className="founder-hero-bg absolute inset-0 -z-20" />
       <div className="founder-hero-grid absolute inset-0 -z-10" />
       <div className="founder-hero-noise absolute inset-0 -z-10" />
-      <h1 className="sr-only">{heroCopy.headline}</h1>
 
       <div className="mx-auto max-w-[88rem] px-4 pb-16 pt-28 sm:px-6 lg:px-8 xl:pb-24 xl:pt-36">
         <div className="grid items-center gap-x-12 gap-y-14 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]">

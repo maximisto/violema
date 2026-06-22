@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 
 export type HeroTourSlide = {
-  src: string;
+  /** Base asset path without extension; .avif and .jpg variants both exist. */
+  asset: string;
   /** Path shown in the frame's address bar. It reads like a live walk-through. */
   path: string;
   alt: string;
@@ -12,11 +13,11 @@ export type HeroTourSlide = {
  * Violema view, ordered to tell the founder workflow from home to scheduling.
  */
 export const heroTourSlides: HeroTourSlide[] = [
-  { src: '/brand/P1.avif', path: 'violema.com / chat', alt: 'Violema home chat with mission context inspector and Dima approval state.' },
-  { src: '/brand/P2.avif', path: 'violema.com / missions', alt: 'Violema mission cockpit showing weekly founder update progress, review, and cost controls.' },
-  { src: '/brand/P3.avif', path: 'violema.com / map', alt: 'Violema workflow map showing steps, tools, integrations, and agent handoff path.' },
-  { src: '/brand/P4.avif', path: 'violema.com / calendar', alt: 'Violema calendar for scheduling recurring founder workflows with connected stack context.' },
-  { src: '/brand/P5.avif', path: 'violema.com / workflow builder', alt: 'Violema workflow builder for creating and saving a recurring automation.' },
+  { asset: '/brand/P1', path: 'violema.com / chat', alt: 'Violema home chat with mission context inspector and Dima approval state.' },
+  { asset: '/brand/P2', path: 'violema.com / missions', alt: 'Violema mission cockpit showing weekly founder update progress, review, and cost controls.' },
+  { asset: '/brand/P3', path: 'violema.com / map', alt: 'Violema workflow map showing steps, tools, integrations, and agent handoff path.' },
+  { asset: '/brand/P4', path: 'violema.com / calendar', alt: 'Violema calendar for scheduling recurring founder workflows with connected stack context.' },
+  { asset: '/brand/P5', path: 'violema.com / workflow builder', alt: 'Violema workflow builder for creating and saving a recurring automation.' },
 ];
 
 export const HERO_TOUR_MS = 7200;
@@ -65,17 +66,20 @@ export function useHeroTour() {
 
 /** The stacked, cross-fading product screenshots. */
 export function HeroTourImages({ index }: { index: number }) {
+  // Eager-load the current and upcoming frame so the cross-fade never flashes
+  // an undecoded image; the rest stay lazy until promoted one step ahead.
+  const next = (index + 1) % heroTourSlides.length;
   return (
-    <div className="relative w-full overflow-hidden bg-black" style={{ aspectRatio: '2200 / 1379' }}>
+    <div className="relative w-full overflow-hidden bg-black" style={{ aspectRatio: '1508 / 798' }}>
       {heroTourSlides.map((slide, i) => (
-        <picture key={slide.src}>
-          <source srcSet={slide.src} type="image/avif" />
+        <picture key={slide.asset}>
+          <source srcSet={`${slide.asset}.avif`} type="image/avif" />
           <img
-            src={slide.src.replace('.avif', '.jpg')}
+            src={`${slide.asset}.jpg`}
             alt={slide.alt}
-            width={2200}
-            height={1379}
-            loading={i === 0 ? 'eager' : 'lazy'}
+            width={1508}
+            height={798}
+            loading={i === 0 || i === index || i === next ? 'eager' : 'lazy'}
             decoding="async"
             draggable={false}
             aria-hidden={i !== index}
