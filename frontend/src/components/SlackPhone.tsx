@@ -88,13 +88,13 @@ export default function SlackPhone({ className = '' }: { className?: string }) {
   }, []);
 
   return (
-    <div ref={rootRef} className={`relative mx-auto w-full max-w-[19.5rem] ${className}`}>
+    <div ref={rootRef} className={`relative mx-auto w-[19rem] ${className}`}>
       {/* titanium frame */}
       <div className="relative rounded-[3rem] bg-gradient-to-b from-[#52555d] via-[#26282d] to-[#0f1014] p-[3px] shadow-[0_50px_110px_-34px_rgba(0,0,0,0.78),inset_0_1px_1.5px_rgba(255,255,255,0.28),inset_0_0_0_1px_rgba(124,58,237,0.10)]">
         {/* violet rim glow */}
         <div aria-hidden className="pointer-events-none absolute -inset-px z-0 rounded-[3rem] bg-[linear-gradient(140deg,rgba(167,139,250,0.35),transparent_30%,transparent_72%,rgba(255,122,60,0.18))] opacity-60 blur-[2px]" />
         <div className="relative rounded-[2.85rem] bg-[#0a0b0e] p-[2px]">
-          <div className="relative overflow-hidden rounded-[2.7rem] bg-[#0b0e14]">
+          <div className="relative flex aspect-[9/19.5] flex-col overflow-hidden rounded-[2.7rem] bg-[#0b0e14]">
             {/* dynamic island */}
             <div className="absolute left-1/2 top-[0.7rem] z-30 h-[1.5rem] w-[5.6rem] -translate-x-1/2 rounded-full bg-black shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" />
             {/* screen glass: layered sheen for a wet-glass read */}
@@ -131,7 +131,7 @@ export default function SlackPhone({ className = '' }: { className?: string }) {
             </div>
 
             {/* thread */}
-            <div className="flex min-h-[19rem] flex-col gap-3 px-3.5 py-3.5">
+            <div className="flex flex-1 flex-col justify-end gap-3 overflow-hidden px-3.5 py-3.5">
               <div className="flex items-center gap-2">
                 <span className="h-px flex-1 bg-white/8" />
                 <span className="text-[0.5rem] font-bold uppercase tracking-[0.12em] text-[#7c8aa3]">Today</span>
