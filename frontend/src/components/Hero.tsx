@@ -92,15 +92,18 @@ function HeroCopy() {
           <div className="absolute -bottom-3 right-8 h-24 w-24 rounded-full bg-signal-500/12 blur-[58px]" />
         </div>
         <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-[0_34px_80px_-30px_rgba(0,0,0,0.9)]">
-          <img
-            src="/brand/P1.avif"
-            alt="Violema desktop workspace with chat, mission context, and founder workflow controls."
-            width={2200}
-            height={1379}
-            className="block w-full"
-            decoding="async"
-            fetchPriority="high"
-          />
+          <picture>
+            <source srcSet="/brand/P1.avif" type="image/avif" />
+            <img
+              src="/brand/P1.jpg"
+              alt="Violema desktop workspace with chat, mission context, and founder workflow controls."
+              width={2200}
+              height={1379}
+              className="block w-full"
+              decoding="async"
+              fetchPriority="high"
+            />
+          </picture>
           <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
           <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-ink-900/95 to-transparent" />
         </div>

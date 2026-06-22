@@ -68,19 +68,21 @@ export function HeroTourImages({ index }: { index: number }) {
   return (
     <div className="relative w-full overflow-hidden bg-black" style={{ aspectRatio: '2200 / 1379' }}>
       {heroTourSlides.map((slide, i) => (
-        <img
-          key={slide.src}
-          src={slide.src}
-          alt={slide.alt}
-          width={2200}
-          height={1379}
-          loading={i === 0 ? 'eager' : 'lazy'}
-          decoding="async"
-          draggable={false}
-          aria-hidden={i !== index}
-          className="absolute inset-0 h-full w-full select-none object-contain transition-opacity ease-out motion-reduce:transition-none"
-          style={{ opacity: i === index ? 1 : 0, transitionDuration: `${FADE_MS}ms` }}
-        />
+        <picture key={slide.src}>
+          <source srcSet={slide.src} type="image/avif" />
+          <img
+            src={slide.src.replace('.avif', '.jpg')}
+            alt={slide.alt}
+            width={2200}
+            height={1379}
+            loading={i === 0 ? 'eager' : 'lazy'}
+            decoding="async"
+            draggable={false}
+            aria-hidden={i !== index}
+            className="absolute inset-0 h-full w-full select-none object-contain transition-opacity ease-out motion-reduce:transition-none"
+            style={{ opacity: i === index ? 1 : 0, transitionDuration: `${FADE_MS}ms` }}
+          />
+        </picture>
       ))}
     </div>
   );
