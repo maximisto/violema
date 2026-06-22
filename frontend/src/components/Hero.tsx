@@ -201,7 +201,7 @@ function DeviceCluster() {
           <HeroTourImages index={index} />
         </div>
 
-        <div className="absolute -bottom-24 -right-5 w-[19.5rem] origin-bottom-right scale-[0.46] sm:-bottom-28 sm:-right-10 sm:scale-[0.52] lg:scale-[0.58]">
+        <div className="absolute -bottom-24 -right-5 w-[19.5rem] origin-bottom-right scale-[0.46] sm:-bottom-28 sm:-right-14 sm:scale-[0.52] lg:-bottom-16 lg:-right-12 lg:scale-[0.56]">
           <SlackPhone />
         </div>
 

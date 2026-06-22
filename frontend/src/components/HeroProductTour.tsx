@@ -2,30 +2,25 @@ import { useEffect, useState } from 'react';
 
 export type HeroTourSlide = {
   src: string;
-  /** Path shown in the frame's address bar — reads like a live walk-through. */
+  /** Path shown in the frame's address bar. It reads like a live walk-through. */
   path: string;
   alt: string;
 };
 
 /**
  * A slow, ambient walk-through of the live product. Each frame is a real
- * Violema view (chat → control center → missions → board → map → calendar →
- * analytics → inspector); the app's own active nav tab moves with it, so the
- * hero quietly shows the whole surface area without any extra chrome.
+ * Violema view, ordered to tell the founder workflow from home to scheduling.
  */
 export const heroTourSlides: HeroTourSlide[] = [
-  { src: '/brand/tour/01-chat.webp', path: 'violema.app / chat', alt: 'Violema chat — ask the AI operator to run founder work.' },
-  { src: '/brand/tour/02-control.webp', path: 'violema.app / runs / 7241', alt: 'Violema control center — a weekly founder update with live run progress and an approval gate.' },
-  { src: '/brand/tour/03-missions.webp', path: 'violema.app / missions', alt: 'Violema missions — Check Stripe revenue running with step-by-step run progress.' },
-  { src: '/brand/tour/04-board.webp', path: 'violema.app / board', alt: 'Violema board — mission work organized by status.' },
-  { src: '/brand/tour/05-map.webp', path: 'violema.app / map', alt: 'Violema map — the workflow topology across steps, tools and integrations.' },
-  { src: '/brand/tour/06-calendar.webp', path: 'violema.app / calendar', alt: 'Violema calendar — schedule recurring founder workflows.' },
-  { src: '/brand/tour/07-analytics.webp', path: 'violema.app / analytics', alt: 'Violema analytics — credit use, efficiency and cost by mission step.' },
-  { src: '/brand/tour/08-inspector.webp', path: 'violema.app / runs / 7241', alt: 'Violema context inspector — plan, evidence and delivery for a completed run.' },
+  { src: '/brand/P1.avif', path: 'violema.com / chat', alt: 'Violema home chat with mission context inspector and Dima approval state.' },
+  { src: '/brand/P2.avif', path: 'violema.com / missions', alt: 'Violema mission cockpit showing weekly founder update progress, review, and cost controls.' },
+  { src: '/brand/P3.avif', path: 'violema.com / map', alt: 'Violema workflow map showing steps, tools, integrations, and agent handoff path.' },
+  { src: '/brand/P4.avif', path: 'violema.com / calendar', alt: 'Violema calendar for scheduling recurring founder workflows with connected stack context.' },
+  { src: '/brand/P5.avif', path: 'violema.com / workflow builder', alt: 'Violema workflow builder for creating and saving a recurring automation.' },
 ];
 
-export const HERO_TOUR_MS = 4600;
-const FADE_MS = 1100;
+export const HERO_TOUR_MS = 7200;
+const FADE_MS = 1400;
 
 /**
  * Drives the tour index. Auto-advances only on desktop, with motion enabled,
@@ -71,19 +66,19 @@ export function useHeroTour() {
 /** The stacked, cross-fading product screenshots. */
 export function HeroTourImages({ index }: { index: number }) {
   return (
-    <div className="relative w-full overflow-hidden bg-ink-850" style={{ aspectRatio: '1600 / 894' }}>
+    <div className="relative w-full overflow-hidden bg-black" style={{ aspectRatio: '2200 / 1379' }}>
       {heroTourSlides.map((slide, i) => (
         <img
           key={slide.src}
           src={slide.src}
           alt={slide.alt}
-          width={1600}
-          height={894}
+          width={2200}
+          height={1379}
           loading={i === 0 ? 'eager' : 'lazy'}
           decoding="async"
           draggable={false}
           aria-hidden={i !== index}
-          className="absolute inset-0 h-full w-full select-none object-cover transition-opacity ease-out motion-reduce:transition-none"
+          className="absolute inset-0 h-full w-full select-none object-contain transition-opacity ease-out motion-reduce:transition-none"
           style={{ opacity: i === index ? 1 : 0, transitionDuration: `${FADE_MS}ms` }}
         />
       ))}
