@@ -118,6 +118,13 @@ export function isUnverifiedEmailSessionAllowed(env: Record<string, string | und
   return env.VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS === 'true' || env.VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS === '1';
 }
 
+export function isDirectAdminEmailLoginAllowed(
+  email: string,
+  env: Record<string, string | undefined> = process.env,
+) {
+  return !isUnverifiedEmailSessionAllowed(env) && isEmailAdminForAccess(email);
+}
+
 function getAdminMagicLoginSecret(secret?: string) {
   const resolved =
     secret?.trim() ||
@@ -141,6 +148,38 @@ function sanitizeMagicLoginNext(value: string | undefined) {
   return next;
 }
 
+function signAuthPayload(payload: Record<string, unknown>, secret: string) {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(encoded)
+    .digest('hex');
+  return `${encoded}.${signature}`;
+}
+
+function verifySignedAuthPayload(token: string | undefined, secret: string) {
+  if (!token) return null;
+  const [encoded, signature] = token.split('.');
+  if (!encoded || !signature) return null;
+  if (!/^[a-f0-9]{64}$/i.test(signature)) return null;
+
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(encoded)
+    .digest('hex');
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  const signatureBuffer = Buffer.from(signature, 'hex');
+  if (expectedBuffer.length !== signatureBuffer.length || !crypto.timingSafeEqual(expectedBuffer, signatureBuffer)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8')) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 export function createAdminMagicLoginToken(input: {
   email: string;
   name?: string;
@@ -157,48 +196,33 @@ export function createAdminMagicLoginToken(input: {
   const nowMs = input.nowMs ?? Date.now();
   const ttlMs = input.ttlMs ?? ADMIN_MAGIC_LOGIN_TTL_MS;
   const payload = {
+    purpose: 'admin_magic',
     email,
     name: input.name?.trim() || email.split('@')[0],
     next: sanitizeMagicLoginNext(input.next),
     issuedAt: nowMs,
     expiresAt: nowMs + ttlMs,
   };
-  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const signature = crypto
-    .createHmac('sha256', getAdminMagicLoginSecret(input.secret))
-    .update(encoded)
-    .digest('hex');
-  return `${encoded}.${signature}`;
+  return signAuthPayload(payload, getAdminMagicLoginSecret(input.secret));
 }
 
 export function verifyAdminMagicLoginToken(
   token: string | undefined,
   options: { nowMs?: number; secret?: string } = {},
 ) {
-  if (!token) return null;
-  const [encoded, signature] = token.split('.');
-  if (!encoded || !signature) return null;
-  if (!/^[a-f0-9]{64}$/i.test(signature)) return null;
-
-  const expected = crypto
-    .createHmac('sha256', getAdminMagicLoginSecret(options.secret))
-    .update(encoded)
-    .digest('hex');
-  const expectedBuffer = Buffer.from(expected, 'hex');
-  const signatureBuffer = Buffer.from(signature, 'hex');
-  if (expectedBuffer.length !== signatureBuffer.length || !crypto.timingSafeEqual(expectedBuffer, signatureBuffer)) {
-    return null;
-  }
+  const payload = verifySignedAuthPayload(token, getAdminMagicLoginSecret(options.secret)) as Partial<{
+    purpose: string;
+    email: string;
+    name: string;
+    next: string;
+    issuedAt: number;
+    expiresAt: number;
+  }> | null;
+  if (!payload) return null;
 
   try {
-    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8')) as Partial<{
-      email: string;
-      name: string;
-      next: string;
-      issuedAt: number;
-      expiresAt: number;
-    }>;
     if (
+      payload.purpose !== 'admin_magic' ||
       typeof payload.email !== 'string' ||
       !/\S+@\S+\.\S+/.test(payload.email) ||
       typeof payload.next !== 'string' ||

@@ -17,9 +17,11 @@ import {
   AuthAccessDeniedError,
   assertEmailApprovedForAccess,
   clearAuthSession as clearPersistedAuthSession,
+  createAdminMagicLoginToken,
   createAuthSession,
   getAuthUserByToken,
   isEmailAdminForAccess,
+  isDirectAdminEmailLoginAllowed,
   isUnverifiedEmailSessionAllowed,
   requestBetaAccess,
   resolveAuthRole,
@@ -886,6 +888,35 @@ function redirectToAuthError(
     next,
   });
   res.redirect(`${origin}${target}?${params.toString()}`);
+}
+
+async function sendAdminMagicLoginEmail(req: Request, input: {
+  email: string;
+  name: string;
+  next: string;
+}) {
+  const origin = getAuthPublicOrigin(req);
+  const token = createAdminMagicLoginToken({
+    email: input.email,
+    name: input.name,
+    next: input.next,
+  });
+  const link = `${origin}/api/auth/admin/magic?token=${encodeURIComponent(token)}`;
+
+  await sendMessage({
+    channel: 'email',
+    to: input.email,
+    subject: 'Your Violema admin sign-in link',
+    body: [
+      `Hi ${input.name},`,
+      '',
+      'Use this secure link to sign in to Violema admin. It expires in 10 minutes.',
+      '',
+      link,
+      '',
+      'If you did not request this, you can ignore this email.',
+    ].join('\n'),
+  });
 }
 
 function buildOAuthCallbackUrl(req: Request, provider: OAuthProvider) {
@@ -4606,10 +4637,11 @@ app.get('/api/auth/session', (req: Request, res: Response) => {
   });
 });
 
-app.post('/api/auth/session', (req: Request, res: Response) => {
+app.post('/api/auth/session', async (req: Request, res: Response) => {
   const body = (req.body || {}) as Record<string, unknown>;
   const email = typeof body.email === 'string' ? body.email.trim() : '';
   const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const next = sanitizeNextPath(typeof body.next === 'string' ? body.next : undefined, '/dashboard');
   const method = (
     typeof body.method === 'string' && ['email', 'google', 'microsoft'].includes(body.method)
       ? body.method
@@ -4645,10 +4677,27 @@ app.post('/api/auth/session', (req: Request, res: Response) => {
   }
 
   if (!isUnverifiedEmailSessionAllowed()) {
-    res.status(403).json({
-      error: 'Verified identity is required for production sign-in.',
-      code: 'verified_identity_required',
-    });
+    if (!isDirectAdminEmailLoginAllowed(email)) {
+      res.status(403).json({
+        error: 'Use Google or Microsoft sign-in for production access. Direct email sign-in is admin-only.',
+        code: 'oauth_required',
+      });
+      return;
+    }
+
+    try {
+      await sendAdminMagicLoginEmail(req, { email, name, next });
+      res.status(202).json({
+        ok: true,
+        verificationRequired: true,
+        message: 'Secure admin sign-in link sent. Check your email to finish signing in.',
+      });
+    } catch (error) {
+      res.status(503).json({
+        error: error instanceof Error ? error.message : 'Could not send the admin sign-in link.',
+        code: 'admin_magic_link_delivery_failed',
+      });
+    }
     return;
   }
 

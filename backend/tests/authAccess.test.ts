@@ -8,6 +8,7 @@ import {
   createAdminMagicLoginToken,
   isEmailAdminForAccess,
   isEmailApprovedForAccess,
+  isDirectAdminEmailLoginAllowed,
   isUnverifiedEmailSessionAllowed,
   resolveAuthRole,
   verifyAdminMagicLoginToken,
@@ -124,6 +125,31 @@ test('production blocks unverified email session minting unless explicitly enabl
     true,
   );
 });
+
+test('production direct email login is restricted to admins', () => withTempAdminStore(() => {
+  clearAdminAccessRecords();
+  const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
+  process.env.VIOLEMA_APPROVED_EMAILS = 'approved-user@example.com';
+
+  try {
+    assert.equal(
+      isDirectAdminEmailLoginAllowed('max@purpleorange.io', { NODE_ENV: 'production' }),
+      true,
+    );
+    assert.equal(
+      isDirectAdminEmailLoginAllowed('approved-user@example.com', { NODE_ENV: 'production' }),
+      false,
+    );
+    assert.equal(
+      isDirectAdminEmailLoginAllowed('max@purpleorange.io', { NODE_ENV: 'development' }),
+      false,
+    );
+  } finally {
+    clearAdminAccessRecords();
+    if (originalApproved === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
+    else process.env.VIOLEMA_APPROVED_EMAILS = originalApproved;
+  }
+}));
 
 test('admin magic login tokens are signed and expire', () => {
   const secret = 'test-admin-magic-secret';

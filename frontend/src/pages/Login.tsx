@@ -35,11 +35,13 @@ export default function Login() {
   const [name, setName] = useState(existing?.name || '');
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(errorFromQuery);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   async function handleContinue() {
     if (!/\S+@\S+\.\S+/.test(email) || name.trim().length < 2) return;
     setSubmitting(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
     persistWorkspaceContext();
     const session = {
       email: email.trim(),
@@ -52,7 +54,11 @@ export default function Login() {
     } as const;
 
     try {
-      await persistAuthSessionToBackend(session);
+      const result = await persistAuthSessionToBackend(session, { next });
+      if (result.status === 'verification_sent') {
+        setSuccessMessage(result.message);
+        return;
+      }
       navigate(next);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Could not sign in');
@@ -63,6 +69,7 @@ export default function Login() {
 
   function handleProviderAuth(provider: Exclude<AuthMethod, 'email'>) {
     setErrorMessage(null);
+    setSuccessMessage(null);
     persistWorkspaceContext();
     beginOAuthFlow(provider, {
       intent: 'login',
@@ -144,6 +151,9 @@ export default function Login() {
 
           {errorMessage ? (
             <p className="mt-3 text-center text-sm text-rose-300">{errorMessage}</p>
+          ) : null}
+          {successMessage ? (
+            <p className="mt-3 text-center text-sm text-emerald-300">{successMessage}</p>
           ) : null}
 
           <p className="mt-4 text-center text-sm text-slate-500">

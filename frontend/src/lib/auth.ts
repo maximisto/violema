@@ -118,7 +118,14 @@ function hydrateSession(value: Partial<AuthSession>): AuthSession | null {
   };
 }
 
-export async function persistAuthSessionToBackend(session: AuthSession) {
+export type PersistAuthSessionResult =
+  | { status: 'authenticated'; session: AuthSession }
+  | { status: 'verification_sent'; message: string };
+
+export async function persistAuthSessionToBackend(
+  session: AuthSession,
+  options: { next?: string } = {},
+): Promise<PersistAuthSessionResult> {
   const response = await fetch('/api/auth/session', {
     method: 'POST',
     headers: {
@@ -135,10 +142,23 @@ export async function persistAuthSessionToBackend(session: AuthSession) {
       slackChannelId: session.slackChannelId,
       slackDisplayTarget: session.slackDisplayTarget,
       slackConnectedAt: session.slackConnectedAt,
+      next: options.next,
     }),
   });
 
-  const payload = await response.json().catch(() => null) as { error?: string; user?: Partial<AuthSession> } | null;
+  const payload = await response.json().catch(() => null) as {
+    error?: string;
+    user?: Partial<AuthSession>;
+    verificationRequired?: boolean;
+    message?: string;
+  } | null;
+  if (response.status === 202 && payload?.verificationRequired) {
+    return {
+      status: 'verification_sent',
+      message: payload.message || 'Check your email to finish signing in.',
+    };
+  }
+
   if (!response.ok || !payload?.user) {
     throw new Error(payload?.error || 'Could not create auth session');
   }
@@ -149,7 +169,7 @@ export async function persistAuthSessionToBackend(session: AuthSession) {
   }
 
   saveAuthSession(nextSession);
-  return nextSession;
+  return { status: 'authenticated', session: nextSession };
 }
 
 export async function fetchBackendAuthSession() {

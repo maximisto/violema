@@ -70,6 +70,7 @@ export default function Signup() {
   const [acceptedEducation, setAcceptedEducation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(errorFromQuery);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const canContinue = name.trim().length > 1 && /\S+@\S+\.\S+/.test(email) && acceptedTerms && acceptedEducation;
   const oauthNext = `/connect/slack?next=${encodeURIComponent(nextPath)}`;
@@ -79,6 +80,7 @@ export default function Signup() {
 
     setSubmitting(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
     persistWorkspaceContext();
     const session = {
       email: email.trim(),
@@ -91,7 +93,13 @@ export default function Signup() {
     } as const;
 
     try {
-      await persistAuthSessionToBackend(session);
+      const result = await persistAuthSessionToBackend(session, {
+        next: `/connect/slack?next=${encodeURIComponent(nextPath)}`,
+      });
+      if (result.status === 'verification_sent') {
+        setSuccessMessage(result.message);
+        return;
+      }
       navigate(`/connect/slack?next=${encodeURIComponent(nextPath)}`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Could not create access');
@@ -106,6 +114,7 @@ export default function Signup() {
       return;
     }
     setErrorMessage(null);
+    setSuccessMessage(null);
     persistWorkspaceContext();
     beginOAuthFlow(provider, {
       intent: 'signup',
@@ -265,6 +274,9 @@ export default function Signup() {
             </button>
             {errorMessage ? (
               <p className="mt-3 text-center text-sm text-rose-300">{errorMessage}</p>
+            ) : null}
+            {successMessage ? (
+              <p className="mt-3 text-center text-sm text-emerald-300">{successMessage}</p>
             ) : null}
             <p className="mt-3 text-center text-xs text-slate-500">
               Access is manually approved. Approved beta users continue into setup; everyone else stays outside the workspace.
