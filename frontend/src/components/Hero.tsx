@@ -79,7 +79,7 @@ function HeroCopy() {
         <span className="text-telemetry text-[0.62rem] text-copy-muted">{heroCopy.eyebrow}</span>
       </div>
 
-      <h1 className="mt-6 font-display text-[3.3rem] font-semibold leading-[0.95] tracking-[-0.03em] text-white sm:text-[4.1rem] xl:text-[4.5rem]">
+      <h1 className="mt-6 font-display text-[3.05rem] font-semibold leading-[1.02] tracking-[-0.012em] text-white sm:text-[4.1rem] sm:leading-[0.98] sm:tracking-[-0.016em] xl:text-[4.5rem] xl:tracking-[-0.018em]">
         <span className="block">AI agents for</span>
         <span className="block bg-gradient-to-br from-white via-[#e7e0ff] to-violet-300 bg-clip-text text-transparent">
           founder work.
