@@ -303,10 +303,10 @@ function Comparison() {
               Not a chatbot. Not brittle automation.
             </h2>
             <a
-              href="#pricing"
+              href="#beta-access"
               className="group mt-7 inline-flex min-h-[3rem] items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/[0.04] px-5 text-sm font-semibold text-white transition duration-200 hover:border-signal-500/40 hover:bg-signal-500/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
-              Match this to a plan
+              Scope beta access
               <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
             </a>
           </div>

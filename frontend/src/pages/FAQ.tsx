@@ -97,24 +97,24 @@ const CATEGORIES = [
     ],
   },
   {
-    id: 'pricing',
-    label: 'Pricing & Plans',
+    id: 'beta-billing',
+    label: 'Beta & Billing',
     icon: CreditCard,
     color: 'text-yellow-400',
     bg: 'bg-yellow-500/10',
     border: 'border-yellow-500/20',
     faqs: [
       {
-        q: 'How does pricing work?',
-        a: 'VIOLEMA offers Starter at $29/month, Pro at $79/month, Team at $249/month, and Enterprise with custom pricing. Credits map to actual agent work, top-ups are one-time add-ons, and the Team tier includes 5 seats plus shared workspace capabilities.',
+        q: 'How does beta billing work?',
+        a: 'VIOLEMA is in controlled beta. We scope the first workflow with each approved customer before attaching billing, because package limits, support load, and run profitability depend on the work being automated.',
       },
       {
         q: 'What do credits actually represent?',
-        a: 'Credits map to real agent work. A heavier run that uses multiple tools, automations, or artifacts consumes more credits than a light chat turn. One-time top-ups add credits without changing your subscription tier.',
+        a: 'Credits map to real agent work. A heavier run that uses multiple tools, automations, or artifacts consumes more credits than a light chat turn. Approved workspaces can review usage before scaling volume.',
       },
       {
         q: 'Can I cancel any time?',
-        a: 'Yes. Cancel any time and your paid plan remains active until the end of the current billing period. Your workspace data and conversation history remain intact unless you ask us to delete them.',
+        a: 'Yes. Any paid beta or workspace agreement can be stopped according to the terms agreed during onboarding. Your workspace data and conversation history remain intact unless you ask us to delete them.',
       },
     ],
   },
@@ -226,7 +226,7 @@ export default function FAQ() {
             </span>
           </h1>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Everything you need to know about VIOLEMA — from capabilities and pricing to security and integrations.
+            Everything you need to know about VIOLEMA — from capabilities and beta access to security and integrations.
           </p>
         </div>
       </section>
@@ -328,7 +328,7 @@ export default function FAQ() {
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <button
-              onClick={() => navigate('/signup?next=%2Fplans')}
+              onClick={() => navigate('/signup?next=%2Fdashboard')}
               className="btn-primary"
             >
               Set up access

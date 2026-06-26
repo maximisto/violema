@@ -3,7 +3,7 @@ import Footer from '../components/Footer';
 import Hero from '../components/Hero';
 import Integrations from '../components/Integrations';
 import Navbar from '../components/Navbar';
-import Pricing from '../components/Pricing';
+import BetaAccess from '../components/BetaAccess';
 import SignalBand from '../components/SignalBand';
 import { useTheme } from '../lib/useTheme';
 
@@ -17,7 +17,7 @@ export default function Landing() {
         <SignalBand />
         <Integrations />
         <Features />
-        <Pricing />
+        <BetaAccess />
       </main>
       <Footer />
     </div>

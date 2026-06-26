@@ -33,8 +33,8 @@ export default function PublicHeader({
           <Link to="/" className="rounded-full px-4 py-2 text-[0.82rem] font-medium text-slate-300 transition-all hover:bg-white/6 hover:text-white">
             Home
           </Link>
-          <Link to="/plans" className="rounded-full px-4 py-2 text-[0.82rem] font-medium text-slate-300 transition-all hover:bg-white/6 hover:text-white">
-            Pricing
+          <Link to="/#beta-access" className="rounded-full px-4 py-2 text-[0.82rem] font-medium text-slate-300 transition-all hover:bg-white/6 hover:text-white">
+            Beta access
           </Link>
           <Link to="/faq" className="rounded-full px-4 py-2 text-[0.82rem] font-medium text-slate-300 transition-all hover:bg-white/6 hover:text-white">
             FAQ

@@ -57,7 +57,7 @@ const NATIVE_NOW = [
   {
     name: 'Stripe',
     detail: 'Billing and workspace purchases',
-    description: 'Power subscriptions, top-ups, and billing state directly inside the Violema commercial surface.',
+    description: 'Support billing state for approved workspaces after workflow scope and access are agreed.',
   },
   {
     name: 'GitHub',
@@ -223,7 +223,7 @@ export default function IntegrationsPage() {
   return (
     <div className={`min-h-screen bg-hero-gradient ${scopeClass}`}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
-      <PublicHeader backHref="/" backLabel="Home" actionHref="/signup?next=%2Fplans" actionLabel="Get access" />
+      <PublicHeader backHref="/" backLabel="Home" actionHref="/signup?next=%2Fdashboard" actionLabel="Get access" />
 
       <main className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <section className="rounded-[2rem] border border-navy-700/60 bg-navy-950/40 px-6 py-8 shadow-[0_24px_80px_rgba(3,8,24,0.3)] sm:px-8 lg:px-10">
@@ -389,7 +389,7 @@ export default function IntegrationsPage() {
             </div>
             <div className="flex flex-col gap-3">
               <Link
-                to="/signup?next=%2Fplans"
+                to="/signup?next=%2Fdashboard"
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-violet-500"
               >
                 Set up access

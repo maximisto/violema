@@ -2,6 +2,7 @@ import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
 import Play from 'lucide-react/dist/esm/icons/play.js';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import { Link, useNavigate } from 'react-router-dom';
+import { consultationUrl, openCalendlyConsultation } from '../lib/calendly';
 import ViolemaLogo from './ViolemaLogo';
 import Reveal from './Reveal';
 
@@ -10,7 +11,7 @@ const footerLinks = {
     { label: 'Product', path: '/#features' },
     { label: 'Workflows', path: '/#how-it-works' },
     { label: 'Integrations', path: '/integrations' },
-    { label: 'Pricing', path: '/#pricing' },
+    { label: 'Beta access', path: '/#beta-access' },
     { label: 'Compare', path: '/#compare' },
   ],
   Resources: [
@@ -21,13 +22,13 @@ const footerLinks = {
   ],
   Company: [
     { label: 'Contact', path: 'mailto:hello@purpleorange.io' },
-    { label: 'Sales', path: 'mailto:sales@purpleorange.io?subject=Violema' },
+    { label: 'Sales', path: consultationUrl },
     { label: 'Security', path: 'mailto:security@purpleorange.io' },
   ],
   Support: [
     { label: 'FAQ', path: '/faq' },
     { label: 'Sign in', path: '/login' },
-    { label: 'Set up access', path: '/signup?next=%2Fplans' },
+    { label: 'Set up access', path: '/signup?next=%2Fdashboard' },
   ],
   Legal: [
     { label: 'Privacy', path: '/privacy' },
@@ -38,6 +39,28 @@ const footerLinks = {
 function FooterLink({ label, path }: { label: string; path: string }) {
   const className = 'text-sm text-[#8793ad] transition duration-200 hover:text-white';
   const isStaticSeoPage = path.startsWith('/blog/') || path.startsWith('/ai-agents-for-founders/');
+  const isExternal = path.startsWith('http://') || path.startsWith('https://');
+
+  if (path === consultationUrl) {
+    return (
+      <a
+        href={path}
+        onClick={(event) => { void openCalendlyConsultation(event, `footer-${label.toLowerCase()}`); }}
+        className={className}
+      >
+        {label}
+      </a>
+    );
+  }
+
+  if (isExternal) {
+    return (
+      <a href={path} target="_blank" rel="noreferrer" className={className}>
+        {label}
+      </a>
+    );
+  }
+
   if (path.startsWith('mailto:') || path.includes('#') || isStaticSeoPage) {
     return (
       <a href={path} className={className}>
@@ -103,7 +126,7 @@ export default function Footer() {
               <div className="relative mt-8 flex flex-col gap-3 sm:flex-row lg:mt-0 lg:flex-col xl:flex-row">
                 <button
                   type="button"
-                  onClick={() => navigate('/signup?next=%2Fplans')}
+                  onClick={() => navigate('/signup?next=%2Fdashboard')}
                   className="group inline-flex min-h-[3.25rem] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] px-6 text-sm font-bold text-white shadow-[0_22px_60px_-18px_rgba(124,58,237,0.8)] transition duration-200 hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
                 >
                   <Sparkles className="h-4 w-4" />
@@ -155,7 +178,7 @@ export default function Footer() {
 
         <div className="flex flex-col gap-4 border-t border-white/10 py-6 text-sm text-[#828ea4] sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2.5">
-            <img src="/po-logo.png" alt="Purple Orange LLC" className="h-5 w-5 object-contain" />
+            <img src="/po-logo.png" alt="Purple Orange LLC" className="po-logo h-5 w-5 object-contain" />
             <span>© {new Date().getFullYear()} Purple Orange LLC. All rights reserved.</span>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-telemetry text-[0.5rem]">

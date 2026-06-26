@@ -36,9 +36,9 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/plans" element={<Billing />} />
-          <Route path="/pricing" element={<Navigate to="/plans" replace />} />
-          <Route path="/settings/billing" element={<Navigate to="/plans" replace />} />
+          <Route path="/plans" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
+          <Route path="/pricing" element={<Navigate to="/#beta-access" replace />} />
+          <Route path="/settings/billing" element={<ProtectedRoute><Navigate to="/plans" replace /></ProtectedRoute>} />
           <Route path="/connect/slack" element={<ProtectedRoute><SlackSetup /></ProtectedRoute>} />
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />

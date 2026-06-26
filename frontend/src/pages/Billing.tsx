@@ -117,7 +117,7 @@ export default function Billing() {
         <PublicHeader
         backHref="/"
         backLabel="Home"
-        actionHref={hasAccess ? '/dashboard' : '/signup?next=%2Fplans'}
+        actionHref={hasAccess ? '/dashboard' : '/signup?next=%2Fdashboard'}
         actionLabel={hasAccess ? 'Open workspace' : 'Create access'}
       />
       <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">

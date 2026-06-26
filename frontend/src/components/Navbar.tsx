@@ -122,7 +122,7 @@ export default function Navbar() {
             </button>
             <button
               type="button"
-              onClick={() => navigate('/signup?next=%2Fplans')}
+              onClick={() => navigate('/signup?next=%2Fdashboard')}
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] px-8 text-base font-bold text-white shadow-[0_18px_55px_rgba(124,58,237,0.28)] transition duration-200 hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
               Set up access
@@ -167,7 +167,7 @@ export default function Navbar() {
               <button
                 type="button"
                 onClick={() => {
-                  navigate('/signup?next=%2Fplans');
+                  navigate('/signup?next=%2Fdashboard');
                   setMobileOpen(false);
                 }}
                 className="min-h-12 rounded-xl bg-[#f4f1ec] px-4 text-sm font-semibold text-[#090a0c]"

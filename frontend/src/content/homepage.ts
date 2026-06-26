@@ -31,17 +31,15 @@ export type GovernanceSignal = {
   body: string;
 };
 
-export type PricingPlan = {
-  id: 'starter' | 'pro' | 'team';
-  name: string;
-  price: string;
-  period: string;
-  description: string;
-  capacity: string;
-  cta: string;
-  featured?: boolean;
-  features: string[];
-  footnote?: string;
+export type BetaAccessStep = {
+  label: string;
+  title: string;
+  body: string;
+};
+
+export type BetaAccessSignal = {
+  label: string;
+  value: string;
 };
 
 export type WorkflowDemoMessage = {
@@ -92,7 +90,7 @@ export const homepageNav: HomepageNavItem[] = [
   { label: 'Product', href: '#features' },
   { label: 'Use cases', href: '#how-it-works' },
   { label: 'Integrations', href: '/integrations' },
-  { label: 'Pricing', href: '#pricing' },
+  { label: 'Beta access', href: '#beta-access' },
   { label: 'Resources', href: '/blog/' },
 ];
 
@@ -581,63 +579,29 @@ export const connectedSystems: ConnectedSystem[] = [
   },
 ];
 
-export const pricingPlans: PricingPlan[] = [
+export const betaAccessSteps: BetaAccessStep[] = [
   {
-    id: 'starter',
-    name: 'Starter',
-    price: '$29',
-    period: 'per month',
-    description: 'For one operator proving the first recurring workflow.',
-    capacity: '3 active workflows',
-    cta: 'Select Starter',
-    features: [
-      '500 Violema credits',
-      'Web research and scheduled runs',
-      'Email support',
-      'Basic run history',
-    ],
+    label: '01',
+    title: 'Scope one painful workflow',
+    body: 'We pick a beta workflow with clear inputs, approval rules, delivery channel, and a visible weekly payoff.',
   },
   {
-    id: 'pro',
-    name: 'Pro',
-    price: '$79',
-    period: 'per month',
-    description: 'For founders running recurring reports, monitors, and follow-up.',
-    capacity: '20 active workflows',
-    cta: 'Select Pro',
-    featured: true,
-    features: [
-      '2,000 Violema credits',
-      'Multi-step workflow runs',
-      'Slack and email delivery',
-      'Approval gates and run logs',
-      'Long-term workspace memory',
-    ],
+    label: '02',
+    title: 'Run it with review gates',
+    body: 'Violema executes the recurring mission, keeps a source trail, and pauses for human approval before sensitive output ships.',
   },
   {
-    id: 'team',
-    name: 'Team',
-    price: '$249',
-    period: 'per month',
-    description: 'For teams that need shared control, review, and higher volume.',
-    capacity: '100 active workflows',
-    cta: 'Select Team',
-    features: [
-      '7,500 Violema credits',
-      '5 included seats',
-      'Shared workspace memory',
-      'Admin visibility',
-      'Priority support',
-    ],
-    footnote: 'Extra seats default to $29 per seat per month.',
+    label: '03',
+    title: 'Set terms from real usage',
+    body: 'Commercial terms come after setup, measured run cost, support load, and proof that the workflow is worth repeating.',
   },
 ];
 
-export const pricingSignals = [
-  { label: 'Active workflows', value: '3 to 100' },
-  { label: 'Run credits', value: '500 to 7,500' },
-  { label: 'Approvals', value: 'Built in' },
-  { label: 'Run history', value: 'Auditable' },
+export const betaAccessSignals: BetaAccessSignal[] = [
+  { label: 'Commercial model', value: 'Scoped after workflow fit' },
+  { label: 'First useful run', value: 'Designed before checkout' },
+  { label: 'Founder control', value: 'Approval gates included' },
+  { label: 'Package learning', value: 'Margins measured in beta' },
 ];
 
 export const comparisonRows = [

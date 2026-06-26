@@ -43,7 +43,7 @@ function HeroActions({ placement = 'hero' }: { placement?: 'hero' | 'mobile_stic
         type="button"
         onClick={() => {
           trackHeroCta('set_up_access', placement);
-          navigate('/signup?next=%2Fplans');
+          navigate('/signup?next=%2Fdashboard');
         }}
         className="group relative inline-flex min-h-[3.5rem] items-center justify-center gap-2.5 overflow-hidden rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] px-6 text-base font-bold tracking-[-0.01em] text-white shadow-[0_22px_60px_-18px_rgba(124,58,237,0.85)] transition duration-200 hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 sm:min-h-[3.25rem]"
       >
@@ -245,7 +245,7 @@ function MobileStickyCta() {
           type="button"
           onClick={() => {
             trackHeroCta('set_up_access', 'mobile_sticky');
-            navigate('/signup?next=%2Fplans');
+            navigate('/signup?next=%2Fdashboard');
           }}
           className="group flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] py-4 text-base font-bold text-white shadow-[0_14px_40px_-10px_rgba(124,58,237,0.7)] transition active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
         >

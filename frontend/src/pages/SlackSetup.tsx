@@ -11,7 +11,7 @@ import { getAuthSession, updateBackendAuthSession } from '../lib/auth';
 
 function getNextPath(search: string) {
   const params = new URLSearchParams(search);
-  return params.get('next') || '/plans';
+  return params.get('next') || '/dashboard';
 }
 
 export default function SlackSetup() {

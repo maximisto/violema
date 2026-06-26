@@ -56,7 +56,7 @@ const EDUCATION_CARDS: EducationCard[] = [
 
 function useNextPath() {
   const location = useLocation();
-  return useMemo(() => new URLSearchParams(location.search).get('next') || '/plans', [location.search]);
+  return useMemo(() => new URLSearchParams(location.search).get('next') || '/dashboard', [location.search]);
 }
 
 export default function Signup() {
