@@ -1,7 +1,7 @@
 # Handoff — VIOLEMA AI Assistant Platform
 
-**Branch:** `claude/build-ai-assistant-platform-BsdRr`  
-**Repo:** `maximisto/test-repo`  
+**Branch:** `main` canonical; local active branch may remain `claude/build-ai-assistant-platform-BsdRr`  
+**Repo:** `maximisto/violema`  
 **Date:** 2026-05-10  
 **Build status:** Clean (tsc + vite build both pass as of last commit)
 

@@ -5,8 +5,8 @@
 3. Run:
 
 ```bash
-git clone https://github.com/maximisto/test-repo.git /tmp/test-repo
-cd /tmp/test-repo/deploy
+git clone https://github.com/maximisto/violema.git /tmp/violema
+cd /tmp/violema/deploy
 sudo bash deploy.sh
 ```
 

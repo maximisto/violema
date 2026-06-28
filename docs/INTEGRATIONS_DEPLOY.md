@@ -78,7 +78,7 @@ curl https://nexus.purpleorange.io/api/integrations/composio/status
 ### 5. Use it in chat
 The Claude API automatically discovers connected Composio tools (e.g., `SLACK_SEND_MESSAGE`, `GITHUB_CREATE_ISSUE`, `LINEAR_CREATE_TASK`). Just ask Violema to do something with the connected tool — it'll pick the right action.
 
-> "File a GitHub issue in maximisto/test-repo titled 'investigate streaming bug'"
+> "File a GitHub issue in maximisto/violema titled 'investigate streaming bug'"
 
 Violema → calls `GITHUB_CREATE_ISSUE` → Composio executes → real issue gets filed.
 

@@ -100,7 +100,7 @@ export interface PartnerIntegrationAdapter {
 
 Workflow:
 - connect GitHub
-- list open issues from `maximisto/test-repo`
+- list open issues from `maximisto/violema`
 - draft Slack summary
 - block posting behind approval
 

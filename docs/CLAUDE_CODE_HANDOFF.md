@@ -8,8 +8,8 @@ This file is the fastest way to get productive on VIOLEMA without re-learning th
 - Company: `Purple Orange LLC`
 - Current public app URL: `https://nexus.purpleorange.io`
 - Intended final domain: `https://violema.com`
-- GitHub repo: `https://github.com/maximisto/test-repo`
-- Active branch at handoff: `claude/build-ai-assistant-platform-BsdRr`
+- GitHub repo: `https://github.com/maximisto/violema`
+- Active branch at handoff: `main` canonical; local worktrees may still use `claude/build-ai-assistant-platform-BsdRr`
 - Local repo path: `/Users/maximisto/Documents/New project`
 
 ## 2. What this product is
