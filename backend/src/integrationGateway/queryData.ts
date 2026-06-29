@@ -1,5 +1,6 @@
 import { queryStripeRevenue, type StripeLikeClient } from './adapters/nativeStripe';
 import type { IntegrationQueryResult, IntegrationQuerySuccess } from './types';
+import type { AutomationStepExecution } from '../platform/types';
 
 export interface LegacyQueryDataSuccess<T = unknown>
   extends Omit<IntegrationQuerySuccess<T>, 'live' | 'cache_hit'> {
@@ -20,6 +21,14 @@ export interface ExecuteQueryDataInput {
   credentialOverrides?: {
     stripeSecretKey?: string;
   };
+}
+
+export interface ApplyQueryStepPayloadToExecutionInput {
+  stepTitle: string;
+  payload: Record<string, unknown>;
+  stepExecution: AutomationStepExecution;
+  stepErrors: string[];
+  artifactCount: number;
 }
 
 const LEGACY_MOCK_DATA: Record<string, Record<string, unknown>> = {
@@ -67,6 +76,40 @@ const LEGACY_MOCK_DATA: Record<string, Record<string, unknown>> = {
     ],
   },
 };
+
+function readQueryPayloadFailureMessage(payload: Record<string, unknown>, stepTitle: string) {
+  if (typeof payload.message === 'string' && payload.message.trim()) {
+    return payload.message.trim();
+  }
+  if (typeof payload.code === 'string' && payload.code.trim()) {
+    return `Query step "${stepTitle}" failed with ${payload.code.trim()}.`;
+  }
+  return `Query step "${stepTitle}" failed.`;
+}
+
+export function applyQueryStepPayloadToExecution(
+  input: ApplyQueryStepPayloadToExecutionInput,
+) {
+  const { stepTitle, payload, stepExecution, stepErrors, artifactCount } = input;
+
+  stepExecution.output = payload;
+  stepExecution.artifactKind = 'query_data';
+  stepExecution.toolCalls = 1;
+  stepExecution.artifactCount = artifactCount;
+
+  if (payload.ok === false) {
+    const failureMessage = readQueryPayloadFailureMessage(payload, stepTitle);
+    stepExecution.status = 'failed';
+    stepExecution.summary = failureMessage;
+    stepExecution.error = failureMessage;
+    stepErrors.push(`${stepTitle}: ${failureMessage}`);
+    return;
+  }
+
+  stepExecution.status = 'succeeded';
+  stepExecution.summary = 'Pulled the requested live data successfully.';
+  stepExecution.error = undefined;
+}
 
 export async function executeQueryData(
   input: ExecuteQueryDataInput,

@@ -50,3 +50,39 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
     process.chdir(originalCwd);
   }
 });
+
+test('createAutomation persists optional workspaceId without forcing a default', async () => {
+  const originalCwd = process.cwd();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'violema-automation-workspace-'));
+  let scheduler: typeof import('../src/scheduler') | null = null;
+  process.chdir(tempDir);
+
+  try {
+    scheduler = await import('../src/scheduler');
+
+    const workspaceScoped = scheduler.createAutomation({
+      workspaceId: 'workspace_acme',
+      name: 'Workspace scoped automation',
+      schedule: 'daily at 9am',
+      actions: ['Check Stripe revenue'],
+    }, async () => ({ ok: true }));
+
+    const legacyShaped = scheduler.createAutomation({
+      name: 'Legacy shaped automation',
+      schedule: 'daily at 10am',
+      actions: ['Check GitHub delivery'],
+    }, async () => ({ ok: true }));
+
+    const stored = scheduler.listAutomations();
+    const scopedRecord = stored.find((item) => item.id === workspaceScoped.id);
+    const legacyRecord = stored.find((item) => item.id === legacyShaped.id);
+
+    assert.equal(scopedRecord?.workspaceId, 'workspace_acme');
+    assert.equal(legacyRecord?.workspaceId, undefined);
+  } finally {
+    scheduler?.listAutomations().forEach((item) => {
+      scheduler?.deleteAutomation(item.id);
+    });
+    process.chdir(originalCwd);
+  }
+});

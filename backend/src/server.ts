@@ -141,7 +141,7 @@ import {
   type IntegrationProvider,
 } from './settingsStore';
 import { buildIntegrationCatalog } from './integrationRegistry';
-import { executeQueryData } from './integrationGateway/queryData';
+import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
 import {
   buildAutomationExperimentAttribution,
   buildAutomationScenarioTelemetry,
@@ -3441,10 +3441,12 @@ async function executeAutomationCore(
           `Query step "${step.title}"`,
           executeToolCall('query_data', step.inputs || {}, { workspaceId }),
         )) as Record<string, unknown>;
-        const chartArtifact = buildAutomationChartArtifactFromQueryPayload({
-          stepTitle: step.title,
-          payload,
-        });
+        const chartArtifact = payload.ok === false
+          ? null
+          : buildAutomationChartArtifactFromQueryPayload({
+            stepTitle: step.title,
+            payload,
+          });
         artifacts.push({
           kind: 'query_data',
           title: step.title,
@@ -3453,12 +3455,13 @@ async function executeAutomationCore(
         if (chartArtifact) {
           artifacts.push(chartArtifact);
         }
-        stepExecution.status = 'succeeded';
-        stepExecution.summary = 'Pulled the requested live data successfully.';
-        stepExecution.output = payload;
-        stepExecution.artifactKind = 'query_data';
-        stepExecution.toolCalls = 1;
-        stepExecution.artifactCount = chartArtifact ? 2 : 1;
+        applyQueryStepPayloadToExecution({
+          stepTitle: step.title,
+          payload,
+          stepExecution,
+          stepErrors,
+          artifactCount: chartArtifact ? 2 : 1,
+        });
         continue;
       }
 
