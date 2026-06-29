@@ -44,6 +44,8 @@ import { MissionDetailView } from '../features/missions/MissionDetailView';
 import { MissionCreditDrawer } from '../features/missions/MissionCreditDrawer';
 import { DashboardGuardian } from '../features/guardian/DimaDashboardGuardian';
 import { DimaSidebarNote } from '../features/guardian/DimaSidebarNote';
+import { WorkflowReadinessPanel, type WorkflowReadinessReport } from '../features/integrations/WorkflowReadinessPanel';
+import { RunLedgerPanel, type WorkflowLedgerEvent } from '../features/missions/RunLedgerPanel';
 import { WorkflowTemplateGallery } from '../features/templates/WorkflowTemplateGallery';
 import { WORKFLOW_TEMPLATES, getWorkflowTemplateById } from '../content/workflowTemplates';
 import { buildMissionWorkspaceView, type MissionSourceTask } from '../features/missions/missionPresenter';
@@ -640,6 +642,22 @@ function applyAutomationEditorDestination(
       ? { ...step, deliveryTarget }
       : step),
   };
+}
+
+function inferEditorWorkflowId(editor: AutomationEditorDraft | null, steps: WorkflowBlockDraft[]) {
+  if (!editor) return '';
+  if (editor.name.toLowerCase().includes('revenue watch')) return 'revenue-watch';
+  const querySources = steps
+    .filter((step) => step.kind === 'query')
+    .map((step) => (typeof step.inputs?.source === 'string' ? step.inputs.source : ''))
+    .filter(Boolean);
+  const hasStripeRevenueQuery = steps.some(
+    (step) => step.inputs?.source === 'stripe' && String(step.inputs?.query_type || '').includes('revenue'),
+  );
+  if (hasStripeRevenueQuery && querySources.every((source) => source === 'stripe')) {
+    return 'revenue-watch';
+  }
+  return '';
 }
 
 type ThreadFilter = 'all' | 'active' | 'pinned' | 'archived';
@@ -1827,6 +1845,8 @@ export default function Dashboard() {
   const [automationEditorSection, setAutomationEditorSection] = useState<AutomationEditorSection>('setup');
   const [automationSetupOptionalOpen, setAutomationSetupOptionalOpen] = useState(false);
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
+  const [workflowReadiness, setWorkflowReadiness] = useState<WorkflowReadinessReport | null>(null);
+  const [runLedgerEvents, setRunLedgerEvents] = useState<WorkflowLedgerEvent[]>([]);
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const { snapshot, refresh: refreshCredits } = useCreditSnapshot();
@@ -2780,6 +2800,33 @@ export default function Dashboard() {
     automationId: selectedMission.automationId || selectedTask?.automationId,
     taskRunId: selectedMission.taskRunId || selectedTask?.taskRunId,
   }), [selectedMission.automationId, selectedMission.taskRunId, selectedTask?.automationId, selectedTask?.taskRunId]);
+  useEffect(() => {
+    const runId = selectedTask?.taskRunId || selectedMission.taskRunId;
+    if (!runId) {
+      setRunLedgerEvents([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({ workspaceId: workspace.workspaceId });
+    fetch(`/api/workflows/runs/${runId}/ledger?${params.toString()}`, {
+      signal: controller.signal,
+      credentials: 'same-origin',
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Could not load run ledger');
+        return response.json();
+      })
+      .then((payload) => {
+        setRunLedgerEvents(Array.isArray(payload?.items) ? payload.items : []);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setRunLedgerEvents([]);
+      });
+
+    return () => controller.abort();
+  }, [selectedTask?.taskRunId, selectedMission.taskRunId, workspace.workspaceId]);
   const activeMissionSelection = useMemo<MissionSelection>(() => {
     if (isMissionSelectionAvailable(selectedMission, missionSelection)) {
       return missionSelection as MissionSelection;
@@ -3020,6 +3067,39 @@ export default function Dashboard() {
     () => inferExecutionPolicyMath(automationEditor?.executionPolicy || DEFAULT_EXECUTION_POLICY, automationEditor?.steps || []),
     [automationEditor]
   );
+  const automationEditorSourceSteps = useMemo(() => {
+    if (!automationEditor) return [];
+    return automationEditor.authoringMode === 'describe'
+      ? buildWorkflowBlocksFromPrompt(automationEditor.workflowPrompt)
+      : automationEditor.steps;
+  }, [automationEditor?.authoringMode, automationEditor?.steps, automationEditor?.workflowPrompt]);
+  const automationEditorWorkflowId = useMemo(
+    () => inferEditorWorkflowId(automationEditor, automationEditorSourceSteps),
+    [automationEditor, automationEditorSourceSteps],
+  );
+  const automationReadinessTarget = automationEditor?.notify || '';
+  const automationReadinessFetchKey = useMemo(() => JSON.stringify({
+    workflowId: automationEditorWorkflowId,
+    name: automationEditor?.name || '',
+    notify: automationReadinessTarget,
+    destinationType: automationEditor?.destinationType || 'none',
+    authoringMode: automationEditor?.authoringMode || 'guided',
+    workflowPrompt: automationEditor?.authoringMode === 'describe' ? automationEditor?.workflowPrompt || '' : '',
+    steps: automationEditorSourceSteps.map((step) => ({
+      kind: step.kind,
+      source: step.inputs?.source,
+      queryType: step.inputs?.query_type,
+      target: step.deliveryTarget?.target || '',
+    })),
+  }), [
+    automationEditor?.authoringMode,
+    automationEditor?.destinationType,
+    automationEditor?.name,
+    automationReadinessTarget,
+    automationEditor?.workflowPrompt,
+    automationEditorSourceSteps,
+    automationEditorWorkflowId,
+  ]);
 
   const updateConversationMeta = useCallback((id: string, updater: (conversation: Conversation) => Conversation) => {
     setConversations((prev) => prev.map((conversation) => (conversation.id === id ? updater(conversation) : conversation)));
@@ -3043,6 +3123,36 @@ export default function Dashboard() {
       setNewConvoMessages([]);
     }
   }, [activeConvoId]);
+
+  useEffect(() => {
+    if (!automationEditorWorkflowId || !automationEditor) {
+      setWorkflowReadiness(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      deliveryTarget: automationReadinessTarget,
+      workspaceId: workspace.workspaceId,
+    });
+    fetch(`/api/workflows/${automationEditorWorkflowId}/readiness?${params.toString()}`, {
+      signal: controller.signal,
+      credentials: 'same-origin',
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Could not load workflow readiness');
+        return response.json();
+      })
+      .then((payload) => {
+        setWorkflowReadiness(payload?.report ? payload.report : null);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setWorkflowReadiness(null);
+      });
+
+    return () => controller.abort();
+  }, [automationEditorWorkflowId, automationReadinessFetchKey, automationReadinessTarget, workspace.workspaceId]);
 
   const updateAutomationStep = useCallback((index: number, value: string) => {
     setAutomationEditor((current) => {
@@ -3353,22 +3463,25 @@ export default function Dashboard() {
   );
 
   const renderMissionReviewsView = () => (
-    <MissionReviews
-      mission={selectedMission}
-      preflight={selectedTask?.preflight}
-      busyAction={
-        actionBusy === 'review-approve'
-          ? 'approve'
-          : actionBusy === 'review-change'
-            ? 'changes'
-            : actionBusy === 'review-rerun'
-              ? 'rerun'
-              : null
-      }
-      onApproveDelivery={handleReviewApprove}
-      onRequestChanges={handleReviewRequestChanges}
-      onRerunFailedStep={handleReviewRerun}
-    />
+    <div className="space-y-4">
+      <MissionReviews
+        mission={selectedMission}
+        preflight={selectedTask?.preflight}
+        busyAction={
+          actionBusy === 'review-approve'
+            ? 'approve'
+            : actionBusy === 'review-change'
+              ? 'changes'
+              : actionBusy === 'review-rerun'
+                ? 'rerun'
+                : null
+        }
+        onApproveDelivery={handleReviewApprove}
+        onRequestChanges={handleReviewRequestChanges}
+        onRerunFailedStep={handleReviewRerun}
+      />
+      <RunLedgerPanel events={runLedgerEvents} />
+    </div>
   );
 
   const renderMissionWorkspaceContent = () => {
@@ -5665,6 +5778,8 @@ export default function Dashboard() {
 	                      </p>
 	                    )}
                   </div>
+
+                  <WorkflowReadinessPanel report={workflowReadiness} />
 
                   <details
                     className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3"
