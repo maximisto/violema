@@ -38,10 +38,14 @@ interface MinimalSettingsView {
 }
 
 interface WorkflowRequirements {
+  supported: boolean;
   requiredIntegrationIds: string[];
   optionalIntegrationIds: string[];
   firstRunRequiresApproval: boolean;
+  defaultDeliveryTarget?: string;
 }
+
+const REVENUE_WATCH_DEFAULT_DELIVERY_TARGET = '#all-purple-orange';
 
 function readConfiguredFlag(
   value:
@@ -83,13 +87,16 @@ function isConfigured(
 function readWorkflowRequirements(workflowId: string): WorkflowRequirements {
   if (workflowId === 'revenue-watch') {
     return {
+      supported: true,
       requiredIntegrationIds: ['stripe'],
       optionalIntegrationIds: [],
       firstRunRequiresApproval: true,
+      defaultDeliveryTarget: REVENUE_WATCH_DEFAULT_DELIVERY_TARGET,
     };
   }
 
   return {
+    supported: false,
     requiredIntegrationIds: [],
     optionalIntegrationIds: [],
     firstRunRequiresApproval: false,
@@ -105,6 +112,18 @@ export function checkWorkflowReadiness(input: {
   const settingsView = input.settingsView || getWorkspaceSettingsView(input.workspaceId);
   const requirements = readWorkflowRequirements(input.workflowId);
   const blockers: WorkflowReadinessBlocker[] = [];
+  const deliveryTarget =
+    input.deliveryTarget === undefined || input.deliveryTarget === null
+      ? requirements.defaultDeliveryTarget
+      : input.deliveryTarget;
+
+  if (!requirements.supported) {
+    blockers.push({
+      key: 'unsupported_workflow',
+      label: 'Unsupported workflow',
+      detail: `Workflow "${input.workflowId}" is not supported by the readiness service.`,
+    });
+  }
 
   if (requirements.requiredIntegrationIds.includes('stripe') && !isConfigured(settingsView, 'stripe')) {
     blockers.push({
@@ -115,7 +134,7 @@ export function checkWorkflowReadiness(input: {
     });
   }
 
-  if (input.workflowId === 'revenue-watch' && !input.deliveryTarget?.trim()) {
+  if (requirements.supported && input.workflowId === 'revenue-watch' && !deliveryTarget?.trim()) {
     blockers.push({
       key: 'slack_target',
       label: 'Add Slack destination',
@@ -127,9 +146,11 @@ export function checkWorkflowReadiness(input: {
     workflowId: input.workflowId,
     workspaceId: input.workspaceId,
     ready: blockers.length === 0,
-    summary: blockers.length === 0
-      ? 'Revenue Watch is ready for a sandbox run. First live delivery requires approval.'
-      : `${blockers.length} readiness item${blockers.length === 1 ? '' : 's'} must be fixed before this workflow can run with real data.`,
+    summary: !requirements.supported
+      ? `Unsupported workflow: ${input.workflowId}.`
+      : blockers.length === 0
+        ? 'Revenue Watch is ready for a sandbox run. First live delivery requires approval.'
+        : `${blockers.length} readiness item${blockers.length === 1 ? '' : 's'} must be fixed before this workflow can run with real data.`,
     requiredIntegrationIds: requirements.requiredIntegrationIds,
     optionalIntegrationIds: requirements.optionalIntegrationIds,
     firstRunRequiresApproval: requirements.firstRunRequiresApproval,

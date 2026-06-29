@@ -4236,7 +4236,7 @@ app.post('/api/integrations/composio/connect', async (req: Request, res: Respons
 
 app.get('/api/workflows/:workflowId/readiness', (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
-  const deliveryTarget = typeof req.query.deliveryTarget === 'string' ? req.query.deliveryTarget : '';
+  const deliveryTarget = typeof req.query.deliveryTarget === 'string' ? req.query.deliveryTarget : undefined;
 
   res.json({
     ok: true,

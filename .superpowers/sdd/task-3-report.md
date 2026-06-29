@@ -154,3 +154,77 @@ ok 2 - Revenue Watch readiness passes with Stripe and Slack target
 ## Issues or concerns
 
 - The readiness endpoint currently treats an empty `deliveryTarget` as a blocker even though the Revenue Watch template has a default Slack channel in frontend metadata. That matches the brief and keeps readiness explicit, but the eventual UI should decide whether to pass the saved destination automatically or require the user to confirm it.
+
+---
+
+## Follow-up fixes after review
+
+### What changed
+
+- Hardened `backend/src/integrationGateway/workflowReadiness.ts` so unsupported workflow IDs never report ready.
+  - Added an explicit unsupported-workflow readiness blocker with `key: 'unsupported_workflow'`.
+  - Unsupported workflow reports now return `ready: false` with a clear unsupported-workflow summary.
+- Added a backend-local Revenue Watch default Slack destination so omitted `deliveryTarget` values no longer fail readiness when Stripe is configured.
+- Preserved the explicit-empty-string behavior from the brief: `deliveryTarget: ''` still produces the Slack target blocker.
+- Updated the route in `backend/src/server.ts` so an absent `deliveryTarget` query param stays `undefined` instead of being coerced to `''`.
+- Expanded `backend/tests/workflowReadiness.test.ts` to cover:
+  - unsupported workflow IDs
+  - omitted delivery target using the backend default
+  - explicit empty delivery target still blocking
+
+### Covering test results
+
+Command:
+
+```bash
+cd /Users/maximisto/Documents/New\ project/backend && node --test -r ts-node/register tests/workflowReadiness.test.ts
+```
+
+Result:
+
+```text
+TAP version 13
+# Subtest: Revenue Watch readiness blocks missing Stripe and missing Slack target
+ok 1 - Revenue Watch readiness blocks missing Stripe and missing Slack target
+# Subtest: Revenue Watch readiness passes with Stripe and Slack target
+ok 2 - Revenue Watch readiness passes with Stripe and Slack target
+# Subtest: Revenue Watch readiness uses the backend default Slack target when deliveryTarget is omitted
+ok 3 - Revenue Watch readiness uses the backend default Slack target when deliveryTarget is omitted
+# Subtest: Revenue Watch readiness still blocks an explicit empty delivery target
+ok 4 - Revenue Watch readiness still blocks an explicit empty delivery target
+# Subtest: unsupported workflow IDs are never reported as ready
+ok 5 - unsupported workflow IDs are never reported as ready
+1..5
+# tests 5
+# pass 5
+# fail 0
+```
+
+Command:
+
+```bash
+cd /Users/maximisto/Documents/New\ project/backend && npx tsc -p tsconfig.json --noEmit --incremental false
+```
+
+Result:
+
+```text
+exit code 0
+```
+
+Command:
+
+```bash
+cd /Users/maximisto/Documents/New\ project/frontend && npx tsx tests/workflowTemplates.contract.ts && npx tsx tests/workflowReadiness.contract.ts
+```
+
+Result:
+
+```text
+workflowTemplates.contract: 6 templates verified
+workflowReadiness.contract: Revenue Watch metadata verified
+```
+
+### Notes
+
+- Frontend typecheck was not rerun in this follow-up because the fix only changed backend readiness logic and backend-focused tests; frontend files were not modified in this patch.
