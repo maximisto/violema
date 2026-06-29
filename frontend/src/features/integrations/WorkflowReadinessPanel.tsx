@@ -20,7 +20,13 @@ export interface WorkflowReadinessReport {
   blockers: WorkflowReadinessBlocker[];
 }
 
-export function WorkflowReadinessPanel({ report }: { report: WorkflowReadinessReport | null }) {
+export function WorkflowReadinessPanel({
+  report,
+  onOpenSetup,
+}: {
+  report: WorkflowReadinessReport | null;
+  onOpenSetup?: (blocker: WorkflowReadinessBlocker) => void;
+}) {
   if (!report) return null;
 
   return (
@@ -50,7 +56,15 @@ export function WorkflowReadinessPanel({ report }: { report: WorkflowReadinessRe
                 <div key={blocker.key} className="rounded-xl border border-white/8 bg-navy-950/35 px-3 py-2">
                   <p className="text-xs font-semibold text-white">{blocker.label}</p>
                   <p className="mt-1 text-[11px] leading-5 text-slate-400">{blocker.detail}</p>
-                  {blocker.route ? (
+                  {onOpenSetup ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenSetup(blocker)}
+                      className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-100"
+                    >
+                      Open setup
+                    </button>
+                  ) : blocker.route ? (
                     <Link
                       to={blocker.route}
                       className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-100"

@@ -45,6 +45,7 @@ import { MissionCreditDrawer } from '../features/missions/MissionCreditDrawer';
 import { DashboardGuardian } from '../features/guardian/DimaDashboardGuardian';
 import { DimaSidebarNote } from '../features/guardian/DimaSidebarNote';
 import { WorkflowReadinessPanel, type WorkflowReadinessReport } from '../features/integrations/WorkflowReadinessPanel';
+import { getSelectedRunLedgerId, inferEditorWorkflowId } from '../features/integrations/workflowReadinessUi';
 import { RunLedgerPanel, type WorkflowLedgerEvent } from '../features/missions/RunLedgerPanel';
 import { WorkflowTemplateGallery } from '../features/templates/WorkflowTemplateGallery';
 import { WORKFLOW_TEMPLATES, getWorkflowTemplateById } from '../content/workflowTemplates';
@@ -642,22 +643,6 @@ function applyAutomationEditorDestination(
       ? { ...step, deliveryTarget }
       : step),
   };
-}
-
-function inferEditorWorkflowId(editor: AutomationEditorDraft | null, steps: WorkflowBlockDraft[]) {
-  if (!editor) return '';
-  if (editor.name.toLowerCase().includes('revenue watch')) return 'revenue-watch';
-  const querySources = steps
-    .filter((step) => step.kind === 'query')
-    .map((step) => (typeof step.inputs?.source === 'string' ? step.inputs.source : ''))
-    .filter(Boolean);
-  const hasStripeRevenueQuery = steps.some(
-    (step) => step.inputs?.source === 'stripe' && String(step.inputs?.query_type || '').includes('revenue'),
-  );
-  if (hasStripeRevenueQuery && querySources.every((source) => source === 'stripe')) {
-    return 'revenue-watch';
-  }
-  return '';
 }
 
 type ThreadFilter = 'all' | 'active' | 'pinned' | 'archived';
@@ -2574,6 +2559,17 @@ export default function Dashboard() {
     );
   }, [location.pathname, location.search, navigate]);
 
+  const handleReadinessOpenSetup = useCallback((blocker: { key: string; route?: string }) => {
+    if (blocker.key === 'stripe' || blocker.route?.includes('provider=stripe')) {
+      closeAutomationEditor();
+      openWorkspaceTarget('integrations', 'suites');
+      return;
+    }
+
+    closeAutomationEditor();
+    openWorkspaceTarget('integrations');
+  }, [closeAutomationEditor, openWorkspaceTarget]);
+
   const pendingRunAfterSave = useRef(false);
 
   const handleAutomationEditorSave = useCallback(async () => {
@@ -2801,7 +2797,10 @@ export default function Dashboard() {
     taskRunId: selectedMission.taskRunId || selectedTask?.taskRunId,
   }), [selectedMission.automationId, selectedMission.taskRunId, selectedTask?.automationId, selectedTask?.taskRunId]);
   useEffect(() => {
-    const runId = selectedTask?.taskRunId || selectedMission.taskRunId;
+    const runId = getSelectedRunLedgerId({
+      selectedTaskRunId: selectedTask?.taskRunId,
+      selectedMissionTaskRunId: selectedMission.taskRunId,
+    });
     if (!runId) {
       setRunLedgerEvents([]);
       return;
@@ -3074,8 +3073,8 @@ export default function Dashboard() {
       : automationEditor.steps;
   }, [automationEditor?.authoringMode, automationEditor?.steps, automationEditor?.workflowPrompt]);
   const automationEditorWorkflowId = useMemo(
-    () => inferEditorWorkflowId(automationEditor, automationEditorSourceSteps),
-    [automationEditor, automationEditorSourceSteps],
+    () => inferEditorWorkflowId(automationEditorSourceSteps),
+    [automationEditorSourceSteps],
   );
   const automationReadinessTarget = automationEditor?.notify || '';
   const automationReadinessFetchKey = useMemo(() => JSON.stringify({
@@ -5779,7 +5778,7 @@ export default function Dashboard() {
 	                    )}
                   </div>
 
-                  <WorkflowReadinessPanel report={workflowReadiness} />
+                  <WorkflowReadinessPanel report={workflowReadiness} onOpenSetup={handleReadinessOpenSetup} />
 
                   <details
                     className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3"
