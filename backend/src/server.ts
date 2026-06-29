@@ -46,6 +46,12 @@ import {
   selectReviewGateVisualArtifacts,
 } from './automationArtifacts';
 import {
+  inferWorkflowIdFromAutomation,
+  isWorkflowDeliveryApprovalRequired,
+  resolveWorkflowDeliveryTarget,
+} from './integrationGateway/workflowPolicy';
+import { buildGenerateReportResult } from './platform/reportGeneration';
+import {
   approveAutomationReview,
   buildAutomationPreflightReport,
   classifyAutomationRunOutcome,
@@ -1839,65 +1845,11 @@ async function executeToolCall(
     }
 
     case 'generate_report': {
-      const { report_type, title, period } = toolInput as { report_type: string; title: string; period?: string };
-      const reportPeriod = period || 'March 2025';
-
-      const reportTemplates: Record<string, object> = {
-        executive_summary: {
-          title,
-          period: reportPeriod,
-          generated_at: new Date().toISOString(),
-          sections: {
-            headline_metrics: { mrr: '$127,450', growth: '+17.8%', nrr: '118%', churn: '0.4%' },
-            highlights: [
-              'MRR crossed $127K milestone for first time',
-              'Net Revenue Retention at all-time high of 118%',
-              'Churn rate improved from 0.7% → 0.4%',
-              'Engineering shipped 28 PRs this week',
-            ],
-            risks: [
-              '18 failed payments ($2,340 at risk)',
-              'CAC increased 12% vs last month',
-            ],
-            next_actions: [
-              'Review failed payment recovery flow',
-              'Investigate CAC increase in paid channels',
-            ],
-          },
-          format: 'markdown',
-          word_count: 347,
-        },
-        weekly_digest: {
-          title,
-          period: reportPeriod,
-          generated_at: new Date().toISOString(),
-          sections: {
-            wins: ['Shipped feature X', 'Closed 23 deals worth $890K', 'Resolved 42 Linear tickets'],
-            metrics_snapshot: { mrr: '$127K', leads: 234, deployments: 12, uptime: '99.97%' },
-            team_updates: 'Engineering: sprint 23 complete. Marketing: campaign launched. Sales: Q2 pipeline strong.',
-            next_week: ['Pricing experiment', 'Enterprise tier launch', 'Sales enablement workshop'],
-          },
-          format: 'markdown',
-          word_count: 284,
-        },
-        metric_analysis: {
-          title,
-          period: reportPeriod,
-          generated_at: new Date().toISOString(),
-          analysis: {
-            trend: 'upward',
-            variance_from_forecast: '+3.2%',
-            key_drivers: ['New enterprise tier', 'Referral program launched', 'Seasonal uplift'],
-            anomalies: ['Thursday spike (+34%) correlates with Product Hunt feature'],
-            recommendations: ['Double down on enterprise motion', 'Investigate referral program ROI'],
-          },
-          format: 'markdown',
-          word_count: 412,
-        },
-      };
-
-      const template = reportTemplates[report_type] || reportTemplates.executive_summary;
-      return JSON.stringify({ success: true, report: template, shareable_url: `https://nexus.app/reports/rpt_${Date.now()}` });
+      return JSON.stringify(buildGenerateReportResult(toolInput as {
+        report_type?: string;
+        title?: string;
+        period?: string;
+      }));
     }
 
     case 'schedule_automation': {
@@ -2174,29 +2126,6 @@ function inferAutomationSearchQuery(
   const description = automation.description?.trim();
   const condition = automation.condition?.trim();
   return [automation.name, description, condition].filter(Boolean).join(' - ');
-}
-
-function inferWorkflowIdFromAutomation(automation: {
-  id?: string;
-  name: string;
-  steps?: PersistedAutomationStep[];
-}) {
-  const text = [
-    automation.id || '',
-    automation.name,
-    ...(automation.steps || []).map((step) =>
-      `${step.title || ''} ${step.objective || ''} ${JSON.stringify(step.inputs || {})}`),
-  ].join('\n').toLowerCase();
-
-  if (
-    text.includes('revenue watch') ||
-    text.includes('weekly founder update') ||
-    (text.includes('"source":"stripe"') && text.includes('revenue'))
-  ) {
-    return 'revenue-watch';
-  }
-
-  return 'custom-workflow';
 }
 
 function inferAutomationQueryDataInput(action: string) {
@@ -3324,15 +3253,6 @@ function buildDeterministicAutomationSummary(
   ].filter(Boolean).join('\n\n');
 }
 
-function isAutomationDeliveryApprovalRequired(step: AutomationStepDefinition) {
-  const explicit = step.inputs?.approval_required;
-  if (explicit === true) return true;
-  if (typeof explicit === 'string' && explicit.trim().toLowerCase() === 'true') return true;
-  return /(approval|required|reviewed|review before|after review|after approval|hold for approval)/i.test(
-    `${step.title} ${step.objective}`,
-  );
-}
-
 async function ensureAutomationSummaryText(
   automation: { name: string; description?: string; condition?: string; actions: string[] },
   plan: AutomationExecutionPlan,
@@ -3610,7 +3530,10 @@ async function executeAutomationCore(
       }
 
       if (step.kind === 'deliver') {
-        const deliveryTarget = step.deliveryTarget?.target?.trim() || automation.notify?.trim() || null;
+        const deliveryTarget = resolveWorkflowDeliveryTarget({
+          step,
+          notify: automation.notify,
+        });
         if (!deliveryTarget) {
           stepExecution.status = 'skipped';
           stepExecution.summary = 'Skipped delivery because no target was configured.';
@@ -3640,12 +3563,16 @@ async function executeAutomationCore(
 
         const body = summaryText || buildAutomationDeliveryFallbackBody(automation, artifacts, stepExecutions, stepErrors);
 
-        if (isAutomationDeliveryApprovalRequired(step)) {
+        if (isWorkflowDeliveryApprovalRequired({
+          workflowId: runContext.workflowId,
+          step,
+          notify: automation.notify,
+        })) {
           const visualArtifacts = selectReviewGateVisualArtifacts(artifacts);
           delivery = {
             success: true,
-            channel: step.deliveryTarget?.channel || (deliveryTarget.includes('@') ? 'email' : 'slack'),
-            to: deliveryTarget,
+            channel: deliveryTarget.channel,
+            to: deliveryTarget.target,
             status: 'waiting_review',
             approval_required: true,
             prepared_at: new Date().toISOString(),
@@ -3655,13 +3582,13 @@ async function executeAutomationCore(
             title: `Ready for review: ${automation.name}`,
             payload: {
               markdown: body,
-              deliveryTarget,
+              deliveryTarget: deliveryTarget.target,
               approvalRequired: true,
               visualArtifacts,
             },
           });
           stepExecution.status = 'succeeded';
-          stepExecution.summary = `Prepared delivery for review. Waiting for approval before sending to ${deliveryTarget}.`;
+          stepExecution.summary = `Prepared delivery for review. Waiting for approval before sending to ${deliveryTarget.target}.`;
           stepExecution.output = delivery;
           stepExecution.artifactKind = 'review_gate';
           stepExecution.toolCalls = 0;
@@ -3672,7 +3599,7 @@ async function executeAutomationCore(
             automationId: automation.id,
             taskId: runContext.taskId,
             taskRunId: runContext.taskRunId,
-            deliveryTarget,
+            deliveryTarget: deliveryTarget.target,
             channel: typeof delivery.channel === 'string' ? delivery.channel : undefined,
             preparedAt: typeof delivery.prepared_at === 'string'
               ? delivery.prepared_at
@@ -3682,17 +3609,18 @@ async function executeAutomationCore(
         }
 
         delivery = await runAutomationStepWithTimeout(`Delivery step "${step.title}"`, sendMessage({
-          to: deliveryTarget,
+          to: deliveryTarget.target,
           subject: `Automation run: ${automation.name}`,
           body,
+          channel: deliveryTarget.channel,
         }));
         artifacts.push({
           kind: 'delivery',
-          title: `Delivered to ${deliveryTarget}`,
+          title: `Delivered to ${deliveryTarget.target}`,
           payload: delivery,
         });
         stepExecution.status = 'succeeded';
-        stepExecution.summary = `Delivered the latest result to ${deliveryTarget}.`;
+        stepExecution.summary = `Delivered the latest result to ${deliveryTarget.target}.`;
         stepExecution.output = delivery;
         stepExecution.artifactKind = 'delivery';
         stepExecution.toolCalls = 1;
@@ -3704,8 +3632,8 @@ async function executeAutomationCore(
           taskId: runContext.taskId,
           taskRunId: runContext.taskRunId,
           type: 'external_action_executed',
-          summary: `Delivered workflow output to ${deliveryTarget}.`,
-          metadata: { deliveryTarget, delivery },
+          summary: `Delivered workflow output to ${deliveryTarget.target}.`,
+          metadata: { deliveryTarget: deliveryTarget.target, delivery },
         });
         continue;
       }

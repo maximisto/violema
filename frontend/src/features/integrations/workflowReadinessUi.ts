@@ -1,6 +1,10 @@
 export interface WorkflowReadinessUiStep {
   kind?: string;
   inputs?: Record<string, unknown>;
+  deliveryTarget?: {
+    channel?: 'slack' | 'email';
+    target?: string;
+  } | null;
 }
 
 export interface WorkflowReadinessUiBlocker {
@@ -30,8 +34,28 @@ export function inferEditorWorkflowId(steps: WorkflowReadinessUiStep[]): string 
   return hasStripeRevenueQuery ? 'revenue-watch' : '';
 }
 
-function normalizeRunId(value?: string | null) {
+function readTrimmed(value?: string | null) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+export function getWorkflowReadinessDeliveryTarget(input: {
+  notify?: string | null;
+  steps: WorkflowReadinessUiStep[];
+}) {
+  const notifyTarget = readTrimmed(input.notify);
+  if (notifyTarget) return notifyTarget;
+
+  for (const step of input.steps) {
+    if (step.kind !== 'deliver') continue;
+    const stepTarget = readTrimmed(step.deliveryTarget?.target);
+    if (stepTarget) return stepTarget;
+  }
+
+  return '';
+}
+
+function normalizeRunId(value?: string | null) {
+  return readTrimmed(value);
 }
 
 export function getSelectedRunLedgerId(input: {

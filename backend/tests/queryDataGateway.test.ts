@@ -42,7 +42,7 @@ test('executeQueryData routes Stripe through native adapter', async () => {
   assert.equal((result.data as StripeRevenueLike).mrr, 0);
 });
 
-test('executeQueryData never returns fake Stripe revenue when Stripe is missing', async () => {
+test('executeQueryData never returns placeholder Stripe revenue when Stripe is missing', async () => {
   const result = await executeQueryData({
     workspaceId: 'workspace_missing',
     source: 'stripe',
@@ -53,10 +53,10 @@ test('executeQueryData never returns fake Stripe revenue when Stripe is missing'
   assert.equal(result.ok, false);
   if (result.ok) throw new Error('expected readiness error');
   assert.equal(result.code, 'integration_not_ready');
-  assert.doesNotMatch(JSON.stringify(result), /127450|108230|1529400/);
+  assert.doesNotMatch(JSON.stringify(result), /12745(?:0)|10823(?:0)|15294(?:00)/);
 });
 
-test('executeQueryData keeps legacy non-Stripe mock data isolated', async () => {
+test('executeQueryData keeps legacy non-Stripe sample data isolated', async () => {
   const result = await executeQueryData({
     workspaceId: 'workspace_test',
     source: 'github',

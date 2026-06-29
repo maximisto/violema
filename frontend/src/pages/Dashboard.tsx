@@ -48,6 +48,7 @@ import { WorkflowReadinessPanel, type WorkflowReadinessReport } from '../feature
 import {
   getDashboardReadinessBlockerAction,
   getSelectedRunLedgerId,
+  getWorkflowReadinessDeliveryTarget,
   inferEditorWorkflowId,
 } from '../features/integrations/workflowReadinessUi';
 import { RunLedgerPanel, type WorkflowLedgerEvent } from '../features/missions/RunLedgerPanel';
@@ -3091,7 +3092,13 @@ export default function Dashboard() {
     () => inferEditorWorkflowId(automationEditorSourceSteps),
     [automationEditorSourceSteps],
   );
-  const automationReadinessTarget = automationEditor?.notify || '';
+  const automationReadinessTarget = useMemo(
+    () => getWorkflowReadinessDeliveryTarget({
+      notify: automationEditor?.notify,
+      steps: automationEditorSourceSteps,
+    }),
+    [automationEditor?.notify, automationEditorSourceSteps],
+  );
   const automationReadinessFetchKey = useMemo(() => JSON.stringify({
     workflowId: automationEditorWorkflowId,
     name: automationEditor?.name || '',

@@ -1,6 +1,7 @@
 import {
   getDashboardReadinessBlockerAction,
   getSelectedRunLedgerId,
+  getWorkflowReadinessDeliveryTarget,
   inferEditorWorkflowId,
 } from '../src/features/integrations/workflowReadinessUi';
 
@@ -45,6 +46,26 @@ assert(
     { kind: 'query', inputs: { source: 'stripe', query_type: 'failed_payments' } },
   ]) === '',
   'Revenue Watch inference stays off without a Stripe revenue query',
+);
+
+assert(
+  getWorkflowReadinessDeliveryTarget({
+    notify: '  ',
+    steps: [
+      { kind: 'deliver', deliveryTarget: { channel: 'slack', target: '#ops' } },
+    ],
+  }) === '#ops',
+  'Workflow readiness target falls back to the first deliver step target when notify is blank',
+);
+
+assert(
+  getWorkflowReadinessDeliveryTarget({
+    notify: ' founders@violema.com ',
+    steps: [
+      { kind: 'deliver', deliveryTarget: { channel: 'slack', target: '#ops' } },
+    ],
+  }) === 'founders@violema.com',
+  'Workflow readiness target prefers notify when it is present',
 );
 
 assert(
