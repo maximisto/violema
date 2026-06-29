@@ -69,4 +69,15 @@ for (const template of WORKFLOW_TEMPLATES) {
 assert(getWorkflowTemplateById('weekly-founder-brief')?.title === 'Weekly founder brief', 'resolves a known template by id');
 assert(getWorkflowTemplateById('does-not-exist') === undefined, 'returns undefined for an unknown id');
 
+const revenueWatch = getWorkflowTemplateById('revenue-watch');
+assert(Boolean(revenueWatch), 'Revenue Watch template exists');
+assert(
+  revenueWatch?.requiredIntegrationIds?.includes('stripe'),
+  'Revenue Watch requires Stripe',
+);
+assert(
+  revenueWatch?.firstRunRequiresApproval === true,
+  'Revenue Watch first run requires approval',
+);
+
 console.log(`workflowTemplates.contract: ${WORKFLOW_TEMPLATES.length} templates verified`);

@@ -142,6 +142,7 @@ import {
 } from './settingsStore';
 import { buildIntegrationCatalog } from './integrationRegistry';
 import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
+import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
 import {
   buildAutomationExperimentAttribution,
   buildAutomationScenarioTelemetry,
@@ -4231,6 +4232,20 @@ app.post('/api/integrations/composio/connect', async (req: Request, res: Respons
     return;
   }
   res.json({ redirectUrl });
+});
+
+app.get('/api/workflows/:workflowId/readiness', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const deliveryTarget = typeof req.query.deliveryTarget === 'string' ? req.query.deliveryTarget : '';
+
+  res.json({
+    ok: true,
+    report: checkWorkflowReadiness({
+      workspaceId,
+      workflowId: req.params.workflowId,
+      deliveryTarget,
+    }),
+  });
 });
 
 registerAgentStudioSettingsRoutes(app, {
