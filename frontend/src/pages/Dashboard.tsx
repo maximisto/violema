@@ -45,7 +45,11 @@ import { MissionCreditDrawer } from '../features/missions/MissionCreditDrawer';
 import { DashboardGuardian } from '../features/guardian/DimaDashboardGuardian';
 import { DimaSidebarNote } from '../features/guardian/DimaSidebarNote';
 import { WorkflowReadinessPanel, type WorkflowReadinessReport } from '../features/integrations/WorkflowReadinessPanel';
-import { getSelectedRunLedgerId, inferEditorWorkflowId } from '../features/integrations/workflowReadinessUi';
+import {
+  getDashboardReadinessBlockerAction,
+  getSelectedRunLedgerId,
+  inferEditorWorkflowId,
+} from '../features/integrations/workflowReadinessUi';
 import { RunLedgerPanel, type WorkflowLedgerEvent } from '../features/missions/RunLedgerPanel';
 import { WorkflowTemplateGallery } from '../features/templates/WorkflowTemplateGallery';
 import { WORKFLOW_TEMPLATES, getWorkflowTemplateById } from '../content/workflowTemplates';
@@ -2559,16 +2563,27 @@ export default function Dashboard() {
     );
   }, [location.pathname, location.search, navigate]);
 
-  const handleReadinessOpenSetup = useCallback((blocker: { key: string; route?: string }) => {
-    if (blocker.key === 'stripe' || blocker.route?.includes('provider=stripe')) {
-      closeAutomationEditor();
-      openWorkspaceTarget('integrations', 'suites');
-      return;
+  const getReadinessBlockerAction = useCallback((blocker: { key: string; route?: string }) => {
+    const action = getDashboardReadinessBlockerAction(blocker);
+    if (!action) return null;
+
+    if (action.kind === 'navigate') {
+      return {
+        label: action.label,
+        onClick: () => {
+          closeAutomationEditor();
+          navigate(action.href);
+        },
+      };
     }
 
-    closeAutomationEditor();
-    openWorkspaceTarget('integrations');
-  }, [closeAutomationEditor, openWorkspaceTarget]);
+    return {
+      label: action.label,
+      onClick: () => {
+        setAutomationEditorSection(action.section);
+      },
+    };
+  }, [closeAutomationEditor, navigate]);
 
   const pendingRunAfterSave = useRef(false);
 
@@ -5778,7 +5793,7 @@ export default function Dashboard() {
 	                    )}
                   </div>
 
-                  <WorkflowReadinessPanel report={workflowReadiness} onOpenSetup={handleReadinessOpenSetup} />
+                  <WorkflowReadinessPanel report={workflowReadiness} getBlockerAction={getReadinessBlockerAction} />
 
                   <details
                     className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3"

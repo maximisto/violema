@@ -1,4 +1,8 @@
-import { getSelectedRunLedgerId, inferEditorWorkflowId } from '../src/features/integrations/workflowReadinessUi';
+import {
+  getDashboardReadinessBlockerAction,
+  getSelectedRunLedgerId,
+  inferEditorWorkflowId,
+} from '../src/features/integrations/workflowReadinessUi';
 
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
@@ -57,6 +61,21 @@ assert(
     selectedMissionTaskRunId: ' run_mission ',
   }) === 'run_mission',
   'Run ledger falls back to the selected mission run id when task run id is empty',
+);
+
+const stripeAction = getDashboardReadinessBlockerAction({ key: 'stripe' });
+assert(stripeAction?.kind === 'navigate', 'Stripe blocker maps to navigation');
+assert(stripeAction?.label === 'Open Stripe settings', 'Stripe blocker uses a specific settings label');
+assert(stripeAction?.kind === 'navigate' && stripeAction.href === '/settings#integration-stripe', 'Stripe blocker points to the real Stripe settings anchor');
+
+const slackAction = getDashboardReadinessBlockerAction({ key: 'slack_target' });
+assert(slackAction?.kind === 'editor', 'Slack target blocker stays in the editor');
+assert(slackAction?.label === 'Set destination', 'Slack target blocker uses the destination-specific label');
+assert(slackAction?.kind === 'editor' && slackAction.section === 'setup', 'Slack target blocker points to the setup section');
+
+assert(
+  getDashboardReadinessBlockerAction({ key: 'unsupported_workflow' }) === null,
+  'Unknown blockers do not get a synthetic dashboard action',
 );
 
 console.log('workflowReadinessUi.contract: workflow inference and run id selection verified');

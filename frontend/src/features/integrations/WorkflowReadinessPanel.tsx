@@ -20,12 +20,18 @@ export interface WorkflowReadinessReport {
   blockers: WorkflowReadinessBlocker[];
 }
 
+export interface WorkflowReadinessBlockerAction {
+  label: string;
+  onClick?: () => void;
+  route?: string;
+}
+
 export function WorkflowReadinessPanel({
   report,
-  onOpenSetup,
+  getBlockerAction,
 }: {
   report: WorkflowReadinessReport | null;
-  onOpenSetup?: (blocker: WorkflowReadinessBlocker) => void;
+  getBlockerAction?: (blocker: WorkflowReadinessBlocker) => WorkflowReadinessBlockerAction | null;
 }) {
   if (!report) return null;
 
@@ -52,28 +58,34 @@ export function WorkflowReadinessPanel({
           ) : null}
           {report.blockers.length > 0 ? (
             <div className="mt-3 space-y-2">
-              {report.blockers.map((blocker) => (
-                <div key={blocker.key} className="rounded-xl border border-white/8 bg-navy-950/35 px-3 py-2">
-                  <p className="text-xs font-semibold text-white">{blocker.label}</p>
-                  <p className="mt-1 text-[11px] leading-5 text-slate-400">{blocker.detail}</p>
-                  {onOpenSetup ? (
-                    <button
-                      type="button"
-                      onClick={() => onOpenSetup(blocker)}
-                      className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-100"
-                    >
-                      Open setup
-                    </button>
-                  ) : blocker.route ? (
-                    <Link
-                      to={blocker.route}
-                      className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-100"
-                    >
-                      Open setup
-                    </Link>
-                  ) : null}
-                </div>
-              ))}
+              {report.blockers.map((blocker) => {
+                const action = getBlockerAction?.(blocker) || (!getBlockerAction && blocker.route
+                  ? { label: 'Open setup', route: blocker.route }
+                  : null);
+
+                return (
+                  <div key={blocker.key} className="rounded-xl border border-white/8 bg-navy-950/35 px-3 py-2">
+                    <p className="text-xs font-semibold text-white">{blocker.label}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-slate-400">{blocker.detail}</p>
+                    {action?.onClick ? (
+                      <button
+                        type="button"
+                        onClick={action.onClick}
+                        className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-100"
+                      >
+                        {action.label}
+                      </button>
+                    ) : action?.route ? (
+                      <Link
+                        to={action.route}
+                        className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-100"
+                      >
+                        {action.label}
+                      </Link>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           ) : null}
         </div>

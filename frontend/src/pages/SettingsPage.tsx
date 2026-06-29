@@ -281,6 +281,15 @@ export default function SettingsPage() {
     autoRollbackMomentumThreshold: 6,
   });
 
+  useEffect(() => {
+    if (loading || !data || typeof window === 'undefined') return;
+    const targetId = window.location.hash.replace(/^#/, '').trim();
+    if (!targetId) return;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [data, loading]);
+
   async function loadSettings(silent = false) {
     if (!silent) setLoading(true);
     try {
@@ -649,7 +658,11 @@ export default function SettingsPage() {
                   const fieldStatus = status?.fields?.[integration.field];
                   const testState = integrationTests[integration.id];
                   return (
-                    <div key={integration.id} className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4">
+                    <div
+                      key={integration.id}
+                      id={integration.id === 'stripe' ? 'integration-stripe' : undefined}
+                      className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="flex items-center gap-2">
