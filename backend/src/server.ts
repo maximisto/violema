@@ -141,6 +141,7 @@ import {
   type IntegrationProvider,
 } from './settingsStore';
 import { buildIntegrationCatalog } from './integrationRegistry';
+import { appendWorkflowLedgerEvent, listWorkflowLedgerEvents } from './integrationGateway/auditLog';
 import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
 import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
 import {
@@ -2170,6 +2171,29 @@ function inferAutomationSearchQuery(
   return [automation.name, description, condition].filter(Boolean).join(' - ');
 }
 
+function inferWorkflowIdFromAutomation(automation: {
+  id?: string;
+  name: string;
+  steps?: PersistedAutomationStep[];
+}) {
+  const text = [
+    automation.id || '',
+    automation.name,
+    ...(automation.steps || []).map((step) =>
+      `${step.title || ''} ${step.objective || ''} ${JSON.stringify(step.inputs || {})}`),
+  ].join('\n').toLowerCase();
+
+  if (
+    text.includes('revenue watch') ||
+    text.includes('weekly founder update') ||
+    (text.includes('"source":"stripe"') && text.includes('revenue'))
+  ) {
+    return 'revenue-watch';
+  }
+
+  return 'custom-workflow';
+}
+
 function inferAutomationQueryDataInput(action: string) {
   const normalized = normalizeAutomationActionText(action);
 
@@ -3366,6 +3390,11 @@ async function executeAutomationCore(
   },
   plan: AutomationExecutionPlan,
   workspaceId: string,
+  runContext: {
+    workflowId: string;
+    taskId: string;
+    taskRunId: string;
+  },
   onProgress?: (state: {
     artifacts: AutomationExecutionArtifact[];
     summaryText: string;
@@ -3442,6 +3471,12 @@ async function executeAutomationCore(
           `Query step "${step.title}"`,
           executeToolCall('query_data', step.inputs || {}, { workspaceId }),
         )) as Record<string, unknown>;
+        const payloadSource = typeof payload.source === 'string' ? payload.source : '';
+        const queryType = typeof payload.query_type === 'string'
+          ? payload.query_type
+          : typeof step.inputs?.query_type === 'string'
+            ? step.inputs.query_type
+            : undefined;
         const chartArtifact = payload.ok === false
           ? null
           : buildAutomationChartArtifactFromQueryPayload({
@@ -3463,6 +3498,24 @@ async function executeAutomationCore(
           stepErrors,
           artifactCount: chartArtifact ? 2 : 1,
         });
+        if (payloadSource === 'stripe') {
+          appendWorkflowLedgerEvent({
+            workspaceId,
+            workflowId: runContext.workflowId,
+            automationId: automation.id,
+            taskId: runContext.taskId,
+            taskRunId: runContext.taskRunId,
+            type: payload.ok === false ? 'connector_failed' : 'data_read',
+            summary: payload.ok === false
+              ? `Stripe read blocked: ${String(payload.message || 'integration not ready')}`
+              : 'Read Stripe revenue summary.',
+            metadata: {
+              source: 'stripe',
+              queryType,
+              ok: payload.ok,
+            },
+          });
+        }
         continue;
       }
 
@@ -3537,6 +3590,16 @@ async function executeAutomationCore(
         stepExecution.artifactKind = 'summary';
         stepExecution.artifactCount = 1;
         stepExecution.tokenUsage = summaryResult.usage;
+        appendWorkflowLedgerEvent({
+          workspaceId,
+          workflowId: runContext.workflowId,
+          automationId: automation.id,
+          taskId: runContext.taskId,
+          taskRunId: runContext.taskRunId,
+          type: 'draft_created',
+          summary: `Drafted ${step.title}.`,
+          metadata: { artifactKind: 'summary', stepId: step.id },
+        });
         continue;
       }
 
@@ -3555,6 +3618,16 @@ async function executeAutomationCore(
               kind: 'summary',
               title: `${automation.name} summary`,
               payload: { markdown: summaryText },
+            });
+            appendWorkflowLedgerEvent({
+              workspaceId,
+              workflowId: runContext.workflowId,
+              automationId: automation.id,
+              taskId: runContext.taskId,
+              taskRunId: runContext.taskRunId,
+              type: 'draft_created',
+              summary: `Drafted ${automation.name} summary.`,
+              metadata: { artifactKind: 'summary', stepId: step.id, generatedBy: 'fallback' },
             });
           }
         }
@@ -3587,6 +3660,20 @@ async function executeAutomationCore(
           stepExecution.artifactKind = 'review_gate';
           stepExecution.toolCalls = 0;
           stepExecution.artifactCount = 1;
+          appendWorkflowLedgerEvent({
+            workspaceId,
+            workflowId: runContext.workflowId,
+            automationId: automation.id,
+            taskId: runContext.taskId,
+            taskRunId: runContext.taskRunId,
+            type: 'approval_requested',
+            summary: `Prepared delivery for approval before sending to ${deliveryTarget}.`,
+            metadata: {
+              deliveryTarget,
+              channel: delivery.channel,
+              draftMarkdown: body,
+            },
+          });
           continue;
         }
 
@@ -3606,6 +3693,16 @@ async function executeAutomationCore(
         stepExecution.artifactKind = 'delivery';
         stepExecution.toolCalls = 1;
         stepExecution.artifactCount = 1;
+        appendWorkflowLedgerEvent({
+          workspaceId,
+          workflowId: runContext.workflowId,
+          automationId: automation.id,
+          taskId: runContext.taskId,
+          taskRunId: runContext.taskRunId,
+          type: 'external_action_executed',
+          summary: `Delivered workflow output to ${deliveryTarget}.`,
+          metadata: { deliveryTarget, delivery },
+        });
         continue;
       }
 
@@ -3641,6 +3738,16 @@ async function executeAutomationCore(
       title: `${automation.name} summary`,
       payload: { markdown: summaryText },
     });
+    appendWorkflowLedgerEvent({
+      workspaceId,
+      workflowId: runContext.workflowId,
+      automationId: automation.id,
+      taskId: runContext.taskId,
+      taskRunId: runContext.taskRunId,
+      type: 'draft_created',
+      summary: `Drafted ${automation.name} summary.`,
+      metadata: { artifactKind: 'summary', generatedBy: 'fallback' },
+    });
     await emitProgress();
   }
 
@@ -3669,6 +3776,7 @@ async function runAutomation(automation: {
   timezone?: string;
 }) {
   const workspaceId = automation.workspaceId || DEFAULT_WORKSPACE_ID;
+  const workflowId = inferWorkflowIdFromAutomation(automation);
   ensureWorkspaceCredits(workspaceId);
   const executionPlan = buildAutomationExecutionPlan(automation);
   const experimentAttribution = buildAutomationExperimentAttribution(automation.studio_state);
@@ -3852,7 +3960,11 @@ async function runAutomation(automation: {
       }
     };
 
-    const execution = await executeAutomationCore(automation, executionPlan, workspaceId, persistProgress);
+    const execution = await executeAutomationCore(automation, executionPlan, workspaceId, {
+      workflowId,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+    }, persistProgress);
     const deliveryWaitingForReview = execution.stepExecutions.some((step) =>
       step.kind === 'deliver' &&
       step.status === 'succeeded' &&
@@ -4244,6 +4356,17 @@ app.get('/api/workflows/:workflowId/readiness', (req: Request, res: Response) =>
       workspaceId,
       workflowId: req.params.workflowId,
       deliveryTarget,
+    }),
+  });
+});
+
+app.get('/api/workflows/runs/:runId/ledger', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json({
+    ok: true,
+    items: listWorkflowLedgerEvents({
+      workspaceId,
+      taskRunId: req.params.runId,
     }),
   });
 });
@@ -5330,8 +5453,29 @@ app.post('/api/automations/:id/reviews/:runId/approve', async (req: Request, res
       reviewer: readBodyString(req.body?.reviewer, 'Violema reviewer'),
       send: ({ to, body, subject, channel }) => sendMessage({ to, body, subject, channel }),
     });
+    const workflowId = inferWorkflowIdFromAutomation(context.automation);
     const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
     const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
+    appendWorkflowLedgerEvent({
+      workspaceId,
+      workflowId,
+      automationId: context.automation.id,
+      taskId: context.task.id,
+      taskRunId: context.taskRun.id,
+      type: 'approval_granted',
+      summary: `Approved delivery to ${result.receipt.deliveryTarget || 'configured destination'}.`,
+      metadata: { receipt: result.receipt },
+    });
+    appendWorkflowLedgerEvent({
+      workspaceId,
+      workflowId,
+      automationId: context.automation.id,
+      taskId: context.task.id,
+      taskRunId: context.taskRun.id,
+      type: 'external_action_executed',
+      summary: `Delivered approved workflow output to ${result.receipt.deliveryTarget || 'configured destination'}.`,
+      metadata: { delivery: result.delivery },
+    });
     broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_approved');
     res.json({ ok: true, receipt: result.receipt, delivery: result.delivery, task, taskRun });
   } catch (error) {
@@ -5354,8 +5498,19 @@ app.post('/api/automations/:id/reviews/:runId/request-changes', (req: Request, r
       reviewer: readBodyString(req.body?.reviewer, 'Violema reviewer'),
       note: readBodyString(req.body?.note, 'Changes requested before delivery.'),
     });
+    const workflowId = inferWorkflowIdFromAutomation(context.automation);
     const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
     const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
+    appendWorkflowLedgerEvent({
+      workspaceId,
+      workflowId,
+      automationId: context.automation.id,
+      taskId: context.task.id,
+      taskRunId: context.taskRun.id,
+      type: 'approval_denied',
+      summary: 'Reviewer requested changes before delivery.',
+      metadata: { reviewRequest: result.reviewRequest },
+    });
     broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_changes_requested');
     res.json({ ok: true, reviewRequest: result.reviewRequest, task, taskRun });
   } catch (error) {
