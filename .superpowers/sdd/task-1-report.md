@@ -264,3 +264,124 @@ exit code 0
 - Pagination is bounded and cursor-based, so larger Stripe accounts no longer silently stop after a single page and the adapter still avoids infinite loops.
 - Live Stripe construction failures are now normalized into the same structured error path as runtime query failures.
 - Failed-payment aggregation now avoids double counting invoice-linked failed charges while preserving unlinked failed charges, so the original contract still holds.
+
+## Fix Pass 2: remove silent pagination truncation
+
+### What changed
+
+- Removed the silent `25`-page truncation behavior from Stripe pagination.
+- Pagination now continues until Stripe returns `has_more: false`.
+- Added fail-closed cursor safety:
+  - if Stripe returns `has_more: true` with no last item id, the adapter throws into `integration_query_failed`
+  - if Stripe returns the same cursor anchor again, the adapter throws into `integration_query_failed`
+- Kept an emergency page bound only as a hard failure path, never as partial success.
+- Updated subscription quantity handling from `quantity || 1` to `quantity ?? 1` so explicit zero quantities stay zero.
+- Added focused test coverage for:
+  - reading through 26 single-item pages without truncation
+  - non-advancing cursor failure returning `integration_query_failed`
+  - zero quantity not being coerced to `1` in the 26-page regression test
+
+### Fix Pass 2 TDD evidence
+
+#### RED command/output
+
+Command:
+
+```bash
+cd /Users/maximisto/Documents/New\ project/backend
+node --test -r ts-node/register tests/nativeStripe.test.ts
+```
+
+Output:
+
+```text
+TAP version 13
+# Subtest: queryStripeRevenue continues past 25 pages instead of silently truncating results
+not ok 4 - queryStripeRevenue continues past 25 pages instead of silently truncating results
+  error: Expected values to be strictly equal:
+  25 !== 26
+# Subtest: queryStripeRevenue returns integration_query_failed when Stripe pagination cursor does not advance
+not ok 5 - queryStripeRevenue returns integration_query_failed when Stripe pagination cursor does not advance
+  error: expected integration_query_failed
+1..8
+# tests 8
+# pass 6
+# fail 2
+```
+
+#### GREEN command/output
+
+Command:
+
+```bash
+cd /Users/maximisto/Documents/New\ project/backend
+node --test -r ts-node/register tests/nativeStripe.test.ts
+```
+
+Output:
+
+```text
+TAP version 13
+# Subtest: queryStripeRevenue normalizes live Stripe revenue signals
+ok 1 - queryStripeRevenue normalizes live Stripe revenue signals
+# Subtest: queryStripeRevenue returns readiness error instead of fake data when credentials are missing
+ok 2 - queryStripeRevenue returns readiness error instead of fake data when credentials are missing
+# Subtest: queryStripeRevenue paginates Stripe list responses instead of stopping after one page
+ok 3 - queryStripeRevenue paginates Stripe list responses instead of stopping after one page
+# Subtest: queryStripeRevenue continues past 25 pages instead of silently truncating results
+ok 4 - queryStripeRevenue continues past 25 pages instead of silently truncating results
+# Subtest: queryStripeRevenue returns integration_query_failed when Stripe pagination cursor does not advance
+ok 5 - queryStripeRevenue returns integration_query_failed when Stripe pagination cursor does not advance
+# Subtest: queryStripeRevenue excludes failed charges linked to already-counted failed invoices
+ok 6 - queryStripeRevenue excludes failed charges linked to already-counted failed invoices
+# Subtest: queryStripeRevenue returns unsupported_query for unsupported Stripe query types
+ok 7 - queryStripeRevenue returns unsupported_query for unsupported Stripe query types
+# Subtest: queryStripeRevenue returns integration_query_failed when live Stripe client creation fails
+ok 8 - queryStripeRevenue returns integration_query_failed when live Stripe client creation fails
+1..8
+# tests 8
+# pass 8
+# fail 0
+```
+
+### Covering validation rerun for fix pass 2
+
+1. Test command:
+
+```bash
+cd /Users/maximisto/Documents/New\ project/backend
+node --test -r ts-node/register tests/nativeStripe.test.ts
+```
+
+Result:
+
+```text
+# tests 8
+# pass 8
+# fail 0
+```
+
+2. Minimal TypeScript validation:
+
+```bash
+cd /Users/maximisto/Documents/New\ project/backend
+./node_modules/.bin/tsc --noEmit --pretty false --target ES2020 --module commonjs --lib ES2020 --esModuleInterop --strict --skipLibCheck src/settingsStore.ts src/integrationRegistry.ts src/integrationGateway/types.ts src/integrationGateway/adapters/nativeStripe.ts tests/nativeStripe.test.ts
+```
+
+Result:
+
+```text
+exit code 0
+```
+
+### Files changed in fix pass 2
+
+- `backend/src/integrationGateway/adapters/nativeStripe.ts`
+- `backend/tests/nativeStripe.test.ts`
+- `.superpowers/sdd/task-1-report.md`
+
+### Self-review findings for fix pass 2
+
+- The adapter no longer returns a silent partial live summary for accounts larger than the previous page cap.
+- Cursor anomalies now fail closed through the existing structured error path instead of producing a misleading success response.
+- The `quantity ?? 1` fix preserves explicit zero quantities without changing the approved mixed-unit revenue contract.

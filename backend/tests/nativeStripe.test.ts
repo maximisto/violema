@@ -317,6 +317,132 @@ test('queryStripeRevenue paginates Stripe list responses instead of stopping aft
   assert.equal(result.data.failed_payments.at_risk_revenue, 78);
 });
 
+test('queryStripeRevenue continues past 25 pages instead of silently truncating results', async () => {
+  const subscriptionCalls: Array<Record<string, unknown>> = [];
+
+  const client: StripeLikeClient = {
+    subscriptions: {
+      async list(params) {
+        subscriptionCalls.push(params);
+        const pageNumber = subscriptionCalls.length;
+        const id = `sub_page_${pageNumber}`;
+
+        if (pageNumber > 1) {
+          assert.equal(params.starting_after, `sub_page_${pageNumber - 1}`);
+        }
+
+        return {
+          data: [
+            {
+              id,
+              status: 'active',
+              created: Math.floor(Date.parse('2026-06-20T12:00:00.000Z') / 1000),
+              canceled_at: null,
+              currency: 'usd',
+              items: {
+                data: [
+                  {
+                    quantity: pageNumber === 26 ? 0 : 1,
+                    price: {
+                      unit_amount: 1000,
+                      recurring: { interval: 'month', interval_count: 1 },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          has_more: pageNumber < 26,
+        };
+      },
+    },
+    invoices: {
+      async list() {
+        return { data: [], has_more: false };
+      },
+    },
+    charges: {
+      async list() {
+        return { data: [], has_more: false };
+      },
+    },
+  };
+
+  const result = await queryStripeRevenue({
+    workspaceId: 'workspace_many_pages',
+    queryType: 'revenue_summary',
+    now,
+    client,
+    limit: 1,
+  });
+
+  if (!result.ok) throw new Error(result.message);
+
+  assert.equal(subscriptionCalls.length, 26);
+  assert.equal(result.data.active_subscriptions, 26);
+  assert.equal(result.data.new_subscriptions, 26);
+  assert.equal(result.data.mrr, 25000);
+});
+
+test('queryStripeRevenue returns integration_query_failed when Stripe pagination cursor does not advance', async () => {
+  let subscriptionCalls = 0;
+
+  const client: StripeLikeClient = {
+    subscriptions: {
+      async list() {
+        subscriptionCalls += 1;
+        return {
+          data: [
+            {
+              id: 'sub_stuck_cursor',
+              status: 'active',
+              created: Math.floor(Date.parse('2026-06-20T12:00:00.000Z') / 1000),
+              canceled_at: null,
+              currency: 'usd',
+              items: {
+                data: [
+                  {
+                    quantity: 1,
+                    price: {
+                      unit_amount: 5000,
+                      recurring: { interval: 'month', interval_count: 1 },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          has_more: true,
+        };
+      },
+    },
+    invoices: {
+      async list() {
+        return { data: [], has_more: false };
+      },
+    },
+    charges: {
+      async list() {
+        return { data: [], has_more: false };
+      },
+    },
+  };
+
+  const result = await queryStripeRevenue({
+    workspaceId: 'workspace_stuck_cursor',
+    queryType: 'revenue_summary',
+    now,
+    client,
+    limit: 1,
+  });
+
+  if (result.ok) throw new Error('expected integration_query_failed');
+
+  assert.equal(result.code, 'integration_query_failed');
+  assert.match(result.message, /cursor did not advance/i);
+  assert.equal(subscriptionCalls, 2);
+});
+
 test('queryStripeRevenue excludes failed charges linked to already-counted failed invoices', async () => {
   const client: StripeLikeClient = {
     subscriptions: {

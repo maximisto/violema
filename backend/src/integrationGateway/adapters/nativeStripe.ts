@@ -133,7 +133,7 @@ function monthlyMultiplier(interval?: StripeInterval | null, intervalCount?: num
 function subscriptionMonthlyRevenue(subscription: StripeLikeSubscription) {
   return (subscription.items?.data || []).reduce((sum, item) => {
     const unitAmount = item.price?.unit_amount || 0;
-    const quantity = item.quantity || 1;
+    const quantity = item.quantity ?? 1;
     const recurring = item.price?.recurring;
     return sum + unitAmount * quantity * monthlyMultiplier(recurring?.interval, recurring?.interval_count);
   }, 0);
@@ -149,12 +149,13 @@ function createStripeClient(secretKey: string): StripeLikeClient {
 async function listAllPages<T extends { id: string }>(
   list: (params: Record<string, unknown>) => Promise<StripeListResponse<T>>,
   baseParams: Record<string, unknown>,
-  maxPages = 25,
 ): Promise<T[]> {
   const results: T[] = [];
   let startingAfter: string | undefined;
+  let pageCount = 0;
 
-  for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+  while (true) {
+    pageCount += 1;
     const page = await list({
       ...baseParams,
       ...(startingAfter ? { starting_after: startingAfter } : {}),
@@ -162,14 +163,22 @@ async function listAllPages<T extends { id: string }>(
 
     results.push(...page.data);
 
-    if (!page.has_more) break;
+    if (!page.has_more) return results;
 
     const lastId = page.data[page.data.length - 1]?.id;
-    if (!lastId) break;
-    startingAfter = lastId;
-  }
+    if (!lastId) {
+      throw new Error('Stripe pagination signaled more results but returned no cursor anchor.');
+    }
+    if (lastId === startingAfter) {
+      throw new Error('Stripe pagination cursor did not advance.');
+    }
 
-  return results;
+    startingAfter = lastId;
+
+    if (pageCount >= 10000) {
+      throw new Error('Stripe pagination exceeded emergency page bound.');
+    }
+  }
 }
 
 function normalizeCurrency(values: Array<string | null | undefined>) {
