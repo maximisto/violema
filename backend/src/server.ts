@@ -3674,7 +3674,9 @@ async function executeAutomationCore(
             taskRunId: runContext.taskRunId,
             deliveryTarget,
             channel: typeof delivery.channel === 'string' ? delivery.channel : undefined,
-            draftMarkdown: body,
+            preparedAt: typeof delivery.prepared_at === 'string'
+              ? delivery.prepared_at
+              : new Date().toISOString(),
           }));
           continue;
         }

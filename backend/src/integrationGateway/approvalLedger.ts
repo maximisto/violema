@@ -9,6 +9,7 @@ export interface PendingApprovalRequestedLedgerEvent {
   taskRunId?: string;
   deliveryTarget: string;
   channel?: string;
+  preparedAt: string;
 }
 
 export function buildPendingApprovalRequestedLedgerEvent(input: {
@@ -19,7 +20,7 @@ export function buildPendingApprovalRequestedLedgerEvent(input: {
   taskRunId?: string;
   deliveryTarget: string;
   channel?: string;
-  draftMarkdown?: string;
+  preparedAt: string;
 }): PendingApprovalRequestedLedgerEvent {
   return {
     workspaceId: input.workspaceId,
@@ -29,6 +30,7 @@ export function buildPendingApprovalRequestedLedgerEvent(input: {
     taskRunId: input.taskRunId,
     deliveryTarget: input.deliveryTarget,
     channel: input.channel,
+    preparedAt: input.preparedAt,
   };
 }
 
@@ -50,5 +52,6 @@ export function finalizePendingApprovalRequestedLedgerEvents(input: {
       deliveryTarget: event.deliveryTarget,
       channel: event.channel,
     },
+    now: () => event.preparedAt,
   }));
 }

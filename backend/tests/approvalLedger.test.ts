@@ -11,7 +11,7 @@ test('failed query plus prepared review gate does not commit approval_requested'
     taskRunId: 'run_revenue',
     deliveryTarget: '#founders',
     channel: 'slack',
-    draftMarkdown: '## Founder update\nStripe was not ready.',
+    preparedAt: '2026-06-29T12:03:00.000Z',
   });
 
   const items = approvalLedger.finalizePendingApprovalRequestedLedgerEvents({
@@ -32,7 +32,7 @@ test('clean review-gated run commits approval_requested', async () => {
     taskRunId: 'run_revenue',
     deliveryTarget: '#founders',
     channel: 'slack',
-    draftMarkdown: '## Founder update\nRevenue is steady.',
+    preparedAt: '2026-06-29T12:04:00.000Z',
   });
 
   const items = approvalLedger.finalizePendingApprovalRequestedLedgerEvents({
@@ -45,7 +45,7 @@ test('clean review-gated run commits approval_requested', async () => {
   assert.equal(items[0].summary, 'Prepared delivery for approval before sending to #founders.');
 });
 
-test('approval_requested metadata excludes full draft markdown', async () => {
+test('approval_requested preserves the original prepared timestamp', async () => {
   const approvalLedger = await import('../src/integrationGateway/approvalLedger');
   const pending = approvalLedger.buildPendingApprovalRequestedLedgerEvent({
     workspaceId: 'workspace_test',
@@ -55,7 +55,29 @@ test('approval_requested metadata excludes full draft markdown', async () => {
     taskRunId: 'run_revenue',
     deliveryTarget: '#founders',
     channel: 'slack',
-    draftMarkdown: '## Founder update\nDo not store this whole draft in the ledger.',
+    preparedAt: '2026-06-29T12:05:00.000Z',
+  });
+
+  const items = approvalLedger.finalizePendingApprovalRequestedLedgerEvents({
+    outcome: { reviewRequired: true },
+    pendingEvents: [pending],
+  });
+
+  assert.equal(typeof items[0].now, 'function');
+  assert.equal(items[0].now?.(), '2026-06-29T12:05:00.000Z');
+});
+
+test('approval_requested metadata stays lean', async () => {
+  const approvalLedger = await import('../src/integrationGateway/approvalLedger');
+  const pending = approvalLedger.buildPendingApprovalRequestedLedgerEvent({
+    workspaceId: 'workspace_test',
+    workflowId: 'revenue-watch',
+    automationId: 'auto_revenue',
+    taskId: 'task_revenue',
+    taskRunId: 'run_revenue',
+    deliveryTarget: '#founders',
+    channel: 'slack',
+    preparedAt: '2026-06-29T12:06:00.000Z',
   });
 
   const items = approvalLedger.finalizePendingApprovalRequestedLedgerEvents({
@@ -67,5 +89,5 @@ test('approval_requested metadata excludes full draft markdown', async () => {
     deliveryTarget: '#founders',
     channel: 'slack',
   });
-  assert.equal('draftMarkdown' in (items[0].metadata || {}), false);
+  assert.deepEqual(Object.keys(items[0].metadata || {}).sort(), ['channel', 'deliveryTarget']);
 });
