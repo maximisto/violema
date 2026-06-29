@@ -141,6 +141,7 @@ import {
   type IntegrationProvider,
 } from './settingsStore';
 import { buildIntegrationCatalog } from './integrationRegistry';
+import { executeQueryData } from './integrationGateway/queryData';
 import {
   buildAutomationExperimentAttribution,
   buildAutomationScenarioTelemetry,
@@ -225,6 +226,17 @@ function buildTaskRunSnapshotEvent(
     run,
     task,
   };
+}
+
+function getAutomationWorkspaceId(automation: { workspaceId?: string } | null | undefined) {
+  return automation?.workspaceId || DEFAULT_WORKSPACE_ID;
+}
+
+function automationBelongsToWorkspace(
+  automation: { workspaceId?: string } | null | undefined,
+  workspaceId: string,
+) {
+  return getAutomationWorkspaceId(automation) === workspaceId;
 }
 
 app.use(helmet({
@@ -1152,6 +1164,7 @@ async function runAnthropicChatLoop(
   route: { model: string },
   anthropicMessages: MessageParam[],
   autonomyMode: string,
+  workspaceId: string,
   sendEvent: (data: Record<string, unknown>) => void
 ): Promise<{ toolCallsExecuted: number }> {
   let continueLoop = true;
@@ -1236,7 +1249,7 @@ async function runAnthropicChatLoop(
       for (const toolUseBlock of toolUseBlocks) {
         const toolInput = toolUseBlock.input as Record<string, unknown>;
         const toolStart = Date.now();
-        const result = await executeToolCall(toolUseBlock.name, toolInput);
+        const result = await executeToolCall(toolUseBlock.name, toolInput, { workspaceId });
         const elapsed = Date.now() - toolStart;
         const confidence = randomConfidence(toolUseBlock.name);
 
@@ -1270,6 +1283,7 @@ async function runOpenAIChatLoop(
   route: { provider: string; model: string; apiKeyEnv: string; baseUrl?: string },
   messages: ChatMessage[],
   autonomyMode: string,
+  workspaceId: string,
   sendEvent: (data: Record<string, unknown>) => void
 ): Promise<{ toolCallsExecuted: number }> {
   const currentMessages: Array<Record<string, unknown>> = [
@@ -1352,7 +1366,7 @@ async function runOpenAIChatLoop(
           input: parsedInput,
         });
 
-        const result = await executeToolCall(toolName, parsedInput);
+        const result = await executeToolCall(toolName, parsedInput, { workspaceId });
         const elapsed = Date.now() - startedAt;
         const confidence = randomConfidence(toolName);
 
@@ -1802,86 +1816,15 @@ async function executeToolCall(
     }
 
     case 'query_data': {
-      const source = toolInput.source as string;
-      const queryType = toolInput.query_type as string;
-
-      const mockData: Record<string, Record<string, unknown>> = {
-        stripe: {
-          monthly_revenue: {
-            period: 'March 2025',
-            mrr: 127450,
-            prev_mrr: 108230,
-            change_pct: 17.77,
-            arr: 1529400,
-            new_subscriptions: 47,
-            churned: 3,
-            net_revenue_retention: 118,
-            upgrades: 12,
-            downgrades: 2,
-            currency: 'USD',
-          },
-          customers: { total: 892, active: 847, trial: 45, churned_this_month: 3, paying: 802 },
-          transactions: {
-            today: { count: 234, volume: 18420, avg: 78.72 },
-            this_month: { count: 4821, volume: 127450, avg: 26.43 },
-          },
-          failed_payments: { count: 18, recovery_rate: '67%', at_risk_mrr: 2340 },
-        },
-        hubspot: {
-          contacts: { total: 12450, new_this_month: 234, qualified_leads: 89, mql: 156, sql: 43 },
-          deals: { open: 67, won_this_month: 23, lost_this_month: 8, pipeline_value: 890000, avg_deal_size: 38700, close_rate: '34%' },
-          campaigns: { active: 5, total_reach: 42000, avg_open_rate: '24.3%', avg_click_rate: '3.8%' },
-        },
-        github: {
-          open_issues: { total: 34, critical: 2, high: 8, medium: 15, low: 9 },
-          pull_requests: { open: 12, merged_this_week: 28, avg_review_time_hours: 6.4, oldest_open_days: 18 },
-          activity: { commits_this_week: 147, contributors_active: 8, deployments_this_week: 12 },
-        },
-        linear: {
-          sprint: { name: 'Sprint 23', open: 156, in_progress: 34, completed: 42, blocked: 7 },
-          velocity: { this_sprint: 84, last_sprint: 76, avg_4_sprints: 79 },
-          cycle_time_days: { p50: 2.1, p90: 5.8 },
-        },
-        posthog: {
-          pageviews: { today: 8421, this_week: 48230, this_month: 182450 },
-          active_users: { dau: 1247, wau: 6832, mau: 18940 },
-          conversion: { signup_rate: '4.2%', activation_rate: '67%', retention_d30: '42%' },
-          top_events: [
-            { event: 'chat_sent', count: 45230, change: '+12%' },
-            { event: 'tool_executed', count: 28410, change: '+34%' },
-            { event: 'automation_created', count: 3210, change: '+89%' },
-          ],
-        },
-        salesforce: {
-          pipeline: { total: 2340000, opportunities: 87, avg_age_days: 34 },
-          forecast: { commit: 340000, best_case: 520000, pipeline: 890000 },
-          top_accounts: [
-            { name: 'Acme Corp', arr: 120000, health: 'green', csm: 'Sarah K.' },
-            { name: 'Globex Inc', arr: 84000, health: 'yellow', csm: 'Mike T.' },
-          ],
-        },
-        google_analytics: {
-          sessions: { today: 3421, this_week: 21450, this_month: 89230 },
-          acquisition: { organic: '42%', direct: '28%', paid: '18%', referral: '12%' },
-          top_pages: [
-            { path: '/', sessions: 12450, bounce_rate: '34%' },
-            { path: '/pricing', sessions: 8230, bounce_rate: '28%' },
-            { path: '/features', sessions: 6710, bounce_rate: '41%' },
-          ],
-        },
-      };
-
-      const sourceData = mockData[source] || {};
-      const result = sourceData[queryType] || { note: `Data for "${queryType}" not found in ${source}` };
-
-      return JSON.stringify({
+      const source = String(toolInput.source || '');
+      const queryType = String(toolInput.query_type || '');
+      return JSON.stringify(await executeQueryData({
+        workspaceId: ctx?.workspaceId || DEFAULT_WORKSPACE_ID,
         source,
-        query_type: queryType,
-        data: result,
-        fetched_at: new Date().toISOString(),
-        latency_ms: Math.floor(Math.random() * 200) + 80,
-        cache_hit: Math.random() > 0.6,
-      });
+        queryType,
+        filters: isObjectRecord(toolInput.filters) ? toolInput.filters : undefined,
+        limit: typeof toolInput.limit === 'number' ? toolInput.limit : undefined,
+      }));
     }
 
     case 'render_chart': {
@@ -2141,10 +2084,10 @@ async function executeConversationTask(input: {
   let toolCallsExecuted = 0;
   if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
     if (!client) throw new Error('Missing Anthropic-compatible client.');
-    const execution = await runAnthropicChatLoop(client, executingRoute, anthropicMessages, autonomyMode, collectEvent);
+    const execution = await runAnthropicChatLoop(client, executingRoute, anthropicMessages, autonomyMode, workspaceId, collectEvent);
     toolCallsExecuted = execution.toolCallsExecuted;
   } else {
-    const execution = await runOpenAIChatLoop(requestedRoute, messages, autonomyMode, collectEvent);
+    const execution = await runOpenAIChatLoop(requestedRoute, messages, autonomyMode, workspaceId, collectEvent);
     toolCallsExecuted = execution.toolCallsExecuted;
   }
 
@@ -3363,6 +3306,7 @@ function isAutomationDeliveryApprovalRequired(step: AutomationStepDefinition) {
 async function ensureAutomationSummaryText(
   automation: { name: string; description?: string; condition?: string; actions: string[] },
   plan: AutomationExecutionPlan,
+  workspaceId: string,
   artifacts: AutomationExecutionArtifact[],
   stepExecutions: AutomationStepExecution[],
   stepErrors: string[],
@@ -3377,7 +3321,7 @@ async function ensureAutomationSummaryText(
         'Summarize the completed automation run in concise markdown. Lead with the highest-value outcome, then note any failure or delivery issue briefly.',
         [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
         600,
-        DEFAULT_WORKSPACE_ID,
+        workspaceId,
       ),
     );
 
@@ -3408,16 +3352,19 @@ async function runAutomationStepWithTimeout<T>(label: string, operation: Promise
 async function executeAutomationCore(
   automation: {
     id: string;
+    workspaceId?: string;
     name: string;
     description?: string;
     actions: string[];
     steps?: PersistedAutomationStep[];
     execution_policy?: AutomationExecutionPolicy;
+    studio_state?: AutomationStudioState;
     notify?: string;
     condition?: string;
     timezone?: string;
   },
   plan: AutomationExecutionPlan,
+  workspaceId: string,
   onProgress?: (state: {
     artifacts: AutomationExecutionArtifact[];
     summaryText: string;
@@ -3450,7 +3397,7 @@ async function executeAutomationCore(
   };
 
   for (const step of plan.steps) {
-    const stepModelSource = getModelSource(step.modelTier || plan.suggestedModelTier, DEFAULT_WORKSPACE_ID);
+    const stepModelSource = getModelSource(step.modelTier || plan.suggestedModelTier, workspaceId);
     const stepExecution: AutomationStepExecution = {
       stepId: step.id,
       kind: step.kind,
@@ -3490,7 +3437,10 @@ async function executeAutomationCore(
       }
 
       if (step.kind === 'query') {
-        const payload = JSON.parse(await runAutomationStepWithTimeout(`Query step "${step.title}"`, executeToolCall('query_data', step.inputs || {}))) as Record<string, unknown>;
+        const payload = JSON.parse(await runAutomationStepWithTimeout(
+          `Query step "${step.title}"`,
+          executeToolCall('query_data', step.inputs || {}, { workspaceId }),
+        )) as Record<string, unknown>;
         const chartArtifact = buildAutomationChartArtifactFromQueryPayload({
           stepTitle: step.title,
           payload,
@@ -3542,7 +3492,7 @@ async function executeAutomationCore(
           'You are an internal VIOLEMA analyst. Produce a compact, decision-ready analysis based only on the supplied evidence. Be concrete and avoid filler.',
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           500,
-          DEFAULT_WORKSPACE_ID,
+          workspaceId,
           ),
         );
         const markdown = analysisResult.text;
@@ -3568,7 +3518,7 @@ async function executeAutomationCore(
           'You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. Be concrete, skim-friendly, and avoid filler.',
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           900,
-          DEFAULT_WORKSPACE_ID,
+          workspaceId,
           ),
         );
         summaryText = summaryResult.text;
@@ -3595,7 +3545,7 @@ async function executeAutomationCore(
         }
 
         if (!summaryText && (artifacts.length > 0 || stepErrors.length > 0)) {
-          summaryText = await ensureAutomationSummaryText(automation, plan, artifacts, stepExecutions, stepErrors);
+          summaryText = await ensureAutomationSummaryText(automation, plan, workspaceId, artifacts, stepExecutions, stepErrors);
           if (summaryText) {
             artifacts.push({
               kind: 'summary',
@@ -3681,7 +3631,7 @@ async function executeAutomationCore(
   }
 
   if (!summaryText && (artifacts.length > 0 || stepErrors.length > 0)) {
-    summaryText = await ensureAutomationSummaryText(automation, plan, artifacts, stepExecutions, stepErrors);
+    summaryText = await ensureAutomationSummaryText(automation, plan, workspaceId, artifacts, stepExecutions, stepErrors);
     artifacts.push({
       kind: 'summary',
       title: `${automation.name} summary`,
@@ -3703,6 +3653,7 @@ async function executeAutomationCore(
 
 async function runAutomation(automation: {
   id: string;
+  workspaceId?: string;
   name: string;
   description?: string;
   actions: string[];
@@ -3713,17 +3664,18 @@ async function runAutomation(automation: {
   condition?: string;
   timezone?: string;
 }) {
-  ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
+  const workspaceId = automation.workspaceId || DEFAULT_WORKSPACE_ID;
+  ensureWorkspaceCredits(workspaceId);
   const executionPlan = buildAutomationExecutionPlan(automation);
   const experimentAttribution = buildAutomationExperimentAttribution(automation.studio_state);
   const scenarioTelemetry = buildAutomationScenarioTelemetry(automation.studio_state, executionPlan, experimentAttribution);
   const modelTier = executionPlan.suggestedModelTier;
-  const runModelSource = getModelSource(modelTier, DEFAULT_WORKSPACE_ID);
+  const runModelSource = getModelSource(modelTier, workspaceId);
   const complexity = executionPlan.complexity;
   const toolCallCount = executionPlan.estimatedToolCalls;
   const executionRole = executionPlan.primaryRole;
   const delegation = buildDelegationRuntimeContext({
-    workspaceId: DEFAULT_WORKSPACE_ID,
+    workspaceId,
     taskKind: 'automation',
     title: automation.name,
     description: automation.description,
@@ -3737,7 +3689,7 @@ async function runAutomation(automation: {
     reasonOverride: executionPlan.rationale,
   });
   const task = createTask({
-    workspaceId: DEFAULT_WORKSPACE_ID,
+    workspaceId,
     title: automation.name,
     description: automation.description,
     kind: 'automation',
@@ -3777,7 +3729,7 @@ async function runAutomation(automation: {
   });
   const estimatedCredits = Math.max(estimate.estimatedCredits, executionPlan.estimatedCredits);
   const taskRun = createTaskRun({
-    workspaceId: DEFAULT_WORKSPACE_ID,
+    workspaceId,
     taskId: task.id,
     ...delegation.taskRunPatch,
     modelTier,
@@ -3808,7 +3760,7 @@ async function runAutomation(automation: {
     },
   });
 
-  broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+  broadcastTaskPanelEvent(workspaceId, {
     type: 'automation_run_started',
     automationId: automation.id,
     taskId: task.id,
@@ -3816,7 +3768,7 @@ async function runAutomation(automation: {
   });
 
   try {
-    assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimatedCredits);
+    assertCanSpendCredits(workspaceId, estimatedCredits);
     updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
 
     const persistProgress = async (progress: {
@@ -3890,13 +3842,13 @@ async function runAutomation(automation: {
         },
       });
 
-      const snapshotEvent = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, 'progress');
+      const snapshotEvent = buildTaskRunSnapshotEvent(workspaceId, taskRun.id, 'progress');
       if (snapshotEvent) {
-        broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, snapshotEvent);
+        broadcastTaskPanelEvent(workspaceId, snapshotEvent);
       }
     };
 
-    const execution = await executeAutomationCore(automation, executionPlan, persistProgress);
+    const execution = await executeAutomationCore(automation, executionPlan, workspaceId, persistProgress);
     const deliveryWaitingForReview = execution.stepExecutions.some((step) =>
       step.kind === 'deliver' &&
       step.status === 'succeeded' &&
@@ -4010,7 +3962,7 @@ async function runAutomation(automation: {
       },
     });
     addLedgerEntry({
-      workspaceId: DEFAULT_WORKSPACE_ID,
+      workspaceId,
       source: 'automation_run',
       deltaCredits: -actualCredits,
       referenceType: 'automation',
@@ -4033,9 +3985,9 @@ async function runAutomation(automation: {
         runOutcome: outcome,
       },
     });
-    const completedSnapshot = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, outcome.runStatus === 'failed' ? 'failed' : 'completed');
+    const completedSnapshot = buildTaskRunSnapshotEvent(workspaceId, taskRun.id, outcome.runStatus === 'failed' ? 'failed' : 'completed');
     if (completedSnapshot) {
-      broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, completedSnapshot);
+      broadcastTaskPanelEvent(workspaceId, completedSnapshot);
     }
     return {
       ok: outcome.schedulerOk,
@@ -4121,9 +4073,9 @@ async function runAutomation(automation: {
         ],
       },
     });
-    const failedSnapshot = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, 'failed');
+    const failedSnapshot = buildTaskRunSnapshotEvent(workspaceId, taskRun.id, 'failed');
     if (failedSnapshot) {
-      broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, failedSnapshot);
+      broadcastTaskPanelEvent(workspaceId, failedSnapshot);
     }
     console.error(`[automation] ${automation.id} failed`, error);
     return {
@@ -5181,7 +5133,9 @@ function readBodyString(value: unknown, fallback = '') {
 
 function findAutomationReviewContext(workspaceId: string, automationId: string, runId: string) {
   const automation = getAutomationById(automationId);
-  if (!automation) return { error: 'Automation not found' as const };
+  if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
+    return { error: 'Automation not found' as const };
+  }
 
   const taskRun = listTaskRuns(workspaceId).find((run) =>
     run.id === runId &&
@@ -5228,7 +5182,7 @@ app.get('/api/missions', (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const items = buildMissionRecords({
     workspaceId,
-    automations: listAutomations(),
+    automations: listAutomations().filter((automation) => automationBelongsToWorkspace(automation, workspaceId)),
     tasks: listTasks(workspaceId),
     taskRuns: listTaskRuns(workspaceId),
   });
@@ -5236,18 +5190,22 @@ app.get('/api/missions', (req: Request, res: Response) => {
   res.json({ items });
 });
 
-app.get('/api/automations', (_req: Request, res: Response) => {
+app.get('/api/automations', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   res.json({
-    items: listAutomations().map((automation) => ({
+    items: listAutomations()
+      .filter((automation) => automationBelongsToWorkspace(automation, workspaceId))
+      .map((automation) => ({
       ...automation,
       preflight: buildAutomationPreflightReport({ automation }),
-    })),
+      })),
   });
 });
 
 app.get('/api/automations/:id/preflight', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   const automation = getAutomationById(req.params.id);
-  if (!automation) {
+  if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
     res.status(404).json({ error: 'Automation not found' });
     return;
   }
@@ -5259,6 +5217,7 @@ app.get('/api/automations/:id/preflight', (req: Request, res: Response) => {
 });
 
 app.post('/api/automations', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   const body = req.body as {
     name?: string;
     description?: string;
@@ -5292,6 +5251,7 @@ app.post('/api/automations', async (req: Request, res: Response) => {
       steps: normalizedSteps,
     });
     const record = createAutomation({
+      workspaceId,
       name: body.name.trim(),
       description: typeof body.description === 'string' ? body.description.trim() || undefined : undefined,
       authoring_mode: body.authoringMode === 'describe' ? 'describe' : 'guided',
@@ -5306,7 +5266,7 @@ app.post('/api/automations', async (req: Request, res: Response) => {
       condition: typeof body.condition === 'string' ? body.condition.trim() || undefined : undefined,
     }, runAutomation);
 
-    broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+    broadcastTaskPanelEvent(workspaceId, {
       type: 'automation_created',
       automationId: record.id,
     });
@@ -5317,13 +5277,20 @@ app.post('/api/automations', async (req: Request, res: Response) => {
 });
 
 app.post('/api/automations/:id/run', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const automation = getAutomationById(req.params.id);
+  if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
+    res.status(404).json({ error: 'Automation not found' });
+    return;
+  }
+
   const record = triggerAutomationNow(req.params.id, runAutomation);
   if (!record) {
     res.status(404).json({ error: 'Automation not found' });
     return;
   }
 
-  broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+  broadcastTaskPanelEvent(workspaceId, {
     type: 'automation_triggered',
     automationId: record.id,
   });
@@ -5407,6 +5374,13 @@ app.post('/api/automations/:id/reviews/:runId/rerun', (req: Request, res: Respon
 });
 
 app.patch('/api/automations/:id', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const automation = getAutomationById(req.params.id);
+  if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
+    res.status(404).json({ error: 'Automation not found' });
+    return;
+  }
+
   const patch: Record<string, unknown> = {};
 
   if (typeof req.body.name === 'string') patch.name = req.body.name.trim();
@@ -5454,7 +5428,7 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Automation not found' });
       return;
     }
-    broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+    broadcastTaskPanelEvent(workspaceId, {
       type: 'automation_updated',
       automationId: updated.id,
     });
@@ -5465,13 +5439,20 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
 });
 
 app.delete('/api/automations/:id', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const automation = getAutomationById(req.params.id);
+  if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
+    res.status(404).json({ error: 'Automation not found' });
+    return;
+  }
+
   const removed = deleteAutomation(req.params.id);
   if (!removed) {
     res.status(404).json({ error: 'Automation not found' });
     return;
   }
 
-  broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+  broadcastTaskPanelEvent(workspaceId, {
     type: 'automation_deleted',
     automationId: removed.id,
   });
