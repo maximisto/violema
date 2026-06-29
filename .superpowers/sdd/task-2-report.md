@@ -218,3 +218,96 @@ ok 5 - applyQueryStepPayloadToExecution keeps successful query payloads successf
 
 - The key contract now holds: missing Stripe credentials make the automation query step fail, and that failure reaches `classifyAutomationRunOutcome(...)` through `stepErrors` and failed step status.
 - The fix stays inside the gateway/query-step path and does not alter Task 1 Stripe adapter behavior.
+
+---
+
+## Re-review Fix Follow-up
+
+### What I changed
+
+- Updated `classifyAutomationRunOutcome(...)` in `backend/src/platform/automationLifecycle.ts` so `deliveryError` or any failed step outranks `deliveryWaitingForReview`.
+- Kept the valid review-gate path unchanged when there are no failed steps or delivery errors.
+- Added the exact mixed-case regression in `backend/tests/automationLifecycle.contract.ts`: a failed query step with an `integration_not_ready`-style message plus a succeeded deliver step waiting for review now classifies as blocked/failed with `schedulerOk: false`.
+
+### Re-review TDD evidence
+
+#### RED command/output
+
+Command:
+```bash
+cd /Users/maximisto/Documents/New\ project/backend
+node --test -r ts-node/register tests/automationLifecycle.contract.ts
+```
+
+Output:
+```text
+TAP version 13
+# Subtest: classifyAutomationRunOutcome prioritizes failed steps over waiting review gates
+not ok 6 - classifyAutomationRunOutcome prioritizes failed steps over waiting review gates
+  error:
+    Expected values to be strictly equal:
+    + actual - expected
+    + 'waiting_review'
+    - 'blocked'
+1..6
+# tests 6
+# pass 5
+# fail 1
+```
+
+#### GREEN command/output
+
+Command:
+```bash
+cd /Users/maximisto/Documents/New\ project/backend
+node --test -r ts-node/register tests/automationLifecycle.contract.ts
+```
+
+Output:
+```text
+TAP version 13
+# Subtest: approveAutomationReview delivers waiting review content and records a run receipt
+ok 1 - approveAutomationReview delivers waiting review content and records a run receipt
+# Subtest: requestAutomationChanges keeps delivery held and records reviewer instructions
+ok 2 - requestAutomationChanges keeps delivery held and records reviewer instructions
+# Subtest: buildAutomationPreflightReport flags missing credentials before a mission runs
+ok 3 - buildAutomationPreflightReport flags missing credentials before a mission runs
+# Subtest: validateAutomationDeliveryDraft allows Slack names at save time but validates email shape
+ok 4 - validateAutomationDeliveryDraft allows Slack names at save time but validates email shape
+# Subtest: classifyAutomationRunOutcome blocks failed delivery but preserves review gates
+ok 5 - classifyAutomationRunOutcome blocks failed delivery but preserves review gates
+# Subtest: classifyAutomationRunOutcome prioritizes failed steps over waiting review gates
+ok 6 - classifyAutomationRunOutcome prioritizes failed steps over waiting review gates
+1..6
+# tests 6
+# pass 6
+# fail 0
+```
+
+### Additional verification
+
+1. Required query gateway regression:
+   - Command:
+     ```bash
+     cd /Users/maximisto/Documents/New\ project/backend
+     node --test -r ts-node/register tests/queryDataGateway.test.ts
+     ```
+   - Result: `5 pass, 0 fail`
+
+2. Compiler verification:
+   - Command:
+     ```bash
+     cd /Users/maximisto/Documents/New\ project/backend
+     npx tsc -p tsconfig.json --noEmit --incremental false
+     ```
+   - Result: passed with exit code `0`.
+
+### Files changed in this re-review
+
+- `backend/src/platform/automationLifecycle.ts`
+- `backend/tests/automationLifecycle.contract.ts`
+
+### Re-review self-check
+
+- Workflow classification now blocks the run whenever any step failed, even if a later delivery step prepared a review gate.
+- The readiness detail is preserved in `reviewSummary`, which keeps the failure visible to downstream workflow handling.

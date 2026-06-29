@@ -200,3 +200,28 @@ test('classifyAutomationRunOutcome blocks failed delivery but preserves review g
   assert.equal(failedDeliveryOutcome.schedulerOk, false);
   assert.match(String(failedDeliveryOutcome.reviewSummary), /Slack target/);
 });
+
+test('classifyAutomationRunOutcome prioritizes failed steps over waiting review gates', () => {
+  const outcome = classifyAutomationRunOutcome({
+    deliveryWaitingForReview: true,
+    stepExecutions: [
+      {
+        kind: 'query',
+        title: 'Check Stripe revenue',
+        status: 'failed',
+        error: 'Stripe read access is required before Revenue Watch can run with real data.',
+      },
+      {
+        kind: 'deliver',
+        title: 'Deliver to Slack',
+        status: 'succeeded',
+      },
+    ],
+  });
+
+  assert.equal(outcome.taskStatus, 'blocked');
+  assert.equal(outcome.runStatus, 'failed');
+  assert.equal(outcome.schedulerOk, false);
+  assert.equal(outcome.reviewRequired, false);
+  assert.match(String(outcome.reviewSummary), /Stripe read access is required before Revenue Watch can run with real data\./);
+});

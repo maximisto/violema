@@ -338,17 +338,6 @@ export function classifyAutomationRunOutcome(input: {
   deliveryError?: string | null;
   stepExecutions: Array<Pick<AutomationStepExecution, 'status' | 'title' | 'error' | 'kind'>>;
 }): AutomationRunOutcome {
-  if (input.deliveryWaitingForReview) {
-    return {
-      taskStatus: 'waiting_review',
-      runStatus: 'succeeded',
-      delegationState: 'review',
-      schedulerOk: true,
-      reviewRequired: true,
-      reviewSummary: 'Delivery is prepared and waiting for approval.',
-    };
-  }
-
   const failedStep = input.stepExecutions.find((step) => step.status === 'failed');
   if (input.deliveryError || failedStep) {
     const detail = input.deliveryError || failedStep?.error || `${failedStep?.title || 'A workflow step'} failed.`;
@@ -359,6 +348,17 @@ export function classifyAutomationRunOutcome(input: {
       schedulerOk: false,
       reviewRequired: false,
       reviewSummary: `Run needs attention before it can be trusted or delivered. ${detail}`,
+    };
+  }
+
+  if (input.deliveryWaitingForReview) {
+    return {
+      taskStatus: 'waiting_review',
+      runStatus: 'succeeded',
+      delegationState: 'review',
+      schedulerOk: true,
+      reviewRequired: true,
+      reviewSummary: 'Delivery is prepared and waiting for approval.',
     };
   }
 
