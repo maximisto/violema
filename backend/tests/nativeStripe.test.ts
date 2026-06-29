@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import Module from 'node:module';
 import test from 'node:test';
 import {
   queryStripeRevenue,
@@ -147,4 +148,281 @@ test('queryStripeRevenue returns readiness error instead of fake data when crede
   assert.equal(result.workflowId, 'revenue-watch');
   assert.match(result.message, /Stripe read access is required/);
   assert.equal(result.nextAction.route, '/integrations?provider=stripe&workflow=revenue-watch');
+});
+
+test('queryStripeRevenue paginates Stripe list responses instead of stopping after one page', async () => {
+  const subscriptionPages = [
+    {
+      data: [
+        {
+          id: 'sub_page_1',
+          status: 'active',
+          created: Math.floor(Date.parse('2026-06-14T12:00:00.000Z') / 1000),
+          canceled_at: null,
+          currency: 'usd',
+          items: {
+            data: [
+              {
+                quantity: 1,
+                price: {
+                  unit_amount: 5000,
+                  recurring: { interval: 'month', interval_count: 1 },
+                },
+              },
+            ],
+          },
+        },
+      ],
+      has_more: true,
+    },
+    {
+      data: [
+        {
+          id: 'sub_page_2',
+          status: 'active',
+          created: Math.floor(Date.parse('2026-06-10T12:00:00.000Z') / 1000),
+          canceled_at: null,
+          currency: 'usd',
+          items: {
+            data: [
+              {
+                quantity: 1,
+                price: {
+                  unit_amount: 120000,
+                  recurring: { interval: 'year', interval_count: 1 },
+                },
+              },
+            ],
+          },
+        },
+      ],
+      has_more: false,
+    },
+  ] as const;
+
+  const invoicePages = [
+    {
+      data: [
+        {
+          id: 'in_page_1',
+          status: 'open',
+          amount_remaining: 4200,
+          currency: 'usd',
+          created: Math.floor(Date.parse('2026-06-28T12:00:00.000Z') / 1000),
+        },
+      ],
+      has_more: true,
+    },
+    {
+      data: [
+        {
+          id: 'in_page_2',
+          status: 'uncollectible',
+          amount_remaining: 2100,
+          currency: 'usd',
+          created: Math.floor(Date.parse('2026-06-26T12:00:00.000Z') / 1000),
+        },
+      ],
+      has_more: false,
+    },
+  ] as const;
+
+  const chargePages = [
+    {
+      data: [
+        {
+          id: 'ch_page_1',
+          status: 'failed',
+          amount: 800,
+          currency: 'usd',
+          created: Math.floor(Date.parse('2026-06-27T12:00:00.000Z') / 1000),
+        },
+      ],
+      has_more: true,
+    },
+    {
+      data: [
+        {
+          id: 'ch_page_2',
+          status: 'failed',
+          amount: 700,
+          currency: 'usd',
+          created: Math.floor(Date.parse('2026-06-25T12:00:00.000Z') / 1000),
+        },
+      ],
+      has_more: false,
+    },
+  ] as const;
+
+  const subscriptionCalls: Array<Record<string, unknown>> = [];
+  const invoiceCalls: Array<Record<string, unknown>> = [];
+  const chargeCalls: Array<Record<string, unknown>> = [];
+
+  const client: StripeLikeClient = {
+    subscriptions: {
+      async list(params) {
+        subscriptionCalls.push(params);
+        const page = subscriptionPages[subscriptionCalls.length - 1];
+        if (!page) throw new Error('unexpected subscription page request');
+        if (subscriptionCalls.length === 2) {
+          assert.equal(params.starting_after, 'sub_page_1');
+        }
+        return page as unknown as Awaited<ReturnType<StripeLikeClient['subscriptions']['list']>>;
+      },
+    },
+    invoices: {
+      async list(params) {
+        invoiceCalls.push(params);
+        const page = invoicePages[invoiceCalls.length - 1];
+        if (!page) throw new Error('unexpected invoice page request');
+        if (invoiceCalls.length === 2) {
+          assert.equal(params.starting_after, 'in_page_1');
+        }
+        return page as unknown as Awaited<ReturnType<StripeLikeClient['invoices']['list']>>;
+      },
+    },
+    charges: {
+      async list(params) {
+        chargeCalls.push(params);
+        const page = chargePages[chargeCalls.length - 1];
+        if (!page) throw new Error('unexpected charge page request');
+        if (chargeCalls.length === 2) {
+          assert.equal(params.starting_after, 'ch_page_1');
+        }
+        return page as unknown as Awaited<ReturnType<StripeLikeClient['charges']['list']>>;
+      },
+    },
+  };
+
+  const result = await queryStripeRevenue({
+    workspaceId: 'workspace_pagination',
+    queryType: 'revenue_summary',
+    now,
+    client,
+    limit: 1,
+  });
+
+  if (!result.ok) throw new Error(result.message);
+
+  assert.equal(subscriptionCalls.length, 2);
+  assert.equal(invoiceCalls.length, 2);
+  assert.equal(chargeCalls.length, 2);
+  assert.equal(result.data.active_subscriptions, 2);
+  assert.equal(result.data.new_subscriptions, 2);
+  assert.equal(result.data.mrr, 15000);
+  assert.equal(result.data.arr, 180000);
+  assert.equal(result.data.failed_payments.invoice_count, 2);
+  assert.equal(result.data.failed_payments.charge_count, 2);
+  assert.equal(result.data.failed_payments.count, 4);
+  assert.equal(result.data.failed_payments.at_risk_revenue, 78);
+});
+
+test('queryStripeRevenue excludes failed charges linked to already-counted failed invoices', async () => {
+  const client: StripeLikeClient = {
+    subscriptions: {
+      async list() {
+        return { data: [], has_more: false };
+      },
+    },
+    invoices: {
+      async list() {
+        return {
+          data: [
+            {
+              id: 'in_failed_linked',
+              status: 'open',
+              amount_remaining: 4200,
+              currency: 'usd',
+              created: Math.floor(Date.parse('2026-06-28T12:00:00.000Z') / 1000),
+            },
+          ],
+          has_more: false,
+        };
+      },
+    },
+    charges: {
+      async list() {
+        return {
+          data: [
+            {
+              id: 'ch_failed_linked',
+              status: 'failed',
+              amount: 1800,
+              currency: 'usd',
+              created: Math.floor(Date.parse('2026-06-27T12:00:00.000Z') / 1000),
+              invoice: 'in_failed_linked',
+            },
+            {
+              id: 'ch_failed_unlinked',
+              status: 'failed',
+              amount: 900,
+              currency: 'usd',
+              created: Math.floor(Date.parse('2026-06-26T12:00:00.000Z') / 1000),
+            },
+          ],
+          has_more: false,
+        };
+      },
+    },
+  };
+
+  const result = await queryStripeRevenue({
+    workspaceId: 'workspace_dedupe',
+    queryType: 'revenue_summary',
+    now,
+    client,
+  });
+
+  if (!result.ok) throw new Error(result.message);
+
+  assert.equal(result.data.failed_payments.invoice_count, 1);
+  assert.equal(result.data.failed_payments.charge_count, 1);
+  assert.equal(result.data.failed_payments.count, 2);
+  assert.equal(result.data.failed_payments.at_risk_revenue, 51);
+});
+
+test('queryStripeRevenue returns unsupported_query for unsupported Stripe query types', async () => {
+  const result = await queryStripeRevenue({
+    workspaceId: 'workspace_unsupported',
+    queryType: 'customer_export',
+    now,
+    secretKey: 'sk_test_injected',
+  });
+
+  if (result.ok) throw new Error('expected unsupported query error');
+
+  assert.equal(result.code, 'unsupported_query');
+  assert.equal(result.source, 'stripe');
+  assert.match(result.message, /customer_export/);
+});
+
+test('queryStripeRevenue returns integration_query_failed when live Stripe client creation fails', async () => {
+  const moduleInternals = Module as unknown as {
+    _load: (request: string, parent: NodeModule | null, isMain: boolean) => unknown;
+  };
+  const originalLoad = moduleInternals._load;
+
+  moduleInternals._load = function patchedLoad(request: string, parent: NodeModule | null, isMain: boolean) {
+    if (request === 'stripe') {
+      throw new Error('stripe module load failed');
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  try {
+    const result = await queryStripeRevenue({
+      workspaceId: 'workspace_client_failure',
+      queryType: 'revenue_summary',
+      now,
+      secretKey: 'sk_test_injected',
+    });
+
+    if (result.ok) throw new Error('expected integration_query_failed');
+
+    assert.equal(result.code, 'integration_query_failed');
+    assert.equal(result.source, 'stripe');
+    assert.match(result.message, /stripe module load failed/);
+  } finally {
+    moduleInternals._load = originalLoad;
+  }
 });

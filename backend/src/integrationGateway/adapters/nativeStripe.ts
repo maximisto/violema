@@ -41,17 +41,23 @@ export interface StripeLikeCharge {
   amount?: number | null;
   currency?: string | null;
   created?: number | null;
+  invoice?: string | { id?: string | null } | null;
+}
+
+interface StripeListResponse<T extends { id: string }> {
+  data: T[];
+  has_more?: boolean;
 }
 
 export interface StripeLikeClient {
   subscriptions: {
-    list(params: Record<string, unknown>): Promise<{ data: StripeLikeSubscription[] }>;
+    list(params: Record<string, unknown>): Promise<StripeListResponse<StripeLikeSubscription>>;
   };
   invoices: {
-    list(params: Record<string, unknown>): Promise<{ data: StripeLikeInvoice[] }>;
+    list(params: Record<string, unknown>): Promise<StripeListResponse<StripeLikeInvoice>>;
   };
   charges: {
-    list(params: Record<string, unknown>): Promise<{ data: StripeLikeCharge[] }>;
+    list(params: Record<string, unknown>): Promise<StripeListResponse<StripeLikeCharge>>;
   };
 }
 
@@ -140,8 +146,40 @@ function createStripeClient(secretKey: string): StripeLikeClient {
   return new StripeCtor(secretKey) as StripeLikeClient;
 }
 
+async function listAllPages<T extends { id: string }>(
+  list: (params: Record<string, unknown>) => Promise<StripeListResponse<T>>,
+  baseParams: Record<string, unknown>,
+  maxPages = 25,
+): Promise<T[]> {
+  const results: T[] = [];
+  let startingAfter: string | undefined;
+
+  for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+    const page = await list({
+      ...baseParams,
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    });
+
+    results.push(...page.data);
+
+    if (!page.has_more) break;
+
+    const lastId = page.data[page.data.length - 1]?.id;
+    if (!lastId) break;
+    startingAfter = lastId;
+  }
+
+  return results;
+}
+
 function normalizeCurrency(values: Array<string | null | undefined>) {
   return (values.find(Boolean) || 'usd').toUpperCase();
+}
+
+function chargeInvoiceId(charge: StripeLikeCharge) {
+  if (!charge.invoice) return undefined;
+  if (typeof charge.invoice === 'string') return charge.invoice;
+  return charge.invoice.id || undefined;
 }
 
 export async function queryStripeRevenue(
@@ -158,34 +196,37 @@ export async function queryStripeRevenue(
   const now = input.now || new Date();
   const windowStartSeconds = Math.floor((now.getTime() - 30 * 24 * 60 * 60 * 1000) / 1000);
   const limit = Math.min(Math.max(input.limit || 100, 1), 100);
-  const client = input.client || createStripeClient(secretKey as string);
 
   try {
+    const client = input.client || createStripeClient(secretKey as string);
     const [subscriptions, invoices, charges] = await Promise.all([
-      client.subscriptions.list({
+      listAllPages(client.subscriptions.list.bind(client.subscriptions), {
         limit,
         status: 'all',
         expand: ['data.items.data.price'],
       }),
-      client.invoices.list({
+      listAllPages(client.invoices.list.bind(client.invoices), {
         limit,
         created: { gte: windowStartSeconds },
       }),
-      client.charges.list({
+      listAllPages(client.charges.list.bind(client.charges), {
         limit,
         created: { gte: windowStartSeconds },
       }),
     ]);
 
     const activeStatuses = new Set(['active', 'trialing', 'past_due']);
-    const activeSubscriptions = subscriptions.data.filter((subscription) => activeStatuses.has(subscription.status || ''));
-    const newSubscriptions = subscriptions.data.filter((subscription) => (subscription.created || 0) >= windowStartSeconds);
-    const churned = subscriptions.data.filter((subscription) =>
+    const activeSubscriptions = subscriptions.filter((subscription) => activeStatuses.has(subscription.status || ''));
+    const newSubscriptions = subscriptions.filter((subscription) => (subscription.created || 0) >= windowStartSeconds);
+    const churned = subscriptions.filter((subscription) =>
       subscription.status === 'canceled' &&
       Boolean(subscription.canceled_at && subscription.canceled_at >= windowStartSeconds),
     );
-    const failedInvoices = invoices.data.filter((invoice) => ['open', 'uncollectible'].includes(invoice.status || ''));
-    const failedCharges = charges.data.filter((charge) => charge.status === 'failed');
+    const failedInvoices = invoices.filter((invoice) => ['open', 'uncollectible'].includes(invoice.status || ''));
+    const failedInvoiceIds = new Set(failedInvoices.map((invoice) => invoice.id));
+    const failedCharges = charges.filter((charge) =>
+      charge.status === 'failed' && !failedInvoiceIds.has(chargeInvoiceId(charge) || ''),
+    );
     const mrr = Math.round(activeSubscriptions.reduce((sum, subscription) => sum + subscriptionMonthlyRevenue(subscription), 0) * 100) / 100;
     const atRiskRevenue = Math.round((
       failedInvoices.reduce((sum, invoice) => sum + centsToDollars(invoice.amount_remaining), 0) +
