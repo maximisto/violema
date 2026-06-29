@@ -4,6 +4,18 @@ import type { WorkflowLedgerEvent, WorkflowLedgerEventType } from './types';
 
 const WORKFLOW_LEDGER_FILE = path.join(process.cwd(), 'workflow-ledger-events.json');
 
+export interface AppendWorkflowLedgerEventInput {
+  workspaceId: string;
+  workflowId: string;
+  automationId?: string;
+  taskId?: string;
+  taskRunId?: string;
+  type: WorkflowLedgerEventType;
+  summary: string;
+  metadata?: Record<string, unknown>;
+  now?: () => string;
+}
+
 function safeTimestampId(value: string) {
   return value.replace(/[^a-zA-Z0-9]+/g, '-').replace(/-+$/g, '');
 }
@@ -16,17 +28,7 @@ function writeEvents(events: WorkflowLedgerEvent[]) {
   writeJsonFile(WORKFLOW_LEDGER_FILE, events);
 }
 
-export function appendWorkflowLedgerEvent(input: {
-  workspaceId: string;
-  workflowId: string;
-  automationId?: string;
-  taskId?: string;
-  taskRunId?: string;
-  type: WorkflowLedgerEventType;
-  summary: string;
-  metadata?: Record<string, unknown>;
-  now?: () => string;
-}) {
+export function appendWorkflowLedgerEvent(input: AppendWorkflowLedgerEventInput) {
   const createdAt = input.now ? input.now() : new Date().toISOString();
   const idBase = input.taskRunId || input.automationId || input.workflowId;
   const event: WorkflowLedgerEvent = {

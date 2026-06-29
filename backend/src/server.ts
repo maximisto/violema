@@ -141,6 +141,11 @@ import {
   type IntegrationProvider,
 } from './settingsStore';
 import { buildIntegrationCatalog } from './integrationRegistry';
+import {
+  buildPendingApprovalRequestedLedgerEvent,
+  finalizePendingApprovalRequestedLedgerEvents,
+  type PendingApprovalRequestedLedgerEvent,
+} from './integrationGateway/approvalLedger';
 import { appendWorkflowLedgerEvent, listWorkflowLedgerEvents } from './integrationGateway/auditLog';
 import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
 import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
@@ -3408,6 +3413,7 @@ async function executeAutomationCore(
   const artifacts: AutomationExecutionArtifact[] = [];
   const stepExecutions: AutomationStepExecution[] = [];
   const stepErrors: string[] = [];
+  const pendingApprovalRequestedEvents: PendingApprovalRequestedLedgerEvent[] = [];
   let summaryText = '';
   let delivery: Record<string, unknown> | null = null;
   let deliveryError: string | null = null;
@@ -3660,20 +3666,16 @@ async function executeAutomationCore(
           stepExecution.artifactKind = 'review_gate';
           stepExecution.toolCalls = 0;
           stepExecution.artifactCount = 1;
-          appendWorkflowLedgerEvent({
+          pendingApprovalRequestedEvents.push(buildPendingApprovalRequestedLedgerEvent({
             workspaceId,
             workflowId: runContext.workflowId,
             automationId: automation.id,
             taskId: runContext.taskId,
             taskRunId: runContext.taskRunId,
-            type: 'approval_requested',
-            summary: `Prepared delivery for approval before sending to ${deliveryTarget}.`,
-            metadata: {
-              deliveryTarget,
-              channel: delivery.channel,
-              draftMarkdown: body,
-            },
-          });
+            deliveryTarget,
+            channel: typeof delivery.channel === 'string' ? delivery.channel : undefined,
+            draftMarkdown: body,
+          }));
           continue;
         }
 
@@ -3754,6 +3756,7 @@ async function executeAutomationCore(
   return {
     plan,
     artifacts,
+    pendingApprovalRequestedEvents,
     summaryText,
     stepErrors,
     stepExecutions,
@@ -3983,6 +3986,12 @@ async function runAutomation(automation: {
       deliveryError: execution.deliveryError,
       stepExecutions: execution.stepExecutions,
     });
+    for (const event of finalizePendingApprovalRequestedLedgerEvents({
+      outcome,
+      pendingEvents: execution.pendingApprovalRequestedEvents,
+    })) {
+      appendWorkflowLedgerEvent(event);
+    }
 
     const inferredActionDeliveryTarget = executionPlan.steps.find((step) => step.kind === 'deliver')?.deliveryTarget?.target;
     const deliveryTarget = automation.notify?.trim() || inferredActionDeliveryTarget || null;
