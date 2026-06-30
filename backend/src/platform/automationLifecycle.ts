@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   AutomationStepExecution,
   AutomationStepDeliveryTarget,
@@ -36,7 +37,17 @@ export interface AutomationRunReceipt {
   deliveryTarget?: string;
   artifactTitle?: string;
   note?: string;
-  delivery?: Record<string, unknown>;
+  delivery?: SafeDeliverySummary;
+}
+
+export interface SafeDeliverySummary extends Record<string, unknown> {
+  target?: string;
+  channel?: string;
+  status?: string;
+  id?: string;
+  ts?: string;
+  bodyLength?: number;
+  bodyHash?: string;
 }
 
 export interface AutomationPreflightBlocker {
@@ -73,6 +84,52 @@ function readRecord(value: unknown): Record<string, unknown> | null {
 
 function readString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function readOptionalString(...values: unknown[]) {
+  for (const value of values) {
+    const text = readString(value);
+    if (text) return text;
+  }
+  return undefined;
+}
+
+function hashBody(body: string) {
+  return createHash('sha256').update(body).digest('hex');
+}
+
+export function buildSafeDeliverySummary(
+  delivery: Record<string, unknown> | null | undefined,
+  body?: string,
+  fallback?: {
+    target?: string;
+    channel?: string;
+    ts?: string;
+  },
+): SafeDeliverySummary {
+  const source = delivery || {};
+  const bodyText = typeof body === 'string' ? body : undefined;
+  const status = readOptionalString(source.status) || (source.success === true ? 'delivered' : undefined);
+  const summary: SafeDeliverySummary = {};
+  const target = readOptionalString(source.target, source.to, source.deliveryTarget, fallback?.target);
+  const channel = readOptionalString(source.channel, fallback?.channel);
+  const id = readOptionalString(source.id, source.message_id, source.messageId, source.sid);
+  const ts = readOptionalString(source.ts, source.slack_ts, source.sent_at, source.sentAt, source.timestamp, fallback?.ts);
+
+  if (target) summary.target = target;
+  if (channel) summary.channel = channel;
+  if (status) summary.status = status;
+  if (id) summary.id = id;
+  if (ts) summary.ts = ts;
+  if (bodyText !== undefined) {
+    summary.bodyLength = bodyText.length;
+    summary.bodyHash = hashBody(bodyText);
+  } else {
+    if (typeof source.bodyLength === 'number') summary.bodyLength = source.bodyLength;
+    if (typeof source.bodyHash === 'string' && source.bodyHash.trim()) summary.bodyHash = source.bodyHash.trim();
+  }
+
+  return summary;
 }
 
 function readArtifacts(task: TaskRecord, taskRun: TaskRunRecord): ReviewArtifact[] {
@@ -135,7 +192,7 @@ function buildReceipt(input: {
   deliveryTarget?: string;
   artifactTitle?: string;
   note?: string;
-  delivery?: Record<string, unknown>;
+  delivery?: SafeDeliverySummary;
 }): AutomationRunReceipt {
   return {
     id: `receipt_${input.taskRun.id}_${input.status}`,
@@ -169,6 +226,11 @@ export async function approveAutomationReview(input: {
     subject: artifact.title || input.task.title,
     channel: deliveryTarget.includes('@') ? 'email' : 'slack',
   });
+  const deliverySummary = buildSafeDeliverySummary(delivery, body, {
+    target: deliveryTarget,
+    channel: deliveryTarget.includes('@') ? 'email' : 'slack',
+    ts: reviewedAt,
+  });
   const receipt = buildReceipt({
     status: 'delivered',
     task: input.task,
@@ -177,7 +239,7 @@ export async function approveAutomationReview(input: {
     reviewedAt,
     deliveryTarget,
     artifactTitle: artifact.title,
-    delivery,
+    delivery: deliverySummary,
   });
 
   return {
@@ -189,14 +251,14 @@ export async function approveAutomationReview(input: {
       metadata: {
         reviewRequired: false,
         reviewReceipt: receipt,
-        latestDelivery: delivery,
+        latestDelivery: deliverySummary,
       },
     },
     runPatch: {
       metadata: {
         reviewRequired: false,
         reviewReceipt: receipt,
-        delivery,
+        delivery: deliverySummary,
       },
     },
   };

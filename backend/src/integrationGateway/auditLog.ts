@@ -28,6 +28,34 @@ function writeEvents(events: WorkflowLedgerEvent[]) {
   writeJsonFile(WORKFLOW_LEDGER_FILE, events);
 }
 
+export function buildSafeDataReadLedgerMetadata(payload: Record<string, unknown>) {
+  const metadata: Record<string, unknown> = {};
+  const data = payload.data && typeof payload.data === 'object'
+    ? payload.data as Record<string, unknown>
+    : {};
+  const items = Array.isArray(data.items) ? data.items : undefined;
+  const total = typeof data.total === 'number' ? data.total : items?.length;
+
+  if (typeof payload.source === 'string') {
+    metadata.source = payload.source;
+  }
+  if (typeof payload.query_type === 'string') {
+    metadata.queryType = payload.query_type;
+  }
+  if (typeof total === 'number') {
+    metadata.resultCount = total;
+  }
+  if (data.window && typeof data.window === 'object') {
+    metadata.window = data.window;
+  }
+  metadata.live = payload.live === true;
+  if (typeof data.providerRoute === 'string') {
+    metadata.providerRoute = data.providerRoute;
+  }
+
+  return metadata;
+}
+
 export function appendWorkflowLedgerEvent(input: AppendWorkflowLedgerEventInput) {
   const createdAt = input.now ? input.now() : new Date().toISOString();
   const idBase = input.taskRunId || input.automationId || input.workflowId;

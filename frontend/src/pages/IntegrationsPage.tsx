@@ -66,6 +66,12 @@ const NATIVE_NOW = [
   },
 ];
 
+const GOOGLE_WORKSPACE_PACK = [
+  { name: 'Gmail', provider: 'gmail', detail: 'Commitments, unreplied threads, and investor follow-up' },
+  { name: 'Google Calendar', provider: 'google_calendar', detail: 'Meetings, deadlines, and relationship context' },
+  { name: 'Google Drive', provider: 'google_drive', detail: 'Docs, packets, and source material' },
+];
+
 const NEXT_UP = [
   { name: 'Notion', body: 'Workspace knowledge sync' },
   { name: 'Linear', body: 'Product issue and cycle sync' },
@@ -145,6 +151,15 @@ function ComposioConnectSection() {
     }
   }
 
+  const prioritizedPartnerApps = catalog
+    ? [
+        ...GOOGLE_WORKSPACE_PACK
+          .map((workspaceApp) => catalog.partnerApps.find((app) => app.name === workspaceApp.provider))
+          .filter((app): app is PartnerApp => Boolean(app)),
+        ...catalog.partnerApps.filter((app) => !GOOGLE_WORKSPACE_PACK.some((workspaceApp) => workspaceApp.provider === app.name)),
+      ]
+    : [];
+
   return (
     <section className="mt-8 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
       <div className="flex items-center gap-3">
@@ -175,7 +190,7 @@ function ComposioConnectSection() {
             </div>
           )}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {catalog.partnerApps.map((app) => {
+            {prioritizedPartnerApps.map((app) => {
               const connected = catalog.partner.connectedApps.some((connectedApp) => connectedApp.toLowerCase() === app.name.toLowerCase());
               const isBusy = busy === app.name;
               return (
