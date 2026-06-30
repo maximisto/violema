@@ -48,6 +48,10 @@ export function isComposioToolName(name: string): boolean {
   return /^[A-Z][A-Z_]*_[A-Z][A-Z_]*$/.test(name);
 }
 
+export function normalizeComposioAppName(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+}
+
 export interface ComposioExecutionContext {
   /** Stable per-workspace identifier — Composio uses this to look up OAuth credentials. */
   entityId: string;
