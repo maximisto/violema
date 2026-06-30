@@ -23,7 +23,7 @@ type IntegrationProvider =
   | 'airtable'
   | 'figma'
   | 'vercel';
-type IntegrationCredentialField = 'token' | 'apiKey' | 'secretKey';
+type IntegrationCredentialField = 'token' | 'apiKey' | 'secretKey' | 'refreshToken' | 'accessToken';
 type Profile = 'micro' | 'default' | 'hard' | 'critical' | 'ops' | 'memory_text' | 'memory_code';
 type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 type AutoGraduationProfileId = 'cautious' | 'balanced' | 'fast_learning';
@@ -150,9 +150,11 @@ const INTEGRATION_COPY: Array<{
   {
     id: 'google_drive',
     label: 'Google Drive',
+    field: 'refreshToken',
+    fieldLabel: 'Refresh token',
+    placeholder: '1//0g…',
     help: 'Docs, board packets, investor materials, and reviewed source files.',
     use: 'Google Workspace',
-    setupRoute: '/integrations?provider=google_drive',
   },
   {
     id: 'linear',

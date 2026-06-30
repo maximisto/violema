@@ -204,14 +204,23 @@ test('Monthly Investor Update requires Stripe GitHub and Drive', () => {
   const report = checkWorkflowReadiness({
     workflowId: 'monthly-investor-update',
     workspaceId: 'workspace_test',
-    connectedPartnerApps: ['google_drive'],
-    env: { GITHUB_DEFAULT_REPOSITORY: 'maximisto/violema' },
+    connectedPartnerApps: [],
+    env: {
+      GITHUB_DEFAULT_REPOSITORY: 'maximisto/violema',
+      GOOGLE_CLIENT_ID: 'google_client',
+      GOOGLE_CLIENT_SECRET: 'google_secret',
+    },
     settingsView: {
       integrations: {
         stripe: { configured: true },
         github: { configured: true },
         gmail: { configured: false },
-        google_drive: { configured: false },
+        google_drive: {
+          configured: true,
+          fields: {
+            refreshToken: { configured: true },
+          },
+        },
       },
     },
   });
@@ -219,6 +228,53 @@ test('Monthly Investor Update requires Stripe GitHub and Drive', () => {
   assert.equal(report.ready, true);
   assert.deepEqual(report.requiredIntegrationIds, ['stripe', 'github', 'google_drive']);
   assert.deepEqual(report.optionalIntegrationIds, ['gmail']);
+});
+
+test('Monthly Investor Update blocks Drive refresh token without Google client credentials', () => {
+  const report = checkWorkflowReadiness({
+    workflowId: 'monthly-investor-update',
+    workspaceId: 'workspace_test',
+    connectedPartnerApps: [],
+    env: { GITHUB_DEFAULT_REPOSITORY: 'maximisto/violema' },
+    settingsView: {
+      integrations: {
+        stripe: { configured: true },
+        github: { configured: true },
+        google_drive: {
+          configured: true,
+          fields: {
+            refreshToken: { configured: true },
+          },
+        },
+      },
+    },
+  });
+
+  assert.equal(report.ready, false);
+  const drive = report.blockers.find((item) => item.key === 'google_drive_client');
+  assert.equal(drive?.label, 'Add Google OAuth client');
+  assert.equal(drive?.route, '/settings#integration-google_drive');
+});
+
+test('Monthly Investor Update blocks Drive when only a partner Drive app is connected', () => {
+  const report = checkWorkflowReadiness({
+    workflowId: 'monthly-investor-update',
+    workspaceId: 'workspace_test',
+    connectedPartnerApps: ['google_drive'],
+    env: { GITHUB_DEFAULT_REPOSITORY: 'maximisto/violema' },
+    settingsView: {
+      integrations: {
+        stripe: { configured: true },
+        github: { configured: true },
+        google_drive: { configured: false },
+      },
+    },
+  });
+
+  assert.equal(report.ready, false);
+  const drive = report.blockers.find((item) => item.key === 'google_drive');
+  assert.equal(drive?.label, 'Connect Google Drive');
+  assert.equal(drive?.route, '/integrations?provider=google_drive&workflow=monthly-investor-update');
 });
 
 test('Shipping and Revenue Pulse requires Stripe and GitHub', () => {
@@ -260,10 +316,19 @@ test('Board Packet Prep requires Drive and Calendar while Stripe and GitHub are 
   const report = checkWorkflowReadiness({
     workflowId: 'board-packet-prep',
     workspaceId: 'workspace_test',
-    connectedPartnerApps: ['google_drive', 'google_calendar'],
+    connectedPartnerApps: ['google_calendar'],
+    env: {
+      GOOGLE_CLIENT_ID: 'google_client',
+      GOOGLE_CLIENT_SECRET: 'google_secret',
+    },
     settingsView: {
       integrations: {
-        google_drive: { configured: false },
+        google_drive: {
+          configured: true,
+          fields: {
+            refreshToken: { configured: true },
+          },
+        },
         google_calendar: { configured: false },
         stripe: { configured: false },
         github: { configured: false },

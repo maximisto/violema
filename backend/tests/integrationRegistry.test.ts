@@ -45,7 +45,8 @@ test('integration catalog exposes Google Workspace as separate provider surfaces
   assert.equal(registry.isIntegrationProvider('google_drive'), true);
   assert.deepEqual(registry.getIntegrationFields('gmail'), []);
   assert.deepEqual(registry.getIntegrationFields('google_calendar'), []);
-  assert.deepEqual(registry.getIntegrationFields('google_drive'), []);
+  assert.deepEqual(registry.getIntegrationFields('google_drive'), ['refreshToken', 'accessToken']);
+  assert.deepEqual(registry.getIntegrationEnvKeys('google_drive', 'refreshToken'), ['GOOGLE_DRIVE_REFRESH_TOKEN']);
 
   const gmail = catalog.providers.find((provider) => provider.id === 'gmail');
   const calendar = catalog.providers.find((provider) => provider.id === 'google_calendar');
@@ -53,10 +54,10 @@ test('integration catalog exposes Google Workspace as separate provider surfaces
 
   assert.equal(gmail?.connectionMethod, 'partner');
   assert.equal(calendar?.connectionMethod, 'partner');
-  assert.equal(drive?.connectionMethod, 'partner');
+  assert.equal(drive?.connectionMethod, 'native');
   assert.ok(catalog.partnerApps.some((app) => app.name === 'gmail'));
   assert.ok(catalog.partnerApps.some((app) => app.name === 'google_calendar'));
-  assert.ok(catalog.partnerApps.some((app) => app.name === 'google_drive'));
+  assert.equal(catalog.partnerApps.some((app) => app.name === 'google_drive'), false);
 
   const serialized = JSON.stringify(catalog);
   assert.doesNotMatch(serialized, /GMAIL_/);

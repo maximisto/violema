@@ -1,5 +1,6 @@
 import { queryStripeRevenue, type StripeLikeClient } from './adapters/nativeStripe';
 import { queryGithub, type GithubFetchLike } from './adapters/nativeGithub';
+import { queryGoogleDrive, type GoogleDriveFetchLike } from './adapters/nativeGoogleDrive';
 import { queryGoogleWorkspace } from './adapters/partnerGoogleWorkspace';
 import { queryFounderTool } from './adapters/partnerFounderTools';
 import type { IntegrationQueryResult, IntegrationQuerySuccess } from './types';
@@ -26,12 +27,17 @@ export interface ExecuteQueryDataInput {
   clientOverrides?: {
     stripe?: StripeLikeClient;
     githubFetch?: GithubFetchLike;
+    googleDriveFetch?: GoogleDriveFetchLike;
     googleWorkspaceExecutor?: GoogleWorkspaceExecutor;
     partnerToolExecutor?: FounderToolExecutor;
   };
   credentialOverrides?: {
     stripeSecretKey?: string;
     githubToken?: string;
+    googleDriveAccessToken?: string;
+    googleDriveRefreshToken?: string;
+    googleDriveClientId?: string;
+    googleDriveClientSecret?: string;
   };
 }
 
@@ -189,7 +195,22 @@ export async function executeQueryData(
     });
   }
 
-  if (source === 'gmail' || source === 'google_calendar' || source === 'google_drive') {
+  if (source === 'google_drive') {
+    return queryGoogleDrive({
+      workspaceId: input.workspaceId,
+      workflowId: input.workflowId,
+      queryType: input.queryType,
+      filters: input.filters,
+      accessToken: input.credentialOverrides?.googleDriveAccessToken,
+      refreshToken: input.credentialOverrides?.googleDriveRefreshToken,
+      clientId: input.credentialOverrides?.googleDriveClientId,
+      clientSecret: input.credentialOverrides?.googleDriveClientSecret,
+      fetchLike: input.clientOverrides?.googleDriveFetch,
+      now,
+    });
+  }
+
+  if (source === 'gmail' || source === 'google_calendar') {
     return queryGoogleWorkspace({
       workspaceId: input.workspaceId,
       source,

@@ -86,6 +86,19 @@ The Claude API automatically discovers connected Composio tools (e.g., `SLACK_SE
 
 Violema → calls `GITHUB_CREATE_ISSUE` → Composio executes → real issue gets filed.
 
+## Google Drive workflow reads
+
+Drive source-material workflows use Violema's native Google Drive API adapter instead of Composio. Configure a refresh token with Drive metadata/file-list scope plus Google OAuth client credentials:
+
+```bash
+echo 'GOOGLE_CLIENT_ID=YOUR-GOOGLE-OAUTH-CLIENT-ID' >> /var/www/nexus/backend/.env
+echo 'GOOGLE_CLIENT_SECRET=YOUR-GOOGLE-OAUTH-CLIENT-SECRET' >> /var/www/nexus/backend/.env
+echo 'GOOGLE_DRIVE_REFRESH_TOKEN=YOUR-DRIVE-REFRESH-TOKEN' >> /var/www/nexus/backend/.env
+pm2 restart nexus-backend --update-env
+```
+
+`GOOGLE_DRIVE_CLIENT_ID` and `GOOGLE_DRIVE_CLIENT_SECRET` can be used instead of the shared `GOOGLE_CLIENT_*` values when Drive needs a separate OAuth client. The native adapter only requests file metadata for workflow source discovery and does not return document body text.
+
 ### Cost
 - Free tier: ~200 tool calls/day
 - Growth: ~$50/mo for 5K calls/day

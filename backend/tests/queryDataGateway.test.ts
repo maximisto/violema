@@ -259,6 +259,45 @@ test('executeQueryData accepts legacy email and calendar aliases but normalizes 
   assert.equal(result.live, true);
 });
 
+test('executeQueryData routes Drive through the native adapter instead of Composio', async () => {
+  let requestedUrl = '';
+  let composioCalled = false;
+  const result = await executeQueryData({
+    workspaceId: 'workspace_test',
+    source: 'drive',
+    queryType: 'recent_docs',
+    connectedPartnerApps: [],
+    credentialOverrides: { googleDriveAccessToken: 'ya29.native-drive' },
+    clientOverrides: {
+      googleWorkspaceExecutor: async () => {
+        composioCalled = true;
+        return { files: [] };
+      },
+      googleDriveFetch: async (url: string) => {
+        requestedUrl = url;
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return { files: [{ id: 'doc_1', name: 'Investor update', mimeType: 'application/vnd.google-apps.document' }] };
+          },
+          async text() {
+            return '{}';
+          },
+        };
+      },
+    },
+    now: new Date('2026-06-30T12:00:00.000Z'),
+  });
+
+  if (!result.ok) throw new Error(result.message);
+  assert.equal(result.source, 'google_drive');
+  assert.equal(result.live, true);
+  assert.equal((result.data as { total?: number }).total, 1);
+  assert.equal(composioCalled, false);
+  assert.match(requestedUrl, /^https:\/\/www\.googleapis\.com\/drive\/v3\/files\?/);
+});
+
 test('query_data tool schema exposes Google Workspace sources and aliases', () => {
   const serverSource = readFileSync('src/server.ts', 'utf8');
   const schemaMatch = serverSource.match(/name: 'query_data'[\s\S]*?enum: \[([^\]]+)\]/);

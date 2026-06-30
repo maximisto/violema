@@ -130,7 +130,6 @@ const INTEGRATION_SETUP: Record<string, { label: string; route: (workflowId: str
 const PARTNER_ALIASES: Record<string, string[]> = {
   gmail: ['gmail'],
   google_calendar: ['google_calendar', 'googlecalendar'],
-  google_drive: ['google_drive', 'googledrive'],
   linear: ['linear'],
   notion: ['notion'],
 };
@@ -170,6 +169,38 @@ function isConfigured(
   if (!integration.fields) return false;
 
   return Object.values(integration.fields).some((field) => readConfiguredFlag(field));
+}
+
+function isFieldConfigured(
+  settingsView: WorkspaceSettingsView | MinimalSettingsView,
+  id: string,
+  field: string,
+): boolean {
+  const integrations = settingsView.integrations as Record<string, MinimalIntegrationReadiness | undefined> | undefined;
+  const integration = integrations?.[id];
+  if (!integration || typeof integration === 'boolean') return false;
+  return readConfiguredFlag(integration.fields?.[field]);
+}
+
+function hasGoogleDriveClientCredentials(env: Record<string, string | undefined>) {
+  const clientId = env.GOOGLE_DRIVE_CLIENT_ID?.trim() || env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = env.GOOGLE_DRIVE_CLIENT_SECRET?.trim() || env.GOOGLE_CLIENT_SECRET?.trim();
+  return Boolean(clientId && clientSecret);
+}
+
+function isGoogleDriveNativeReady(input: {
+  settingsView: WorkspaceSettingsView | MinimalSettingsView;
+  env: Record<string, string | undefined>;
+}) {
+  const accessTokenConfigured =
+    isFieldConfigured(input.settingsView, 'google_drive', 'accessToken') ||
+    Boolean(input.env.GOOGLE_DRIVE_ACCESS_TOKEN?.trim());
+  if (accessTokenConfigured) return true;
+
+  const refreshTokenConfigured =
+    isFieldConfigured(input.settingsView, 'google_drive', 'refreshToken') ||
+    Boolean(input.env.GOOGLE_DRIVE_REFRESH_TOKEN?.trim());
+  return refreshTokenConfigured && hasGoogleDriveClientCredentials(input.env);
 }
 
 function readWorkflowRequirements(workflowId: string): WorkflowRequirements {
@@ -240,6 +271,14 @@ export function checkWorkflowReadiness(input: {
             route: INTEGRATION_SETUP.github.route(input.workflowId),
           });
         }
+      }
+      if (integrationId === 'google_drive' && !isGoogleDriveNativeReady({ settingsView, env })) {
+        blockers.push({
+          key: 'google_drive_client',
+          label: 'Add Google OAuth client',
+          detail: 'Google Drive refresh tokens require Google OAuth client credentials before source-material workflows can refresh access.',
+          route: '/settings#integration-google_drive',
+        });
       }
       continue;
     }
