@@ -91,3 +91,32 @@ test('approval_requested metadata stays lean', async () => {
   });
   assert.deepEqual(Object.keys(items[0].metadata || {}).sort(), ['channel', 'deliveryTarget']);
 });
+
+test('data_read metadata helper redacts raw provider payloads', async () => {
+  const auditLog = await import('../src/integrationGateway/auditLog');
+
+  const metadata = auditLog.buildSafeDataReadLedgerMetadata({
+    ok: true,
+    source: 'gmail',
+    query_type: 'commitments',
+    live: true,
+    data: {
+      total: 1,
+      window: { start: '2026-06-23T00:00:00.000Z', end: '2026-06-30T00:00:00.000Z' },
+      providerRoute: 'gmail.commitments',
+      items: [
+        { id: 'thread_1', subject: 'Investor update', body: 'private raw body' },
+      ],
+    },
+  });
+
+  assert.deepEqual(metadata, {
+    source: 'gmail',
+    queryType: 'commitments',
+    resultCount: 1,
+    window: { start: '2026-06-23T00:00:00.000Z', end: '2026-06-30T00:00:00.000Z' },
+    live: true,
+    providerRoute: 'gmail.commitments',
+  });
+  assert.doesNotMatch(JSON.stringify(metadata), /private raw body/);
+});

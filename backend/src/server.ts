@@ -152,7 +152,11 @@ import {
   finalizePendingApprovalRequestedLedgerEvents,
   type PendingApprovalRequestedLedgerEvent,
 } from './integrationGateway/approvalLedger';
-import { appendWorkflowLedgerEvent, listWorkflowLedgerEvents } from './integrationGateway/auditLog';
+import {
+  appendWorkflowLedgerEvent,
+  buildSafeDataReadLedgerMetadata,
+  listWorkflowLedgerEvents,
+} from './integrationGateway/auditLog';
 import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
 import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
 import {
@@ -1831,12 +1835,16 @@ async function executeToolCall(
     case 'query_data': {
       const source = String(toolInput.source || '');
       const queryType = String(toolInput.query_type || '');
+      const connectedPartnerApps = await listConnectedApps({
+        entityId: ctx?.workspaceId || DEFAULT_WORKSPACE_ID,
+      });
       return JSON.stringify(await executeQueryData({
         workspaceId: ctx?.workspaceId || DEFAULT_WORKSPACE_ID,
         source,
         queryType,
         filters: isObjectRecord(toolInput.filters) ? toolInput.filters : undefined,
         limit: typeof toolInput.limit === 'number' ? toolInput.limit : undefined,
+        connectedPartnerApps,
       }));
     }
 
@@ -3424,23 +3432,24 @@ async function executeAutomationCore(
           stepErrors,
           artifactCount: chartArtifact ? 2 : 1,
         });
-        if (payloadSource === 'stripe') {
-          appendWorkflowLedgerEvent({
-            workspaceId,
-            workflowId: runContext.workflowId,
-            automationId: automation.id,
-            taskId: runContext.taskId,
-            taskRunId: runContext.taskRunId,
-            type: payload.ok === false ? 'connector_failed' : 'data_read',
-            summary: payload.ok === false
-              ? `Stripe read blocked: ${String(payload.message || 'integration not ready')}`
-              : 'Read Stripe revenue summary.',
-            metadata: {
-              source: 'stripe',
-              queryType,
-              ok: payload.ok,
-            },
-          });
+        if (payloadSource) {
+          const liveRead = payload.live === true;
+          const shouldLedger = liveRead
+            || ['stripe', 'github', 'gmail', 'google_calendar', 'google_drive'].includes(payloadSource);
+          if (shouldLedger) {
+            appendWorkflowLedgerEvent({
+              workspaceId,
+              workflowId: runContext.workflowId,
+              automationId: automation.id,
+              taskId: runContext.taskId,
+              taskRunId: runContext.taskRunId,
+              type: payload.ok === false ? 'connector_failed' : 'data_read',
+              summary: payload.ok === false
+                ? `${payloadSource} read blocked: ${String(payload.message || 'integration not ready')}`
+                : `Read ${payloadSource} ${queryType || 'data'}.`,
+              metadata: buildSafeDataReadLedgerMetadata(payload),
+            });
+          }
         }
         continue;
       }

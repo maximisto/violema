@@ -1,6 +1,10 @@
 import { queryStripeRevenue, type StripeLikeClient } from './adapters/nativeStripe';
+import { queryGithub, type GithubFetchLike } from './adapters/nativeGithub';
+import { queryGoogleWorkspace } from './adapters/partnerGoogleWorkspace';
 import type { IntegrationQueryResult, IntegrationQuerySuccess } from './types';
 import type { AutomationStepExecution } from '../platform/types';
+
+type GoogleWorkspaceExecutor = NonNullable<Parameters<typeof queryGoogleWorkspace>[0]['executor']>;
 
 export interface LegacyQueryDataSuccess<T = unknown>
   extends Omit<IntegrationQuerySuccess<T>, 'live' | 'cache_hit'> {
@@ -14,12 +18,16 @@ export interface ExecuteQueryDataInput {
   queryType: string;
   filters?: Record<string, unknown>;
   limit?: number;
+  connectedPartnerApps?: string[];
   now?: Date;
   clientOverrides?: {
     stripe?: StripeLikeClient;
+    githubFetch?: GithubFetchLike;
+    googleWorkspaceExecutor?: GoogleWorkspaceExecutor;
   };
   credentialOverrides?: {
     stripeSecretKey?: string;
+    githubToken?: string;
   };
 }
 
@@ -87,6 +95,13 @@ function readQueryPayloadFailureMessage(payload: Record<string, unknown>, stepTi
   return `Query step "${stepTitle}" failed.`;
 }
 
+function normalizeQuerySource(source: string) {
+  if (source === 'email') return 'gmail';
+  if (source === 'calendar') return 'google_calendar';
+  if (source === 'drive') return 'google_drive';
+  return source;
+}
+
 export function applyQueryStepPayloadToExecution(
   input: ApplyQueryStepPayloadToExecutionInput,
 ) {
@@ -115,8 +130,9 @@ export async function executeQueryData(
   input: ExecuteQueryDataInput,
 ): Promise<IntegrationQueryResult | LegacyQueryDataSuccess> {
   const now = input.now || new Date();
+  const source = normalizeQuerySource(input.source);
 
-  if (input.source === 'stripe') {
+  if (source === 'stripe') {
     return queryStripeRevenue({
       workspaceId: input.workspaceId,
       queryType: input.queryType,
@@ -127,12 +143,35 @@ export async function executeQueryData(
     });
   }
 
-  const sourceData = LEGACY_MOCK_DATA[input.source] || {};
-  const result = sourceData[input.queryType] || { note: `Data for "${input.queryType}" not found in ${input.source}` };
+  if (source === 'github') {
+    return queryGithub({
+      workspaceId: input.workspaceId,
+      queryType: input.queryType,
+      filters: input.filters,
+      token: input.credentialOverrides?.githubToken,
+      fetchLike: input.clientOverrides?.githubFetch,
+      now,
+    });
+  }
+
+  if (source === 'gmail' || source === 'google_calendar' || source === 'google_drive') {
+    return queryGoogleWorkspace({
+      workspaceId: input.workspaceId,
+      source,
+      queryType: input.queryType as Parameters<typeof queryGoogleWorkspace>[0]['queryType'],
+      filters: input.filters,
+      connectedPartnerApps: input.connectedPartnerApps,
+      executor: input.clientOverrides?.googleWorkspaceExecutor,
+      now,
+    });
+  }
+
+  const sourceData = LEGACY_MOCK_DATA[source] || {};
+  const result = sourceData[input.queryType] || { note: `Data for "${input.queryType}" not found in ${source}` };
 
   return {
     ok: true,
-    source: input.source,
+    source,
     query_type: input.queryType,
     data: result,
     fetched_at: now.toISOString(),
