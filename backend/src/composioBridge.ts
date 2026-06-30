@@ -29,6 +29,12 @@ interface ComposioLinkResponse {
   redirectUrl?: string;
 }
 
+interface ComposioToolExecutionResponse {
+  data?: unknown;
+  error?: unknown;
+  successful?: boolean;
+}
+
 const COMPOSIO_TOOLKIT_SLUG_ALIASES: Record<string, string> = {
   google_calendar: 'googlecalendar',
   googlecalendar: 'googlecalendar',
@@ -161,6 +167,21 @@ function readToolkitSlug(record: Record<string, unknown>) {
   return slug ? toComposioToolkitSlug(slug) : null;
 }
 
+function unwrapToolExecutionResponse(response: unknown): unknown {
+  if (!response || typeof response !== 'object' || Array.isArray(response)) {
+    return response;
+  }
+
+  const execution = response as ComposioToolExecutionResponse;
+  if (execution.successful === false || execution.error) {
+    throw new Error('Composio action failed.');
+  }
+
+  return Object.prototype.hasOwnProperty.call(execution, 'data')
+    ? execution.data
+    : response;
+}
+
 function isActiveConnectedAccount(record: Record<string, unknown>) {
   const status = readStringField(record, 'status');
   const disabled = record.is_disabled ?? record.isDisabled;
@@ -211,7 +232,7 @@ export async function executeComposioAction(
   input: Record<string, unknown>,
   ctx: ComposioExecutionContext,
 ): Promise<unknown> {
-  return await composioRequest(`/api/v3.1/tools/execute/${encodeURIComponent(actionName)}`, {
+  const response = await composioRequest(`/api/v3.1/tools/execute/${encodeURIComponent(actionName)}`, {
     method: 'POST',
     body: {
       arguments: input,
@@ -219,6 +240,7 @@ export async function executeComposioAction(
       version: getToolkitVersion(actionName),
     },
   });
+  return unwrapToolExecutionResponse(response);
 }
 
 /**

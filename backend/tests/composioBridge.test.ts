@@ -117,7 +117,7 @@ test('executeComposioAction calls the current v3.1 tool execution endpoint', asy
       { entityId: 'workspace_test' },
     );
 
-    assert.deepEqual(result, { data: { threads: [] }, error: null, successful: true });
+    assert.deepEqual(result, { threads: [] });
     assert.equal(requests.length, 1);
     assert.equal(requests[0].url.pathname, '/api/v3.1/tools/execute/GMAIL_FETCH_EMAILS');
     assert.equal(requests[0].init?.method, 'POST');
