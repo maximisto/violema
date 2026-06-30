@@ -40,7 +40,7 @@ import {
 } from './security';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
-import { executeComposioAction, getComposioConnectionUrl, isComposioEnabled, isComposioToolName, listConnectedApps } from './composioBridge';
+import { executeComposioAction, getComposioConnectionUrl, isComposioEnabled, isComposioToolName, listConnectedApps, resolveComposioEntityId } from './composioBridge';
 import {
   buildAutomationChartArtifactFromQueryPayload,
   selectReviewGateVisualArtifacts,
@@ -1747,7 +1747,7 @@ async function executeToolCall(
   if (isComposioToolName(toolName) && isComposioEnabled()) {
     try {
       const result = await executeComposioAction(toolName, toolInput, {
-        entityId: ctx?.workspaceId ?? 'default',
+        entityId: resolveComposioEntityId(ctx?.workspaceId),
       });
       return JSON.stringify(result);
     } catch (err) {
@@ -1854,7 +1854,7 @@ async function executeToolCall(
       const source = String(toolInput.source || '');
       const queryType = String(toolInput.query_type || '');
       const connectedPartnerApps = await listConnectedApps({
-        entityId: ctx?.workspaceId || DEFAULT_WORKSPACE_ID,
+        entityId: resolveComposioEntityId(ctx?.workspaceId || DEFAULT_WORKSPACE_ID),
       });
       return JSON.stringify(await executeQueryData({
         workspaceId: ctx?.workspaceId || DEFAULT_WORKSPACE_ID,
@@ -4244,26 +4244,28 @@ app.post('/api/summarize', async (req: Request, res: Response) => {
 // ── Composio integration endpoints ────────────────────────────────────────────
 app.get('/api/integrations/catalog', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
+  const composioEntityId = resolveComposioEntityId(workspaceId);
   const partnerEnabled = isComposioEnabled();
   const connectedPartnerApps = partnerEnabled
-    ? await listConnectedApps({ entityId: workspaceId })
+    ? await listConnectedApps({ entityId: composioEntityId })
     : [];
   res.json(buildIntegrationCatalog({ partnerEnabled, connectedPartnerApps }));
 });
 
 app.get('/api/integrations/composio/status', (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
-  res.json({ enabled: isComposioEnabled(), workspaceId });
+  res.json({ enabled: isComposioEnabled(), workspaceId, entityId: resolveComposioEntityId(workspaceId) });
 });
 
 app.get('/api/integrations/composio/connections', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
+  const composioEntityId = resolveComposioEntityId(workspaceId);
   if (!isComposioEnabled()) {
     res.json({ enabled: false, apps: [] });
     return;
   }
-  const apps = await listConnectedApps({ entityId: workspaceId });
-  res.json({ enabled: true, apps });
+  const apps = await listConnectedApps({ entityId: composioEntityId });
+  res.json({ enabled: true, apps, entityId: composioEntityId });
 });
 
 app.post('/api/integrations/composio/connect', async (req: Request, res: Response) => {
@@ -4277,7 +4279,9 @@ app.post('/api/integrations/composio/connect', async (req: Request, res: Respons
     res.status(503).json({ error: 'Composio is not configured on this server.' });
     return;
   }
-  const redirectUrl = await getComposioConnectionUrl(appName, { entityId: workspaceId });
+  const redirectUrl = await getComposioConnectionUrl(appName, {
+    entityId: resolveComposioEntityId(workspaceId),
+  });
   if (!redirectUrl) {
     res.status(500).json({ error: `Could not start OAuth flow for ${appName}` });
     return;
@@ -4288,7 +4292,9 @@ app.post('/api/integrations/composio/connect', async (req: Request, res: Respons
 app.get('/api/workflows/:workflowId/readiness', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const deliveryTarget = typeof req.query.deliveryTarget === 'string' ? req.query.deliveryTarget : undefined;
-  const connectedPartnerApps = await listConnectedApps({ entityId: workspaceId });
+  const connectedPartnerApps = await listConnectedApps({
+    entityId: resolveComposioEntityId(workspaceId),
+  });
 
   res.json({
     ok: true,

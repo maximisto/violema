@@ -9,6 +9,16 @@ interface StripeRevenueLike {
   mrr: number;
 }
 
+const ORIGINAL_COMPOSIO_ENTITY_ID = process.env.COMPOSIO_ENTITY_ID;
+
+function restoreComposioEntityId() {
+  if (ORIGINAL_COMPOSIO_ENTITY_ID === undefined) {
+    delete process.env.COMPOSIO_ENTITY_ID;
+    return;
+  }
+  process.env.COMPOSIO_ENTITY_ID = ORIGINAL_COMPOSIO_ENTITY_ID;
+}
+
 function emptyStripeClient(): StripeLikeClient {
   return {
     subscriptions: { async list() { return { data: [] }; } },
@@ -138,46 +148,54 @@ test('executeQueryData returns readiness error for Linear without partner connec
 
 test('executeQueryData routes Linear through the partner adapter when connected', async () => {
   let receivedActionName = '';
+  let receivedEntityId = '';
   let receivedInput: Record<string, unknown> | undefined;
-  const result = await executeQueryData({
-    workspaceId: 'workspace_test',
-    source: 'linear',
-    queryType: 'delivery_backlog',
-    connectedPartnerApps: ['linear'],
-    clientOverrides: {
-      partnerToolExecutor: async (actionName: string, input: Record<string, unknown>) => {
-        receivedActionName = actionName;
-        receivedInput = input;
-        return {
-          issues: [
-            {
-              id: 'issue_1',
-              identifier: 'ENG-7',
-              title: 'Fix onboarding activation',
-              url: 'https://linear.app/acme/issue/ENG-7',
-              state: { name: 'In Progress' },
-              priority: 2,
-              assignee: { name: 'Avery' },
-              updatedAt: '2026-06-29T12:00:00.000Z',
-              description: 'Private customer context should not be returned.',
-            },
-          ],
-        };
+  process.env.COMPOSIO_ENTITY_ID = 'violema-founder-os';
+  try {
+    const result = await executeQueryData({
+      workspaceId: 'workspace_test',
+      source: 'linear',
+      queryType: 'delivery_backlog',
+      connectedPartnerApps: ['linear'],
+      clientOverrides: {
+        partnerToolExecutor: async (actionName: string, input: Record<string, unknown>, ctx: { entityId: string }) => {
+          receivedActionName = actionName;
+          receivedEntityId = ctx.entityId;
+          receivedInput = input;
+          return {
+            issues: [
+              {
+                id: 'issue_1',
+                identifier: 'ENG-7',
+                title: 'Fix onboarding activation',
+                url: 'https://linear.app/acme/issue/ENG-7',
+                state: { name: 'In Progress' },
+                priority: 2,
+                assignee: { name: 'Avery' },
+                updatedAt: '2026-06-29T12:00:00.000Z',
+                description: 'Private customer context should not be returned.',
+              },
+            ],
+          };
+        },
+      } as Parameters<typeof executeQueryData>[0]['clientOverrides'] & {
+        partnerToolExecutor: (actionName: string, input: Record<string, unknown>, ctx: { entityId: string }) => Promise<unknown>;
       },
-    } as Parameters<typeof executeQueryData>[0]['clientOverrides'] & {
-      partnerToolExecutor: (actionName: string, input: Record<string, unknown>) => Promise<unknown>;
-    },
-    now: new Date('2026-06-30T12:00:00.000Z'),
-  });
+      now: new Date('2026-06-30T12:00:00.000Z'),
+    });
 
-  if (!result.ok) throw new Error(result.message);
-  assert.equal(result.source, 'linear');
-  assert.equal(result.live, true);
-  assert.equal(receivedActionName, 'LINEAR_LIST_LINEAR_ISSUES');
-  assert.equal(receivedInput?.first, 25);
-  assert.equal(result.data && typeof result.data === 'object' && (result.data as { total?: number }).total, 1);
-  assert.match(JSON.stringify(result), /ENG-7/);
-  assert.doesNotMatch(JSON.stringify(result), /Private customer context/);
+    if (!result.ok) throw new Error(result.message);
+    assert.equal(result.source, 'linear');
+    assert.equal(result.live, true);
+    assert.equal(receivedActionName, 'LINEAR_LIST_LINEAR_ISSUES');
+    assert.equal(receivedEntityId, 'violema-founder-os');
+    assert.equal(receivedInput?.first, 25);
+    assert.equal(result.data && typeof result.data === 'object' && (result.data as { total?: number }).total, 1);
+    assert.match(JSON.stringify(result), /ENG-7/);
+    assert.doesNotMatch(JSON.stringify(result), /Private customer context/);
+  } finally {
+    restoreComposioEntityId();
+  }
 });
 
 test('executeQueryData routes Notion through the partner adapter when connected', async () => {

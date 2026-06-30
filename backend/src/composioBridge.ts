@@ -174,6 +174,24 @@ function getConfiguredAuthConfigId(toolkitSlug: string) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+function toEnvKeySegment(value: string) {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+export function resolveComposioEntityId(workspaceId?: string) {
+  const trimmedWorkspaceId = typeof workspaceId === 'string' && workspaceId.trim()
+    ? workspaceId.trim()
+    : 'default';
+  const scopedEnvKey = `COMPOSIO_ENTITY_ID_${toEnvKeySegment(trimmedWorkspaceId)}`;
+  const scoped = process.env[scopedEnvKey];
+  if (typeof scoped === 'string' && scoped.trim()) return scoped.trim();
+
+  const global = process.env.COMPOSIO_ENTITY_ID;
+  if (typeof global === 'string' && global.trim()) return global.trim();
+
+  return trimmedWorkspaceId;
+}
+
 function readStringField(record: Record<string, unknown>, ...fields: string[]) {
   for (const field of fields) {
     const value = record[field];

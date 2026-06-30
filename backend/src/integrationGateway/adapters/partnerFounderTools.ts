@@ -1,6 +1,7 @@
 import {
   executeComposioAction,
   normalizeComposioAppName,
+  resolveComposioEntityId,
 } from '../../composioBridge';
 import type {
   IntegrationQueryResult,
@@ -337,7 +338,7 @@ export async function queryFounderTool(
     const raw = await executor(
       actionName,
       buildActionInput(input.source, input.queryType, input.filters),
-      { entityId: input.workspaceId },
+      { entityId: resolveComposioEntityId(input.workspaceId) },
     );
     const items = normalizeItems(input.source, raw);
 

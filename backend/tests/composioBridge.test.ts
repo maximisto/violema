@@ -15,6 +15,8 @@ const ORIGINAL_ENV = {
   COMPOSIO_API_KEY: process.env.COMPOSIO_API_KEY,
   COMPOSIO_BASE_URL: process.env.COMPOSIO_BASE_URL,
   COMPOSIO_AUTH_CONFIG_ID_GOOGLEDRIVE: process.env.COMPOSIO_AUTH_CONFIG_ID_GOOGLEDRIVE,
+  COMPOSIO_ENTITY_ID: process.env.COMPOSIO_ENTITY_ID,
+  COMPOSIO_ENTITY_ID_WORKSPACE_TEST: process.env.COMPOSIO_ENTITY_ID_WORKSPACE_TEST,
 };
 
 function resetComposioBridge(): ComposioBridgeModule {
@@ -37,6 +39,8 @@ async function withBridge<T>(
   process.env.COMPOSIO_API_KEY = 'cmp_test_key';
   process.env.COMPOSIO_BASE_URL = 'https://composio.test';
   delete process.env.COMPOSIO_AUTH_CONFIG_ID_GOOGLEDRIVE;
+  delete process.env.COMPOSIO_ENTITY_ID;
+  delete process.env.COMPOSIO_ENTITY_ID_WORKSPACE_TEST;
 
   const requests: FetchRequest[] = [];
   const originalFetch = globalThis.fetch;
@@ -127,8 +131,22 @@ async function withBridge<T>(
     restoreEnvVar('COMPOSIO_API_KEY', ORIGINAL_ENV.COMPOSIO_API_KEY);
     restoreEnvVar('COMPOSIO_BASE_URL', ORIGINAL_ENV.COMPOSIO_BASE_URL);
     restoreEnvVar('COMPOSIO_AUTH_CONFIG_ID_GOOGLEDRIVE', ORIGINAL_ENV.COMPOSIO_AUTH_CONFIG_ID_GOOGLEDRIVE);
+    restoreEnvVar('COMPOSIO_ENTITY_ID', ORIGINAL_ENV.COMPOSIO_ENTITY_ID);
+    restoreEnvVar('COMPOSIO_ENTITY_ID_WORKSPACE_TEST', ORIGINAL_ENV.COMPOSIO_ENTITY_ID_WORKSPACE_TEST);
   }
 }
+
+test('resolveComposioEntityId separates integration identity from workspace id', async () => {
+  await withBridge(async (bridge) => {
+    assert.equal(bridge.resolveComposioEntityId('workspace_test'), 'workspace_test');
+
+    process.env.COMPOSIO_ENTITY_ID = 'violema-founder-os';
+    assert.equal(bridge.resolveComposioEntityId('workspace_test'), 'violema-founder-os');
+
+    process.env.COMPOSIO_ENTITY_ID_WORKSPACE_TEST = 'violema-workspace-specific';
+    assert.equal(bridge.resolveComposioEntityId('workspace_test'), 'violema-workspace-specific');
+  });
+});
 
 test('executeComposioAction calls the current v3.1 tool execution endpoint', async () => {
   await withBridge(async (bridge, requests) => {

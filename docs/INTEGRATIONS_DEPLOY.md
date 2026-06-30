@@ -59,14 +59,18 @@ Composio gives you Slack/GitHub/Stripe/HubSpot/Linear/Notion/Asana/Salesforce/Gm
 ### 2. Set on the VPS
 ```bash
 echo 'COMPOSIO_API_KEY=YOUR-KEY-HERE' >> /var/www/nexus/backend/.env
+echo 'COMPOSIO_ENTITY_ID=violema-founder-os' >> /var/www/nexus/backend/.env
 echo 'COMPOSIO_API_KEY=YOUR-KEY-HERE' >> /var/www/nexus/.env
+echo 'COMPOSIO_ENTITY_ID=violema-founder-os' >> /var/www/nexus/.env
 pm2 restart nexus-backend --update-env
 ```
+
+`COMPOSIO_ENTITY_ID` is the stable OAuth identity Composio uses for connected accounts. Keep it separate from Violema's internal workspace id; otherwise the default workspace slug can leak into Composio as the OAuth user id.
 
 ### 3. Verify it loaded
 ```bash
 curl https://nexus.purpleorange.io/api/integrations/composio/status
-# Expected: {"enabled":true,"workspaceId":"..."}
+# Expected: {"enabled":true,"workspaceId":"...","entityId":"violema-founder-os"}
 ```
 
 ### 4. Connect your first integration via the UI

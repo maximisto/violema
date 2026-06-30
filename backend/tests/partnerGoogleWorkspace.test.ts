@@ -2,6 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { queryGoogleWorkspace } from '../src/integrationGateway/adapters/partnerGoogleWorkspace';
 
+const ORIGINAL_COMPOSIO_ENTITY_ID = process.env.COMPOSIO_ENTITY_ID;
+
+function restoreComposioEntityId() {
+  if (ORIGINAL_COMPOSIO_ENTITY_ID === undefined) {
+    delete process.env.COMPOSIO_ENTITY_ID;
+    return;
+  }
+  process.env.COMPOSIO_ENTITY_ID = ORIGINAL_COMPOSIO_ENTITY_ID;
+}
+
 test('queryGoogleWorkspace returns readiness error for missing partner connection', async () => {
   const result = await queryGoogleWorkspace({
     workspaceId: 'workspace_test',
@@ -70,6 +80,29 @@ test('queryGoogleWorkspace normalizes Gmail commitments without raw email bodies
   assert.equal(receivedInput?.includeBody, false);
   assert.equal(receivedInput?.query, '("follow up" OR "following up" OR deadline OR due OR send)');
   assert.doesNotMatch(JSON.stringify(result), /Long raw body/);
+});
+
+test('queryGoogleWorkspace sends Composio calls to the configured integration entity', async () => {
+  process.env.COMPOSIO_ENTITY_ID = 'violema-founder-os';
+  try {
+    let receivedEntityId = '';
+    const result = await queryGoogleWorkspace({
+      workspaceId: 'workspace_test',
+      source: 'gmail',
+      queryType: 'commitments',
+      connectedPartnerApps: ['gmail'],
+      now: new Date('2026-06-30T12:00:00.000Z'),
+      executor: async (_actionName, _input, ctx) => {
+        receivedEntityId = ctx.entityId;
+        return { threads: [] };
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(receivedEntityId, 'violema-founder-os');
+  } finally {
+    restoreComposioEntityId();
+  }
 });
 
 test('queryGoogleWorkspace ignores unsafe Gmail filters and keeps canonical windows', async () => {
