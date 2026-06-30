@@ -421,6 +421,8 @@ interface PlatformTaskRunRecord {
 
 interface AutomationApiRecord {
   id: string;
+  workflowId?: string;
+  templateId?: string;
   name: string;
   description?: string;
   authoring_mode?: 'guided' | 'describe';
@@ -458,6 +460,8 @@ interface DashboardTaskItem {
   id: string | number;
   taskId?: string;
   taskRunId?: string;
+  workflowId?: string;
+  templateId?: string;
   title: string;
   status: DashboardTaskStatus;
   time: string;
@@ -566,6 +570,8 @@ interface DashboardWorkerTopology {
 interface AutomationEditorDraft {
   mode: 'create' | 'edit';
   id: string;
+  workflowId?: string;
+  templateId?: string;
   name: string;
   schedule: string;
   timezone: string;
@@ -674,6 +680,8 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
     {
       id: 'preview-weekly-founder-update',
       automationId: 'preview-weekly-founder-update',
+      workflowId: 'weekly-founder-brief',
+      templateId: 'weekly-founder-brief',
       title: 'Weekly founder update',
       status: 'complete',
       time: 'Every Monday at 9am',
@@ -2107,6 +2115,8 @@ export default function Dashboard() {
           id: automation.id,
           taskId: task?.id,
           taskRunId: latestRun?.id,
+          workflowId: automation.workflowId,
+          templateId: automation.templateId,
           title: automation.name,
           status,
           time: automation.next_run_at ? `Next ${formatAutomationRunTime(automation.next_run_at)}` : automation.schedule,
@@ -2455,6 +2465,8 @@ export default function Dashboard() {
     setAutomationEditor({
       mode: 'edit',
       id: task.automationId,
+      workflowId: task.workflowId,
+      templateId: task.templateId,
       name: task.title,
       schedule: task.schedule || task.time,
       timezone: task.timezone || getLocalTimeZone(),
@@ -2484,6 +2496,8 @@ export default function Dashboard() {
     setAutomationEditor({
       mode: 'create',
       id: `draft-${Date.now()}`,
+      workflowId: undefined,
+      templateId: undefined,
       name: '',
       schedule: 'every monday at 9am',
       timezone: getLocalTimeZone(),
@@ -2525,6 +2539,8 @@ export default function Dashboard() {
       return {
         mode: 'create',
         id: current?.id || `draft-${Date.now()}`,
+        workflowId: template.id,
+        templateId: template.id,
         name: template.title,
         schedule: template.cadence,
         timezone,
@@ -2623,6 +2639,8 @@ export default function Dashboard() {
           description: automationEditor.description.trim() || null,
           authoringMode: automationEditor.authoringMode,
           workflowPrompt: automationEditor.workflowPrompt.trim() || null,
+          workflowId: automationEditor.workflowId || null,
+          templateId: automationEditor.templateId || null,
           notify: notifyTarget || null,
           condition: automationEditor.condition.trim() || null,
           steps,
@@ -3089,8 +3107,8 @@ export default function Dashboard() {
       : automationEditor.steps;
   }, [automationEditor?.authoringMode, automationEditor?.steps, automationEditor?.workflowPrompt]);
   const automationEditorWorkflowId = useMemo(
-    () => inferEditorWorkflowId(automationEditorSourceSteps),
-    [automationEditorSourceSteps],
+    () => inferEditorWorkflowId(automationEditorSourceSteps, automationEditor?.workflowId),
+    [automationEditor?.workflowId, automationEditorSourceSteps],
   );
   const automationReadinessTarget = useMemo(
     () => getWorkflowReadinessDeliveryTarget({
@@ -3409,6 +3427,8 @@ export default function Dashboard() {
     setAutomationEditor({
       mode: 'create',
       id: `draft-${Date.now()}`,
+      workflowId: selectedTask.workflowId,
+      templateId: selectedTask.templateId,
       name: `${selectedTask.title} copy`,
       schedule: selectedTask.schedule || selectedTask.time || 'every monday at 9am',
       description: selectedTask.description || '',

@@ -29,6 +29,8 @@ export interface AutomationRecord {
   id: string;
   version?: 2;
   workspaceId?: string;
+  workflowId?: string;
+  templateId?: string;
   name: string;
   description?: string;
   authoring_mode?: 'guided' | 'describe';
@@ -65,6 +67,8 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
   {
     id: 'auto_weekly_founder_update',
     version: 2,
+    workflowId: 'weekly-founder-brief',
+    templateId: 'weekly-founder-brief',
     name: 'Weekly founder update',
     description: 'A source-linked operating brief that rolls up revenue, product, customer, calendar, email, market, and decision signals for founder review.',
     authoring_mode: 'guided',
@@ -269,6 +273,8 @@ function normalizeAutomationText(value: string) {
 function normalizeAutomationRecord(record: AutomationRecord): AutomationRecord {
   return {
     ...record,
+    workflowId: record.workflowId?.trim() || undefined,
+    templateId: record.templateId?.trim() || undefined,
     actions: record.actions.map(normalizeAutomationText),
     workflow_prompt: record.workflow_prompt ? normalizeAutomationText(record.workflow_prompt) : record.workflow_prompt,
     notify: normalizeDeliveryTargetText(record.notify),
@@ -626,6 +632,8 @@ export function createAutomation(
     id: `auto_${Date.now()}`,
     version: input.steps?.length ? 2 : undefined,
     workspaceId: input.workspaceId,
+    workflowId: input.workflowId?.trim() || undefined,
+    templateId: input.templateId?.trim() || undefined,
     name: input.name,
     description: input.description,
     authoring_mode: input.authoring_mode,

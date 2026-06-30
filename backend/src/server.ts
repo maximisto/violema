@@ -5303,6 +5303,8 @@ app.post('/api/automations', async (req: Request, res: Response) => {
     description?: string;
     authoringMode?: 'guided' | 'describe';
     workflowPrompt?: string;
+    workflowId?: string | null;
+    templateId?: string | null;
     schedule?: string;
     timezone?: string;
     actions?: unknown[];
@@ -5332,6 +5334,8 @@ app.post('/api/automations', async (req: Request, res: Response) => {
     });
     const record = createAutomation({
       workspaceId,
+      workflowId: typeof body.workflowId === 'string' ? body.workflowId.trim() || undefined : undefined,
+      templateId: typeof body.templateId === 'string' ? body.templateId.trim() || undefined : undefined,
       name: body.name.trim(),
       description: typeof body.description === 'string' ? body.description.trim() || undefined : undefined,
       authoring_mode: body.authoringMode === 'describe' ? 'describe' : 'guided',
@@ -5499,6 +5503,8 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
   if (typeof req.body.description === 'string') patch.description = req.body.description.trim();
   if (req.body.authoringMode === 'guided' || req.body.authoringMode === 'describe') patch.authoring_mode = req.body.authoringMode;
   if (typeof req.body.workflowPrompt === 'string') patch.workflow_prompt = req.body.workflowPrompt.trim();
+  if (typeof req.body.workflowId === 'string') patch.workflowId = req.body.workflowId.trim() || undefined;
+  if (typeof req.body.templateId === 'string') patch.templateId = req.body.templateId.trim() || undefined;
   if (typeof req.body.schedule === 'string') patch.schedule = req.body.schedule.trim();
   if (typeof req.body.timezone === 'string') patch.timezone = req.body.timezone.trim();
   if (typeof req.body.notify === 'string') patch.notify = req.body.notify.trim();
@@ -5526,6 +5532,8 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
   if (req.body.condition === null) patch.condition = undefined;
   if (req.body.description === null) patch.description = undefined;
   if (req.body.workflowPrompt === null) patch.workflow_prompt = undefined;
+  if (req.body.workflowId === null) patch.workflowId = undefined;
+  if (req.body.templateId === null) patch.templateId = undefined;
   if (req.body.status === 'active' || req.body.status === 'paused') {
     patch.status = req.body.status;
   }

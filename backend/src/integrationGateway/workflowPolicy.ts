@@ -1,7 +1,13 @@
 import type { AutomationStepDefinition, PersistedAutomationStep } from '../platform/types';
 
-type WorkflowStepLike = Pick<PersistedAutomationStep, 'kind' | 'title' | 'objective' | 'inputs' | 'deliveryTarget'>
-  | Pick<AutomationStepDefinition, 'kind' | 'title' | 'objective' | 'inputs' | 'deliveryTarget'>;
+type WorkflowStepLike = {
+  id?: string;
+  kind: PersistedAutomationStep['kind'] | AutomationStepDefinition['kind'];
+  title?: string;
+  objective?: string;
+  inputs?: PersistedAutomationStep['inputs'] | AutomationStepDefinition['inputs'];
+  deliveryTarget?: PersistedAutomationStep['deliveryTarget'] | AutomationStepDefinition['deliveryTarget'];
+};
 
 export interface WorkflowAutomationLike {
   name?: string;

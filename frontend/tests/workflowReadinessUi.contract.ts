@@ -49,6 +49,14 @@ assert(
 );
 
 assert(
+  inferEditorWorkflowId([
+    { kind: 'query', inputs: { source: 'stripe', query_type: 'revenue_summary' } },
+    { kind: 'query', inputs: { source: 'github', query_type: 'delivery_risk' } },
+  ], 'weekly-founder-brief') === 'weekly-founder-brief',
+  'explicit workflow identity wins over mixed-step inference',
+);
+
+assert(
   getWorkflowReadinessDeliveryTarget({
     notify: '  ',
     steps: [

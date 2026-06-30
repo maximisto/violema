@@ -17,7 +17,13 @@ export type WorkflowReadinessBlockerAction =
   | { kind: 'editor'; label: string; section: 'setup' }
   | null;
 
-export function inferEditorWorkflowId(steps: WorkflowReadinessUiStep[]): string {
+export function inferEditorWorkflowId(
+  steps: WorkflowReadinessUiStep[],
+  explicitWorkflowId?: string | null,
+): string {
+  const explicit = typeof explicitWorkflowId === 'string' ? explicitWorkflowId.trim() : '';
+  if (explicit) return explicit;
+
   const querySteps = steps.filter((step) => step.kind === 'query');
   if (querySteps.length === 0) return '';
 
