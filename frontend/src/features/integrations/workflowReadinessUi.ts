@@ -82,6 +82,31 @@ export function getDashboardReadinessBlockerAction(
     };
   }
 
+  if (blocker.key === 'github' || blocker.route?.includes('integration-github')) {
+    return {
+      kind: 'navigate',
+      label: 'Open GitHub settings',
+      href: blocker.route || '/settings#integration-github',
+    };
+  }
+
+  if (
+    blocker.key === 'gmail' ||
+    blocker.key === 'google_calendar' ||
+    blocker.key === 'google_drive' ||
+    blocker.route?.includes('/integrations?provider=')
+  ) {
+    return {
+      kind: 'navigate',
+      label: blocker.key === 'google_calendar'
+        ? 'Connect Calendar'
+        : blocker.key === 'google_drive'
+          ? 'Connect Drive'
+          : 'Connect Gmail',
+      href: blocker.route || '/integrations',
+    };
+  }
+
   if (blocker.key === 'slack_target') {
     return {
       kind: 'editor',

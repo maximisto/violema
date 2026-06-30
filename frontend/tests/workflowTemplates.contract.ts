@@ -80,4 +80,41 @@ assert(
   'Revenue Watch first run requires approval',
 );
 
+const weeklyFounderBrief = getWorkflowTemplateById('weekly-founder-brief');
+assert(Boolean(weeklyFounderBrief), 'Weekly founder brief template exists');
+assert(
+  JSON.stringify(weeklyFounderBrief?.requiredIntegrationIds) === JSON.stringify(['stripe', 'github', 'gmail', 'google_calendar']),
+  'Weekly founder brief declares required founder-pack integrations',
+);
+assert(
+  weeklyFounderBrief?.optionalIntegrationIds?.includes('google_drive'),
+  'Weekly founder brief declares Drive optional',
+);
+
+const investorFollowUp = getWorkflowTemplateById('investor-follow-up');
+assert(
+  JSON.stringify(investorFollowUp?.requiredIntegrationIds) === JSON.stringify(['gmail', 'google_calendar']),
+  'Investor follow-up declares Gmail and Calendar requirements',
+);
+
+const monthlyInvestorUpdate = getWorkflowTemplateById('monthly-investor-update');
+assert(
+  JSON.stringify(monthlyInvestorUpdate?.requiredIntegrationIds) === JSON.stringify(['stripe', 'github', 'google_drive']),
+  'Monthly investor update declares Stripe GitHub and Drive requirements',
+);
+
+const shippingRevenuePulse = getWorkflowTemplateById('shipping-revenue-pulse');
+assert(Boolean(shippingRevenuePulse), 'Shipping and Revenue Pulse template exists');
+assert(
+  JSON.stringify(shippingRevenuePulse?.requiredIntegrationIds) === JSON.stringify(['stripe', 'github']),
+  'Shipping and Revenue Pulse declares Stripe and GitHub requirements',
+);
+
+const boardPacketPrep = getWorkflowTemplateById('board-packet-prep');
+assert(Boolean(boardPacketPrep), 'Board Packet Prep template exists');
+assert(
+  JSON.stringify(boardPacketPrep?.requiredIntegrationIds) === JSON.stringify(['google_drive', 'google_calendar']),
+  'Board Packet Prep declares Drive and Calendar requirements',
+);
+
 console.log(`workflowTemplates.contract: ${WORKFLOW_TEMPLATES.length} templates verified`);

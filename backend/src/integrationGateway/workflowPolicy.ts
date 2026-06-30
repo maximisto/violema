@@ -57,6 +57,15 @@ function isApprovalRequiredByStepMetadata(step: WorkflowStepLike) {
   );
 }
 
+const REVIEW_GATED_WORKFLOWS = new Set([
+  'revenue-watch',
+  'weekly-founder-brief',
+  'investor-follow-up',
+  'monthly-investor-update',
+  'shipping-revenue-pulse',
+  'board-packet-prep',
+]);
+
 export function inferWorkflowIdFromAutomation(automation: WorkflowAutomationLike) {
   const explicitWorkflowId = readExplicitWorkflowId(automation);
   if (explicitWorkflowId) return explicitWorkflowId;
@@ -95,5 +104,5 @@ export function isWorkflowDeliveryApprovalRequired(input: {
     notify: input.notify,
   });
 
-  return input.workflowId === 'revenue-watch' && delivery?.channel === 'slack';
+  return REVIEW_GATED_WORKFLOWS.has(input.workflowId) && Boolean(delivery);
 }

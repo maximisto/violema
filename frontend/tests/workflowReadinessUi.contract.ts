@@ -102,6 +102,18 @@ assert(slackAction?.kind === 'editor', 'Slack target blocker stays in the editor
 assert(slackAction?.label === 'Set destination', 'Slack target blocker uses the destination-specific label');
 assert(slackAction?.kind === 'editor' && slackAction.section === 'setup', 'Slack target blocker points to the setup section');
 
+const githubAction = getDashboardReadinessBlockerAction({ key: 'github', route: '/settings#integration-github' });
+assert(githubAction?.kind === 'navigate', 'GitHub blocker maps to navigation');
+assert(githubAction?.kind === 'navigate' && githubAction.href === '/settings#integration-github', 'GitHub blocker points to settings anchor');
+
+const gmailAction = getDashboardReadinessBlockerAction({ key: 'gmail', route: '/integrations?provider=gmail&workflow=investor-follow-up' });
+assert(gmailAction?.kind === 'navigate', 'Gmail blocker maps to navigation');
+assert(gmailAction?.kind === 'navigate' && gmailAction.href === '/integrations?provider=gmail&workflow=investor-follow-up', 'Gmail blocker preserves partner setup route');
+
+const driveAction = getDashboardReadinessBlockerAction({ key: 'google_drive', route: '/integrations?provider=google_drive&workflow=board-packet-prep' });
+assert(driveAction?.kind === 'navigate', 'Drive blocker maps to navigation');
+assert(driveAction?.kind === 'navigate' && driveAction.href.includes('provider=google_drive'), 'Drive blocker points to Drive setup');
+
 assert(
   getDashboardReadinessBlockerAction({ key: 'unsupported_workflow' }) === null,
   'Unknown blockers do not get a synthetic dashboard action',
