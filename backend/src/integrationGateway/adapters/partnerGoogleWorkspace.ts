@@ -123,6 +123,33 @@ const WINDOW_BY_QUERY_TYPE: Record<GoogleWorkspaceQueryType, RelativeWindow> = {
   board_packet_sources: { startOffsetDays: -30, endOffsetDays: 0 },
 };
 
+const GMAIL_QUERY_HINTS: Record<
+  Extract<GoogleWorkspaceQueryType, 'commitments' | 'unreplied_threads' | 'investor_threads'>,
+  string
+> = {
+  commitments: '("follow up" OR "following up" OR deadline OR due OR send)',
+  unreplied_threads: '("awaiting reply" OR "following up" OR unanswered OR "circling back")',
+  investor_threads: '(investor OR fund OR partner OR deck OR update)',
+};
+
+const CALENDAR_INTENTS: Record<
+  Extract<GoogleWorkspaceQueryType, 'weekly_commitments' | 'upcoming_meetings' | 'recent_meetings'>,
+  string
+> = {
+  weekly_commitments: 'weekly_commitments_window',
+  upcoming_meetings: 'upcoming_meetings_window',
+  recent_meetings: 'recent_meetings_window',
+};
+
+const DRIVE_QUERY_HINTS: Record<
+  Extract<GoogleWorkspaceQueryType, 'recent_docs' | 'investor_materials' | 'board_packet_sources'>,
+  string
+> = {
+  recent_docs: 'type:document OR type:spreadsheet OR type:presentation',
+  investor_materials: 'investor OR fundraising OR deck OR metrics OR update',
+  board_packet_sources: '"board packet" OR board deck OR investor update OR meeting prep',
+};
+
 function providerRoute(source: GoogleWorkspaceSource) {
   return `/integrations?provider=${source}&workflow=weekly-founder-brief`;
 }
@@ -272,29 +299,33 @@ function buildActionInput(
     start: window.start,
     end: window.end,
   };
+  const safeFilters = { ...(filters || {}) };
 
   if (source === 'gmail') {
     return {
       ...baseInput,
+      ...safeFilters,
       maxResults: 25,
+      query: GMAIL_QUERY_HINTS[queryType as keyof typeof GMAIL_QUERY_HINTS] || '',
       includeBody: false,
-      ...(filters || {}),
     };
   }
 
   if (source === 'google_calendar') {
     return {
       ...baseInput,
+      ...safeFilters,
       calendarId: 'primary',
-      ...(filters || {}),
+      intent: CALENDAR_INTENTS[queryType as keyof typeof CALENDAR_INTENTS] || 'calendar_window',
     };
   }
 
   return {
     ...baseInput,
+    ...safeFilters,
     pageSize: 25,
+    query: DRIVE_QUERY_HINTS[queryType as keyof typeof DRIVE_QUERY_HINTS] || '',
     includeText: false,
-    ...(filters || {}),
   };
 }
 
