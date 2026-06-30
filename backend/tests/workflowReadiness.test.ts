@@ -108,6 +108,11 @@ test('Weekly Founder Brief requires Stripe GitHub Gmail and Calendar with Drive 
   assert.deepEqual(report.requiredIntegrationIds, ['stripe', 'github', 'gmail', 'google_calendar']);
   assert.deepEqual(report.optionalIntegrationIds, ['google_drive', 'web_search']);
   assert.equal(report.firstRunRequiresApproval, true);
+  assert.equal(
+    report.summary,
+    'Weekly Founder Brief is ready for a sandbox run. First live delivery requires approval.',
+  );
+  assert.doesNotMatch(report.summary, /Revenue Watch/i);
 });
 
 test('Investor Follow-up blocks missing Gmail and routes to partner setup', () => {

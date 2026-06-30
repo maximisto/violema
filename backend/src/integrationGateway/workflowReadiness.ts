@@ -88,6 +88,15 @@ const WORKFLOW_REQUIREMENTS: Record<string, WorkflowRequirements> = {
   },
 };
 
+const WORKFLOW_DISPLAY_NAMES: Record<string, string> = {
+  'revenue-watch': 'Revenue Watch',
+  'weekly-founder-brief': 'Weekly Founder Brief',
+  'investor-follow-up': 'Investor Follow-up',
+  'monthly-investor-update': 'Monthly Investor Update',
+  'shipping-revenue-pulse': 'Shipping Revenue Pulse',
+  'board-packet-prep': 'Board Packet Prep',
+};
+
 const INTEGRATION_SETUP: Record<string, { label: string; route: (workflowId: string) => string; detail: string }> = {
   stripe: {
     label: 'Connect Stripe',
@@ -168,6 +177,10 @@ function readWorkflowRequirements(workflowId: string): WorkflowRequirements {
   };
 }
 
+function getWorkflowDisplayName(workflowId: string): string {
+  return WORKFLOW_DISPLAY_NAMES[workflowId] || workflowId;
+}
+
 function hasPartnerConnection(provider: string, connectedPartnerApps: string[] = []) {
   const normalized = new Set(connectedPartnerApps.map((item) => item.toLowerCase()));
   return (PARTNER_ALIASES[provider] || []).some((alias) => normalized.has(alias));
@@ -238,7 +251,7 @@ export function checkWorkflowReadiness(input: {
     summary: !requirements.supported
       ? `Unsupported workflow: ${input.workflowId}.`
       : blockers.length === 0
-        ? 'Revenue Watch is ready for a sandbox run. First live delivery requires approval.'
+        ? `${getWorkflowDisplayName(input.workflowId)} is ready for a sandbox run. First live delivery requires approval.`
         : `${blockers.length} readiness item${blockers.length === 1 ? '' : 's'} must be fixed before this workflow can run with real data.`,
     requiredIntegrationIds: requirements.requiredIntegrationIds,
     optionalIntegrationIds: requirements.optionalIntegrationIds,
