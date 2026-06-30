@@ -4285,9 +4285,10 @@ app.post('/api/integrations/composio/connect', async (req: Request, res: Respons
   res.json({ redirectUrl });
 });
 
-app.get('/api/workflows/:workflowId/readiness', (req: Request, res: Response) => {
+app.get('/api/workflows/:workflowId/readiness', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const deliveryTarget = typeof req.query.deliveryTarget === 'string' ? req.query.deliveryTarget : undefined;
+  const connectedPartnerApps = await listConnectedApps({ entityId: workspaceId });
 
   res.json({
     ok: true,
@@ -4295,6 +4296,7 @@ app.get('/api/workflows/:workflowId/readiness', (req: Request, res: Response) =>
       workspaceId,
       workflowId: req.params.workflowId,
       deliveryTarget,
+      connectedPartnerApps,
     }),
   });
 });

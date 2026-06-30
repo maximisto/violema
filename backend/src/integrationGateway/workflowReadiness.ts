@@ -46,6 +46,81 @@ interface WorkflowRequirements {
 }
 
 const REVENUE_WATCH_DEFAULT_DELIVERY_TARGET = '#all-purple-orange';
+const WORKFLOW_REQUIREMENTS: Record<string, WorkflowRequirements> = {
+  'revenue-watch': {
+    supported: true,
+    requiredIntegrationIds: ['stripe'],
+    optionalIntegrationIds: [],
+    firstRunRequiresApproval: true,
+    defaultDeliveryTarget: REVENUE_WATCH_DEFAULT_DELIVERY_TARGET,
+  },
+  'weekly-founder-brief': {
+    supported: true,
+    requiredIntegrationIds: ['stripe', 'github', 'gmail', 'google_calendar'],
+    optionalIntegrationIds: ['google_drive', 'web_search'],
+    firstRunRequiresApproval: true,
+    defaultDeliveryTarget: REVENUE_WATCH_DEFAULT_DELIVERY_TARGET,
+  },
+  'investor-follow-up': {
+    supported: true,
+    requiredIntegrationIds: ['gmail', 'google_calendar'],
+    optionalIntegrationIds: ['google_drive'],
+    firstRunRequiresApproval: true,
+  },
+  'monthly-investor-update': {
+    supported: true,
+    requiredIntegrationIds: ['stripe', 'github', 'google_drive'],
+    optionalIntegrationIds: ['gmail'],
+    firstRunRequiresApproval: true,
+  },
+  'shipping-revenue-pulse': {
+    supported: true,
+    requiredIntegrationIds: ['stripe', 'github'],
+    optionalIntegrationIds: ['web_search'],
+    firstRunRequiresApproval: true,
+    defaultDeliveryTarget: REVENUE_WATCH_DEFAULT_DELIVERY_TARGET,
+  },
+  'board-packet-prep': {
+    supported: true,
+    requiredIntegrationIds: ['google_drive', 'google_calendar'],
+    optionalIntegrationIds: ['stripe', 'github'],
+    firstRunRequiresApproval: true,
+  },
+};
+
+const INTEGRATION_SETUP: Record<string, { label: string; route: (workflowId: string) => string; detail: string }> = {
+  stripe: {
+    label: 'Connect Stripe',
+    route: () => '/integrations?provider=stripe&workflow=revenue-watch',
+    detail: 'Stripe read access is required before this workflow can run with real revenue data.',
+  },
+  github: {
+    label: 'Connect GitHub',
+    route: () => '/settings#integration-github',
+    detail: 'GitHub repository access is required before this workflow can read delivery and issue signals.',
+  },
+  gmail: {
+    label: 'Connect Gmail',
+    route: (workflowId) => `/integrations?provider=gmail&workflow=${workflowId}`,
+    detail: 'Gmail access is required before this workflow can identify commitments and unreplied threads.',
+  },
+  google_calendar: {
+    label: 'Connect Google Calendar',
+    route: (workflowId) => `/integrations?provider=google_calendar&workflow=${workflowId}`,
+    detail: 'Google Calendar access is required before this workflow can read meeting and deadline context.',
+  },
+  google_drive: {
+    label: 'Connect Google Drive',
+    route: (workflowId) => `/integrations?provider=google_drive&workflow=${workflowId}`,
+    detail: 'Google Drive access is required before this workflow can read selected document source material.',
+  },
+};
+
+const PARTNER_ALIASES: Record<string, string[]> = {
+  gmail: ['gmail'],
+  google_calendar: ['google_calendar', 'googlecalendar'],
+  google_drive: ['google_drive', 'googledrive'],
+};
 
 function readConfiguredFlag(
   value:
@@ -85,17 +160,7 @@ function isConfigured(
 }
 
 function readWorkflowRequirements(workflowId: string): WorkflowRequirements {
-  if (workflowId === 'revenue-watch') {
-    return {
-      supported: true,
-      requiredIntegrationIds: ['stripe'],
-      optionalIntegrationIds: [],
-      firstRunRequiresApproval: true,
-      defaultDeliveryTarget: REVENUE_WATCH_DEFAULT_DELIVERY_TARGET,
-    };
-  }
-
-  return {
+  return WORKFLOW_REQUIREMENTS[workflowId] || {
     supported: false,
     requiredIntegrationIds: [],
     optionalIntegrationIds: [],
@@ -103,11 +168,26 @@ function readWorkflowRequirements(workflowId: string): WorkflowRequirements {
   };
 }
 
+function hasPartnerConnection(provider: string, connectedPartnerApps: string[] = []) {
+  const normalized = new Set(connectedPartnerApps.map((item) => item.toLowerCase()));
+  return (PARTNER_ALIASES[provider] || []).some((alias) => normalized.has(alias));
+}
+
+function isRequirementConfigured(input: {
+  settingsView: WorkspaceSettingsView | MinimalSettingsView;
+  id: string;
+  connectedPartnerApps?: string[];
+}) {
+  if (isConfigured(input.settingsView, input.id)) return true;
+  return hasPartnerConnection(input.id, input.connectedPartnerApps);
+}
+
 export function checkWorkflowReadiness(input: {
   workflowId: string;
   workspaceId: string;
   deliveryTarget?: string | null;
   settingsView?: WorkspaceSettingsView | MinimalSettingsView;
+  connectedPartnerApps?: string[];
 }): WorkflowReadinessReport {
   const settingsView = input.settingsView || getWorkspaceSettingsView(input.workspaceId);
   const requirements = readWorkflowRequirements(input.workflowId);
@@ -125,12 +205,21 @@ export function checkWorkflowReadiness(input: {
     });
   }
 
-  if (requirements.requiredIntegrationIds.includes('stripe') && !isConfigured(settingsView, 'stripe')) {
+  for (const integrationId of requirements.requiredIntegrationIds) {
+    if (isRequirementConfigured({
+      settingsView,
+      id: integrationId,
+      connectedPartnerApps: input.connectedPartnerApps,
+    })) {
+      continue;
+    }
+
+    const setup = INTEGRATION_SETUP[integrationId];
     blockers.push({
-      key: 'stripe',
-      label: 'Connect Stripe',
-      detail: 'Stripe read access is required before Revenue Watch can run with real data.',
-      route: '/integrations?provider=stripe&workflow=revenue-watch',
+      key: integrationId,
+      label: setup?.label || `Configure ${integrationId}`,
+      detail: setup?.detail || `${integrationId} access is required before this workflow can run.`,
+      route: setup?.route(input.workflowId),
     });
   }
 
