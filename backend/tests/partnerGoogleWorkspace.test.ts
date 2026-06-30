@@ -138,6 +138,7 @@ test('queryGoogleWorkspace normalizes Calendar meeting windows', async () => {
 });
 
 test('queryGoogleWorkspace normalizes Drive docs without full document text', async () => {
+  let receivedActionName: string | undefined;
   let receivedInput: Record<string, unknown> | undefined;
   const result = await queryGoogleWorkspace({
     workspaceId: 'workspace_test',
@@ -146,7 +147,8 @@ test('queryGoogleWorkspace normalizes Drive docs without full document text', as
     connectedPartnerApps: ['googledrive'],
     now: new Date('2026-06-30T12:00:00.000Z'),
     filters: { includeText: true },
-    executor: async (_actionName, input) => {
+    executor: async (actionName, input) => {
+      receivedActionName = actionName;
       receivedInput = input;
       return {
         files: [
@@ -166,8 +168,11 @@ test('queryGoogleWorkspace normalizes Drive docs without full document text', as
   assert.equal(result.ok, true);
   if (!result.ok) throw new Error('expected success');
   assert.equal(result.data.items[0].id, 'doc_1');
+  assert.equal(receivedActionName, 'GOOGLEDRIVE_LIST_FILES');
   assert.equal(receivedInput?.includeText, false);
-  assert.equal(receivedInput?.query, '"board packet" OR board deck OR investor update OR meeting prep');
+  assert.equal(receivedInput?.q, 'name contains "board packet" or name contains "board deck" or name contains "investor update" or name contains "meeting prep"');
+  assert.equal(receivedInput?.fields, 'files(id,name,mimeType,webViewLink,modifiedTime),nextPageToken');
+  assert.equal(Object.prototype.hasOwnProperty.call(receivedInput || {}, 'query'), false);
   assert.doesNotMatch(JSON.stringify(result), /Full private board packet/);
 });
 
@@ -200,7 +205,9 @@ test('queryGoogleWorkspace ignores unsafe Drive filters and redacts executor err
   assert.equal(receivedInput?.end, '2026-06-30T12:00:00.000Z');
   assert.equal(receivedInput?.includeText, false);
   assert.equal(receivedInput?.pageSize, 12);
-  for (const key of ['include_text', 'fullText', 'text', 'fields']) {
+  assert.equal(receivedInput?.fields, 'files(id,name,mimeType,webViewLink,modifiedTime),nextPageToken');
+  assert.equal(receivedInput?.q, "mimeType = 'application/vnd.google-apps.document' or mimeType = 'application/vnd.google-apps.spreadsheet' or mimeType = 'application/vnd.google-apps.presentation'");
+  for (const key of ['include_text', 'fullText', 'text', 'query']) {
     assert.equal(Object.prototype.hasOwnProperty.call(receivedInput || {}, key), false, `${key} should not reach Composio`);
   }
   assert.equal(result.ok, false);

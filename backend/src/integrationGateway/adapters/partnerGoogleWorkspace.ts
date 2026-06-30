@@ -40,9 +40,9 @@ const GOOGLE_WORKSPACE_ACTIONS: Record<
     recent_meetings: 'GOOGLECALENDAR_FIND_EVENT',
   },
   google_drive: {
-    recent_docs: 'GOOGLEDRIVE_SEARCH_FILES',
-    investor_materials: 'GOOGLEDRIVE_SEARCH_FILES',
-    board_packet_sources: 'GOOGLEDRIVE_SEARCH_FILES',
+    recent_docs: 'GOOGLEDRIVE_LIST_FILES',
+    investor_materials: 'GOOGLEDRIVE_LIST_FILES',
+    board_packet_sources: 'GOOGLEDRIVE_LIST_FILES',
   },
 };
 
@@ -146,10 +146,27 @@ const DRIVE_QUERY_HINTS: Record<
   Extract<GoogleWorkspaceQueryType, 'recent_docs' | 'investor_materials' | 'board_packet_sources'>,
   string
 > = {
-  recent_docs: 'type:document OR type:spreadsheet OR type:presentation',
-  investor_materials: 'investor OR fundraising OR deck OR metrics OR update',
-  board_packet_sources: '"board packet" OR board deck OR investor update OR meeting prep',
+  recent_docs: [
+    "mimeType = 'application/vnd.google-apps.document'",
+    "mimeType = 'application/vnd.google-apps.spreadsheet'",
+    "mimeType = 'application/vnd.google-apps.presentation'",
+  ].join(' or '),
+  investor_materials: [
+    'name contains "investor"',
+    'name contains "fundraising"',
+    'name contains "deck"',
+    'name contains "metrics"',
+    'name contains "update"',
+  ].join(' or '),
+  board_packet_sources: [
+    'name contains "board packet"',
+    'name contains "board deck"',
+    'name contains "investor update"',
+    'name contains "meeting prep"',
+  ].join(' or '),
 };
+
+const DRIVE_METADATA_FIELDS = 'files(id,name,mimeType,webViewLink,modifiedTime),nextPageToken';
 
 function readWorkflowId(value?: string) {
   return typeof value === 'string' && value.trim() ? value.trim() : 'weekly-founder-brief';
@@ -361,7 +378,8 @@ function buildActionInput(
   return {
     ...baseInput,
     pageSize: 25,
-    query: DRIVE_QUERY_HINTS[queryType as keyof typeof DRIVE_QUERY_HINTS] || '',
+    q: DRIVE_QUERY_HINTS[queryType as keyof typeof DRIVE_QUERY_HINTS] || '',
+    fields: DRIVE_METADATA_FIELDS,
     ...safeFilters,
     includeText: false,
   };
