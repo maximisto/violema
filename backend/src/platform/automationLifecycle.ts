@@ -336,9 +336,18 @@ export function validateAutomationDeliveryDraft(input: {
 export function classifyAutomationRunOutcome(input: {
   deliveryWaitingForReview?: boolean;
   deliveryError?: string | null;
-  stepExecutions: Array<Pick<AutomationStepExecution, 'status' | 'title' | 'error' | 'kind'>>;
+  stepExecutions: Array<Pick<AutomationStepExecution, 'status' | 'title' | 'error' | 'kind' | 'stepId'>>;
 }): AutomationRunOutcome {
-  const failedStep = input.stepExecutions.find((step) => step.status === 'failed');
+  const failedStep = input.stepExecutions.find((step) => {
+    if (step.status !== 'failed') return false;
+
+    const isSystemSummary =
+      step.kind === 'summarize' &&
+      step.title === 'Generate automation summary' &&
+      /^auto_step_/.test(step.stepId);
+
+    return !isSystemSummary;
+  });
   if (input.deliveryError || failedStep) {
     const detail = input.deliveryError || failedStep?.error || `${failedStep?.title || 'A workflow step'} failed.`;
     return {
