@@ -180,7 +180,7 @@ test('classifyAutomationRunOutcome blocks failed delivery but preserves review g
   const reviewOutcome = classifyAutomationRunOutcome({
     deliveryWaitingForReview: true,
     stepExecutions: [
-      { kind: 'deliver', title: 'Deliver', status: 'succeeded' },
+      { kind: 'deliver', title: 'Deliver', status: 'succeeded', stepId: 'step_deliver' },
     ],
   });
 
@@ -191,7 +191,7 @@ test('classifyAutomationRunOutcome blocks failed delivery but preserves review g
   const failedDeliveryOutcome = classifyAutomationRunOutcome({
     deliveryError: 'Slack target "#all-purple-orange" is not visible to Violema.',
     stepExecutions: [
-      { kind: 'deliver', title: 'Deliver', status: 'failed' },
+      { kind: 'deliver', title: 'Deliver', status: 'failed', stepId: 'step_deliver' },
     ],
   });
 
@@ -199,4 +199,63 @@ test('classifyAutomationRunOutcome blocks failed delivery but preserves review g
   assert.equal(failedDeliveryOutcome.runStatus, 'failed');
   assert.equal(failedDeliveryOutcome.schedulerOk, false);
   assert.match(String(failedDeliveryOutcome.reviewSummary), /Slack target/);
+});
+
+test('classifyAutomationRunOutcome prioritizes failed steps over waiting review gates', () => {
+  const outcome = classifyAutomationRunOutcome({
+    deliveryWaitingForReview: true,
+    stepExecutions: [
+      {
+        stepId: 'step_stripe',
+        kind: 'query',
+        title: 'Check Stripe revenue',
+        status: 'failed',
+        error: 'Stripe read access is required before Revenue Watch can run with real data.',
+      },
+      {
+        stepId: 'step_deliver',
+        kind: 'deliver',
+        title: 'Deliver to Slack',
+        status: 'succeeded',
+      },
+    ],
+  });
+
+  assert.equal(outcome.taskStatus, 'blocked');
+  assert.equal(outcome.runStatus, 'failed');
+  assert.equal(outcome.schedulerOk, false);
+  assert.equal(outcome.reviewRequired, false);
+  assert.match(String(outcome.reviewSummary), /Stripe read access is required before Revenue Watch can run with real data\./);
+});
+
+test('classifyAutomationRunOutcome lets system summary degradation wait for review', () => {
+  const outcome = classifyAutomationRunOutcome({
+    deliveryWaitingForReview: true,
+    stepExecutions: [
+      {
+        stepId: 'step_stripe',
+        kind: 'query',
+        title: 'Check Stripe revenue',
+        status: 'succeeded',
+      },
+      {
+        stepId: 'auto_step_auto_revenue_watch_3',
+        kind: 'summarize',
+        title: 'Generate automation summary',
+        status: 'failed',
+        error: 'Model route is temporarily unavailable.',
+      },
+      {
+        stepId: 'step_deliver',
+        kind: 'deliver',
+        title: 'Deliver to Slack',
+        status: 'succeeded',
+      },
+    ],
+  });
+
+  assert.equal(outcome.taskStatus, 'waiting_review');
+  assert.equal(outcome.runStatus, 'succeeded');
+  assert.equal(outcome.schedulerOk, true);
+  assert.equal(outcome.reviewRequired, true);
 });

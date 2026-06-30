@@ -42,6 +42,9 @@ export interface WorkflowTemplateDefinition {
   notify: string;
   /** Human-readable systems this loop reads from, for the gallery card. */
   integrations: string[];
+  requiredIntegrationIds?: string[];
+  optionalIntegrationIds?: string[];
+  firstRunRequiresApproval?: boolean;
   steps: WorkflowTemplateStep[];
 }
 
@@ -75,6 +78,9 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
     destination: 'slack',
     notify: '#all-purple-orange',
     integrations: ['Stripe'],
+    requiredIntegrationIds: ['stripe'],
+    optionalIntegrationIds: [],
+    firstRunRequiresApproval: true,
     description: 'Monitor revenue movement, failed payments, churn risk, and expansion signals before they become surprises.',
     steps: [
       { kind: 'query', title: 'Pull Stripe revenue pulse', objective: 'Check revenue, failed payments, churn events, and upgrades.', inputs: { source: 'stripe', query_type: 'revenue_summary' } },

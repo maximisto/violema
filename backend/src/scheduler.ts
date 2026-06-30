@@ -28,6 +28,7 @@ export interface AutomationStudioState {
 export interface AutomationRecord {
   id: string;
   version?: 2;
+  workspaceId?: string;
   name: string;
   description?: string;
   authoring_mode?: 'guided' | 'describe';
@@ -289,6 +290,7 @@ function withAutomationDefaults(record: AutomationRecord): AutomationRecord {
   const timezone = normalizeTimeZone(normalized.timezone);
   return {
     ...normalized,
+    workspaceId: normalized.workspaceId,
     timezone,
     next_run_at: normalized.status === 'paused'
       ? undefined
@@ -623,6 +625,7 @@ export function createAutomation(
   const record = withAutomationDefaults({
     id: `auto_${Date.now()}`,
     version: input.steps?.length ? 2 : undefined,
+    workspaceId: input.workspaceId,
     name: input.name,
     description: input.description,
     authoring_mode: input.authoring_mode,

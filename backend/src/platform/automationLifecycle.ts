@@ -336,20 +336,18 @@ export function validateAutomationDeliveryDraft(input: {
 export function classifyAutomationRunOutcome(input: {
   deliveryWaitingForReview?: boolean;
   deliveryError?: string | null;
-  stepExecutions: Array<Pick<AutomationStepExecution, 'status' | 'title' | 'error' | 'kind'>>;
+  stepExecutions: Array<Pick<AutomationStepExecution, 'status' | 'title' | 'error' | 'kind' | 'stepId'>>;
 }): AutomationRunOutcome {
-  if (input.deliveryWaitingForReview) {
-    return {
-      taskStatus: 'waiting_review',
-      runStatus: 'succeeded',
-      delegationState: 'review',
-      schedulerOk: true,
-      reviewRequired: true,
-      reviewSummary: 'Delivery is prepared and waiting for approval.',
-    };
-  }
+  const failedStep = input.stepExecutions.find((step) => {
+    if (step.status !== 'failed') return false;
 
-  const failedStep = input.stepExecutions.find((step) => step.status === 'failed');
+    const isSystemSummary =
+      step.kind === 'summarize' &&
+      step.title === 'Generate automation summary' &&
+      /^auto_step_/.test(step.stepId);
+
+    return !isSystemSummary;
+  });
   if (input.deliveryError || failedStep) {
     const detail = input.deliveryError || failedStep?.error || `${failedStep?.title || 'A workflow step'} failed.`;
     return {
@@ -359,6 +357,17 @@ export function classifyAutomationRunOutcome(input: {
       schedulerOk: false,
       reviewRequired: false,
       reviewSummary: `Run needs attention before it can be trusted or delivered. ${detail}`,
+    };
+  }
+
+  if (input.deliveryWaitingForReview) {
+    return {
+      taskStatus: 'waiting_review',
+      runStatus: 'succeeded',
+      delegationState: 'review',
+      schedulerOk: true,
+      reviewRequired: true,
+      reviewSummary: 'Delivery is prepared and waiting for approval.',
     };
   }
 

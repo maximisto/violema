@@ -46,6 +46,12 @@ import {
   selectReviewGateVisualArtifacts,
 } from './automationArtifacts';
 import {
+  inferWorkflowIdFromAutomation,
+  isWorkflowDeliveryApprovalRequired,
+  resolveWorkflowDeliveryTarget,
+} from './integrationGateway/workflowPolicy';
+import { buildGenerateReportResult } from './platform/reportGeneration';
+import {
   approveAutomationReview,
   buildAutomationPreflightReport,
   classifyAutomationRunOutcome,
@@ -142,6 +148,14 @@ import {
 } from './settingsStore';
 import { buildIntegrationCatalog } from './integrationRegistry';
 import {
+  buildPendingApprovalRequestedLedgerEvent,
+  finalizePendingApprovalRequestedLedgerEvents,
+  type PendingApprovalRequestedLedgerEvent,
+} from './integrationGateway/approvalLedger';
+import { appendWorkflowLedgerEvent, listWorkflowLedgerEvents } from './integrationGateway/auditLog';
+import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
+import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
+import {
   buildAutomationExperimentAttribution,
   buildAutomationScenarioTelemetry,
 } from './agent-studio/automationStudio';
@@ -225,6 +239,17 @@ function buildTaskRunSnapshotEvent(
     run,
     task,
   };
+}
+
+function getAutomationWorkspaceId(automation: { workspaceId?: string } | null | undefined) {
+  return automation?.workspaceId || DEFAULT_WORKSPACE_ID;
+}
+
+function automationBelongsToWorkspace(
+  automation: { workspaceId?: string } | null | undefined,
+  workspaceId: string,
+) {
+  return getAutomationWorkspaceId(automation) === workspaceId;
 }
 
 app.use(helmet({
@@ -1152,6 +1177,7 @@ async function runAnthropicChatLoop(
   route: { model: string },
   anthropicMessages: MessageParam[],
   autonomyMode: string,
+  workspaceId: string,
   sendEvent: (data: Record<string, unknown>) => void
 ): Promise<{ toolCallsExecuted: number }> {
   let continueLoop = true;
@@ -1236,7 +1262,7 @@ async function runAnthropicChatLoop(
       for (const toolUseBlock of toolUseBlocks) {
         const toolInput = toolUseBlock.input as Record<string, unknown>;
         const toolStart = Date.now();
-        const result = await executeToolCall(toolUseBlock.name, toolInput);
+        const result = await executeToolCall(toolUseBlock.name, toolInput, { workspaceId });
         const elapsed = Date.now() - toolStart;
         const confidence = randomConfidence(toolUseBlock.name);
 
@@ -1270,6 +1296,7 @@ async function runOpenAIChatLoop(
   route: { provider: string; model: string; apiKeyEnv: string; baseUrl?: string },
   messages: ChatMessage[],
   autonomyMode: string,
+  workspaceId: string,
   sendEvent: (data: Record<string, unknown>) => void
 ): Promise<{ toolCallsExecuted: number }> {
   const currentMessages: Array<Record<string, unknown>> = [
@@ -1352,7 +1379,7 @@ async function runOpenAIChatLoop(
           input: parsedInput,
         });
 
-        const result = await executeToolCall(toolName, parsedInput);
+        const result = await executeToolCall(toolName, parsedInput, { workspaceId });
         const elapsed = Date.now() - startedAt;
         const confidence = randomConfidence(toolName);
 
@@ -1802,86 +1829,15 @@ async function executeToolCall(
     }
 
     case 'query_data': {
-      const source = toolInput.source as string;
-      const queryType = toolInput.query_type as string;
-
-      const mockData: Record<string, Record<string, unknown>> = {
-        stripe: {
-          monthly_revenue: {
-            period: 'March 2025',
-            mrr: 127450,
-            prev_mrr: 108230,
-            change_pct: 17.77,
-            arr: 1529400,
-            new_subscriptions: 47,
-            churned: 3,
-            net_revenue_retention: 118,
-            upgrades: 12,
-            downgrades: 2,
-            currency: 'USD',
-          },
-          customers: { total: 892, active: 847, trial: 45, churned_this_month: 3, paying: 802 },
-          transactions: {
-            today: { count: 234, volume: 18420, avg: 78.72 },
-            this_month: { count: 4821, volume: 127450, avg: 26.43 },
-          },
-          failed_payments: { count: 18, recovery_rate: '67%', at_risk_mrr: 2340 },
-        },
-        hubspot: {
-          contacts: { total: 12450, new_this_month: 234, qualified_leads: 89, mql: 156, sql: 43 },
-          deals: { open: 67, won_this_month: 23, lost_this_month: 8, pipeline_value: 890000, avg_deal_size: 38700, close_rate: '34%' },
-          campaigns: { active: 5, total_reach: 42000, avg_open_rate: '24.3%', avg_click_rate: '3.8%' },
-        },
-        github: {
-          open_issues: { total: 34, critical: 2, high: 8, medium: 15, low: 9 },
-          pull_requests: { open: 12, merged_this_week: 28, avg_review_time_hours: 6.4, oldest_open_days: 18 },
-          activity: { commits_this_week: 147, contributors_active: 8, deployments_this_week: 12 },
-        },
-        linear: {
-          sprint: { name: 'Sprint 23', open: 156, in_progress: 34, completed: 42, blocked: 7 },
-          velocity: { this_sprint: 84, last_sprint: 76, avg_4_sprints: 79 },
-          cycle_time_days: { p50: 2.1, p90: 5.8 },
-        },
-        posthog: {
-          pageviews: { today: 8421, this_week: 48230, this_month: 182450 },
-          active_users: { dau: 1247, wau: 6832, mau: 18940 },
-          conversion: { signup_rate: '4.2%', activation_rate: '67%', retention_d30: '42%' },
-          top_events: [
-            { event: 'chat_sent', count: 45230, change: '+12%' },
-            { event: 'tool_executed', count: 28410, change: '+34%' },
-            { event: 'automation_created', count: 3210, change: '+89%' },
-          ],
-        },
-        salesforce: {
-          pipeline: { total: 2340000, opportunities: 87, avg_age_days: 34 },
-          forecast: { commit: 340000, best_case: 520000, pipeline: 890000 },
-          top_accounts: [
-            { name: 'Acme Corp', arr: 120000, health: 'green', csm: 'Sarah K.' },
-            { name: 'Globex Inc', arr: 84000, health: 'yellow', csm: 'Mike T.' },
-          ],
-        },
-        google_analytics: {
-          sessions: { today: 3421, this_week: 21450, this_month: 89230 },
-          acquisition: { organic: '42%', direct: '28%', paid: '18%', referral: '12%' },
-          top_pages: [
-            { path: '/', sessions: 12450, bounce_rate: '34%' },
-            { path: '/pricing', sessions: 8230, bounce_rate: '28%' },
-            { path: '/features', sessions: 6710, bounce_rate: '41%' },
-          ],
-        },
-      };
-
-      const sourceData = mockData[source] || {};
-      const result = sourceData[queryType] || { note: `Data for "${queryType}" not found in ${source}` };
-
-      return JSON.stringify({
+      const source = String(toolInput.source || '');
+      const queryType = String(toolInput.query_type || '');
+      return JSON.stringify(await executeQueryData({
+        workspaceId: ctx?.workspaceId || DEFAULT_WORKSPACE_ID,
         source,
-        query_type: queryType,
-        data: result,
-        fetched_at: new Date().toISOString(),
-        latency_ms: Math.floor(Math.random() * 200) + 80,
-        cache_hit: Math.random() > 0.6,
-      });
+        queryType,
+        filters: isObjectRecord(toolInput.filters) ? toolInput.filters : undefined,
+        limit: typeof toolInput.limit === 'number' ? toolInput.limit : undefined,
+      }));
     }
 
     case 'render_chart': {
@@ -1889,65 +1845,11 @@ async function executeToolCall(
     }
 
     case 'generate_report': {
-      const { report_type, title, period } = toolInput as { report_type: string; title: string; period?: string };
-      const reportPeriod = period || 'March 2025';
-
-      const reportTemplates: Record<string, object> = {
-        executive_summary: {
-          title,
-          period: reportPeriod,
-          generated_at: new Date().toISOString(),
-          sections: {
-            headline_metrics: { mrr: '$127,450', growth: '+17.8%', nrr: '118%', churn: '0.4%' },
-            highlights: [
-              'MRR crossed $127K milestone for first time',
-              'Net Revenue Retention at all-time high of 118%',
-              'Churn rate improved from 0.7% → 0.4%',
-              'Engineering shipped 28 PRs this week',
-            ],
-            risks: [
-              '18 failed payments ($2,340 at risk)',
-              'CAC increased 12% vs last month',
-            ],
-            next_actions: [
-              'Review failed payment recovery flow',
-              'Investigate CAC increase in paid channels',
-            ],
-          },
-          format: 'markdown',
-          word_count: 347,
-        },
-        weekly_digest: {
-          title,
-          period: reportPeriod,
-          generated_at: new Date().toISOString(),
-          sections: {
-            wins: ['Shipped feature X', 'Closed 23 deals worth $890K', 'Resolved 42 Linear tickets'],
-            metrics_snapshot: { mrr: '$127K', leads: 234, deployments: 12, uptime: '99.97%' },
-            team_updates: 'Engineering: sprint 23 complete. Marketing: campaign launched. Sales: Q2 pipeline strong.',
-            next_week: ['Pricing experiment', 'Enterprise tier launch', 'Sales enablement workshop'],
-          },
-          format: 'markdown',
-          word_count: 284,
-        },
-        metric_analysis: {
-          title,
-          period: reportPeriod,
-          generated_at: new Date().toISOString(),
-          analysis: {
-            trend: 'upward',
-            variance_from_forecast: '+3.2%',
-            key_drivers: ['New enterprise tier', 'Referral program launched', 'Seasonal uplift'],
-            anomalies: ['Thursday spike (+34%) correlates with Product Hunt feature'],
-            recommendations: ['Double down on enterprise motion', 'Investigate referral program ROI'],
-          },
-          format: 'markdown',
-          word_count: 412,
-        },
-      };
-
-      const template = reportTemplates[report_type] || reportTemplates.executive_summary;
-      return JSON.stringify({ success: true, report: template, shareable_url: `https://nexus.app/reports/rpt_${Date.now()}` });
+      return JSON.stringify(buildGenerateReportResult(toolInput as {
+        report_type?: string;
+        title?: string;
+        period?: string;
+      }));
     }
 
     case 'schedule_automation': {
@@ -2141,10 +2043,10 @@ async function executeConversationTask(input: {
   let toolCallsExecuted = 0;
   if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
     if (!client) throw new Error('Missing Anthropic-compatible client.');
-    const execution = await runAnthropicChatLoop(client, executingRoute, anthropicMessages, autonomyMode, collectEvent);
+    const execution = await runAnthropicChatLoop(client, executingRoute, anthropicMessages, autonomyMode, workspaceId, collectEvent);
     toolCallsExecuted = execution.toolCallsExecuted;
   } else {
-    const execution = await runOpenAIChatLoop(requestedRoute, messages, autonomyMode, collectEvent);
+    const execution = await runOpenAIChatLoop(requestedRoute, messages, autonomyMode, workspaceId, collectEvent);
     toolCallsExecuted = execution.toolCallsExecuted;
   }
 
@@ -3351,18 +3253,10 @@ function buildDeterministicAutomationSummary(
   ].filter(Boolean).join('\n\n');
 }
 
-function isAutomationDeliveryApprovalRequired(step: AutomationStepDefinition) {
-  const explicit = step.inputs?.approval_required;
-  if (explicit === true) return true;
-  if (typeof explicit === 'string' && explicit.trim().toLowerCase() === 'true') return true;
-  return /(approval|required|reviewed|review before|after review|after approval|hold for approval)/i.test(
-    `${step.title} ${step.objective}`,
-  );
-}
-
 async function ensureAutomationSummaryText(
   automation: { name: string; description?: string; condition?: string; actions: string[] },
   plan: AutomationExecutionPlan,
+  workspaceId: string,
   artifacts: AutomationExecutionArtifact[],
   stepExecutions: AutomationStepExecution[],
   stepErrors: string[],
@@ -3377,7 +3271,7 @@ async function ensureAutomationSummaryText(
         'Summarize the completed automation run in concise markdown. Lead with the highest-value outcome, then note any failure or delivery issue briefly.',
         [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
         600,
-        DEFAULT_WORKSPACE_ID,
+        workspaceId,
       ),
     );
 
@@ -3408,16 +3302,24 @@ async function runAutomationStepWithTimeout<T>(label: string, operation: Promise
 async function executeAutomationCore(
   automation: {
     id: string;
+    workspaceId?: string;
     name: string;
     description?: string;
     actions: string[];
     steps?: PersistedAutomationStep[];
     execution_policy?: AutomationExecutionPolicy;
+    studio_state?: AutomationStudioState;
     notify?: string;
     condition?: string;
     timezone?: string;
   },
   plan: AutomationExecutionPlan,
+  workspaceId: string,
+  runContext: {
+    workflowId: string;
+    taskId: string;
+    taskRunId: string;
+  },
   onProgress?: (state: {
     artifacts: AutomationExecutionArtifact[];
     summaryText: string;
@@ -3431,6 +3333,7 @@ async function executeAutomationCore(
   const artifacts: AutomationExecutionArtifact[] = [];
   const stepExecutions: AutomationStepExecution[] = [];
   const stepErrors: string[] = [];
+  const pendingApprovalRequestedEvents: PendingApprovalRequestedLedgerEvent[] = [];
   let summaryText = '';
   let delivery: Record<string, unknown> | null = null;
   let deliveryError: string | null = null;
@@ -3450,7 +3353,7 @@ async function executeAutomationCore(
   };
 
   for (const step of plan.steps) {
-    const stepModelSource = getModelSource(step.modelTier || plan.suggestedModelTier, DEFAULT_WORKSPACE_ID);
+    const stepModelSource = getModelSource(step.modelTier || plan.suggestedModelTier, workspaceId);
     const stepExecution: AutomationStepExecution = {
       stepId: step.id,
       kind: step.kind,
@@ -3490,11 +3393,22 @@ async function executeAutomationCore(
       }
 
       if (step.kind === 'query') {
-        const payload = JSON.parse(await runAutomationStepWithTimeout(`Query step "${step.title}"`, executeToolCall('query_data', step.inputs || {}))) as Record<string, unknown>;
-        const chartArtifact = buildAutomationChartArtifactFromQueryPayload({
-          stepTitle: step.title,
-          payload,
-        });
+        const payload = JSON.parse(await runAutomationStepWithTimeout(
+          `Query step "${step.title}"`,
+          executeToolCall('query_data', step.inputs || {}, { workspaceId }),
+        )) as Record<string, unknown>;
+        const payloadSource = typeof payload.source === 'string' ? payload.source : '';
+        const queryType = typeof payload.query_type === 'string'
+          ? payload.query_type
+          : typeof step.inputs?.query_type === 'string'
+            ? step.inputs.query_type
+            : undefined;
+        const chartArtifact = payload.ok === false
+          ? null
+          : buildAutomationChartArtifactFromQueryPayload({
+            stepTitle: step.title,
+            payload,
+          });
         artifacts.push({
           kind: 'query_data',
           title: step.title,
@@ -3503,12 +3417,31 @@ async function executeAutomationCore(
         if (chartArtifact) {
           artifacts.push(chartArtifact);
         }
-        stepExecution.status = 'succeeded';
-        stepExecution.summary = 'Pulled the requested live data successfully.';
-        stepExecution.output = payload;
-        stepExecution.artifactKind = 'query_data';
-        stepExecution.toolCalls = 1;
-        stepExecution.artifactCount = chartArtifact ? 2 : 1;
+        applyQueryStepPayloadToExecution({
+          stepTitle: step.title,
+          payload,
+          stepExecution,
+          stepErrors,
+          artifactCount: chartArtifact ? 2 : 1,
+        });
+        if (payloadSource === 'stripe') {
+          appendWorkflowLedgerEvent({
+            workspaceId,
+            workflowId: runContext.workflowId,
+            automationId: automation.id,
+            taskId: runContext.taskId,
+            taskRunId: runContext.taskRunId,
+            type: payload.ok === false ? 'connector_failed' : 'data_read',
+            summary: payload.ok === false
+              ? `Stripe read blocked: ${String(payload.message || 'integration not ready')}`
+              : 'Read Stripe revenue summary.',
+            metadata: {
+              source: 'stripe',
+              queryType,
+              ok: payload.ok,
+            },
+          });
+        }
         continue;
       }
 
@@ -3542,7 +3475,7 @@ async function executeAutomationCore(
           'You are an internal VIOLEMA analyst. Produce a compact, decision-ready analysis based only on the supplied evidence. Be concrete and avoid filler.',
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           500,
-          DEFAULT_WORKSPACE_ID,
+          workspaceId,
           ),
         );
         const markdown = analysisResult.text;
@@ -3568,7 +3501,7 @@ async function executeAutomationCore(
           'You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. Be concrete, skim-friendly, and avoid filler.',
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           900,
-          DEFAULT_WORKSPACE_ID,
+          workspaceId,
           ),
         );
         summaryText = summaryResult.text;
@@ -3583,11 +3516,24 @@ async function executeAutomationCore(
         stepExecution.artifactKind = 'summary';
         stepExecution.artifactCount = 1;
         stepExecution.tokenUsage = summaryResult.usage;
+        appendWorkflowLedgerEvent({
+          workspaceId,
+          workflowId: runContext.workflowId,
+          automationId: automation.id,
+          taskId: runContext.taskId,
+          taskRunId: runContext.taskRunId,
+          type: 'draft_created',
+          summary: `Drafted ${step.title}.`,
+          metadata: { artifactKind: 'summary', stepId: step.id },
+        });
         continue;
       }
 
       if (step.kind === 'deliver') {
-        const deliveryTarget = step.deliveryTarget?.target?.trim() || automation.notify?.trim() || null;
+        const deliveryTarget = resolveWorkflowDeliveryTarget({
+          step,
+          notify: automation.notify,
+        });
         if (!deliveryTarget) {
           stepExecution.status = 'skipped';
           stepExecution.summary = 'Skipped delivery because no target was configured.';
@@ -3595,24 +3541,38 @@ async function executeAutomationCore(
         }
 
         if (!summaryText && (artifacts.length > 0 || stepErrors.length > 0)) {
-          summaryText = await ensureAutomationSummaryText(automation, plan, artifacts, stepExecutions, stepErrors);
+          summaryText = await ensureAutomationSummaryText(automation, plan, workspaceId, artifacts, stepExecutions, stepErrors);
           if (summaryText) {
             artifacts.push({
               kind: 'summary',
               title: `${automation.name} summary`,
               payload: { markdown: summaryText },
             });
+            appendWorkflowLedgerEvent({
+              workspaceId,
+              workflowId: runContext.workflowId,
+              automationId: automation.id,
+              taskId: runContext.taskId,
+              taskRunId: runContext.taskRunId,
+              type: 'draft_created',
+              summary: `Drafted ${automation.name} summary.`,
+              metadata: { artifactKind: 'summary', stepId: step.id, generatedBy: 'fallback' },
+            });
           }
         }
 
         const body = summaryText || buildAutomationDeliveryFallbackBody(automation, artifacts, stepExecutions, stepErrors);
 
-        if (isAutomationDeliveryApprovalRequired(step)) {
+        if (isWorkflowDeliveryApprovalRequired({
+          workflowId: runContext.workflowId,
+          step,
+          notify: automation.notify,
+        })) {
           const visualArtifacts = selectReviewGateVisualArtifacts(artifacts);
           delivery = {
             success: true,
-            channel: step.deliveryTarget?.channel || (deliveryTarget.includes('@') ? 'email' : 'slack'),
-            to: deliveryTarget,
+            channel: deliveryTarget.channel,
+            to: deliveryTarget.target,
             status: 'waiting_review',
             approval_required: true,
             prepared_at: new Date().toISOString(),
@@ -3622,36 +3582,59 @@ async function executeAutomationCore(
             title: `Ready for review: ${automation.name}`,
             payload: {
               markdown: body,
-              deliveryTarget,
+              deliveryTarget: deliveryTarget.target,
               approvalRequired: true,
               visualArtifacts,
             },
           });
           stepExecution.status = 'succeeded';
-          stepExecution.summary = `Prepared delivery for review. Waiting for approval before sending to ${deliveryTarget}.`;
+          stepExecution.summary = `Prepared delivery for review. Waiting for approval before sending to ${deliveryTarget.target}.`;
           stepExecution.output = delivery;
           stepExecution.artifactKind = 'review_gate';
           stepExecution.toolCalls = 0;
           stepExecution.artifactCount = 1;
+          pendingApprovalRequestedEvents.push(buildPendingApprovalRequestedLedgerEvent({
+            workspaceId,
+            workflowId: runContext.workflowId,
+            automationId: automation.id,
+            taskId: runContext.taskId,
+            taskRunId: runContext.taskRunId,
+            deliveryTarget: deliveryTarget.target,
+            channel: typeof delivery.channel === 'string' ? delivery.channel : undefined,
+            preparedAt: typeof delivery.prepared_at === 'string'
+              ? delivery.prepared_at
+              : new Date().toISOString(),
+          }));
           continue;
         }
 
         delivery = await runAutomationStepWithTimeout(`Delivery step "${step.title}"`, sendMessage({
-          to: deliveryTarget,
+          to: deliveryTarget.target,
           subject: `Automation run: ${automation.name}`,
           body,
+          channel: deliveryTarget.channel,
         }));
         artifacts.push({
           kind: 'delivery',
-          title: `Delivered to ${deliveryTarget}`,
+          title: `Delivered to ${deliveryTarget.target}`,
           payload: delivery,
         });
         stepExecution.status = 'succeeded';
-        stepExecution.summary = `Delivered the latest result to ${deliveryTarget}.`;
+        stepExecution.summary = `Delivered the latest result to ${deliveryTarget.target}.`;
         stepExecution.output = delivery;
         stepExecution.artifactKind = 'delivery';
         stepExecution.toolCalls = 1;
         stepExecution.artifactCount = 1;
+        appendWorkflowLedgerEvent({
+          workspaceId,
+          workflowId: runContext.workflowId,
+          automationId: automation.id,
+          taskId: runContext.taskId,
+          taskRunId: runContext.taskRunId,
+          type: 'external_action_executed',
+          summary: `Delivered workflow output to ${deliveryTarget.target}.`,
+          metadata: { deliveryTarget: deliveryTarget.target, delivery },
+        });
         continue;
       }
 
@@ -3681,11 +3664,21 @@ async function executeAutomationCore(
   }
 
   if (!summaryText && (artifacts.length > 0 || stepErrors.length > 0)) {
-    summaryText = await ensureAutomationSummaryText(automation, plan, artifacts, stepExecutions, stepErrors);
+    summaryText = await ensureAutomationSummaryText(automation, plan, workspaceId, artifacts, stepExecutions, stepErrors);
     artifacts.push({
       kind: 'summary',
       title: `${automation.name} summary`,
       payload: { markdown: summaryText },
+    });
+    appendWorkflowLedgerEvent({
+      workspaceId,
+      workflowId: runContext.workflowId,
+      automationId: automation.id,
+      taskId: runContext.taskId,
+      taskRunId: runContext.taskRunId,
+      type: 'draft_created',
+      summary: `Drafted ${automation.name} summary.`,
+      metadata: { artifactKind: 'summary', generatedBy: 'fallback' },
     });
     await emitProgress();
   }
@@ -3693,6 +3686,7 @@ async function executeAutomationCore(
   return {
     plan,
     artifacts,
+    pendingApprovalRequestedEvents,
     summaryText,
     stepErrors,
     stepExecutions,
@@ -3703,6 +3697,7 @@ async function executeAutomationCore(
 
 async function runAutomation(automation: {
   id: string;
+  workspaceId?: string;
   name: string;
   description?: string;
   actions: string[];
@@ -3713,17 +3708,19 @@ async function runAutomation(automation: {
   condition?: string;
   timezone?: string;
 }) {
-  ensureWorkspaceCredits(DEFAULT_WORKSPACE_ID);
+  const workspaceId = automation.workspaceId || DEFAULT_WORKSPACE_ID;
+  const workflowId = inferWorkflowIdFromAutomation(automation);
+  ensureWorkspaceCredits(workspaceId);
   const executionPlan = buildAutomationExecutionPlan(automation);
   const experimentAttribution = buildAutomationExperimentAttribution(automation.studio_state);
   const scenarioTelemetry = buildAutomationScenarioTelemetry(automation.studio_state, executionPlan, experimentAttribution);
   const modelTier = executionPlan.suggestedModelTier;
-  const runModelSource = getModelSource(modelTier, DEFAULT_WORKSPACE_ID);
+  const runModelSource = getModelSource(modelTier, workspaceId);
   const complexity = executionPlan.complexity;
   const toolCallCount = executionPlan.estimatedToolCalls;
   const executionRole = executionPlan.primaryRole;
   const delegation = buildDelegationRuntimeContext({
-    workspaceId: DEFAULT_WORKSPACE_ID,
+    workspaceId,
     taskKind: 'automation',
     title: automation.name,
     description: automation.description,
@@ -3737,7 +3734,7 @@ async function runAutomation(automation: {
     reasonOverride: executionPlan.rationale,
   });
   const task = createTask({
-    workspaceId: DEFAULT_WORKSPACE_ID,
+    workspaceId,
     title: automation.name,
     description: automation.description,
     kind: 'automation',
@@ -3777,7 +3774,7 @@ async function runAutomation(automation: {
   });
   const estimatedCredits = Math.max(estimate.estimatedCredits, executionPlan.estimatedCredits);
   const taskRun = createTaskRun({
-    workspaceId: DEFAULT_WORKSPACE_ID,
+    workspaceId,
     taskId: task.id,
     ...delegation.taskRunPatch,
     modelTier,
@@ -3808,7 +3805,7 @@ async function runAutomation(automation: {
     },
   });
 
-  broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+  broadcastTaskPanelEvent(workspaceId, {
     type: 'automation_run_started',
     automationId: automation.id,
     taskId: task.id,
@@ -3816,7 +3813,7 @@ async function runAutomation(automation: {
   });
 
   try {
-    assertCanSpendCredits(DEFAULT_WORKSPACE_ID, estimatedCredits);
+    assertCanSpendCredits(workspaceId, estimatedCredits);
     updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
 
     const persistProgress = async (progress: {
@@ -3890,13 +3887,17 @@ async function runAutomation(automation: {
         },
       });
 
-      const snapshotEvent = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, 'progress');
+      const snapshotEvent = buildTaskRunSnapshotEvent(workspaceId, taskRun.id, 'progress');
       if (snapshotEvent) {
-        broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, snapshotEvent);
+        broadcastTaskPanelEvent(workspaceId, snapshotEvent);
       }
     };
 
-    const execution = await executeAutomationCore(automation, executionPlan, persistProgress);
+    const execution = await executeAutomationCore(automation, executionPlan, workspaceId, {
+      workflowId,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+    }, persistProgress);
     const deliveryWaitingForReview = execution.stepExecutions.some((step) =>
       step.kind === 'deliver' &&
       step.status === 'succeeded' &&
@@ -3915,6 +3916,12 @@ async function runAutomation(automation: {
       deliveryError: execution.deliveryError,
       stepExecutions: execution.stepExecutions,
     });
+    for (const event of finalizePendingApprovalRequestedLedgerEvents({
+      outcome,
+      pendingEvents: execution.pendingApprovalRequestedEvents,
+    })) {
+      appendWorkflowLedgerEvent(event);
+    }
 
     const inferredActionDeliveryTarget = executionPlan.steps.find((step) => step.kind === 'deliver')?.deliveryTarget?.target;
     const deliveryTarget = automation.notify?.trim() || inferredActionDeliveryTarget || null;
@@ -4010,7 +4017,7 @@ async function runAutomation(automation: {
       },
     });
     addLedgerEntry({
-      workspaceId: DEFAULT_WORKSPACE_ID,
+      workspaceId,
       source: 'automation_run',
       deltaCredits: -actualCredits,
       referenceType: 'automation',
@@ -4033,9 +4040,9 @@ async function runAutomation(automation: {
         runOutcome: outcome,
       },
     });
-    const completedSnapshot = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, outcome.runStatus === 'failed' ? 'failed' : 'completed');
+    const completedSnapshot = buildTaskRunSnapshotEvent(workspaceId, taskRun.id, outcome.runStatus === 'failed' ? 'failed' : 'completed');
     if (completedSnapshot) {
-      broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, completedSnapshot);
+      broadcastTaskPanelEvent(workspaceId, completedSnapshot);
     }
     return {
       ok: outcome.schedulerOk,
@@ -4121,9 +4128,9 @@ async function runAutomation(automation: {
         ],
       },
     });
-    const failedSnapshot = buildTaskRunSnapshotEvent(DEFAULT_WORKSPACE_ID, taskRun.id, 'failed');
+    const failedSnapshot = buildTaskRunSnapshotEvent(workspaceId, taskRun.id, 'failed');
     if (failedSnapshot) {
-      broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, failedSnapshot);
+      broadcastTaskPanelEvent(workspaceId, failedSnapshot);
     }
     console.error(`[automation] ${automation.id} failed`, error);
     return {
@@ -4276,6 +4283,31 @@ app.post('/api/integrations/composio/connect', async (req: Request, res: Respons
     return;
   }
   res.json({ redirectUrl });
+});
+
+app.get('/api/workflows/:workflowId/readiness', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const deliveryTarget = typeof req.query.deliveryTarget === 'string' ? req.query.deliveryTarget : undefined;
+
+  res.json({
+    ok: true,
+    report: checkWorkflowReadiness({
+      workspaceId,
+      workflowId: req.params.workflowId,
+      deliveryTarget,
+    }),
+  });
+});
+
+app.get('/api/workflows/runs/:runId/ledger', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json({
+    ok: true,
+    items: listWorkflowLedgerEvents({
+      workspaceId,
+      taskRunId: req.params.runId,
+    }),
+  });
 });
 
 registerAgentStudioSettingsRoutes(app, {
@@ -5181,7 +5213,9 @@ function readBodyString(value: unknown, fallback = '') {
 
 function findAutomationReviewContext(workspaceId: string, automationId: string, runId: string) {
   const automation = getAutomationById(automationId);
-  if (!automation) return { error: 'Automation not found' as const };
+  if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
+    return { error: 'Automation not found' as const };
+  }
 
   const taskRun = listTaskRuns(workspaceId).find((run) =>
     run.id === runId &&
@@ -5228,7 +5262,7 @@ app.get('/api/missions', (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const items = buildMissionRecords({
     workspaceId,
-    automations: listAutomations(),
+    automations: listAutomations().filter((automation) => automationBelongsToWorkspace(automation, workspaceId)),
     tasks: listTasks(workspaceId),
     taskRuns: listTaskRuns(workspaceId),
   });
@@ -5236,18 +5270,22 @@ app.get('/api/missions', (req: Request, res: Response) => {
   res.json({ items });
 });
 
-app.get('/api/automations', (_req: Request, res: Response) => {
+app.get('/api/automations', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   res.json({
-    items: listAutomations().map((automation) => ({
+    items: listAutomations()
+      .filter((automation) => automationBelongsToWorkspace(automation, workspaceId))
+      .map((automation) => ({
       ...automation,
       preflight: buildAutomationPreflightReport({ automation }),
-    })),
+      })),
   });
 });
 
 app.get('/api/automations/:id/preflight', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   const automation = getAutomationById(req.params.id);
-  if (!automation) {
+  if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
     res.status(404).json({ error: 'Automation not found' });
     return;
   }
@@ -5259,6 +5297,7 @@ app.get('/api/automations/:id/preflight', (req: Request, res: Response) => {
 });
 
 app.post('/api/automations', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
   const body = req.body as {
     name?: string;
     description?: string;
@@ -5292,6 +5331,7 @@ app.post('/api/automations', async (req: Request, res: Response) => {
       steps: normalizedSteps,
     });
     const record = createAutomation({
+      workspaceId,
       name: body.name.trim(),
       description: typeof body.description === 'string' ? body.description.trim() || undefined : undefined,
       authoring_mode: body.authoringMode === 'describe' ? 'describe' : 'guided',
@@ -5306,7 +5346,7 @@ app.post('/api/automations', async (req: Request, res: Response) => {
       condition: typeof body.condition === 'string' ? body.condition.trim() || undefined : undefined,
     }, runAutomation);
 
-    broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+    broadcastTaskPanelEvent(workspaceId, {
       type: 'automation_created',
       automationId: record.id,
     });
@@ -5317,13 +5357,20 @@ app.post('/api/automations', async (req: Request, res: Response) => {
 });
 
 app.post('/api/automations/:id/run', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const automation = getAutomationById(req.params.id);
+  if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
+    res.status(404).json({ error: 'Automation not found' });
+    return;
+  }
+
   const record = triggerAutomationNow(req.params.id, runAutomation);
   if (!record) {
     res.status(404).json({ error: 'Automation not found' });
     return;
   }
 
-  broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+  broadcastTaskPanelEvent(workspaceId, {
     type: 'automation_triggered',
     automationId: record.id,
   });
@@ -5345,8 +5392,29 @@ app.post('/api/automations/:id/reviews/:runId/approve', async (req: Request, res
       reviewer: readBodyString(req.body?.reviewer, 'Violema reviewer'),
       send: ({ to, body, subject, channel }) => sendMessage({ to, body, subject, channel }),
     });
+    const workflowId = inferWorkflowIdFromAutomation(context.automation);
     const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
     const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
+    appendWorkflowLedgerEvent({
+      workspaceId,
+      workflowId,
+      automationId: context.automation.id,
+      taskId: context.task.id,
+      taskRunId: context.taskRun.id,
+      type: 'approval_granted',
+      summary: `Approved delivery to ${result.receipt.deliveryTarget || 'configured destination'}.`,
+      metadata: { receipt: result.receipt },
+    });
+    appendWorkflowLedgerEvent({
+      workspaceId,
+      workflowId,
+      automationId: context.automation.id,
+      taskId: context.task.id,
+      taskRunId: context.taskRun.id,
+      type: 'external_action_executed',
+      summary: `Delivered approved workflow output to ${result.receipt.deliveryTarget || 'configured destination'}.`,
+      metadata: { delivery: result.delivery },
+    });
     broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_approved');
     res.json({ ok: true, receipt: result.receipt, delivery: result.delivery, task, taskRun });
   } catch (error) {
@@ -5369,8 +5437,19 @@ app.post('/api/automations/:id/reviews/:runId/request-changes', (req: Request, r
       reviewer: readBodyString(req.body?.reviewer, 'Violema reviewer'),
       note: readBodyString(req.body?.note, 'Changes requested before delivery.'),
     });
+    const workflowId = inferWorkflowIdFromAutomation(context.automation);
     const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
     const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
+    appendWorkflowLedgerEvent({
+      workspaceId,
+      workflowId,
+      automationId: context.automation.id,
+      taskId: context.task.id,
+      taskRunId: context.taskRun.id,
+      type: 'approval_denied',
+      summary: 'Reviewer requested changes before delivery.',
+      metadata: { reviewRequest: result.reviewRequest },
+    });
     broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_changes_requested');
     res.json({ ok: true, reviewRequest: result.reviewRequest, task, taskRun });
   } catch (error) {
@@ -5407,6 +5486,13 @@ app.post('/api/automations/:id/reviews/:runId/rerun', (req: Request, res: Respon
 });
 
 app.patch('/api/automations/:id', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const automation = getAutomationById(req.params.id);
+  if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
+    res.status(404).json({ error: 'Automation not found' });
+    return;
+  }
+
   const patch: Record<string, unknown> = {};
 
   if (typeof req.body.name === 'string') patch.name = req.body.name.trim();
@@ -5454,7 +5540,7 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Automation not found' });
       return;
     }
-    broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+    broadcastTaskPanelEvent(workspaceId, {
       type: 'automation_updated',
       automationId: updated.id,
     });
@@ -5465,13 +5551,20 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
 });
 
 app.delete('/api/automations/:id', (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const automation = getAutomationById(req.params.id);
+  if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
+    res.status(404).json({ error: 'Automation not found' });
+    return;
+  }
+
   const removed = deleteAutomation(req.params.id);
   if (!removed) {
     res.status(404).json({ error: 'Automation not found' });
     return;
   }
 
-  broadcastTaskPanelEvent(DEFAULT_WORKSPACE_ID, {
+  broadcastTaskPanelEvent(workspaceId, {
     type: 'automation_deleted',
     automationId: removed.id,
   });
