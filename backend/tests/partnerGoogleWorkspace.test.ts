@@ -57,6 +57,45 @@ test('queryGoogleWorkspace normalizes Gmail commitments without raw email bodies
   assert.doesNotMatch(JSON.stringify(result), /Long raw body/);
 });
 
+test('queryGoogleWorkspace ignores unsafe Gmail filters and keeps canonical windows', async () => {
+  let receivedInput: Record<string, unknown> | undefined;
+  const result = await queryGoogleWorkspace({
+    workspaceId: 'workspace_test',
+    source: 'gmail',
+    queryType: 'commitments',
+    connectedPartnerApps: ['gmail'],
+    now: new Date('2026-06-30T12:00:00.000Z'),
+    filters: {
+      start: '1999-01-01T00:00:00.000Z',
+      end: '2099-01-01T00:00:00.000Z',
+      include_body: true,
+      include_text: true,
+      includeBody: true,
+      includeText: true,
+      bodyFormat: 'full',
+      fields: 'raw,body,text',
+      fullText: true,
+      text: 'raw private body',
+      query: 'newer_than:10y',
+      maxResults: 10,
+    },
+    executor: async (_actionName, input) => {
+      receivedInput = input;
+      return { threads: [] };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(receivedInput?.start, '2026-06-23T12:00:00.000Z');
+  assert.equal(receivedInput?.end, '2026-06-30T12:00:00.000Z');
+  assert.equal(receivedInput?.includeBody, false);
+  assert.equal(receivedInput?.maxResults, 10);
+  assert.equal(receivedInput?.query, '("follow up" OR "following up" OR deadline OR due OR send)');
+  for (const key of ['include_body', 'include_text', 'includeText', 'bodyFormat', 'fields', 'fullText', 'text']) {
+    assert.equal(Object.prototype.hasOwnProperty.call(receivedInput || {}, key), false, `${key} should not reach Composio`);
+  }
+});
+
 test('queryGoogleWorkspace normalizes Calendar meeting windows', async () => {
   const result = await queryGoogleWorkspace({
     workspaceId: 'workspace_test',
@@ -115,4 +154,40 @@ test('queryGoogleWorkspace normalizes Drive docs without full document text', as
   assert.equal(receivedInput?.includeText, false);
   assert.equal(receivedInput?.query, '"board packet" OR board deck OR investor update OR meeting prep');
   assert.doesNotMatch(JSON.stringify(result), /Full private board packet/);
+});
+
+test('queryGoogleWorkspace ignores unsafe Drive filters and redacts executor errors', async () => {
+  let receivedInput: Record<string, unknown> | undefined;
+  const secret = 'sk_live_google_secret raw private board body';
+  const result = await queryGoogleWorkspace({
+    workspaceId: 'workspace_test',
+    source: 'google_drive',
+    queryType: 'recent_docs',
+    connectedPartnerApps: ['google_drive'],
+    now: new Date('2026-06-30T12:00:00.000Z'),
+    filters: {
+      pageSize: 12,
+      includeText: true,
+      include_text: true,
+      fullText: true,
+      text: 'raw document text',
+      fields: '*',
+      start: '1999-01-01T00:00:00.000Z',
+      end: '2099-01-01T00:00:00.000Z',
+    },
+    executor: async (_actionName, input) => {
+      receivedInput = input;
+      throw new Error(`Composio failed with ${secret}`);
+    },
+  });
+
+  assert.equal(receivedInput?.start, '2026-06-16T12:00:00.000Z');
+  assert.equal(receivedInput?.end, '2026-06-30T12:00:00.000Z');
+  assert.equal(receivedInput?.includeText, false);
+  assert.equal(receivedInput?.pageSize, 12);
+  for (const key of ['include_text', 'fullText', 'text', 'fields']) {
+    assert.equal(Object.prototype.hasOwnProperty.call(receivedInput || {}, key), false, `${key} should not reach Composio`);
+  }
+  assert.equal(result.ok, false);
+  assert.doesNotMatch(JSON.stringify(result), /sk_live_google_secret|raw private board body/);
 });

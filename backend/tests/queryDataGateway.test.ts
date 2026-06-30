@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { applyQueryStepPayloadToExecution, executeQueryData } from '../src/integrationGateway/queryData';
 import type { StripeLikeClient } from '../src/integrationGateway/adapters/nativeStripe';
@@ -135,6 +136,17 @@ test('executeQueryData accepts legacy email and calendar aliases but normalizes 
   if (!result.ok) throw new Error(result.message);
   assert.equal(result.source, 'gmail');
   assert.equal(result.live, true);
+});
+
+test('query_data tool schema exposes Google Workspace sources and aliases', () => {
+  const serverSource = readFileSync('src/server.ts', 'utf8');
+  const schemaMatch = serverSource.match(/name: 'query_data'[\s\S]*?enum: \[([^\]]+)\]/);
+  assert.ok(schemaMatch, 'query_data schema enum should be present');
+
+  const enumSource = schemaMatch[1];
+  for (const source of ['gmail', 'google_calendar', 'google_drive', 'email', 'calendar', 'drive']) {
+    assert.match(enumSource, new RegExp(`'${source}'`), `${source} should be exposed in query_data source enum`);
+  }
 });
 
 test('applyQueryStepPayloadToExecution marks readiness errors as failed automation steps', () => {

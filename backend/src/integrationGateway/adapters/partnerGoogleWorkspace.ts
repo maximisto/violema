@@ -193,14 +193,13 @@ function unsupportedQuery(
 
 function queryFailed(
   source: GoogleWorkspaceSource,
-  message: string,
 ): IntegrationReadinessError {
   return {
     ok: false,
     code: 'integration_query_failed',
     source,
     workflowId: 'weekly-founder-brief',
-    message,
+    message: 'Google Workspace partner query failed. Review the integration connection and try again.',
     nextAction: {
       label: 'Review integration',
       route: providerRoute(source),
@@ -230,6 +229,38 @@ function readActionName(
   queryType: GoogleWorkspaceQueryType,
 ) {
   return GOOGLE_WORKSPACE_ACTIONS[source][queryType];
+}
+
+function readPositiveInteger(value: unknown, max: number) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) return undefined;
+  return Math.min(value, max);
+}
+
+function readSafeString(value: unknown, maxLength: number) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > maxLength) return undefined;
+  return trimmed;
+}
+
+function buildAllowedFilters(
+  source: GoogleWorkspaceSource,
+  filters?: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!filters) return {};
+
+  if (source === 'gmail') {
+    const maxResults = readPositiveInteger(filters.maxResults ?? filters.limit, 50);
+    return maxResults ? { maxResults } : {};
+  }
+
+  if (source === 'google_calendar') {
+    const calendarId = readSafeString(filters.calendarId, 256);
+    return calendarId ? { calendarId } : {};
+  }
+
+  const pageSize = readPositiveInteger(filters.pageSize ?? filters.limit, 50);
+  return pageSize ? { pageSize } : {};
 }
 
 function normalizeGmailItem(item: GmailThreadRecord) {
@@ -299,14 +330,14 @@ function buildActionInput(
     start: window.start,
     end: window.end,
   };
-  const safeFilters = { ...(filters || {}) };
+  const safeFilters = buildAllowedFilters(source, filters);
 
   if (source === 'gmail') {
     return {
       ...baseInput,
-      ...safeFilters,
       maxResults: 25,
       query: GMAIL_QUERY_HINTS[queryType as keyof typeof GMAIL_QUERY_HINTS] || '',
+      ...safeFilters,
       includeBody: false,
     };
   }
@@ -314,17 +345,17 @@ function buildActionInput(
   if (source === 'google_calendar') {
     return {
       ...baseInput,
-      ...safeFilters,
       calendarId: 'primary',
       intent: CALENDAR_INTENTS[queryType as keyof typeof CALENDAR_INTENTS] || 'calendar_window',
+      ...safeFilters,
     };
   }
 
   return {
     ...baseInput,
-    ...safeFilters,
     pageSize: 25,
     query: DRIVE_QUERY_HINTS[queryType as keyof typeof DRIVE_QUERY_HINTS] || '',
+    ...safeFilters,
     includeText: false,
   };
 }
@@ -369,10 +400,7 @@ export async function queryGoogleWorkspace(
       cache_hit: false,
       live: true,
     };
-  } catch (error) {
-    const message = error instanceof Error
-      ? error.message
-      : 'Google Workspace partner query failed.';
-    return queryFailed(input.source, message);
+  } catch {
+    return queryFailed(input.source);
   }
 }

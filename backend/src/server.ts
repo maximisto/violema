@@ -54,6 +54,7 @@ import { buildGenerateReportResult } from './platform/reportGeneration';
 import {
   approveAutomationReview,
   buildAutomationPreflightReport,
+  buildSafeDeliverySummary,
   classifyAutomationRunOutcome,
   requestAutomationChanges,
   validateAutomationDeliveryDraft,
@@ -1494,7 +1495,23 @@ const NEXUS_TOOLS: Tool[] = [
       properties: {
         source: {
           type: 'string',
-          enum: ['stripe', 'hubspot', 'github', 'linear', 'notion', 'salesforce', 'jira', 'posthog', 'google_analytics'],
+          enum: [
+            'stripe',
+            'hubspot',
+            'github',
+            'gmail',
+            'google_calendar',
+            'google_drive',
+            'email',
+            'calendar',
+            'drive',
+            'linear',
+            'notion',
+            'salesforce',
+            'jira',
+            'posthog',
+            'google_analytics',
+          ],
           description: 'The data source to query',
         },
         query_type: { type: 'string', description: 'Type of data to retrieve' },
@@ -3617,20 +3634,25 @@ async function executeAutomationCore(
           continue;
         }
 
-        delivery = await runAutomationStepWithTimeout(`Delivery step "${step.title}"`, sendMessage({
+        const delivered = await runAutomationStepWithTimeout(`Delivery step "${step.title}"`, sendMessage({
           to: deliveryTarget.target,
           subject: `Automation run: ${automation.name}`,
           body,
           channel: deliveryTarget.channel,
         }));
+        const deliverySummary = buildSafeDeliverySummary(delivered, body, {
+          target: deliveryTarget.target,
+          channel: deliveryTarget.channel,
+        });
+        delivery = deliverySummary;
         artifacts.push({
           kind: 'delivery',
           title: `Delivered to ${deliveryTarget.target}`,
-          payload: delivery,
+          payload: deliverySummary,
         });
         stepExecution.status = 'succeeded';
         stepExecution.summary = `Delivered the latest result to ${deliveryTarget.target}.`;
-        stepExecution.output = delivery;
+        stepExecution.output = deliverySummary;
         stepExecution.artifactKind = 'delivery';
         stepExecution.toolCalls = 1;
         stepExecution.artifactCount = 1;
@@ -3642,7 +3664,7 @@ async function executeAutomationCore(
           taskRunId: runContext.taskRunId,
           type: 'external_action_executed',
           summary: `Delivered workflow output to ${deliveryTarget.target}.`,
-          metadata: { deliveryTarget: deliveryTarget.target, delivery },
+          metadata: { delivery: deliverySummary },
         });
         continue;
       }
@@ -3852,7 +3874,7 @@ async function runAutomation(automation: {
           artifacts: progress.artifacts,
           summary: progress.summaryText || undefined,
           stepErrors: progress.stepErrors,
-          delivery: progress.delivery,
+          delivery: progress.delivery ? buildSafeDeliverySummary(progress.delivery) : null,
           deliveryError: progress.deliveryError,
           rolePlan: {
             primaryRole: executionPlan.primaryRole,
@@ -5428,7 +5450,7 @@ app.post('/api/automations/:id/reviews/:runId/approve', async (req: Request, res
       taskRunId: context.taskRun.id,
       type: 'external_action_executed',
       summary: `Delivered approved workflow output to ${result.receipt.deliveryTarget || 'configured destination'}.`,
-      metadata: { delivery: result.delivery },
+      metadata: { delivery: result.receipt.delivery },
     });
     broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_approved');
     res.json({ ok: true, receipt: result.receipt, delivery: result.delivery, task, taskRun });

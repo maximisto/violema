@@ -129,6 +129,10 @@ function queryFailed(message: string): IntegrationReadinessError {
   };
 }
 
+function safeGithubQueryFailure(): IntegrationReadinessError {
+  return queryFailed('GitHub request failed. Review the integration connection and repository scope, then try again.');
+}
+
 function githubHttpError(status: number): IntegrationReadinessError {
   if (status === 401) {
     return {
@@ -193,6 +197,19 @@ function resolveRepository(input: QueryGithubInput): string | undefined {
   return undefined;
 }
 
+export function isValidGithubRepository(repository: string) {
+  const [owner, repo, extra] = repository.split('/');
+  if (!owner || !repo || extra) return false;
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(owner)) return false;
+  if (repo === '.' || repo === '..') return false;
+  return /^[A-Za-z0-9._-]{1,100}$/.test(repo);
+}
+
+function buildRepositoryPath(repository: string) {
+  const [owner, repo] = repository.split('/');
+  return `${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+}
+
 function resolveToken(input: QueryGithubInput) {
   return input.token || getIntegrationCredential(input.workspaceId, 'github', 'token') || undefined;
 }
@@ -254,9 +271,8 @@ async function fetchGithubArray(
       return githubHttpError(response.status);
     }
     return parseGithubArray(await response.json());
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown GitHub request failure.';
-    return queryFailed(message);
+  } catch {
+    return safeGithubQueryFailure();
   }
 }
 
@@ -288,6 +304,11 @@ export async function queryGithub(
       'GitHub repository scope is required before this workflow can read delivery signals.',
     );
   }
+  if (!isValidGithubRepository(repository)) {
+    return readinessError(
+      'A valid GitHub repository in owner/repo format is required before this workflow can read delivery signals.',
+    );
+  }
 
   const token = resolveToken(input);
   if (!token) {
@@ -304,8 +325,9 @@ export async function queryGithub(
   const generatedAt = now.toISOString();
   const notes = ['Only safe GitHub list fields were normalized.'];
 
-  const issuesUrl = `https://api.github.com/repos/${repository}/issues?state=open&per_page=50`;
-  const pullsUrl = `https://api.github.com/repos/${repository}/pulls?state=closed&sort=updated&direction=desc&per_page=50`;
+  const repositoryPath = buildRepositoryPath(repository);
+  const issuesUrl = `https://api.github.com/repos/${repositoryPath}/issues?state=open&per_page=50`;
+  const pullsUrl = `https://api.github.com/repos/${repositoryPath}/pulls?state=closed&sort=updated&direction=desc&per_page=50`;
 
   const issueResponse = input.queryType === 'merged_prs'
     ? []

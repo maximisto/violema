@@ -45,6 +45,27 @@ test('queryGithub returns readiness error when token is missing', async () => {
   assert.equal(result.nextAction.route, '/settings#integration-github');
 });
 
+test('queryGithub rejects invalid repositories before constructing GitHub URLs', async () => {
+  let fetched = false;
+  const result = await queryGithub({
+    workspaceId: 'workspace_test',
+    queryType: 'open_issues',
+    filters: { repository: 'maximisto/violema?per_page=1000' },
+    token: 'ghp_test',
+    fetchLike: async () => {
+      fetched = true;
+      return jsonResponse([]);
+    },
+    now: new Date('2026-06-30T12:00:00.000Z'),
+  });
+
+  assert.equal(fetched, false);
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error('expected readiness error');
+  assert.equal(result.code, 'integration_not_ready');
+  assert.doesNotMatch(JSON.stringify(result), /per_page=1000/);
+});
+
 test('queryGithub normalizes open issue data without code or secrets', async () => {
   const fetchLike: GithubFetchLike = async (url: string) => {
     assert.match(String(url), /issues/);
@@ -96,6 +117,29 @@ test('queryGithub normalizes open issue data without code or secrets', async () 
   assert.doesNotMatch(JSON.stringify(result), /secret|contents|patch|diff/i);
 });
 
+test('queryGithub encodes validated repository path segments in request URLs', async () => {
+  const urls: string[] = [];
+  const fetchLike: GithubFetchLike = async (url: string) => {
+    urls.push(String(url));
+    return jsonResponse([]);
+  };
+
+  const result = await queryGithub({
+    workspaceId: 'workspace_test',
+    queryType: 'delivery_risk',
+    filters: { repository: 'maximisto/violema.repo' },
+    token: 'ghp_test',
+    fetchLike,
+    now: new Date('2026-06-30T12:00:00.000Z'),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(urls, [
+    'https://api.github.com/repos/maximisto/violema.repo/issues?state=open&per_page=50',
+    'https://api.github.com/repos/maximisto/violema.repo/pulls?state=closed&sort=updated&direction=desc&per_page=50',
+  ]);
+});
+
 test('queryGithub derives delivery risk from issues and pull requests', async () => {
   const fetchLike: GithubFetchLike = async (url: string) => {
     const value = String(url);
@@ -139,6 +183,25 @@ test('queryGithub derives delivery risk from issues and pull requests', async ()
   assert.equal(data.blockers, 1);
   assert.equal(data.merged_this_week, 1);
   assert.equal(data.risk_level, 'medium');
+});
+
+test('queryGithub redacts thrown fetch exceptions before returning query errors', async () => {
+  const secret = 'ghp_secret_token raw patch body';
+  const result = await queryGithub({
+    workspaceId: 'workspace_test',
+    queryType: 'open_issues',
+    filters: { repository: 'maximisto/violema' },
+    token: 'ghp_test',
+    fetchLike: async () => {
+      throw new Error(`network failure leaked ${secret}`);
+    },
+    now: new Date('2026-06-30T12:00:00.000Z'),
+  });
+
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error('expected error');
+  assert.equal(result.code, 'integration_query_failed');
+  assert.doesNotMatch(JSON.stringify(result), /ghp_secret_token|raw patch body/);
 });
 
 test('queryGithub classifies non-2xx GitHub responses without leaking upstream bodies', async () => {

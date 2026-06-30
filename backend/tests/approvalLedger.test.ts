@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 test('failed query plus prepared review gate does not commit approval_requested', async () => {
@@ -119,4 +120,63 @@ test('data_read metadata helper redacts raw provider payloads', async () => {
     providerRoute: 'gmail.commitments',
   });
   assert.doesNotMatch(JSON.stringify(metadata), /private raw body/);
+});
+
+test('approved delivery metadata stores only a safe body summary', async () => {
+  const { approveAutomationReview } = await import('../src/platform/automationLifecycle');
+  const body = 'Approved investor update body with private details.';
+  const result = await approveAutomationReview({
+    task: ({
+      id: 'task_review',
+      title: 'Review investor update',
+      status: 'waiting_review',
+      metadata: {
+        automationId: 'auto_review',
+        latestArtifacts: [
+          {
+            kind: 'review_gate',
+            title: 'Investor update',
+            payload: {
+              markdown: body,
+              deliveryTarget: '#founders',
+              approvalRequired: true,
+            },
+          },
+        ],
+      },
+    } as unknown) as Parameters<typeof approveAutomationReview>[0]['task'],
+    taskRun: ({
+      id: 'run_review',
+      metadata: {},
+    } as unknown) as Parameters<typeof approveAutomationReview>[0]['taskRun'],
+    reviewer: 'Max',
+    now: () => '2026-06-30T12:00:00.000Z',
+    send: async () => ({
+      id: 'msg_123',
+      channel: 'slack',
+      target: '#founders',
+      status: 'delivered',
+      ts: '2026-06-30T12:01:00.000Z',
+      body: 'provider echoed private body',
+    }),
+  });
+
+  const expectedHash = createHash('sha256').update(body).digest('hex');
+  const expectedDelivery = {
+    id: 'msg_123',
+    channel: 'slack',
+    target: '#founders',
+    status: 'delivered',
+    ts: '2026-06-30T12:01:00.000Z',
+    bodyLength: body.length,
+    bodyHash: expectedHash,
+  };
+
+  assert.equal(result.delivery.body, body);
+  assert.deepEqual(result.taskPatch.metadata.latestDelivery, expectedDelivery);
+  assert.deepEqual(result.runPatch.metadata.delivery, expectedDelivery);
+  assert.deepEqual(result.receipt.delivery, expectedDelivery);
+  assert.doesNotMatch(JSON.stringify(result.taskPatch.metadata), /Approved investor update body|provider echoed private body/);
+  assert.doesNotMatch(JSON.stringify(result.runPatch.metadata), /Approved investor update body|provider echoed private body/);
+  assert.doesNotMatch(JSON.stringify(result.receipt), /Approved investor update body|provider echoed private body/);
 });

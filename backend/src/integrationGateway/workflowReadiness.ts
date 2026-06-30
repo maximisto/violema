@@ -1,4 +1,6 @@
+import { normalizeComposioAppName } from '../composioBridge';
 import { getWorkspaceSettingsView, type WorkspaceSettingsView } from '../settingsStore';
+import { isValidGithubRepository } from './adapters/nativeGithub';
 
 export interface WorkflowReadinessBlocker {
   key: string;
@@ -182,7 +184,7 @@ function getWorkflowDisplayName(workflowId: string): string {
 }
 
 function hasPartnerConnection(provider: string, connectedPartnerApps: string[] = []) {
-  const normalized = new Set(connectedPartnerApps.map((item) => item.toLowerCase()));
+  const normalized = new Set(connectedPartnerApps.map((item) => normalizeComposioAppName(item)));
   return (PARTNER_ALIASES[provider] || []).some((alias) => normalized.has(alias));
 }
 
@@ -201,9 +203,11 @@ export function checkWorkflowReadiness(input: {
   deliveryTarget?: string | null;
   settingsView?: WorkspaceSettingsView | MinimalSettingsView;
   connectedPartnerApps?: string[];
+  env?: Record<string, string | undefined>;
 }): WorkflowReadinessReport {
   const settingsView = input.settingsView || getWorkspaceSettingsView(input.workspaceId);
   const requirements = readWorkflowRequirements(input.workflowId);
+  const env = input.env || process.env;
   const blockers: WorkflowReadinessBlocker[] = [];
   const deliveryTarget =
     input.deliveryTarget === undefined || input.deliveryTarget === null
@@ -224,6 +228,17 @@ export function checkWorkflowReadiness(input: {
       id: integrationId,
       connectedPartnerApps: input.connectedPartnerApps,
     })) {
+      if (integrationId === 'github') {
+        const repository = env.GITHUB_DEFAULT_REPOSITORY?.trim() || '';
+        if (!repository || !isValidGithubRepository(repository)) {
+          blockers.push({
+            key: 'github_repository',
+            label: 'Select GitHub repository',
+            detail: 'GitHub repository scope is required before this workflow can read delivery and issue signals.',
+            route: INTEGRATION_SETUP.github.route(input.workflowId),
+          });
+        }
+      }
       continue;
     }
 
