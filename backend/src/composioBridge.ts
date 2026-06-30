@@ -148,6 +148,12 @@ function getToolkitVersion(actionName: string) {
   return process.env[envKey] || process.env.COMPOSIO_TOOLKIT_VERSION || 'latest';
 }
 
+function getConfiguredAuthConfigId(toolkitSlug: string) {
+  const envKey = `COMPOSIO_AUTH_CONFIG_ID_${toolkitSlug.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`;
+  const value = process.env[envKey];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
 function readStringField(record: Record<string, unknown>, ...fields: string[]) {
   for (const field of fields) {
     const value = record[field];
@@ -189,6 +195,9 @@ function isActiveConnectedAccount(record: Record<string, unknown>) {
 }
 
 async function getOrCreateAuthConfigId(toolkitSlug: string): Promise<string | null> {
+  const configuredAuthConfigId = getConfiguredAuthConfigId(toolkitSlug);
+  if (configuredAuthConfigId) return configuredAuthConfigId;
+
   const existing = await composioRequest<ComposioAuthConfigListResponse>('/api/v3.1/auth_configs', {
     query: {
       toolkit_slug: toolkitSlug,

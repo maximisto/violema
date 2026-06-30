@@ -14,6 +14,7 @@ type ModuleLoader = (request: string, parent: NodeModule | null | undefined, isM
 const ORIGINAL_ENV = {
   COMPOSIO_API_KEY: process.env.COMPOSIO_API_KEY,
   COMPOSIO_BASE_URL: process.env.COMPOSIO_BASE_URL,
+  COMPOSIO_AUTH_CONFIG_ID_GOOGLEDRIVE: process.env.COMPOSIO_AUTH_CONFIG_ID_GOOGLEDRIVE,
 };
 
 function resetComposioBridge(): ComposioBridgeModule {
@@ -22,11 +23,20 @@ function resetComposioBridge(): ComposioBridgeModule {
   return require('../src/composioBridge') as ComposioBridgeModule;
 }
 
+function restoreEnvVar(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
+}
+
 async function withBridge<T>(
   fn: (bridge: ComposioBridgeModule, requests: FetchRequest[]) => Promise<T>,
 ): Promise<T> {
   process.env.COMPOSIO_API_KEY = 'cmp_test_key';
   process.env.COMPOSIO_BASE_URL = 'https://composio.test';
+  delete process.env.COMPOSIO_AUTH_CONFIG_ID_GOOGLEDRIVE;
 
   const requests: FetchRequest[] = [];
   const originalFetch = globalThis.fetch;
@@ -104,8 +114,9 @@ async function withBridge<T>(
     resetComposioBridge();
     (globalThis as unknown as { fetch: typeof fetch }).fetch = originalFetch;
     moduleWithLoader._load = originalLoad;
-    process.env.COMPOSIO_API_KEY = ORIGINAL_ENV.COMPOSIO_API_KEY;
-    process.env.COMPOSIO_BASE_URL = ORIGINAL_ENV.COMPOSIO_BASE_URL;
+    restoreEnvVar('COMPOSIO_API_KEY', ORIGINAL_ENV.COMPOSIO_API_KEY);
+    restoreEnvVar('COMPOSIO_BASE_URL', ORIGINAL_ENV.COMPOSIO_BASE_URL);
+    restoreEnvVar('COMPOSIO_AUTH_CONFIG_ID_GOOGLEDRIVE', ORIGINAL_ENV.COMPOSIO_AUTH_CONFIG_ID_GOOGLEDRIVE);
   }
 }
 
@@ -155,6 +166,24 @@ test('getComposioConnectionUrl starts OAuth through auth configs and connected a
     assert.equal(requests[1].url.pathname, '/api/v3.1/connected_accounts/link');
     assert.deepEqual(requests[1].body, {
       auth_config_id: 'auth_drive',
+      user_id: 'workspace_test',
+    });
+  });
+});
+
+test('getComposioConnectionUrl can use a configured custom auth config id', async () => {
+  await withBridge(async (bridge, requests) => {
+    process.env.COMPOSIO_AUTH_CONFIG_ID_GOOGLEDRIVE = 'auth_custom_drive';
+
+    const redirectUrl = await bridge.getComposioConnectionUrl('google_drive', {
+      entityId: 'workspace_test',
+    });
+
+    assert.equal(redirectUrl, 'https://dashboard.composio.dev/link/link_test');
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url.pathname, '/api/v3.1/connected_accounts/link');
+    assert.deepEqual(requests[0].body, {
+      auth_config_id: 'auth_custom_drive',
       user_id: 'workspace_test',
     });
   });
