@@ -90,6 +90,10 @@ assert(
   weeklyFounderBrief?.optionalIntegrationIds?.includes('google_drive'),
   'Weekly founder brief declares Drive optional',
 );
+assert(
+  weeklyFounderBrief?.steps.some((step) => step.kind === 'query' && step.inputs?.source === 'google_drive' && (step as { optional?: boolean }).optional === true),
+  'Weekly founder brief marks the optional Drive query step optional',
+);
 
 const investorFollowUp = getWorkflowTemplateById('investor-follow-up');
 assert(
@@ -101,6 +105,10 @@ const monthlyInvestorUpdate = getWorkflowTemplateById('monthly-investor-update')
 assert(
   JSON.stringify(monthlyInvestorUpdate?.requiredIntegrationIds) === JSON.stringify(['stripe', 'github', 'google_drive']),
   'Monthly investor update declares Stripe GitHub and Drive requirements',
+);
+assert(
+  monthlyInvestorUpdate?.steps.some((step) => step.kind === 'query' && step.inputs?.source === 'gmail' && (step as { optional?: boolean }).optional === true),
+  'Monthly investor update marks the optional Gmail query step optional',
 );
 
 const shippingRevenuePulse = getWorkflowTemplateById('shipping-revenue-pulse');
@@ -115,6 +123,14 @@ assert(Boolean(boardPacketPrep), 'Board Packet Prep template exists');
 assert(
   JSON.stringify(boardPacketPrep?.requiredIntegrationIds) === JSON.stringify(['google_drive', 'google_calendar']),
   'Board Packet Prep declares Drive and Calendar requirements',
+);
+assert(
+  boardPacketPrep?.steps.some((step) => step.kind === 'query' && step.inputs?.source === 'stripe' && (step as { optional?: boolean }).optional === true),
+  'Board Packet Prep marks the optional Stripe query step optional',
+);
+assert(
+  boardPacketPrep?.steps.some((step) => step.kind === 'query' && step.inputs?.source === 'github' && (step as { optional?: boolean }).optional === true),
+  'Board Packet Prep marks the optional GitHub query step optional',
 );
 
 console.log(`workflowTemplates.contract: ${WORKFLOW_TEMPLATES.length} templates verified`);

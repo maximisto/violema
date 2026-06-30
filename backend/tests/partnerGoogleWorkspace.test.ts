@@ -20,6 +20,21 @@ test('queryGoogleWorkspace returns readiness error for missing partner connectio
   assert.equal(result.nextAction.route, '/integrations?provider=gmail&workflow=weekly-founder-brief');
 });
 
+test('queryGoogleWorkspace uses caller workflow id in setup routes', async () => {
+  const result = await queryGoogleWorkspace({
+    workspaceId: 'workspace_test',
+    workflowId: 'investor-follow-up',
+    source: 'gmail',
+    queryType: 'commitments',
+    connectedPartnerApps: [],
+  });
+
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error('expected readiness error');
+  assert.equal(result.workflowId, 'investor-follow-up');
+  assert.equal(result.nextAction.route, '/integrations?provider=gmail&workflow=investor-follow-up');
+});
+
 test('queryGoogleWorkspace normalizes Gmail commitments without raw email bodies', async () => {
   let receivedInput: Record<string, unknown> | undefined;
   const result = await queryGoogleWorkspace({

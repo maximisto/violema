@@ -183,6 +183,58 @@ test('applyQueryStepPayloadToExecution marks readiness errors as failed automati
   ]);
 });
 
+test('applyQueryStepPayloadToExecution skips unavailable optional query sources', () => {
+  const stepExecution = makeQueryStepExecution();
+  const stepErrors: string[] = [];
+
+  applyQueryStepPayloadToExecution({
+    stepTitle: 'Review optional Gmail threads',
+    payload: {
+      ok: false,
+      code: 'integration_not_ready',
+      source: 'gmail',
+      message: 'Gmail is required before this workflow can read live partner data.',
+    },
+    stepExecution,
+    stepErrors,
+    artifactCount: 1,
+    optional: true,
+  });
+
+  assert.equal(stepExecution.status, 'skipped');
+  assert.equal(stepExecution.summary, 'Skipped optional gmail read because the integration is not available.');
+  assert.equal(stepExecution.error, undefined);
+  assert.equal(stepExecution.artifactKind, 'query_data');
+  assert.equal(stepExecution.toolCalls, 1);
+  assert.equal(stepExecution.artifactCount, 1);
+  assert.deepEqual(stepErrors, []);
+});
+
+test('applyQueryStepPayloadToExecution still fails unsupported optional queries', () => {
+  const stepExecution = makeQueryStepExecution();
+  const stepErrors: string[] = [];
+
+  applyQueryStepPayloadToExecution({
+    stepTitle: 'Review optional custom source',
+    payload: {
+      ok: false,
+      code: 'unsupported_query',
+      source: 'gmail',
+      message: 'Google Workspace query "everything" is not supported for gmail.',
+    },
+    stepExecution,
+    stepErrors,
+    artifactCount: 1,
+    optional: true,
+  });
+
+  assert.equal(stepExecution.status, 'failed');
+  assert.equal(stepExecution.summary, 'Google Workspace query "everything" is not supported for gmail.');
+  assert.deepEqual(stepErrors, [
+    'Review optional custom source: Google Workspace query "everything" is not supported for gmail.',
+  ]);
+});
+
 test('applyQueryStepPayloadToExecution keeps successful query payloads successful', () => {
   const stepExecution = makeQueryStepExecution();
   const stepErrors: string[] = [];

@@ -71,6 +71,7 @@ export interface GoogleWorkspaceQueryData {
 
 export interface QueryGoogleWorkspaceInput {
   workspaceId: string;
+  workflowId?: string;
   source: GoogleWorkspaceSource;
   queryType: GoogleWorkspaceQueryType;
   connectedPartnerApps?: string[];
@@ -150,11 +151,15 @@ const DRIVE_QUERY_HINTS: Record<
   board_packet_sources: '"board packet" OR board deck OR investor update OR meeting prep',
 };
 
-function providerRoute(source: GoogleWorkspaceSource) {
-  return `/integrations?provider=${source}&workflow=weekly-founder-brief`;
+function readWorkflowId(value?: string) {
+  return typeof value === 'string' && value.trim() ? value.trim() : 'weekly-founder-brief';
 }
 
-function missingConnection(source: GoogleWorkspaceSource): IntegrationReadinessError {
+function providerRoute(source: GoogleWorkspaceSource, workflowId = 'weekly-founder-brief') {
+  return `/integrations?provider=${source}&workflow=${encodeURIComponent(readWorkflowId(workflowId))}`;
+}
+
+function missingConnection(source: GoogleWorkspaceSource, workflowId: string): IntegrationReadinessError {
   const labels: Record<GoogleWorkspaceSource, string> = {
     gmail: 'Connect Gmail',
     google_calendar: 'Connect Google Calendar',
@@ -165,11 +170,11 @@ function missingConnection(source: GoogleWorkspaceSource): IntegrationReadinessE
     ok: false,
     code: 'integration_not_ready',
     source,
-    workflowId: 'weekly-founder-brief',
+    workflowId,
     message: `${labels[source].replace('Connect ', '')} is required before this workflow can read live partner data.`,
     nextAction: {
       label: labels[source],
-      route: providerRoute(source),
+      route: providerRoute(source, workflowId),
     },
   };
 }
@@ -177,32 +182,34 @@ function missingConnection(source: GoogleWorkspaceSource): IntegrationReadinessE
 function unsupportedQuery(
   source: GoogleWorkspaceSource,
   queryType: string,
+  workflowId: string,
 ): IntegrationReadinessError {
   return {
     ok: false,
     code: 'unsupported_query',
     source,
-    workflowId: 'weekly-founder-brief',
+    workflowId,
     message: `Google Workspace query "${queryType}" is not supported for ${source}.`,
     nextAction: {
       label: 'Manage integrations',
-      route: providerRoute(source),
+      route: providerRoute(source, workflowId),
     },
   };
 }
 
 function queryFailed(
   source: GoogleWorkspaceSource,
+  workflowId: string,
 ): IntegrationReadinessError {
   return {
     ok: false,
     code: 'integration_query_failed',
     source,
-    workflowId: 'weekly-founder-brief',
+    workflowId,
     message: 'Google Workspace partner query failed. Review the integration connection and try again.',
     nextAction: {
       label: 'Review integration',
-      route: providerRoute(source),
+      route: providerRoute(source, workflowId),
     },
   };
 }
@@ -363,13 +370,14 @@ function buildActionInput(
 export async function queryGoogleWorkspace(
   input: QueryGoogleWorkspaceInput,
 ): Promise<IntegrationQueryResult<GoogleWorkspaceQueryData>> {
+  const workflowId = readWorkflowId(input.workflowId);
   if (!isConnected(input.source, input.connectedPartnerApps)) {
-    return missingConnection(input.source);
+    return missingConnection(input.source, workflowId);
   }
 
   const actionName = readActionName(input.source, input.queryType);
   if (!actionName) {
-    return unsupportedQuery(input.source, input.queryType);
+    return unsupportedQuery(input.source, input.queryType, workflowId);
   }
 
   const now = input.now || new Date();
@@ -391,7 +399,7 @@ export async function queryGoogleWorkspace(
       query_type: input.queryType,
       data: {
         window,
-        providerRoute: providerRoute(input.source),
+        providerRoute: providerRoute(input.source, workflowId),
         total: items.length,
         items,
       },
@@ -401,6 +409,6 @@ export async function queryGoogleWorkspace(
       live: true,
     };
   } catch {
-    return queryFailed(input.source);
+    return queryFailed(input.source, workflowId);
   }
 }

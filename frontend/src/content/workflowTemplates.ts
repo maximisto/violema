@@ -20,6 +20,7 @@ export interface WorkflowTemplateStep {
   objective: string;
   inputs?: Record<string, unknown>;
   deliveryTarget?: { channel: 'slack' | 'email'; target: string } | null;
+  optional?: boolean;
 }
 
 export type WorkflowTemplateCategory =
@@ -68,7 +69,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
       { kind: 'query', title: 'Scan GitHub delivery', objective: 'Pull merged pull requests, blocked issues, stale reviews, and release risk from GitHub.', inputs: { source: 'github', query_type: 'delivery_risk' } },
       { kind: 'query', title: 'Review Gmail commitments', objective: 'Find founder-critical follow-ups, investor/customer commitments, and unanswered priority threads.', inputs: { source: 'gmail', query_type: 'commitments' } },
       { kind: 'query', title: 'Review calendar commitments', objective: 'Review upcoming meetings, deadlines, and relationship commitments for the next seven days.', inputs: { source: 'google_calendar', query_type: 'weekly_commitments' } },
-      { kind: 'query', title: 'Scan Drive source material', objective: 'Find recently changed investor, customer, and board source files that should inform the brief.', inputs: { source: 'google_drive', query_type: 'recent_docs' } },
+      { kind: 'query', title: 'Scan Drive source material', objective: 'Find recently changed investor, customer, and board source files that should inform the brief.', inputs: { source: 'google_drive', query_type: 'recent_docs' }, optional: true },
       { kind: 'search', title: 'Scan market signals', objective: 'Research customer, competitor, pricing, platform, and AI automation changes since the last update.', inputs: { query: 'AI automation platform startup competitor pricing product launch founder update', num_results: 6 } },
       { kind: 'summarize', title: 'Draft founder brief', objective: 'Synthesize a founder-ready brief with signals, risks, decisions needed, and next actions.' },
       { kind: 'deliver', title: 'Hold for approval and deliver', objective: 'Send the reviewed weekly founder update after approval.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#all-purple-orange' } },
@@ -169,7 +170,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
       { kind: 'query', title: 'Pull monthly revenue', objective: 'Summarize MRR movement, new revenue, churn, and expansion for the month.', inputs: { source: 'stripe', query_type: 'revenue_summary' } },
       { kind: 'query', title: 'Summarize delivery', objective: 'Pull shipped work, releases, and notable engineering progress from GitHub.', inputs: { source: 'github', query_type: 'delivery_risk' } },
       { kind: 'query', title: 'Collect investor source docs', objective: 'Find source docs, metrics notes, and materials for the monthly investor update.', inputs: { source: 'google_drive', query_type: 'investor_materials' } },
-      { kind: 'query', title: 'Review investor email threads', objective: 'Find open investor questions and promised updates that should shape the monthly update.', inputs: { source: 'gmail', query_type: 'investor_threads' } },
+      { kind: 'query', title: 'Review investor email threads', objective: 'Find open investor questions and promised updates that should shape the monthly update.', inputs: { source: 'gmail', query_type: 'investor_threads' }, optional: true },
       { kind: 'analyze', title: 'Identify wins and asks', objective: 'Separate the month into wins, risks, metrics, and specific asks for investors.' },
       { kind: 'summarize', title: 'Draft investor update', objective: 'Write a concise, honest monthly update with metrics, narrative, risks, and asks for review before sending.' },
     ],
@@ -213,8 +214,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
     steps: [
       { kind: 'query', title: 'Collect board packet sources', objective: 'Find board docs, investor materials, and recently changed packet source files.', inputs: { source: 'google_drive', query_type: 'board_packet_sources' } },
       { kind: 'query', title: 'Review board calendar context', objective: 'Find upcoming board meetings, prep deadlines, and recent meeting context.', inputs: { source: 'google_calendar', query_type: 'upcoming_meetings' } },
-      { kind: 'query', title: 'Pull Stripe board metrics', objective: 'Read revenue movement and failed-payment signals for the board packet.', inputs: { source: 'stripe', query_type: 'revenue_summary' } },
-      { kind: 'query', title: 'Read GitHub delivery state', objective: 'Read shipping progress and open delivery risk from GitHub.', inputs: { source: 'github', query_type: 'delivery_risk' } },
+      { kind: 'query', title: 'Pull Stripe board metrics', objective: 'Read revenue movement and failed-payment signals for the board packet.', inputs: { source: 'stripe', query_type: 'revenue_summary' }, optional: true },
+      { kind: 'query', title: 'Read GitHub delivery state', objective: 'Read shipping progress and open delivery risk from GitHub.', inputs: { source: 'github', query_type: 'delivery_risk' }, optional: true },
       { kind: 'summarize', title: 'Draft board packet outline', objective: 'Draft a source-linked board packet outline with metrics, wins, risks, decisions, and open questions.' },
     ],
   },

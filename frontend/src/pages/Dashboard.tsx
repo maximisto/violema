@@ -310,6 +310,7 @@ interface WorkflowBlockDraft {
   objective: string;
   inputs?: Record<string, unknown>;
   deliveryTarget?: { channel: 'slack' | 'email'; target: string } | null;
+  optional?: boolean;
 }
 
 type WorkflowDeliveryTargetDraft = NonNullable<WorkflowBlockDraft['deliveryTarget']>;

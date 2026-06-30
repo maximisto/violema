@@ -158,7 +158,7 @@ import {
   buildSafeDataReadLedgerMetadata,
   listWorkflowLedgerEvents,
 } from './integrationGateway/auditLog';
-import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
+import { applyQueryStepPayloadToExecution, executeQueryData, isOptionalQueryReadinessFailure } from './integrationGateway/queryData';
 import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
 import {
   buildAutomationExperimentAttribution,
@@ -1740,7 +1740,7 @@ function buildChartArtifact(toolInput: Record<string, unknown>) {
 async function executeToolCall(
   toolName: string,
   toolInput: Record<string, unknown>,
-  ctx?: { workspaceId?: string },
+  ctx?: { workspaceId?: string; workflowId?: string },
 ): Promise<string> {
   // Composio fallback path — tool names like SLACK_SEND_MESSAGE, GITHUB_CREATE_ISSUE etc.
   if (isComposioToolName(toolName) && isComposioEnabled()) {
@@ -1857,6 +1857,7 @@ async function executeToolCall(
       });
       return JSON.stringify(await executeQueryData({
         workspaceId: ctx?.workspaceId || DEFAULT_WORKSPACE_ID,
+        workflowId: ctx?.workflowId,
         source,
         queryType,
         filters: isObjectRecord(toolInput.filters) ? toolInput.filters : undefined,
@@ -2623,6 +2624,7 @@ function createAutomationStepDefinitionFromPersisted(
       estimatedCredits: estimateAutomationStepCredits('query', 'micro', { toolCalls: 1 }),
       toolName: 'query_data',
       inputs: queryDataInput,
+      optional: step.optional === true,
     };
   }
 
@@ -3420,7 +3422,7 @@ async function executeAutomationCore(
       if (step.kind === 'query') {
         const payload = JSON.parse(await runAutomationStepWithTimeout(
           `Query step "${step.title}"`,
-          executeToolCall('query_data', step.inputs || {}, { workspaceId }),
+          executeToolCall('query_data', step.inputs || {}, { workspaceId, workflowId: runContext.workflowId }),
         )) as Record<string, unknown>;
         const payloadSource = typeof payload.source === 'string' ? payload.source : '';
         const queryType = typeof payload.query_type === 'string'
@@ -3448,9 +3450,11 @@ async function executeAutomationCore(
           stepExecution,
           stepErrors,
           artifactCount: chartArtifact ? 2 : 1,
+          optional: step.optional === true,
         });
         if (payloadSource) {
           const liveRead = payload.live === true;
+          const optionalQuerySkipped = step.optional === true && isOptionalQueryReadinessFailure(payload);
           const shouldLedger = liveRead
             || ['stripe', 'github', 'gmail', 'google_calendar', 'google_drive'].includes(payloadSource);
           if (shouldLedger) {
@@ -3460,8 +3464,10 @@ async function executeAutomationCore(
               automationId: automation.id,
               taskId: runContext.taskId,
               taskRunId: runContext.taskRunId,
-              type: payload.ok === false ? 'connector_failed' : 'data_read',
-              summary: payload.ok === false
+              type: optionalQuerySkipped ? 'connector_skipped' : payload.ok === false ? 'connector_failed' : 'data_read',
+              summary: optionalQuerySkipped
+                ? `Skipped optional ${payloadSource} ${queryType || 'data'} read because the integration is not available.`
+                : payload.ok === false
                 ? `${payloadSource} read blocked: ${String(payload.message || 'integration not ready')}`
                 : `Read ${payloadSource} ${queryType || 'data'}.`,
               metadata: buildSafeDataReadLedgerMetadata(payload),

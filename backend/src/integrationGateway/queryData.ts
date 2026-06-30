@@ -14,6 +14,7 @@ export interface LegacyQueryDataSuccess<T = unknown>
 
 export interface ExecuteQueryDataInput {
   workspaceId: string;
+  workflowId?: string;
   source: string;
   queryType: string;
   filters?: Record<string, unknown>;
@@ -37,6 +38,7 @@ export interface ApplyQueryStepPayloadToExecutionInput {
   stepExecution: AutomationStepExecution;
   stepErrors: string[];
   artifactCount: number;
+  optional?: boolean;
 }
 
 const LEGACY_MOCK_DATA: Record<string, Record<string, unknown>> = {
@@ -95,6 +97,21 @@ function readQueryPayloadFailureMessage(payload: Record<string, unknown>, stepTi
   return `Query step "${stepTitle}" failed.`;
 }
 
+const OPTIONAL_QUERY_SKIP_CODES = new Set([
+  'integration_not_ready',
+  'integration_auth_expired',
+  'integration_scope_missing',
+  'integration_rate_limited',
+  'integration_unavailable',
+  'integration_query_failed',
+]);
+
+export function isOptionalQueryReadinessFailure(payload: Record<string, unknown>) {
+  return payload.ok === false &&
+    typeof payload.code === 'string' &&
+    OPTIONAL_QUERY_SKIP_CODES.has(payload.code);
+}
+
 function normalizeQuerySource(source: string) {
   if (source === 'email') return 'gmail';
   if (source === 'calendar') return 'google_calendar';
@@ -111,6 +128,21 @@ export function applyQueryStepPayloadToExecution(
   stepExecution.artifactKind = 'query_data';
   stepExecution.toolCalls = 1;
   stepExecution.artifactCount = artifactCount;
+
+  if (input.optional && isOptionalQueryReadinessFailure(payload)) {
+    const source = typeof payload.source === 'string' && payload.source.trim()
+      ? payload.source.trim()
+      : 'data source';
+    stepExecution.status = 'skipped';
+    stepExecution.summary = `Skipped optional ${source} read because the integration is not available.`;
+    stepExecution.error = undefined;
+    stepExecution.output = {
+      ...payload,
+      optional: true,
+      skipped: true,
+    };
+    return;
+  }
 
   if (payload.ok === false) {
     const failureMessage = readQueryPayloadFailureMessage(payload, stepTitle);
@@ -162,6 +194,7 @@ export async function executeQueryData(
       filters: input.filters,
       connectedPartnerApps: input.connectedPartnerApps,
       executor: input.clientOverrides?.googleWorkspaceExecutor,
+      workflowId: input.workflowId,
       now,
     });
   }

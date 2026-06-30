@@ -42,7 +42,8 @@ export type WorkflowLedgerEventType =
   | 'approval_granted'
   | 'approval_denied'
   | 'external_action_executed'
-  | 'connector_failed';
+  | 'connector_failed'
+  | 'connector_skipped';
 
 export interface WorkflowLedgerEvent {
   id: string;
