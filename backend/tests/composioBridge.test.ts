@@ -54,6 +54,16 @@ async function withBridge<T>(
       return Response.json({ data: { threads: [] }, error: null, successful: true });
     }
 
+    if (url.pathname === '/api/v3.1/tools/execute/GOOGLEDRIVE_LIST_FILES') {
+      return Response.json({
+        data: null,
+        error: {
+          message: 'Request had insufficient authentication scopes. ACCESS_TOKEN_SCOPE_INSUFFICIENT raw-provider-body',
+        },
+        successful: false,
+      });
+    }
+
     if (url.pathname === '/api/v3.1/connected_accounts') {
       return Response.json({
         items: [
@@ -138,6 +148,25 @@ test('executeComposioAction calls the current v3.1 tool execution endpoint', asy
       user_id: 'workspace_test',
       version: 'latest',
     });
+  });
+});
+
+test('executeComposioAction classifies insufficient OAuth scopes without leaking provider error text', async () => {
+  await withBridge(async (bridge) => {
+    await assert.rejects(
+      () => bridge.executeComposioAction(
+        'GOOGLEDRIVE_LIST_FILES',
+        { pageSize: 1 },
+        { entityId: 'workspace_test' },
+      ),
+      (err: unknown) => {
+        const typed = err as Error & { code?: string };
+        assert.equal(typed.message, 'Composio action failed.');
+        assert.equal(typed.code, 'insufficient_scope');
+        assert.doesNotMatch(JSON.stringify(typed), /raw-provider-body|ACCESS_TOKEN_SCOPE_INSUFFICIENT/);
+        return true;
+      },
+    );
   });
 });
 

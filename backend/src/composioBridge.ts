@@ -44,13 +44,33 @@ const COMPOSIO_TOOLKIT_SLUG_ALIASES: Record<string, string> = {
   drive: 'googledrive',
   gmail: 'gmail',
   email: 'gmail',
+  linear: 'linear',
+  notion: 'notion',
 };
 
 const ACTION_TOOLKIT_ALIASES: Record<string, string> = {
   GMAIL: 'gmail',
   GOOGLECALENDAR: 'googlecalendar',
   GOOGLEDRIVE: 'googledrive',
+  LINEAR: 'linear',
+  NOTION: 'notion',
 };
+
+export type ComposioToolExecutionErrorCode =
+  | 'insufficient_scope'
+  | 'rate_limited'
+  | 'unavailable'
+  | 'failed';
+
+export class ComposioToolExecutionError extends Error {
+  code: ComposioToolExecutionErrorCode;
+
+  constructor(code: ComposioToolExecutionErrorCode) {
+    super('Composio action failed.');
+    this.name = 'ComposioToolExecutionError';
+    this.code = code;
+  }
+}
 
 function getComposioApiKey(): string | null {
   const apiKey = process.env.COMPOSIO_API_KEY;
@@ -180,12 +200,30 @@ function unwrapToolExecutionResponse(response: unknown): unknown {
 
   const execution = response as ComposioToolExecutionResponse;
   if (execution.successful === false || execution.error) {
-    throw new Error('Composio action failed.');
+    throw new ComposioToolExecutionError(classifyToolExecutionError(execution.error));
   }
 
   return Object.prototype.hasOwnProperty.call(execution, 'data')
     ? execution.data
     : response;
+}
+
+function classifyToolExecutionError(error: unknown): ComposioToolExecutionErrorCode {
+  const serialized = JSON.stringify(error || {}).toLowerCase();
+  if (
+    serialized.includes('access_token_scope_insufficient') ||
+    serialized.includes('insufficient authentication scopes') ||
+    serialized.includes('insufficient permission')
+  ) {
+    return 'insufficient_scope';
+  }
+  if (serialized.includes('rate limit') || serialized.includes('too many requests')) {
+    return 'rate_limited';
+  }
+  if (serialized.includes('temporarily unavailable') || serialized.includes('service unavailable')) {
+    return 'unavailable';
+  }
+  return 'failed';
 }
 
 function isActiveConnectedAccount(record: Record<string, unknown>) {

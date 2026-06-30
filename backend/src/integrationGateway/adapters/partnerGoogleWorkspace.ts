@@ -231,6 +231,29 @@ function queryFailed(
   };
 }
 
+function scopeMissing(
+  source: GoogleWorkspaceSource,
+  workflowId: string,
+): IntegrationReadinessError {
+  const labels: Record<GoogleWorkspaceSource, string> = {
+    gmail: 'Gmail',
+    google_calendar: 'Google Calendar',
+    google_drive: 'Google Drive',
+  };
+
+  return {
+    ok: false,
+    code: 'integration_scope_missing',
+    source,
+    workflowId,
+    message: `${labels[source]} needs additional OAuth scopes before this workflow can read live partner data.`,
+    nextAction: {
+      label: `Reconnect ${labels[source]}`,
+      route: providerRoute(source, workflowId),
+    },
+  };
+}
+
 function addDays(date: Date, days: number) {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
@@ -426,7 +449,10 @@ export async function queryGoogleWorkspace(
       cache_hit: false,
       live: true,
     };
-  } catch {
+  } catch (err) {
+    if ((err as { code?: string } | undefined)?.code === 'insufficient_scope') {
+      return scopeMissing(input.source, workflowId);
+    }
     return queryFailed(input.source, workflowId);
   }
 }

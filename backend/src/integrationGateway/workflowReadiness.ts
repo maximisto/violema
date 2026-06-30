@@ -59,7 +59,7 @@ const WORKFLOW_REQUIREMENTS: Record<string, WorkflowRequirements> = {
   'weekly-founder-brief': {
     supported: true,
     requiredIntegrationIds: ['stripe', 'github', 'gmail', 'google_calendar'],
-    optionalIntegrationIds: ['google_drive', 'web_search'],
+    optionalIntegrationIds: ['google_drive', 'linear', 'notion', 'web_search'],
     firstRunRequiresApproval: true,
     defaultDeliveryTarget: REVENUE_WATCH_DEFAULT_DELIVERY_TARGET,
   },
@@ -78,7 +78,7 @@ const WORKFLOW_REQUIREMENTS: Record<string, WorkflowRequirements> = {
   'shipping-revenue-pulse': {
     supported: true,
     requiredIntegrationIds: ['stripe', 'github'],
-    optionalIntegrationIds: ['web_search'],
+    optionalIntegrationIds: ['linear', 'web_search'],
     firstRunRequiresApproval: true,
     defaultDeliveryTarget: REVENUE_WATCH_DEFAULT_DELIVERY_TARGET,
   },
@@ -131,6 +131,8 @@ const PARTNER_ALIASES: Record<string, string[]> = {
   gmail: ['gmail'],
   google_calendar: ['google_calendar', 'googlecalendar'],
   google_drive: ['google_drive', 'googledrive'],
+  linear: ['linear'],
+  notion: ['notion'],
 };
 
 function readConfiguredFlag(

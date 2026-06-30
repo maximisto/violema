@@ -1,10 +1,12 @@
 import { queryStripeRevenue, type StripeLikeClient } from './adapters/nativeStripe';
 import { queryGithub, type GithubFetchLike } from './adapters/nativeGithub';
 import { queryGoogleWorkspace } from './adapters/partnerGoogleWorkspace';
+import { queryFounderTool } from './adapters/partnerFounderTools';
 import type { IntegrationQueryResult, IntegrationQuerySuccess } from './types';
 import type { AutomationStepExecution } from '../platform/types';
 
 type GoogleWorkspaceExecutor = NonNullable<Parameters<typeof queryGoogleWorkspace>[0]['executor']>;
+type FounderToolExecutor = NonNullable<Parameters<typeof queryFounderTool>[0]['executor']>;
 
 export interface LegacyQueryDataSuccess<T = unknown>
   extends Omit<IntegrationQuerySuccess<T>, 'live' | 'cache_hit'> {
@@ -25,6 +27,7 @@ export interface ExecuteQueryDataInput {
     stripe?: StripeLikeClient;
     githubFetch?: GithubFetchLike;
     googleWorkspaceExecutor?: GoogleWorkspaceExecutor;
+    partnerToolExecutor?: FounderToolExecutor;
   };
   credentialOverrides?: {
     stripeSecretKey?: string;
@@ -194,6 +197,19 @@ export async function executeQueryData(
       filters: input.filters,
       connectedPartnerApps: input.connectedPartnerApps,
       executor: input.clientOverrides?.googleWorkspaceExecutor,
+      workflowId: input.workflowId,
+      now,
+    });
+  }
+
+  if (source === 'linear' || source === 'notion') {
+    return queryFounderTool({
+      workspaceId: input.workspaceId,
+      source,
+      queryType: input.queryType as Parameters<typeof queryFounderTool>[0]['queryType'],
+      filters: input.filters,
+      connectedPartnerApps: input.connectedPartnerApps,
+      executor: input.clientOverrides?.partnerToolExecutor,
       workflowId: input.workflowId,
       now,
     });

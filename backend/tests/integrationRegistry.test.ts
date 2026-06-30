@@ -25,7 +25,8 @@ test('integration registry remains the credential field source of truth', async 
   const registry = await import('../src/integrationRegistry');
 
   assert.deepEqual(registry.getIntegrationFields('github'), ['token']);
-  assert.deepEqual(registry.getIntegrationFields('linear'), ['apiKey']);
+  assert.deepEqual(registry.getIntegrationFields('linear'), []);
+  assert.deepEqual(registry.getIntegrationFields('notion'), []);
   assert.deepEqual(registry.getIntegrationEnvKeys('stripe', 'secretKey'), ['STRIPE_SECRET_KEY']);
   assert.equal(registry.isIntegrationProvider('hubspot'), true);
   assert.equal(registry.isIntegrationProvider('slack'), false);
@@ -60,4 +61,23 @@ test('integration catalog exposes Google Workspace as separate provider surfaces
   const serialized = JSON.stringify(catalog);
   assert.doesNotMatch(serialized, /GMAIL_/);
   assert.doesNotMatch(serialized, /GOOGLE_/);
+});
+
+test('integration catalog exposes Linear and Notion as partner workflow surfaces', async () => {
+  const registry = await import('../src/integrationRegistry');
+
+  const catalog = registry.buildIntegrationCatalog({
+    partnerEnabled: true,
+    connectedPartnerApps: ['linear', 'notion'],
+  });
+
+  const linear = catalog.providers.find((provider) => provider.id === 'linear');
+  const notion = catalog.providers.find((provider) => provider.id === 'notion');
+
+  assert.equal(linear?.status, 'ready');
+  assert.equal(notion?.status, 'ready');
+  assert.equal(linear?.connectionMethod, 'partner');
+  assert.equal(notion?.connectionMethod, 'partner');
+  assert.ok(catalog.partnerApps.some((app) => app.name === 'linear'));
+  assert.ok(catalog.partnerApps.some((app) => app.name === 'notion'));
 });

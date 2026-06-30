@@ -107,7 +107,7 @@ test('Weekly Founder Brief requires Stripe GitHub Gmail and Calendar with Drive 
 
   assert.equal(report.ready, true);
   assert.deepEqual(report.requiredIntegrationIds, ['stripe', 'github', 'gmail', 'google_calendar']);
-  assert.deepEqual(report.optionalIntegrationIds, ['google_drive', 'web_search']);
+  assert.deepEqual(report.optionalIntegrationIds, ['google_drive', 'linear', 'notion', 'web_search']);
   assert.equal(report.firstRunRequiresApproval, true);
   assert.equal(
     report.summary,
@@ -235,6 +235,7 @@ test('Shipping and Revenue Pulse requires Stripe and GitHub', () => {
 
   assert.equal(report.ready, false);
   assert.deepEqual(report.requiredIntegrationIds, ['stripe', 'github']);
+  assert.deepEqual(report.optionalIntegrationIds, ['linear', 'web_search']);
   assert.equal(report.blockers.find((item) => item.key === 'github')?.route, '/settings#integration-github');
 });
 

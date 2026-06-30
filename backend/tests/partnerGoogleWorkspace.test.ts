@@ -213,3 +213,25 @@ test('queryGoogleWorkspace ignores unsafe Drive filters and redacts executor err
   assert.equal(result.ok, false);
   assert.doesNotMatch(JSON.stringify(result), /sk_live_google_secret|raw private board body/);
 });
+
+test('queryGoogleWorkspace classifies under-scoped Drive tokens without leaking provider payloads', async () => {
+  const result = await queryGoogleWorkspace({
+    workspaceId: 'workspace_test',
+    source: 'google_drive',
+    queryType: 'recent_docs',
+    connectedPartnerApps: ['googledrive'],
+    now: new Date('2026-06-30T12:00:00.000Z'),
+    executor: async () => {
+      const err = new Error('Composio action failed.');
+      (err as Error & { code?: string }).code = 'insufficient_scope';
+      throw err;
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error('expected scope error');
+  assert.equal(result.code, 'integration_scope_missing');
+  assert.equal(result.source, 'google_drive');
+  assert.match(result.message, /Google Drive needs additional OAuth scopes/);
+  assert.doesNotMatch(JSON.stringify(result), /ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficient authentication scopes/i);
+});

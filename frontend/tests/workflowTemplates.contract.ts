@@ -91,8 +91,24 @@ assert(
   'Weekly founder brief declares Drive optional',
 );
 assert(
+  weeklyFounderBrief?.optionalIntegrationIds?.includes('linear'),
+  'Weekly founder brief declares Linear optional',
+);
+assert(
+  weeklyFounderBrief?.optionalIntegrationIds?.includes('notion'),
+  'Weekly founder brief declares Notion optional',
+);
+assert(
   weeklyFounderBrief?.steps.some((step) => step.kind === 'query' && step.inputs?.source === 'google_drive' && (step as { optional?: boolean }).optional === true),
   'Weekly founder brief marks the optional Drive query step optional',
+);
+assert(
+  weeklyFounderBrief?.steps.some((step) => step.kind === 'query' && step.inputs?.source === 'linear' && (step as { optional?: boolean }).optional === true),
+  'Weekly founder brief marks the optional Linear query step optional',
+);
+assert(
+  weeklyFounderBrief?.steps.some((step) => step.kind === 'query' && step.inputs?.source === 'notion' && (step as { optional?: boolean }).optional === true),
+  'Weekly founder brief marks the optional Notion query step optional',
 );
 
 const investorFollowUp = getWorkflowTemplateById('investor-follow-up');
@@ -116,6 +132,10 @@ assert(Boolean(shippingRevenuePulse), 'Shipping and Revenue Pulse template exist
 assert(
   JSON.stringify(shippingRevenuePulse?.requiredIntegrationIds) === JSON.stringify(['stripe', 'github']),
   'Shipping and Revenue Pulse declares Stripe and GitHub requirements',
+);
+assert(
+  shippingRevenuePulse?.optionalIntegrationIds?.includes('linear'),
+  'Shipping and Revenue Pulse declares Linear optional',
 );
 
 const boardPacketPrep = getWorkflowTemplateById('board-packet-prep');
