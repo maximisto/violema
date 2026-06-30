@@ -742,7 +742,7 @@ export default function SettingsPage() {
                             Server credential available
                           </span>
                         ) : null}
-                        {!fieldStatus?.configured ? (
+                        {integration.field && !fieldStatus?.configured ? (
                           <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-500">
                             Needs credential
                           </span>
