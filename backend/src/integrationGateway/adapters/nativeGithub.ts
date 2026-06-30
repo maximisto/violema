@@ -129,6 +129,62 @@ function queryFailed(message: string): IntegrationReadinessError {
   };
 }
 
+function githubHttpError(status: number): IntegrationReadinessError {
+  if (status === 401) {
+    return {
+      ok: false,
+      code: 'integration_auth_expired',
+      source: 'github',
+      message: 'GitHub credentials are no longer valid for this workspace.',
+      nextAction: {
+        label: 'Connect GitHub',
+        route: '/settings#integration-github',
+      },
+    };
+  }
+
+  if (status === 403) {
+    return {
+      ok: false,
+      code: 'integration_scope_missing',
+      source: 'github',
+      message: 'GitHub access does not include the repository scope required for this read.',
+      nextAction: {
+        label: 'Connect GitHub',
+        route: '/settings#integration-github',
+      },
+    };
+  }
+
+  if (status === 429) {
+    return {
+      ok: false,
+      code: 'integration_rate_limited',
+      source: 'github',
+      message: 'GitHub rate limit reached. Please retry after the window resets.',
+      nextAction: {
+        label: 'Connect GitHub',
+        route: '/settings#integration-github',
+      },
+    };
+  }
+
+  if (status >= 500) {
+    return {
+      ok: false,
+      code: 'integration_unavailable',
+      source: 'github',
+      message: 'GitHub is temporarily unavailable.',
+      nextAction: {
+        label: 'Connect GitHub',
+        route: '/settings#integration-github',
+      },
+    };
+  }
+
+  return queryFailed('GitHub request failed.');
+}
+
 function resolveRepository(input: QueryGithubInput): string | undefined {
   const repository = input.filters?.repository;
   if (typeof repository === 'string' && repository.trim()) return repository.trim();
@@ -195,8 +251,7 @@ async function fetchGithubArray(
   try {
     const response = await fetchLike(url, { headers: buildHeaders(token) });
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      return queryFailed(`GitHub request failed with status ${response.status}${body ? `: ${body}` : ''}`);
+      return githubHttpError(response.status);
     }
     return parseGithubArray(await response.json());
   } catch (error) {
