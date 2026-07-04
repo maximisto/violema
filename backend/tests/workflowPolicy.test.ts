@@ -61,7 +61,7 @@ test('Revenue Watch Slack delivery requires approval even without step metadata'
   );
 });
 
-test('Revenue Watch email delivery does not force approval without review metadata', () => {
+test('Revenue Watch email delivery now requires approval for the reviewed workflow pack', () => {
   assert.equal(
     isWorkflowDeliveryApprovalRequired({
       workflowId: 'revenue-watch',
@@ -74,7 +74,7 @@ test('Revenue Watch email delivery does not force approval without review metada
         deliveryTarget: { channel: 'email', target: 'finance@violema.com' },
       },
     }),
-    false,
+    true,
   );
 });
 
@@ -108,4 +108,24 @@ test('delivery target resolution falls back from notify to the deliver step targ
     }),
     { channel: 'slack', target: '#ops' },
   );
+});
+
+test('founder workflow pack deliveries require approval', () => {
+  for (const workflowId of ['weekly-founder-brief', 'investor-follow-up', 'monthly-investor-update', 'shipping-revenue-pulse', 'board-packet-prep']) {
+    assert.equal(
+      isWorkflowDeliveryApprovalRequired({
+        workflowId,
+        notify: '',
+        step: {
+          kind: 'deliver',
+          title: 'Deliver workflow output',
+          objective: 'Send the reviewed workflow output.',
+          inputs: {},
+          deliveryTarget: { channel: 'slack', target: '#all-purple-orange' },
+        },
+      }),
+      true,
+      `${workflowId} requires approval`,
+    );
+  }
 });

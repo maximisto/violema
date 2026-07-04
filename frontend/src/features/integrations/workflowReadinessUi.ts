@@ -17,7 +17,13 @@ export type WorkflowReadinessBlockerAction =
   | { kind: 'editor'; label: string; section: 'setup' }
   | null;
 
-export function inferEditorWorkflowId(steps: WorkflowReadinessUiStep[]): string {
+export function inferEditorWorkflowId(
+  steps: WorkflowReadinessUiStep[],
+  explicitWorkflowId?: string | null,
+): string {
+  const explicit = typeof explicitWorkflowId === 'string' ? explicitWorkflowId.trim() : '';
+  if (explicit) return explicit;
+
   const querySteps = steps.filter((step) => step.kind === 'query');
   if (querySteps.length === 0) return '';
 
@@ -73,6 +79,31 @@ export function getDashboardReadinessBlockerAction(
       kind: 'navigate',
       label: 'Open Stripe settings',
       href: '/settings#integration-stripe',
+    };
+  }
+
+  if (blocker.key === 'github' || blocker.route?.includes('integration-github')) {
+    return {
+      kind: 'navigate',
+      label: 'Open GitHub settings',
+      href: blocker.route || '/settings#integration-github',
+    };
+  }
+
+  if (
+    blocker.key === 'gmail' ||
+    blocker.key === 'google_calendar' ||
+    blocker.key === 'google_drive' ||
+    blocker.route?.includes('/integrations?provider=')
+  ) {
+    return {
+      kind: 'navigate',
+      label: blocker.key === 'google_calendar'
+        ? 'Connect Calendar'
+        : blocker.key === 'google_drive'
+          ? 'Connect Drive'
+          : 'Connect Gmail',
+      href: blocker.route || '/integrations',
     };
   }
 

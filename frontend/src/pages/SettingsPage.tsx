@@ -11,8 +11,19 @@ import { resolveWorkspaceContext } from '../lib/workspace';
 import ViolemaLogo from '../components/ViolemaLogo';
 
 type Provider = 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax';
-type IntegrationProvider = 'github' | 'linear' | 'notion' | 'stripe' | 'hubspot' | 'airtable' | 'figma' | 'vercel';
-type IntegrationCredentialField = 'token' | 'apiKey' | 'secretKey';
+type IntegrationProvider =
+  | 'github'
+  | 'gmail'
+  | 'google_calendar'
+  | 'google_drive'
+  | 'linear'
+  | 'notion'
+  | 'stripe'
+  | 'hubspot'
+  | 'airtable'
+  | 'figma'
+  | 'vercel';
+type IntegrationCredentialField = 'token' | 'apiKey' | 'secretKey' | 'refreshToken' | 'accessToken';
 type Profile = 'micro' | 'default' | 'hard' | 'critical' | 'ops' | 'memory_text' | 'memory_code';
 type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 type AutoGraduationProfileId = 'cautious' | 'balanced' | 'fast_learning';
@@ -106,11 +117,12 @@ const PROVIDER_COPY: Record<Provider, { label: string; help: string }> = {
 const INTEGRATION_COPY: Array<{
   id: IntegrationProvider;
   label: string;
-  field: IntegrationCredentialField;
-  fieldLabel: string;
-  placeholder: string;
+  field?: IntegrationCredentialField;
+  fieldLabel?: string;
+  placeholder?: string;
   help: string;
   use: string;
+  setupRoute?: string;
 }> = [
   {
     id: 'github',
@@ -120,6 +132,29 @@ const INTEGRATION_COPY: Array<{
     placeholder: 'ghp_…',
     help: 'Repos, issues, PRs, code context, and engineering follow-through.',
     use: 'Engineering workflows',
+  },
+  {
+    id: 'gmail',
+    label: 'Gmail',
+    help: 'Threads, replies, commitments, and investor/customer follow-up source material.',
+    use: 'Google Workspace',
+    setupRoute: '/integrations?provider=gmail',
+  },
+  {
+    id: 'google_calendar',
+    label: 'Google Calendar',
+    help: 'Meetings, deadlines, attendees, and weekly founder commitments.',
+    use: 'Google Workspace',
+    setupRoute: '/integrations?provider=google_calendar',
+  },
+  {
+    id: 'google_drive',
+    label: 'Google Drive',
+    field: 'refreshToken',
+    fieldLabel: 'Refresh token',
+    placeholder: '1//0g…',
+    help: 'Docs, board packets, investor materials, and reviewed source files.',
+    use: 'Google Workspace',
   },
   {
     id: 'linear',
@@ -374,7 +409,7 @@ export default function SettingsPage() {
           integration.id,
           integrationClears[integration.id]
             ? null
-            : integrationInputs[integration.id].trim()
+            : integration.field && integrationInputs[integration.id].trim()
               ? { [integration.field]: integrationInputs[integration.id].trim() }
               : undefined,
         ]),
@@ -499,6 +534,11 @@ export default function SettingsPage() {
   }
 
   async function handleIntegrationTest(integration: (typeof INTEGRATION_COPY)[number]) {
+    if (!integration.field) {
+      navigate(integration.setupRoute || '/integrations');
+      return;
+    }
+
     setIntegrationTests((current) => ({
       ...current,
       [integration.id]: { tone: 'idle', testing: true, message: 'Testing…' },
@@ -655,12 +695,13 @@ export default function SettingsPage() {
               <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {INTEGRATION_COPY.map((integration) => {
                   const status = data.settings.integrations[integration.id];
-                  const fieldStatus = status?.fields?.[integration.field];
+                  const anchorId = `integration-${integration.id.replace(/_/g, '-')}`;
+                  const fieldStatus = integration.field ? status?.fields?.[integration.field] : undefined;
                   const testState = integrationTests[integration.id];
                   return (
                     <div
                       key={integration.id}
-                      id={integration.id === 'stripe' ? 'integration-stripe' : undefined}
+                      id={anchorId}
                       className="rounded-2xl border border-navy-700/70 bg-navy-950/42 p-4"
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -688,6 +729,11 @@ export default function SettingsPage() {
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2">
+                        {!integration.field ? (
+                          <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
+                            Connect with Google Workspace
+                          </span>
+                        ) : null}
                         {fieldStatus?.workspaceConfigured ? (
                           <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
                             Saved {fieldStatus.maskedValue || 'credential'}
@@ -698,7 +744,7 @@ export default function SettingsPage() {
                             Server credential available
                           </span>
                         ) : null}
-                        {!fieldStatus?.configured ? (
+                        {integration.field && !fieldStatus?.configured ? (
                           <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-500">
                             Needs credential
                           </span>
@@ -706,37 +752,49 @@ export default function SettingsPage() {
                       </div>
 
                       <div className="mt-3 space-y-2">
-                        <label className="block">
-                          <span className="mb-1.5 block text-[11px] text-slate-500">{integration.fieldLabel}</span>
-                          <div className="ui-input-shell">
-                            <input
-                              type="password"
-                              value={integrationInputs[integration.id]}
-                              onChange={(event) => setIntegrationInputs((current) => ({ ...current, [integration.id]: event.target.value }))}
-                              className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
-                              placeholder={integration.placeholder}
-                            />
-                          </div>
-                        </label>
-                        <label className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-400">
-                          <input
-                            type="checkbox"
-                            checked={integrationClears[integration.id]}
-                            onChange={(event) => setIntegrationClears((current) => ({ ...current, [integration.id]: event.target.checked }))}
-                            className="mt-0.5 rounded border-navy-700 bg-navy-950 text-violet-400 focus:ring-violet-500"
-                          />
-                          Clear workspace credential and fall back to server credential
-                        </label>
-                        <div className="flex justify-end">
+                        {integration.field ? (
+                          <>
+                            <label className="block">
+                              <span className="mb-1.5 block text-[11px] text-slate-500">{integration.fieldLabel}</span>
+                              <div className="ui-input-shell">
+                                <input
+                                  type="password"
+                                  value={integrationInputs[integration.id]}
+                                  onChange={(event) => setIntegrationInputs((current) => ({ ...current, [integration.id]: event.target.value }))}
+                                  className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                                  placeholder={integration.placeholder}
+                                />
+                              </div>
+                            </label>
+                            <label className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-400">
+                              <input
+                                type="checkbox"
+                                checked={integrationClears[integration.id]}
+                                onChange={(event) => setIntegrationClears((current) => ({ ...current, [integration.id]: event.target.checked }))}
+                                className="mt-0.5 rounded border-navy-700 bg-navy-950 text-violet-400 focus:ring-violet-500"
+                              />
+                              Clear workspace credential and fall back to server credential
+                            </label>
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => void handleIntegrationTest(integration)}
+                                disabled={integrationClears[integration.id] || testState?.testing}
+                                className="ui-pill shrink-0 px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200 disabled:opacity-50"
+                              >
+                                {testState?.testing ? 'Testing…' : 'Test'}
+                              </button>
+                            </div>
+                          </>
+                        ) : (
                           <button
                             type="button"
-                            onClick={() => void handleIntegrationTest(integration)}
-                            disabled={integrationClears[integration.id] || testState?.testing}
-                            className="ui-pill shrink-0 px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200 disabled:opacity-50"
+                            onClick={() => navigate(integration.setupRoute || '/integrations')}
+                            className="ui-pill shrink-0 px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200"
                           >
-                            {testState?.testing ? 'Testing…' : 'Test'}
+                            Connect
                           </button>
-                        </div>
+                        )}
                         {testState?.message ? (
                           <div className={`rounded-xl border px-3 py-2 text-[11px] ${
                             testState.tone === 'success'

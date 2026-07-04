@@ -43,6 +43,9 @@ test('stores, masks, reads, and clears workspace integration credentials', async
       settings.getWorkspaceIntegrationCredential('workspace-integrations-test', 'stripe', 'secretKey'),
       'sk_test_1234567890abcdef',
     );
+    assert.equal(view.integrations.gmail.configured, false);
+    assert.equal(view.integrations.gmail.activeSource, 'none');
+    assert.deepEqual(Object.keys(view.integrations.gmail.fields), []);
 
     settings.upsertWorkspaceSettings({
       workspaceId: 'workspace-integrations-test',

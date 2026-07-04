@@ -25,8 +25,60 @@ test('integration registry remains the credential field source of truth', async 
   const registry = await import('../src/integrationRegistry');
 
   assert.deepEqual(registry.getIntegrationFields('github'), ['token']);
-  assert.deepEqual(registry.getIntegrationFields('linear'), ['apiKey']);
+  assert.deepEqual(registry.getIntegrationFields('linear'), []);
+  assert.deepEqual(registry.getIntegrationFields('notion'), []);
   assert.deepEqual(registry.getIntegrationEnvKeys('stripe', 'secretKey'), ['STRIPE_SECRET_KEY']);
   assert.equal(registry.isIntegrationProvider('hubspot'), true);
   assert.equal(registry.isIntegrationProvider('slack'), false);
+});
+
+test('integration catalog exposes Google Workspace as separate provider surfaces', async () => {
+  const registry = await import('../src/integrationRegistry');
+
+  const catalog = registry.buildIntegrationCatalog({
+    partnerEnabled: true,
+    connectedPartnerApps: ['gmail'],
+  });
+
+  assert.equal(registry.isIntegrationProvider('gmail'), true);
+  assert.equal(registry.isIntegrationProvider('google_calendar'), true);
+  assert.equal(registry.isIntegrationProvider('google_drive'), true);
+  assert.deepEqual(registry.getIntegrationFields('gmail'), []);
+  assert.deepEqual(registry.getIntegrationFields('google_calendar'), []);
+  assert.deepEqual(registry.getIntegrationFields('google_drive'), ['refreshToken', 'accessToken']);
+  assert.deepEqual(registry.getIntegrationEnvKeys('google_drive', 'refreshToken'), ['GOOGLE_DRIVE_REFRESH_TOKEN']);
+
+  const gmail = catalog.providers.find((provider) => provider.id === 'gmail');
+  const calendar = catalog.providers.find((provider) => provider.id === 'google_calendar');
+  const drive = catalog.providers.find((provider) => provider.id === 'google_drive');
+
+  assert.equal(gmail?.connectionMethod, 'partner');
+  assert.equal(calendar?.connectionMethod, 'partner');
+  assert.equal(drive?.connectionMethod, 'native');
+  assert.ok(catalog.partnerApps.some((app) => app.name === 'gmail'));
+  assert.ok(catalog.partnerApps.some((app) => app.name === 'google_calendar'));
+  assert.equal(catalog.partnerApps.some((app) => app.name === 'google_drive'), false);
+
+  const serialized = JSON.stringify(catalog);
+  assert.doesNotMatch(serialized, /GMAIL_/);
+  assert.doesNotMatch(serialized, /GOOGLE_/);
+});
+
+test('integration catalog exposes Linear and Notion as partner workflow surfaces', async () => {
+  const registry = await import('../src/integrationRegistry');
+
+  const catalog = registry.buildIntegrationCatalog({
+    partnerEnabled: true,
+    connectedPartnerApps: ['linear', 'notion'],
+  });
+
+  const linear = catalog.providers.find((provider) => provider.id === 'linear');
+  const notion = catalog.providers.find((provider) => provider.id === 'notion');
+
+  assert.equal(linear?.status, 'ready');
+  assert.equal(notion?.status, 'ready');
+  assert.equal(linear?.connectionMethod, 'partner');
+  assert.equal(notion?.connectionMethod, 'partner');
+  assert.ok(catalog.partnerApps.some((app) => app.name === 'linear'));
+  assert.ok(catalog.partnerApps.some((app) => app.name === 'notion'));
 });

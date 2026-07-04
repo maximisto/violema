@@ -175,6 +175,7 @@ export interface PersistedAutomationStep {
   objective: string;
   inputs?: Record<string, unknown>;
   deliveryTarget?: AutomationStepDeliveryTarget | null;
+  optional?: boolean;
 }
 
 export interface AutomationStepDefinition {
@@ -191,6 +192,7 @@ export interface AutomationStepDefinition {
   toolName?: 'web_search' | 'query_data' | 'browser_screenshot' | 'send_message' | 'generate_text';
   inputs?: Record<string, unknown>;
   deliveryTarget?: AutomationStepDeliveryTarget | null;
+  optional?: boolean;
 }
 
 export interface AutomationStepExecution {

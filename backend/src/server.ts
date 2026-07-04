@@ -40,7 +40,7 @@ import {
 } from './security';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
-import { executeComposioAction, getComposioConnectionUrl, isComposioEnabled, isComposioToolName, listConnectedApps } from './composioBridge';
+import { executeComposioAction, getComposioConnectionUrl, isComposioEnabled, isComposioToolName, listConnectedApps, resolveComposioEntityId } from './composioBridge';
 import {
   buildAutomationChartArtifactFromQueryPayload,
   selectReviewGateVisualArtifacts,
@@ -54,10 +54,12 @@ import { buildGenerateReportResult } from './platform/reportGeneration';
 import {
   approveAutomationReview,
   buildAutomationPreflightReport,
+  buildSafeDeliverySummary,
   classifyAutomationRunOutcome,
   requestAutomationChanges,
   validateAutomationDeliveryDraft,
 } from './platform/automationLifecycle';
+import { normalizePersistedAutomationSteps } from './platform/automationSteps';
 import { extractToolArtifactsFromResult, type StoredToolArtifact } from './platform/toolArtifacts';
 import {
   createAutomation,
@@ -152,8 +154,12 @@ import {
   finalizePendingApprovalRequestedLedgerEvents,
   type PendingApprovalRequestedLedgerEvent,
 } from './integrationGateway/approvalLedger';
-import { appendWorkflowLedgerEvent, listWorkflowLedgerEvents } from './integrationGateway/auditLog';
-import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
+import {
+  appendWorkflowLedgerEvent,
+  buildSafeDataReadLedgerMetadata,
+  listWorkflowLedgerEvents,
+} from './integrationGateway/auditLog';
+import { applyQueryStepPayloadToExecution, executeQueryData, isOptionalQueryReadinessFailure } from './integrationGateway/queryData';
 import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
 import {
   buildAutomationExperimentAttribution,
@@ -1490,7 +1496,23 @@ const NEXUS_TOOLS: Tool[] = [
       properties: {
         source: {
           type: 'string',
-          enum: ['stripe', 'hubspot', 'github', 'linear', 'notion', 'salesforce', 'jira', 'posthog', 'google_analytics'],
+          enum: [
+            'stripe',
+            'hubspot',
+            'github',
+            'gmail',
+            'google_calendar',
+            'google_drive',
+            'email',
+            'calendar',
+            'drive',
+            'linear',
+            'notion',
+            'salesforce',
+            'jira',
+            'posthog',
+            'google_analytics',
+          ],
           description: 'The data source to query',
         },
         query_type: { type: 'string', description: 'Type of data to retrieve' },
@@ -1719,13 +1741,13 @@ function buildChartArtifact(toolInput: Record<string, unknown>) {
 async function executeToolCall(
   toolName: string,
   toolInput: Record<string, unknown>,
-  ctx?: { workspaceId?: string },
+  ctx?: { workspaceId?: string; workflowId?: string },
 ): Promise<string> {
   // Composio fallback path — tool names like SLACK_SEND_MESSAGE, GITHUB_CREATE_ISSUE etc.
   if (isComposioToolName(toolName) && isComposioEnabled()) {
     try {
       const result = await executeComposioAction(toolName, toolInput, {
-        entityId: ctx?.workspaceId ?? 'default',
+        entityId: resolveComposioEntityId(ctx?.workspaceId),
       });
       return JSON.stringify(result);
     } catch (err) {
@@ -1831,12 +1853,17 @@ async function executeToolCall(
     case 'query_data': {
       const source = String(toolInput.source || '');
       const queryType = String(toolInput.query_type || '');
+      const connectedPartnerApps = await listConnectedApps({
+        entityId: resolveComposioEntityId(ctx?.workspaceId || DEFAULT_WORKSPACE_ID),
+      });
       return JSON.stringify(await executeQueryData({
         workspaceId: ctx?.workspaceId || DEFAULT_WORKSPACE_ID,
+        workflowId: ctx?.workflowId,
         source,
         queryType,
         filters: isObjectRecord(toolInput.filters) ? toolInput.filters : undefined,
         limit: typeof toolInput.limit === 'number' ? toolInput.limit : undefined,
+        connectedPartnerApps,
       }));
     }
 
@@ -2210,44 +2237,6 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function normalizePersistedAutomationSteps(input: unknown[]): PersistedAutomationStep[] {
-  return input.reduce<PersistedAutomationStep[]>((steps, item, index) => {
-    if (!isObjectRecord(item)) return steps;
-    const kind = typeof item.kind === 'string' ? item.kind.trim().toLowerCase() : '';
-    if (!['search', 'query', 'summarize', 'deliver', 'capture', 'analyze', 'note'].includes(kind)) return steps;
-
-    const objectiveCandidate = typeof item.objective === 'string'
-      ? item.objective.trim()
-      : typeof item.title === 'string'
-        ? item.title.trim()
-        : '';
-    if (!objectiveCandidate) return steps;
-
-    let deliveryTarget: PersistedAutomationStep['deliveryTarget'] = null;
-    if (
-      isObjectRecord(item.deliveryTarget) &&
-      (item.deliveryTarget.channel === 'slack' || item.deliveryTarget.channel === 'email') &&
-      typeof item.deliveryTarget.target === 'string' &&
-      item.deliveryTarget.target.trim()
-    ) {
-      deliveryTarget = {
-        channel: item.deliveryTarget.channel,
-        target: item.deliveryTarget.target.trim(),
-      };
-    }
-
-    steps.push({
-      id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `step_${index + 1}`,
-      kind: kind as PersistedAutomationStep['kind'],
-      title: typeof item.title === 'string' && item.title.trim() ? item.title.trim() : undefined,
-      objective: objectiveCandidate,
-      inputs: isObjectRecord(item.inputs) ? item.inputs : undefined,
-      deliveryTarget,
-    });
-    return steps;
-  }, []);
-}
-
 function deriveLegacyActionFromStep(step: PersistedAutomationStep) {
   const objective = step.objective.trim();
   switch (step.kind) {
@@ -2598,6 +2587,7 @@ function createAutomationStepDefinitionFromPersisted(
       estimatedCredits: estimateAutomationStepCredits('query', 'micro', { toolCalls: 1 }),
       toolName: 'query_data',
       inputs: queryDataInput,
+      optional: step.optional === true,
     };
   }
 
@@ -3395,7 +3385,7 @@ async function executeAutomationCore(
       if (step.kind === 'query') {
         const payload = JSON.parse(await runAutomationStepWithTimeout(
           `Query step "${step.title}"`,
-          executeToolCall('query_data', step.inputs || {}, { workspaceId }),
+          executeToolCall('query_data', step.inputs || {}, { workspaceId, workflowId: runContext.workflowId }),
         )) as Record<string, unknown>;
         const payloadSource = typeof payload.source === 'string' ? payload.source : '';
         const queryType = typeof payload.query_type === 'string'
@@ -3423,24 +3413,29 @@ async function executeAutomationCore(
           stepExecution,
           stepErrors,
           artifactCount: chartArtifact ? 2 : 1,
+          optional: step.optional === true,
         });
-        if (payloadSource === 'stripe') {
-          appendWorkflowLedgerEvent({
-            workspaceId,
-            workflowId: runContext.workflowId,
-            automationId: automation.id,
-            taskId: runContext.taskId,
-            taskRunId: runContext.taskRunId,
-            type: payload.ok === false ? 'connector_failed' : 'data_read',
-            summary: payload.ok === false
-              ? `Stripe read blocked: ${String(payload.message || 'integration not ready')}`
-              : 'Read Stripe revenue summary.',
-            metadata: {
-              source: 'stripe',
-              queryType,
-              ok: payload.ok,
-            },
-          });
+        if (payloadSource) {
+          const liveRead = payload.live === true;
+          const optionalQuerySkipped = step.optional === true && isOptionalQueryReadinessFailure(payload);
+          const shouldLedger = liveRead
+            || ['stripe', 'github', 'gmail', 'google_calendar', 'google_drive'].includes(payloadSource);
+          if (shouldLedger) {
+            appendWorkflowLedgerEvent({
+              workspaceId,
+              workflowId: runContext.workflowId,
+              automationId: automation.id,
+              taskId: runContext.taskId,
+              taskRunId: runContext.taskRunId,
+              type: optionalQuerySkipped ? 'connector_skipped' : payload.ok === false ? 'connector_failed' : 'data_read',
+              summary: optionalQuerySkipped
+                ? `Skipped optional ${payloadSource} ${queryType || 'data'} read because the integration is not available.`
+                : payload.ok === false
+                ? `${payloadSource} read blocked: ${String(payload.message || 'integration not ready')}`
+                : `Read ${payloadSource} ${queryType || 'data'}.`,
+              metadata: buildSafeDataReadLedgerMetadata(payload),
+            });
+          }
         }
         continue;
       }
@@ -3608,20 +3603,25 @@ async function executeAutomationCore(
           continue;
         }
 
-        delivery = await runAutomationStepWithTimeout(`Delivery step "${step.title}"`, sendMessage({
+        const delivered = await runAutomationStepWithTimeout(`Delivery step "${step.title}"`, sendMessage({
           to: deliveryTarget.target,
           subject: `Automation run: ${automation.name}`,
           body,
           channel: deliveryTarget.channel,
         }));
+        const deliverySummary = buildSafeDeliverySummary(delivered, body, {
+          target: deliveryTarget.target,
+          channel: deliveryTarget.channel,
+        });
+        delivery = deliverySummary;
         artifacts.push({
           kind: 'delivery',
           title: `Delivered to ${deliveryTarget.target}`,
-          payload: delivery,
+          payload: deliverySummary,
         });
         stepExecution.status = 'succeeded';
         stepExecution.summary = `Delivered the latest result to ${deliveryTarget.target}.`;
-        stepExecution.output = delivery;
+        stepExecution.output = deliverySummary;
         stepExecution.artifactKind = 'delivery';
         stepExecution.toolCalls = 1;
         stepExecution.artifactCount = 1;
@@ -3633,7 +3633,7 @@ async function executeAutomationCore(
           taskRunId: runContext.taskRunId,
           type: 'external_action_executed',
           summary: `Delivered workflow output to ${deliveryTarget.target}.`,
-          metadata: { deliveryTarget: deliveryTarget.target, delivery },
+          metadata: { delivery: deliverySummary },
         });
         continue;
       }
@@ -3843,7 +3843,7 @@ async function runAutomation(automation: {
           artifacts: progress.artifacts,
           summary: progress.summaryText || undefined,
           stepErrors: progress.stepErrors,
-          delivery: progress.delivery,
+          delivery: progress.delivery ? buildSafeDeliverySummary(progress.delivery) : null,
           deliveryError: progress.deliveryError,
           rolePlan: {
             primaryRole: executionPlan.primaryRole,
@@ -4244,26 +4244,28 @@ app.post('/api/summarize', async (req: Request, res: Response) => {
 // ── Composio integration endpoints ────────────────────────────────────────────
 app.get('/api/integrations/catalog', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
+  const composioEntityId = resolveComposioEntityId(workspaceId);
   const partnerEnabled = isComposioEnabled();
   const connectedPartnerApps = partnerEnabled
-    ? await listConnectedApps({ entityId: workspaceId })
+    ? await listConnectedApps({ entityId: composioEntityId })
     : [];
   res.json(buildIntegrationCatalog({ partnerEnabled, connectedPartnerApps }));
 });
 
 app.get('/api/integrations/composio/status', (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
-  res.json({ enabled: isComposioEnabled(), workspaceId });
+  res.json({ enabled: isComposioEnabled(), workspaceId, entityId: resolveComposioEntityId(workspaceId) });
 });
 
 app.get('/api/integrations/composio/connections', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
+  const composioEntityId = resolveComposioEntityId(workspaceId);
   if (!isComposioEnabled()) {
     res.json({ enabled: false, apps: [] });
     return;
   }
-  const apps = await listConnectedApps({ entityId: workspaceId });
-  res.json({ enabled: true, apps });
+  const apps = await listConnectedApps({ entityId: composioEntityId });
+  res.json({ enabled: true, apps, entityId: composioEntityId });
 });
 
 app.post('/api/integrations/composio/connect', async (req: Request, res: Response) => {
@@ -4277,7 +4279,9 @@ app.post('/api/integrations/composio/connect', async (req: Request, res: Respons
     res.status(503).json({ error: 'Composio is not configured on this server.' });
     return;
   }
-  const redirectUrl = await getComposioConnectionUrl(appName, { entityId: workspaceId });
+  const redirectUrl = await getComposioConnectionUrl(appName, {
+    entityId: resolveComposioEntityId(workspaceId),
+  });
   if (!redirectUrl) {
     res.status(500).json({ error: `Could not start OAuth flow for ${appName}` });
     return;
@@ -4285,9 +4289,12 @@ app.post('/api/integrations/composio/connect', async (req: Request, res: Respons
   res.json({ redirectUrl });
 });
 
-app.get('/api/workflows/:workflowId/readiness', (req: Request, res: Response) => {
+app.get('/api/workflows/:workflowId/readiness', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const deliveryTarget = typeof req.query.deliveryTarget === 'string' ? req.query.deliveryTarget : undefined;
+  const connectedPartnerApps = await listConnectedApps({
+    entityId: resolveComposioEntityId(workspaceId),
+  });
 
   res.json({
     ok: true,
@@ -4295,6 +4302,7 @@ app.get('/api/workflows/:workflowId/readiness', (req: Request, res: Response) =>
       workspaceId,
       workflowId: req.params.workflowId,
       deliveryTarget,
+      connectedPartnerApps,
     }),
   });
 });
@@ -5303,6 +5311,8 @@ app.post('/api/automations', async (req: Request, res: Response) => {
     description?: string;
     authoringMode?: 'guided' | 'describe';
     workflowPrompt?: string;
+    workflowId?: string | null;
+    templateId?: string | null;
     schedule?: string;
     timezone?: string;
     actions?: unknown[];
@@ -5332,6 +5342,8 @@ app.post('/api/automations', async (req: Request, res: Response) => {
     });
     const record = createAutomation({
       workspaceId,
+      workflowId: typeof body.workflowId === 'string' ? body.workflowId.trim() || undefined : undefined,
+      templateId: typeof body.templateId === 'string' ? body.templateId.trim() || undefined : undefined,
       name: body.name.trim(),
       description: typeof body.description === 'string' ? body.description.trim() || undefined : undefined,
       authoring_mode: body.authoringMode === 'describe' ? 'describe' : 'guided',
@@ -5413,7 +5425,7 @@ app.post('/api/automations/:id/reviews/:runId/approve', async (req: Request, res
       taskRunId: context.taskRun.id,
       type: 'external_action_executed',
       summary: `Delivered approved workflow output to ${result.receipt.deliveryTarget || 'configured destination'}.`,
-      metadata: { delivery: result.delivery },
+      metadata: { delivery: result.receipt.delivery },
     });
     broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_approved');
     res.json({ ok: true, receipt: result.receipt, delivery: result.delivery, task, taskRun });
@@ -5499,6 +5511,8 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
   if (typeof req.body.description === 'string') patch.description = req.body.description.trim();
   if (req.body.authoringMode === 'guided' || req.body.authoringMode === 'describe') patch.authoring_mode = req.body.authoringMode;
   if (typeof req.body.workflowPrompt === 'string') patch.workflow_prompt = req.body.workflowPrompt.trim();
+  if (typeof req.body.workflowId === 'string') patch.workflowId = req.body.workflowId.trim() || undefined;
+  if (typeof req.body.templateId === 'string') patch.templateId = req.body.templateId.trim() || undefined;
   if (typeof req.body.schedule === 'string') patch.schedule = req.body.schedule.trim();
   if (typeof req.body.timezone === 'string') patch.timezone = req.body.timezone.trim();
   if (typeof req.body.notify === 'string') patch.notify = req.body.notify.trim();
@@ -5526,6 +5540,8 @@ app.patch('/api/automations/:id', async (req: Request, res: Response) => {
   if (req.body.condition === null) patch.condition = undefined;
   if (req.body.description === null) patch.description = undefined;
   if (req.body.workflowPrompt === null) patch.workflow_prompt = undefined;
+  if (req.body.workflowId === null) patch.workflowId = undefined;
+  if (req.body.templateId === null) patch.templateId = undefined;
   if (req.body.status === 'active' || req.body.status === 'paused') {
     patch.status = req.body.status;
   }

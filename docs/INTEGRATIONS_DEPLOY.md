@@ -59,14 +59,18 @@ Composio gives you Slack/GitHub/Stripe/HubSpot/Linear/Notion/Asana/Salesforce/Gm
 ### 2. Set on the VPS
 ```bash
 echo 'COMPOSIO_API_KEY=YOUR-KEY-HERE' >> /var/www/nexus/backend/.env
+echo 'COMPOSIO_ENTITY_ID=violema-founder-os' >> /var/www/nexus/backend/.env
 echo 'COMPOSIO_API_KEY=YOUR-KEY-HERE' >> /var/www/nexus/.env
+echo 'COMPOSIO_ENTITY_ID=violema-founder-os' >> /var/www/nexus/.env
 pm2 restart nexus-backend --update-env
 ```
+
+`COMPOSIO_ENTITY_ID` is the stable OAuth identity Composio uses for connected accounts. Keep it separate from Violema's internal workspace id; otherwise the default workspace slug can leak into Composio as the OAuth user id.
 
 ### 3. Verify it loaded
 ```bash
 curl https://nexus.purpleorange.io/api/integrations/composio/status
-# Expected: {"enabled":true,"workspaceId":"..."}
+# Expected: {"enabled":true,"workspaceId":"...","entityId":"violema-founder-os"}
 ```
 
 ### 4. Connect your first integration via the UI
@@ -81,6 +85,19 @@ The Claude API automatically discovers connected Composio tools (e.g., `SLACK_SE
 > "File a GitHub issue in maximisto/violema titled 'investigate streaming bug'"
 
 Violema → calls `GITHUB_CREATE_ISSUE` → Composio executes → real issue gets filed.
+
+## Google Drive workflow reads
+
+Drive source-material workflows use Violema's native Google Drive API adapter instead of Composio. Configure a refresh token with Drive metadata/file-list scope plus Google OAuth client credentials:
+
+```bash
+echo 'GOOGLE_CLIENT_ID=YOUR-GOOGLE-OAUTH-CLIENT-ID' >> /var/www/nexus/backend/.env
+echo 'GOOGLE_CLIENT_SECRET=YOUR-GOOGLE-OAUTH-CLIENT-SECRET' >> /var/www/nexus/backend/.env
+echo 'GOOGLE_DRIVE_REFRESH_TOKEN=YOUR-DRIVE-REFRESH-TOKEN' >> /var/www/nexus/backend/.env
+pm2 restart nexus-backend --update-env
+```
+
+`GOOGLE_DRIVE_CLIENT_ID` and `GOOGLE_DRIVE_CLIENT_SECRET` can be used instead of the shared `GOOGLE_CLIENT_*` values when Drive needs a separate OAuth client. The native adapter only requests file metadata for workflow source discovery and does not return document body text.
 
 ### Cost
 - Free tier: ~200 tool calls/day

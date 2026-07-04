@@ -5,7 +5,14 @@ export interface IntegrationNextAction {
 
 export interface IntegrationReadinessError {
   ok: false;
-  code: 'integration_not_ready' | 'unsupported_query' | 'integration_query_failed';
+  code:
+    | 'integration_not_ready'
+    | 'integration_auth_expired'
+    | 'integration_scope_missing'
+    | 'integration_rate_limited'
+    | 'integration_unavailable'
+    | 'unsupported_query'
+    | 'integration_query_failed';
   source: string;
   workflowId?: string;
   message: string;
@@ -35,7 +42,8 @@ export type WorkflowLedgerEventType =
   | 'approval_granted'
   | 'approval_denied'
   | 'external_action_executed'
-  | 'connector_failed';
+  | 'connector_failed'
+  | 'connector_skipped';
 
 export interface WorkflowLedgerEvent {
   id: string;
