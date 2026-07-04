@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import path from 'path';
 import { readJsonFile, writeJsonFile } from './platform/jsonStore';
+import { DEFAULT_WORKSPACE_ID } from './platform/workspace';
 import {
   getAccessRecord,
   listAdminAccessRecords,
@@ -16,6 +17,8 @@ export interface AuthUserRecord {
   name: string;
   role: AccessRole;
   method: AuthMethod;
+  workspaceIds: string[];
+  defaultWorkspaceId: string;
   acceptedTerms: boolean;
   acceptedEducation: boolean;
   slackWorkspace?: string;
@@ -52,8 +55,48 @@ export class AuthAccessDeniedError extends Error {
   }
 }
 
+export class WorkspaceAccessDeniedError extends Error {
+  statusCode = 403;
+  code = 'workspace_access_denied';
+
+  constructor(message = 'Workspace access denied.') {
+    super(message);
+    this.name = 'WorkspaceAccessDeniedError';
+  }
+}
+
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function deriveUserWorkspaceId(userId: string) {
+  return `workspace_${crypto.createHash('sha256').update(userId).digest('hex').slice(0, 16)}`;
+}
+
+function normalizeWorkspaceIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64))
+    .filter(Boolean)));
+}
+
+function normalizeAuthUserRecord(user: AuthUserRecord): AuthUserRecord {
+  const fallbackWorkspaceId = user.role === 'admin' ? DEFAULT_WORKSPACE_ID : deriveUserWorkspaceId(user.id);
+  const workspaceIds = normalizeWorkspaceIds(user.workspaceIds);
+  const defaultWorkspaceId =
+    typeof user.defaultWorkspaceId === 'string' && user.defaultWorkspaceId.trim()
+      ? user.defaultWorkspaceId.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
+      : fallbackWorkspaceId;
+  const nextWorkspaceIds = workspaceIds.includes(defaultWorkspaceId)
+    ? workspaceIds
+    : [defaultWorkspaceId, ...workspaceIds];
+
+  return {
+    ...user,
+    workspaceIds: nextWorkspaceIds,
+    defaultWorkspaceId,
+  };
 }
 
 function parseEmailList(value: string | undefined) {
@@ -250,7 +293,11 @@ export function assertEmailApprovedForAccess(email: string) {
 }
 
 function readUsers() {
-  return readJsonFile<AuthUserRecord[]>(USERS_FILE, []);
+  const users = readJsonFile<AuthUserRecord[]>(USERS_FILE, []);
+  const normalized = users.map(normalizeAuthUserRecord);
+  const needsMigration = JSON.stringify(users) !== JSON.stringify(normalized);
+  if (needsMigration) writeUsers(normalized);
+  return normalized;
 }
 
 export function listAuthUsers() {
@@ -321,6 +368,11 @@ export function upsertAuthUser(input: {
   const existingIndex = users.findIndex((item) => item.email === email);
   const existing = existingIndex >= 0 ? users[existingIndex] : null;
   const nextName = input.name.trim() || existing?.name || email.split('@')[0];
+  const id = existing?.id || `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const fallbackWorkspaceId = input.role === 'admin' ? DEFAULT_WORKSPACE_ID : deriveUserWorkspaceId(id);
+  const defaultWorkspaceId = existing?.defaultWorkspaceId || fallbackWorkspaceId;
+  const workspaceIds = normalizeWorkspaceIds(existing?.workspaceIds);
+  if (!workspaceIds.includes(defaultWorkspaceId)) workspaceIds.unshift(defaultWorkspaceId);
 
   const next: AuthUserRecord = existingIndex >= 0
     ? {
@@ -329,6 +381,8 @@ export function upsertAuthUser(input: {
         name: nextName,
         role: input.role,
         method: input.method,
+        workspaceIds,
+        defaultWorkspaceId,
         acceptedTerms: input.acceptedTerms || Boolean(existing?.acceptedTerms),
         acceptedEducation: input.acceptedEducation || Boolean(existing?.acceptedEducation),
         slackWorkspace: input.slackWorkspace ?? existing?.slackWorkspace,
@@ -338,11 +392,13 @@ export function upsertAuthUser(input: {
         updatedAt: now,
       }
     : {
-        id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        id,
         email,
         name: nextName,
         role: input.role,
         method: input.method,
+        workspaceIds,
+        defaultWorkspaceId,
         acceptedTerms: input.acceptedTerms,
         acceptedEducation: input.acceptedEducation,
         slackWorkspace: input.slackWorkspace,
@@ -360,6 +416,25 @@ export function upsertAuthUser(input: {
   }
   writeUsers(users);
   return next;
+}
+
+export function getAuthUserDefaultWorkspaceId(user: AuthUserRecord) {
+  return normalizeAuthUserRecord(user).defaultWorkspaceId;
+}
+
+export function getAuthUserWorkspaceIds(user: AuthUserRecord) {
+  return normalizeAuthUserRecord(user).workspaceIds;
+}
+
+export function canAuthUserAccessWorkspace(user: AuthUserRecord, workspaceId: string) {
+  if (user.role === 'admin') return true;
+  return getAuthUserWorkspaceIds(user).includes(workspaceId);
+}
+
+export function assertAuthUserCanAccessWorkspace(user: AuthUserRecord, workspaceId: string) {
+  if (!canAuthUserAccessWorkspace(user, workspaceId)) {
+    throw new WorkspaceAccessDeniedError();
+  }
 }
 
 export function createAuthSession(userId: string) {

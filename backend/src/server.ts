@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import cors from 'cors';
@@ -19,6 +19,8 @@ import {
   clearAuthSession as clearPersistedAuthSession,
   createAdminMagicLoginToken,
   createAuthSession,
+  assertAuthUserCanAccessWorkspace,
+  getAuthUserDefaultWorkspaceId,
   getAuthUserByToken,
   isEmailAdminForAccess,
   isDirectAdminEmailLoginAllowed,
@@ -26,6 +28,7 @@ import {
   requestBetaAccess,
   resolveAuthRole,
   type AuthMethod as PersistedAuthMethod,
+  type AuthUserRecord,
   upsertAuthUser,
   verifyAdminMagicLoginToken,
 } from './auth';
@@ -186,6 +189,7 @@ const ALLOWED_ORIGINS = [
   'http://nexus.purpleorange.io',
 ];
 const AUTH_COOKIE_NAME = 'violema_session';
+type AuthenticatedRequest = Request & { authUser?: AuthUserRecord };
 type AnthropicConstructor = typeof import('@anthropic-ai/sdk').default;
 let cachedAnthropicConstructor: AnthropicConstructor | null = null;
 
@@ -332,6 +336,11 @@ app.use((req: Request, res: Response, next: () => void) => {
     return;
   }
 
+  (req as AuthenticatedRequest).authUser = {
+    ...record.user,
+    role: resolveAuthRole(record.user.email),
+  };
+
   next();
 });
 
@@ -398,16 +407,32 @@ function getPersistedAutomationCount(): number {
   }
 }
 
+function normalizeWorkspaceSelector(value: unknown) {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+  if (!normalized) return '';
+  return normalized === 'workspace_default' ? DEFAULT_WORKSPACE_ID : normalized;
+}
+
+function readRequestedWorkspaceId(req: Request) {
+  return (
+    normalizeWorkspaceSelector(req.header('X-Workspace-Id')) ||
+    normalizeWorkspaceSelector(req.query.workspace_id) ||
+    normalizeWorkspaceSelector((req.body as Record<string, unknown> | undefined)?.workspaceId)
+  );
+}
+
+function getAuthenticatedUser(req: Request) {
+  return (req as AuthenticatedRequest).authUser || null;
+}
+
 function resolveWorkspaceContext(req: Request) {
-  const candidateId =
-    (typeof req.header('X-Workspace-Id') === 'string' ? req.header('X-Workspace-Id') : undefined) ||
-    (typeof req.query.workspace_id === 'string' ? req.query.workspace_id : undefined) ||
-    (typeof (req.body as Record<string, unknown> | undefined)?.workspaceId === 'string'
-      ? (req.body as Record<string, unknown>).workspaceId as string
-      : undefined) ||
-    DEFAULT_WORKSPACE_ID;
-  const normalizedId = candidateId.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || DEFAULT_WORKSPACE_ID;
-  const workspaceId = normalizedId === 'workspace_default' ? DEFAULT_WORKSPACE_ID : normalizedId;
+  const authUser = getAuthenticatedUser(req);
+  const requestedWorkspaceId = readRequestedWorkspaceId(req);
+  const workspaceId = requestedWorkspaceId || (authUser ? getAuthUserDefaultWorkspaceId(authUser) : DEFAULT_WORKSPACE_ID);
+  if (authUser) {
+    assertAuthUserCanAccessWorkspace(authUser, workspaceId);
+  }
   const candidateName =
     (typeof req.header('X-Workspace-Name') === 'string' ? req.header('X-Workspace-Name') : undefined) ||
     (typeof req.query.workspace_name === 'string' ? req.query.workspace_name : undefined) ||
@@ -5697,11 +5722,34 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
-loadPersistedAutomations(runAutomation);
-ensureCoreAutomationSeeds(runAutomation);
+app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
+  const statusCode = error instanceof Error && typeof (error as Error & { statusCode?: number }).statusCode === 'number'
+    ? (error as Error & { statusCode: number }).statusCode
+    : null;
+  if (!statusCode) {
+    next(error);
+    return;
+  }
 
-app.listen(PORT, () => {
-  console.log(`Violema by Purple Orange AI — backend running on http://localhost:${PORT}`);
+  res.status(statusCode).json({
+    error: error instanceof Error ? error.message : 'Request failed',
+    code: error instanceof Error && typeof (error as Error & { code?: string }).code === 'string'
+      ? (error as Error & { code: string }).code
+      : 'request_failed',
+  });
 });
+
+export function startServer() {
+  loadPersistedAutomations(runAutomation);
+  ensureCoreAutomationSeeds(runAutomation);
+
+  return app.listen(PORT, () => {
+    console.log(`Violema by Purple Orange AI — backend running on http://localhost:${PORT}`);
+  });
+}
+
+if (require.main === module) {
+  startServer();
+}
 
 export default app;
