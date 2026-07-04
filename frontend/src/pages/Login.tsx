@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
 import KeyRound from 'lucide-react/dist/esm/icons/key-round.js';
 import Mail from 'lucide-react/dist/esm/icons/mail.js';
-import { beginOAuthFlow, getAuthSession, isAdminEmail, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
+import { beginOAuthFlow, getAuthSession, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
@@ -46,7 +46,7 @@ export default function Login() {
     const session = {
       email: email.trim(),
       name: name.trim(),
-      role: isAdminEmail(email) ? 'admin' : existing?.role || 'user',
+      role: 'user',
       method: existing?.method || 'email',
       acceptedTerms: true,
       acceptedEducation: true,

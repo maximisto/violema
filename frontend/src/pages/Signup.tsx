@@ -5,7 +5,7 @@ import Eye from 'lucide-react/dist/esm/icons/eye.js';
 import Lock from 'lucide-react/dist/esm/icons/lock.js';
 import Mail from 'lucide-react/dist/esm/icons/mail.js';
 import MonitorSmartphone from 'lucide-react/dist/esm/icons/monitor-smartphone.js';
-import { beginOAuthFlow, isAdminEmail, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
+import { beginOAuthFlow, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import BrandIcon from '../components/BrandIcon';
 import PublicHeader from '../components/PublicHeader';
@@ -85,7 +85,7 @@ export default function Signup() {
     const session = {
       email: email.trim(),
       name: name.trim(),
-      role: isAdminEmail(email) ? 'admin' : 'user',
+      role: 'user',
       method: 'email' as const,
       acceptedTerms,
       acceptedEducation,

@@ -86,7 +86,7 @@ import {
 } from '../features/missions/missionSelectionState';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
 import { resolveWorkspaceContext } from '../lib/workspace';
-import { getAuthSession, hasSlackConnection, isAdminSession } from '../lib/auth';
+import { fetchBackendAuthSession, isAdminSession, type AuthSession } from '../lib/auth';
 import ViolemaLogo from '../components/ViolemaLogo';
 import type { Conversation, Message, AutonomyMode } from '../types';
 import type { MissionLessonView, MissionWorkspaceTab } from '../features/missions/types';
@@ -1838,10 +1838,11 @@ export default function Dashboard() {
   const [workflowReadiness, setWorkflowReadiness] = useState<WorkflowReadinessReport | null>(null);
   const [runLedgerEvents, setRunLedgerEvents] = useState<WorkflowLedgerEvent[]>([]);
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
+  const [backendAuthSession, setBackendAuthSession] = useState<AuthSession | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const { snapshot, refresh: refreshCredits } = useCreditSnapshot();
-  const authSession = getAuthSession();
-  const canLoadTestCredits = isAdminSession(authSession);
+  const canLoadTestCredits = isAdminSession(backendAuthSession);
+  const hasBackendSlackConnection = Boolean(backendAuthSession?.slackWorkspace && backendAuthSession?.slackChannelId);
 
   const activeMode = MODE_BUTTONS.find((m) => m.mode === autonomyMode)!;
   const activeWorkspaceArea = getWorkspaceArea(workspaceArea);
@@ -1888,6 +1889,22 @@ export default function Dashboard() {
     } catch {
       // ignore localStorage failures
     }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    void fetchBackendAuthSession()
+      .then((session) => {
+        if (active) setBackendAuthSession(session);
+      })
+      .catch(() => {
+        if (active) setBackendAuthSession(null);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -2859,7 +2876,7 @@ export default function Dashboard() {
     ));
     setSelectedCalendarItemId(null);
   }, [selectedMission.id]);
-  const reviewerLabel = authSession?.email || authSession?.name || 'Violema reviewer';
+  const reviewerLabel = backendAuthSession?.email || backendAuthSession?.name || 'Violema reviewer';
   const handleReviewApprove = useCallback(async () => {
     if (!selectedReviewTarget.automationId || !selectedReviewTarget.taskRunId) {
       showNotice('error', 'No reviewable run is selected.');
@@ -3365,7 +3382,7 @@ export default function Dashboard() {
   };
 
   const grantTestCredits = useCallback(async () => {
-    if (!authSession?.email || !canLoadTestCredits) return;
+    if (!backendAuthSession?.email || !canLoadTestCredits) return;
 
     setActionBusy('grant');
     try {
@@ -3394,7 +3411,7 @@ export default function Dashboard() {
     } finally {
       setActionBusy(null);
     }
-  }, [authSession?.email, canLoadTestCredits, refreshCredits, showNotice, workspace.workspaceId, workspace.workspaceName]);
+  }, [backendAuthSession?.email, canLoadTestCredits, refreshCredits, showNotice, workspace.workspaceId, workspace.workspaceName]);
 
   const duplicateSelectedAutomation = useCallback(() => {
     if (!selectedTask) return;
@@ -4758,13 +4775,13 @@ export default function Dashboard() {
             <div className="flex items-center gap-2.5">
               {/* Avatar */}
               <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl border border-violet-800/40 bg-gradient-to-br from-violet-700/35 to-navy-700 text-[10px] font-bold text-violet-300">
-                {authSession?.name ? authSession.name[0].toUpperCase() : 'U'}
+                {backendAuthSession?.name ? backendAuthSession.name[0].toUpperCase() : 'U'}
               </div>
 
               {/* Name + plan */}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12px] font-medium leading-none text-slate-200">
-                  {authSession?.name || authSession?.email || 'You'}
+                  {backendAuthSession?.name || backendAuthSession?.email || 'You'}
                 </p>
                 <p className="mt-0.5 text-[10px] leading-none text-slate-600">{snapshot.planName} plan</p>
               </div>
@@ -4772,11 +4789,11 @@ export default function Dashboard() {
               {/* Slack status dot */}
               <button
                 onClick={() => navigate('/connect/slack?next=%2Fdashboard')}
-                aria-label={hasSlackConnection() ? 'Slack connected — click to edit' : 'Connect Slack'}
-                title={hasSlackConnection() ? `Slack: ${authSession?.slackDisplayTarget || authSession?.slackChannelId || 'connected'}` : 'Slack not connected'}
+                aria-label={hasBackendSlackConnection ? 'Slack connected — click to edit' : 'Connect Slack'}
+                title={hasBackendSlackConnection ? `Slack: ${backendAuthSession?.slackDisplayTarget || backendAuthSession?.slackChannelId || 'connected'}` : 'Slack not connected'}
                 className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-navy-800 hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
               >
-                <span className={`h-2 w-2 rounded-full ${hasSlackConnection() ? 'bg-green-400' : 'bg-slate-600'}`} />
+                <span className={`h-2 w-2 rounded-full ${hasBackendSlackConnection ? 'bg-green-400' : 'bg-slate-600'}`} />
               </button>
 
               {/* Settings */}
