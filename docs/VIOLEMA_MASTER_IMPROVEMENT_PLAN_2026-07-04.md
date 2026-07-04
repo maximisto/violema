@@ -258,6 +258,11 @@ Notes:
 - **WP-2.1 (truth-labeling) jumps the queue** — it's a half-day and removes the single biggest demo landmine.
 - Phases 2 and 3 parallelize across sessions once Phase 1 lands.
 - Already-shipped work this plan builds on (don't redo): P5 cost plumbing, Save & run, per-step results panel, fail-closed conditions, compact sidebar, Settings account section, OAuth code paths (need only env vars + the WP-0 hardening).
+- **Codex work already on this branch (PR #2, commits `6b5365b..1d0efb0`) partially delivers Phase 2/4 for the Revenue Watch workflow** — before starting the WPs below, read `backend/src/integrationGateway/` (nativeStripe adapter, `workflowReadiness.ts`, `approvalLedger.ts`, `auditLog.ts`, `workflowPolicy.ts`) and extend rather than duplicate:
+  - WP-2.1: report generation already fails closed with `source_data_required` instead of synthetic revenue for Revenue Watch — remaining scope is the *other* demo tools and the UI "simulated" chips.
+  - WP-2.3: the Stripe (read) hero integration exists for revenue queries — remaining scope is Google Workspace + GitHub, and folding Stripe creds into the WP-2.2 vault.
+  - WP-4.1: approval gates + run ledger events (`data_read`, `draft_created`, `approval_requested`, `approval_granted`, `external_action_executed`) exist for this workflow — WP-4.1's scope becomes generalizing them into the universal Run page, not inventing them.
+  - PR #2's own follow-ups fold in here: persist explicit `workflowId`/`templateId` on automations (belongs in WP-2.5's typed spec), and VPS model-provider env cleanup (belongs in "Open items requiring Max").
 
 ## How to run this with Opus 4.8
 
@@ -300,3 +305,4 @@ Each WP is a self-contained brief: problem, file references, ordered steps, acce
 2. **Pricing decision** (WP-5.2 / 4.2): $79/2000-credit economics vs the $29/$50/$149 plan-doc tiers — pick before landing copy work.
 3. **[VAULT] reconciliation** — run this plan past `Violema - Dashboard.md`, `Violema - Runbook.md`, and the Deployment/Auth/SEO canon on a machine with vault access; anything the canon contradicts, the canon wins and this doc gets amended.
 4. **Beta cohort** — Phases 0–1 done = safe to onboard the 3–5 friendly founders the beta-readiness audit calls for; their reviewed-run data feeds the Phase 5 metrics.
+5. **VPS model-provider env cleanup** (carried from PR #2 findings) — Anthropic direct test returns premature-close, the OpenAI env var appears to hold an Anthropic-shaped key, and OpenRouter returns `User not found`. Workflows degrade safely to review, but production model routing must be fixed before relying on generated briefs.
