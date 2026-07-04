@@ -1,6 +1,6 @@
-import fs from 'fs';
 import path from 'path';
 import { createCreditLedgerEntry, summarizeCreditLedger } from './ledger';
+import { readJsonFile, writeJsonFile } from './jsonStore';
 import type {
   AgentRole,
   CreditLedgerEntry,
@@ -22,19 +22,6 @@ interface JsonStoreShape {
   tasks: TaskRecord[];
   taskRuns: TaskRunRecord[];
   ledger: CreditLedgerEntry[];
-}
-
-function readJsonFile<T>(filePath: string, fallback: T): T {
-  try {
-    if (!fs.existsSync(filePath)) return fallback;
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJsonFile<T>(filePath: string, value: T) {
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
 }
 
 export function getPlatformState(): JsonStoreShape {

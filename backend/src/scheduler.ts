@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import cron, { ScheduledTask } from 'node-cron';
+import type { ScheduledTask } from 'node-cron';
 import type { AutomationExecutionPolicy, AutomationStepKind, PersistedAutomationStep } from './platform/types';
 
 export interface AutomationRoleDirective {
@@ -53,6 +53,20 @@ export interface AutomationRecord {
 const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
 const scheduledTasks = new Map<string, ScheduledTask>();
 const DEFAULT_AUTOMATION_TIMEZONE = process.env.DEFAULT_AUTOMATION_TIMEZONE || 'UTC';
+let cronModule: typeof import('node-cron') | null = null;
+
+function getCron() {
+  if (!cronModule) {
+    // Lazy-load node-cron so read-only automation imports do not keep test workers alive.
+    cronModule = require('node-cron') as typeof import('node-cron');
+  }
+  return cronModule;
+}
+
+function shouldScheduleAutomationTasks() {
+  return process.env.VIOLEMA_DISABLE_AUTOMATION_SCHEDULER !== '1';
+}
+
 const LEGACY_DELIVERY_TARGETS: Record<string, string> = {
   '#founders': '#all-purple-orange',
 };
@@ -323,7 +337,7 @@ function parseTime(value?: string): { hour: number; minute: number } {
 export function normalizeSchedule(schedule: string): string {
   const normalized = schedule.trim().toLowerCase();
 
-  if (cron.validate(normalized)) {
+  if (getCron().validate(normalized)) {
     return normalized;
   }
 
@@ -483,11 +497,16 @@ function scheduleAutomationTask(
   }
 
   const timezone = normalizeTimeZone(record.timezone);
-  const task = cron.schedule(record.cron_expression, () => {
-    void executeAutomation({ ...record, timezone }, onTrigger);
-  }, { timezone });
+  if (shouldScheduleAutomationTasks()) {
+    const task = getCron().schedule(record.cron_expression, () => {
+      void executeAutomation({ ...record, timezone }, onTrigger);
+    }, { timezone });
 
-  scheduledTasks.set(record.id, task);
+    scheduledTasks.set(record.id, task);
+  } else {
+    scheduledTasks.delete(record.id);
+  }
+
   updateAutomationRecord(record.id, (current) => ({
     ...current,
     timezone,

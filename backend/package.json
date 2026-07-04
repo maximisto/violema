@@ -5,7 +5,11 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "NODE_ENV=test VIOLEMA_DISABLE_AUTOMATION_SCHEDULER=1 node --test -r ts-node/register \"tests/**/*.test.ts\" \"tests/**/*.contract.ts\"",
+    "test:platform": "NODE_ENV=test VIOLEMA_DISABLE_AUTOMATION_SCHEDULER=1 node --test -r ts-node/register tests/jsonStore.test.ts",
     "start": "node dist/server.js"
   },
   "dependencies": {
@@ -25,6 +29,6 @@
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.5",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.3.3"
+    "typescript": "5.3.3"
   }
 }
