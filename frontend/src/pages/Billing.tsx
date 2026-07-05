@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
+import CalendarCheck from 'lucide-react/dist/esm/icons/calendar-check.js';
 import Check from 'lucide-react/dist/esm/icons/check.js';
 import CreditCard from 'lucide-react/dist/esm/icons/credit-card.js';
 import Layers3 from 'lucide-react/dist/esm/icons/layers-3.js';
@@ -21,6 +22,7 @@ import {
   getSampleRunById,
   getSampleRunPath,
 } from '../content/sampleRuns';
+import { openCalendlyConsultation } from '../lib/calendly';
 
 const PLANS = [
   {
@@ -152,6 +154,23 @@ export default function Billing() {
                 <p className="text-sm text-slate-500">
                   Existing Stripe prices are reused: Start checks out through the current $79 plan, Pro through the current $249 plan, and Enterprise is custom.
                 </p>
+              </div>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <button
+                  type="button"
+                  onClick={(event) => { void openCalendlyConsultation(event, 'pricing-hero-workflow-audit'); }}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-glow-violet transition-colors hover:bg-violet-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                >
+                  <CalendarCheck className="h-4 w-4" />
+                  Book workflow audit
+                </button>
+                <Link
+                  to={hasAccess ? '/dashboard' : '/signup?next=%2Fdashboard'}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-navy-700/80 bg-navy-900/55 px-5 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-violet-500/35 hover:text-white"
+                >
+                  {hasAccess ? 'Open workspace' : 'Start free preview'}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
               </div>
             </div>
 
