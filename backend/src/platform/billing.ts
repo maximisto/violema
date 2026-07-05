@@ -54,7 +54,7 @@ export const TOP_UP_OFFERS_FILE = path.join(process.cwd(), 'platform-top-up-offe
 const DEFAULT_PLAN_CATALOG: Record<BillingPlanId, PlanDefinition> = {
   starter: {
     id: 'starter',
-    name: 'Starter',
+    name: 'Legacy Starter',
     stripeProductKey: 'nexus_starter_monthly',
     monthlyPriceUsd: 29,
     includedCredits: 500,
@@ -70,6 +70,7 @@ const DEFAULT_PLAN_CATALOG: Record<BillingPlanId, PlanDefinition> = {
     features: [
       '500 Violema credits',
       '3 active automations',
+      'Legacy beta access',
       'Web research',
       'Code execution',
       'Email support',
@@ -78,7 +79,7 @@ const DEFAULT_PLAN_CATALOG: Record<BillingPlanId, PlanDefinition> = {
   },
   pro: {
     id: 'pro',
-    name: 'Pro',
+    name: 'Start',
     stripeProductKey: 'nexus_pro_monthly',
     monthlyPriceUsd: 79,
     includedCredits: 2000,
@@ -93,9 +94,12 @@ const DEFAULT_PLAN_CATALOG: Record<BillingPlanId, PlanDefinition> = {
     supportsAnalyticsDashboard: true,
     features: [
       '2,000 Violema credits',
+      '1-3 live reviewed missions',
       '20 active automations',
-      'Multi-agent orchestration',
-      'Task automation',
+      'First hero integration',
+      'Run review pages',
+      'Slack/email delivery',
+      'Budget caps',
       'Long-term memory',
       'Slack + email support',
       'Analytics dashboard',
@@ -104,7 +108,7 @@ const DEFAULT_PLAN_CATALOG: Record<BillingPlanId, PlanDefinition> = {
   },
   team: {
     id: 'team',
-    name: 'Team',
+    name: 'Pro',
     stripeProductKey: 'nexus_team_monthly',
     monthlyPriceUsd: 249,
     includedCredits: 7500,
@@ -119,9 +123,12 @@ const DEFAULT_PLAN_CATALOG: Record<BillingPlanId, PlanDefinition> = {
     supportsAnalyticsDashboard: true,
     features: [
       '7,500 Violema credits',
+      '5-10 live reviewed missions',
       '100 active automations',
       '5 included seats',
       'Approvals / review gates',
+      'Slack operating surface',
+      'Priority setup support',
       'Admin visibility',
       'Shared workspace / shared memory',
       'Priority support',
@@ -316,7 +323,7 @@ export function calculatePlanLimitState(input: {
       severity: input.plan.supportsMultiAgent ? 'ok' : 'blocked',
       current: input.needsMultiAgent,
       limit: input.plan.supportsMultiAgent,
-      message: input.plan.supportsMultiAgent ? 'Multi-agent available.' : 'Multi-agent requires Pro or Team.',
+      message: input.plan.supportsMultiAgent ? 'Multi-agent available.' : 'Multi-agent requires Start or Pro.',
     });
   }
 
@@ -326,7 +333,7 @@ export function calculatePlanLimitState(input: {
       severity: input.plan.supportsApprovals ? 'ok' : 'blocked',
       current: input.needsApprovals,
       limit: input.plan.supportsApprovals,
-      message: input.plan.supportsApprovals ? 'Approvals available.' : 'Approval workflows require Team.',
+      message: input.plan.supportsApprovals ? 'Approvals available.' : 'Approval workflows require Pro.',
     });
   }
 

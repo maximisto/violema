@@ -16,33 +16,28 @@ import { useTheme } from '../lib/useTheme';
 
 const PLANS = [
   {
-    id: 'starter' as const,
-    name: 'Starter',
-    priceUsd: 29,
-    description: 'A lean self-serve tier for founders and operators getting started.',
-    credits: 500,
-    automations: 3,
-    features: ['Web research', 'Code execution', 'Email support'],
-  },
-  {
     id: 'pro' as const,
-    name: 'Pro',
+    name: 'Start',
     priceUsd: 79,
-    description: 'The default operating tier for serious solo operators and execution-heavy workflows.',
+    description: 'The first real plan for a founder who wants one reliable reviewed workflow.',
     credits: 2000,
     automations: 20,
-    features: ['Multi-agent orchestration', 'Task automation', 'Long-term memory', 'Slack + email support', 'Analytics dashboard'],
+    missions: '1-3 live missions',
+    stripeMapping: 'Uses the existing $79 Stripe price.',
+    features: ['First hero integration', 'Run review pages', 'Slack/email delivery', 'Budget caps', 'Analytics dashboard'],
     featured: true,
   },
   {
     id: 'team' as const,
-    name: 'Team',
+    name: 'Pro',
     priceUsd: 249,
-    description: 'A real team workspace with shared context, approvals, and admin visibility.',
+    description: 'The production tier for recurring missions, approvals, and real operating cadence.',
     credits: 7500,
     automations: 100,
+    missions: '5-10 live missions',
+    stripeMapping: 'Uses the existing $249 Stripe price.',
     seats: 5,
-    features: ['Approvals / review gates', 'Admin visibility', 'Shared workspace / shared memory', 'Priority support'],
+    features: ['Approval gates', 'More integrations', 'Slack operating surface', 'Admin visibility', 'Priority setup support'],
   },
 ];
 
@@ -54,7 +49,7 @@ export default function Billing() {
   const { snapshot, refresh } = useCreditSnapshot();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
-  const [hoveredPlanId, setHoveredPlanId] = useState<'starter' | 'pro' | 'team' | null>(null);
+  const [hoveredPlanId, setHoveredPlanId] = useState<'pro' | 'team' | null>(null);
   const search = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const section = search.get('section') === 'topups' ? 'topups' : 'plans';
   const requestedPlan = search.get('plan');
@@ -62,6 +57,7 @@ export default function Billing() {
   const sessionId = search.get('session_id');
   const hasAccess = Boolean(session?.acceptedTerms && session?.acceptedEducation);
   const slackReady = Boolean(session?.slackWorkspace && session?.slackChannelId);
+  const billingBasePath = location.pathname.startsWith('/pricing') ? '/pricing' : '/plans';
 
   useEffect(() => {
     persistWorkspaceContext();
@@ -75,9 +71,9 @@ export default function Billing() {
     void refresh();
   }, [checkoutState, refresh]);
 
-  async function handleSubscription(planId: 'starter' | 'pro' | 'team') {
+  async function handleSubscription(planId: 'pro' | 'team') {
     if (!hasAccess) {
-      navigate(`/signup?next=${encodeURIComponent(`/plans?plan=${planId}`)}`);
+      navigate(`/signup?next=${encodeURIComponent(`${billingBasePath}?plan=${planId}`)}`);
       return;
     }
     setBusyId(planId);
@@ -95,7 +91,7 @@ export default function Billing() {
 
   async function handleTopUp(offerId: 'topup_500' | 'topup_1500' | 'topup_5000') {
     if (!hasAccess) {
-      navigate(`/signup?next=${encodeURIComponent('/plans?section=topups')}`);
+      navigate(`/signup?next=${encodeURIComponent(`${billingBasePath}?section=topups`)}`);
       return;
     }
     setBusyId(offerId);
@@ -133,14 +129,14 @@ export default function Billing() {
                 <span className="gradient-text"> before Violema starts executing.</span>
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg">
-                Plans set your monthly credit budget and automation limits. Top-ups are one-time add-ons for extra work without changing your plan.
+                Start with a workflow audit, then choose the monthly tier that matches the first real mission. Top-ups are one-time add-ons for extra work without changing your plan.
               </p>
               <div className="mt-5 space-y-1.5">
                 <p className="text-sm text-slate-300">
-                  Credits map to actual agent work. Start lean, then scale as Violema takes on more execution.
+                  Credits map to actual agent work. The public ladder starts at $79 because Violema is selling reviewed operating loops, not cheap task volume.
                 </p>
                 <p className="text-sm text-slate-500">
-                  Starter is for light weekly usage. Higher tiers are built for heavier multi-agent workflows and bigger automation volume.
+                  Existing Stripe prices are reused: Start checks out through the current $79 plan, Pro through the current $249 plan, and Enterprise is custom.
                 </p>
               </div>
             </div>
@@ -187,7 +183,7 @@ export default function Billing() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => navigate(`/connect/slack?next=${encodeURIComponent('/plans')}`)}
+                      onClick={() => navigate(`/connect/slack?next=${encodeURIComponent(billingBasePath)}`)}
                       className="ui-button-ghost px-3 py-2 text-xs"
                     >
                       {slackReady ? 'Edit' : 'Connect'}
@@ -239,7 +235,7 @@ export default function Billing() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => navigate('/plans')}
+                    onClick={() => navigate(billingBasePath)}
                     className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-500/22"
                   >
                     <ArrowRight className="h-3.5 w-3.5" />
@@ -255,7 +251,7 @@ export default function Billing() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => navigate('/plans')}
+                onClick={() => navigate(billingBasePath)}
                 className={`ui-pill px-4 py-2 ${section === 'plans' ? 'border-violet-500/35 bg-violet-500/12 text-violet-200' : ''}`}
               >
                 <Layers3 className="h-3.5 w-3.5" />
@@ -263,7 +259,7 @@ export default function Billing() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/plans?section=topups')}
+                onClick={() => navigate(`${billingBasePath}?section=topups`)}
                 className={`ui-pill px-4 py-2 ${section === 'topups' ? 'border-violet-500/35 bg-violet-500/12 text-violet-200' : ''}`}
               >
                 <CreditCard className="h-3.5 w-3.5" />
@@ -281,16 +277,16 @@ export default function Billing() {
             <div className="mt-5 grid gap-3 border-t border-white/6 pt-5 md:grid-cols-3">
               {[
                 {
-                  title: 'Start lean',
-                  body: 'Starter is for light weekly usage when you want research, code help, and a few active automations.',
+                  title: 'Design first',
+                  body: 'Most buyers should start with a workflow audit so the first mission is narrow, connected, and reviewable.',
                 },
                 {
-                  title: 'Operate seriously',
-                  body: 'Pro is the working tier for people running Violema regularly across research, automation, and delegated execution.',
+                  title: 'Start at $79',
+                  body: 'Start is for one founder workflow with real sources, visible costs, and reviewed delivery.',
                 },
                 {
-                  title: 'Scale as a team',
-                  body: 'Team adds shared context, approvals, admin visibility, and five included seats for coordinated work.',
+                  title: 'Pro at $249',
+                  body: 'Pro is the production tier for recurring missions, approval gates, Slack operations, and team visibility.',
                 },
               ].map((item) => (
                 <div key={item.title} className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
@@ -316,7 +312,7 @@ export default function Billing() {
 
         {section === 'plans' ? (
           <>
-            <div className="mt-7 grid gap-5 xl:grid-cols-3 items-stretch">
+            <div className="mt-7 grid gap-5 xl:grid-cols-2 items-stretch">
               {PLANS.map((plan) => (
                 <div
                   key={plan.id}
@@ -362,18 +358,34 @@ export default function Billing() {
 
                   <div className="mt-5 grid gap-2 sm:grid-cols-2">
                     <div className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Mission range</p>
+                      <p className="mt-2 text-lg font-semibold text-white">{plan.missions}</p>
+                    </div>
+                    <div className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Credits</p>
                       <p className="mt-2 text-lg font-semibold text-white">{formatCredits(plan.credits)}</p>
                     </div>
-                    <div className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Active automations</p>
-                      <p className="mt-2 text-lg font-semibold text-white">{plan.automations}</p>
-                    </div>
+                  </div>
+
+                  <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Active automations</p>
+                    <p className="mt-2 text-lg font-semibold text-white">{plan.automations}</p>
+                  </div>
+
+                  <div className={`mt-3 rounded-2xl border px-4 py-3 ${
+                    plan.id === 'team'
+                      ? 'border-cyan-500/20 bg-cyan-500/8'
+                      : 'border-violet-500/20 bg-violet-500/8'
+                  }`}>
+                    <p className={`text-[10px] uppercase tracking-[0.18em] ${
+                      plan.id === 'team' ? 'text-cyan-300/80' : 'text-violet-300/80'
+                    }`}>Stripe mapping</p>
+                    <p className="mt-2 text-sm text-slate-300">{plan.stripeMapping}</p>
                   </div>
 
                   {plan.seats && (
-                    <div className="mt-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/8 px-4 py-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-300/80">Included seats</p>
+                    <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Included seats</p>
                       <p className="mt-2 text-lg font-semibold text-white">{plan.seats} seats + $29 per extra seat</p>
                     </div>
                   )}
@@ -413,7 +425,7 @@ export default function Billing() {
                   <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Enterprise</p>
                   <h3 className="mt-2 text-2xl font-semibold text-white">Custom for bigger teams</h3>
                   <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
-                    Higher limits, security controls, admin workflows, onboarding support, and SLA-ready positioning. Use this when Violema is becoming part of a broader operating stack.
+                    Custom mission volume, security controls, admin workflows, onboarding support, and SLA-ready positioning. Use this when Violema is becoming part of a broader operating stack.
                   </p>
                   <a
                     href="mailto:sales@purpleorange.io?subject=Violema%20Enterprise"

@@ -61,7 +61,7 @@ function getAppBaseUrl(): string {
 }
 
 const DEFAULT_SUCCESS_URL = `${getAppBaseUrl()}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
-const DEFAULT_CANCEL_URL = `${getAppBaseUrl()}/plans?checkout=cancel`;
+const DEFAULT_CANCEL_URL = `${getAppBaseUrl()}/pricing?checkout=cancel`;
 
 let cachedStripe: Stripe | null = null;
 let cachedStripeKey: string | null = null;

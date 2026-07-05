@@ -24,6 +24,50 @@ The plan: **make the promise true, make the core safe, then make the differentia
 
 ---
 
+## Pricing + Packaging Direction (Stargaze Pass, 2026-07-04)
+
+**Decision:** do **not** ship a $29 lowest paid tier. Violema should present as a call-led, trust-heavy AI operator for founder workflows:
+
+1. Primary CTA: **Book a workflow audit** / "Design your first reviewed mission."
+2. Secondary CTA: **Start free** for a bounded preview, not a production tier.
+3. First real paid plan: **Start / Founder — $79/mo**.
+4. Main production plan: **Pro — $249/mo**.
+
+**Why:** $29 frames Violema as commodity automation. The durable wedge is not "cheap tasks"; it is reviewed, source-linked, cost-visible operational work a founder can trust. The market already has cheap workflow meters. Violema should anchor against the value of a reliable operating loop and the trust/onboarding required to connect real company data.
+
+**Competitive pricing check, official sources reviewed 2026-07-04:**
+
+| Product | Public pricing anchor | Lesson for Violema |
+|---|---:|---|
+| [Zapier](https://zapier.com/pricing) | Free, Professional from $19.99/mo, Team from $69/mo | Commodity workflow automation starts cheap; do not let this anchor Violema's reviewed-operator positioning. |
+| [Make](https://www.make.com/en/pricing) | Free, Core $9/mo, Pro $16/mo, Teams $29/mo at 10k credits | Low prices are for visual workflow volume, not trusted AI execution with review and evidence. |
+| [Relay.app](https://www.relay.app/pricing) | Free, Professional $19/mo annual, Team $59/mo annual | Human-in-the-loop workflow tools still use low self-serve entry points; Violema needs a stronger trust/value frame. |
+| [n8n](https://n8n.io/pricing/) | Starter 20 EUR/mo annual, Pro 50 EUR/mo annual, Business 667 EUR/mo annual | Builder platforms scale up sharply when production, governance, and team usage matter. |
+| [Lindy](https://www.lindy.ai/pricing) | Plus $49.99/mo, Pro $99.99/mo, Max $199.99/mo; Pro includes live onboarding | The closest "AI assistant/operator" comparable validates that serious-use agent pricing belongs near/above $100, while onboarding is part of value. |
+| [Gumloop](https://www.gumloop.com/pricing) | Free, Pro starts at $37/mo, Enterprise custom | AI-agent builders can start low, but serious team usage still pushes toward custom/enterprise motion. |
+| [Relevance AI](https://relevanceai.com/pricing) / [pricing docs](https://relevanceai.com/docs/admin/subscriptions/new-pricing) | Public page is enterprise-first/custom; docs split actions from vendor credits | Agent platforms are moving toward transparent usage economics; Violema should make cost intelligence a feature, not a footnote. |
+
+**Recommended packaging:**
+
+- **Workflow Audit (primary motion):** 20-minute call to map the first mission, confirm integrations/data readiness, and decide whether Violema is useful. Do not label this "Contact sales"; call it a workflow audit or first-mission design session.
+- **Free Preview ($0):** demo workspace, sample data, one reviewed sample run, visible run ledger/costs, no external delivery without connection. Purpose: self-serve learning and lead capture, not production value.
+- **Start / Founder ($79/mo):** 1 workspace, 1-3 live missions, 1,500-2,000 credits, first hero integration, run review pages, Slack/email delivery, budget caps. This replaces the current $29 Starter concept without forcing a $99 first step.
+- **Pro ($249/mo):** 5-10 live missions, 7,500+ credits, approval gates, more integrations, Slack operating surface, priority setup/support.
+- **Enterprise (custom):** more seats, workspaces, custom mission volume, compliance/security review, custom integration help.
+- **Optional paid setup:** $500-$1,500 first-mission setup, credited against the first invoice for qualified founders. This filters tire-kickers without making early adopters feel punished.
+
+**Presentation / linking:**
+
+- Make the hero CTA **Book workflow audit**. Pair it with a quieter **Start free preview** secondary CTA.
+- Pricing page should show the call-led path first, then the plan cards. The best buyer path is not "pick a tier blind"; it is "design the first mission, then choose the plan."
+- Link every pricing card to a sample reviewed run and a monthly cost projection. The proof is the run ledger: sources, steps, approval state, credits, provider cost, and monthly estimate.
+- Reuse existing Stripe products/price IDs: current backend `pro` maps to public **Start / Founder $79**; current backend `team` maps to public **Pro $249**; current backend `starter` becomes hidden/legacy. No Stripe product migration is required.
+- `/pricing` should become the canonical route; `/plans` can remain as a backwards-compatible alias. Current implementation has a blank `/pricing` route and live `/plans`, so WP-5.2 must fix routing, copy, and credit economics together.
+
+**Stargaze rule:** sell the outcome of a trusted operating loop, not the cheapest seat in an automation category. A founder who will not pay $79 for one reliable reviewed workflow is not the first ICP; $249 Pro is the real production anchor.
+
+---
+
 ## Phase 0 — Stop the Bleeding (security + money safety)
 
 *Everything here is small, surgical, and must ship before anything else. No new features. Target: 1–2 Opus sessions.*
@@ -208,7 +252,7 @@ Nobody in the category has a first-class "review what the AI did" experience. Bu
 
 ### WP-4.2 Cost intelligence (the moat, part 2)
 
-The P5 margin plumbing exists — turn it into a user-facing killer feature: per-automation monthly cost projection ("this daily monitor ≈ 340 credits/mo"), budget caps per automation with auto-pause + Slack alert, and a workspace cost dashboard (spend by automation, by model tier, trend). Position: "the only AI operator that shows you exactly what every task costs before and after it runs." **[VAULT]** reconcile pricing narrative with the canon doc — the $29/$50/$149 plan-doc numbers contradict the coded $79/2000-credit economics; pick one, fix `cost.ts` + `/plans` + landing copy together (see WP-5.2).
+The P5 margin plumbing exists — turn it into a user-facing killer feature: per-automation monthly cost projection ("this daily monitor ≈ 340 credits/mo"), budget caps per automation with auto-pause + Slack alert, and a workspace cost dashboard (spend by automation, by model tier, trend). Position: "the only AI operator that shows you exactly what every task costs before and after it runs." Pricing target is now **call-led workflow audit + bounded free preview + Start/Founder at $79/mo + Pro at $249/mo + Enterprise custom**; reconcile the old $29/$50/$149 plan-doc numbers by fixing `cost.ts` + `/pricing`/`/plans` + landing copy together while reusing existing Stripe price IDs (see WP-5.2).
 
 ### WP-4.3 Template gallery → 5-minute activation
 
@@ -232,7 +276,18 @@ SSE reconnect with `Last-Event-ID` resume on the chat stream; automation runs st
 From WP-1.4 telemetry, build the internal one-pager investors will ask for: WAU, activation rate (signup → first reviewed run), retained automations/week (recurring-value proxy), runs/week growth, gross margin per run (real, from P5 data), failure rate trend. Auto-emailed weekly to Max.
 
 ### WP-5.2 Pricing + narrative coherence
-Fix the pricing contradiction (plan doc vs `cost.ts` vs blank `/pricing` route — real route is `/plans`; add a redirect). Landing copy audit against what is now *actually real* post-Phase 2 — the docs themselves flag the current copy as over-broad ("AI coworker that does everything" → "the reviewable AI operator for founder-led teams" wedge). Ship the SEO comparison pages from the campaign doc ("Zapier AI vs AI operator", "n8n vs AI agent") once the claims are true.
+Fix the pricing contradiction (plan doc vs `cost.ts` vs blank `/pricing` route — real route is `/plans`) around the new target: **workflow audit primary, free preview secondary, Start/Founder $79/mo, Pro $249/mo, Enterprise custom**.
+
+**First pass shipped on this PR branch:** `/pricing` now renders the billing surface, public cards show Start $79 and Pro $249, backend display names match while existing Stripe `pro`/`team` IDs and price env keys are reused, and Legacy Starter is hidden from the public ladder.
+
+1. Replace the current `$29 Starter` public offer with `Start / Founder — $79/mo`; move the serious production tier to `Pro — $249/mo`.
+2. Reuse existing Stripe env keys and price IDs: backend `pro` remains the checkout id for $79, backend `team` remains the checkout id for $249, and backend `starter` stays as hidden/legacy fallback rather than a public plan.
+3. Align credit economics in `backend/src/platform/cost.ts`, backend plan display names, `frontend/src/pages/Billing.tsx`, landing CTAs, and any plan docs in one PR. Do not change copy without changing billing math.
+4. Make `/pricing` canonical and keep `/plans` as a redirect or backwards-compatible alias.
+5. Add "Book workflow audit" as the primary public CTA and "Start free preview" as the secondary CTA. Avoid generic "Contact sales" language except for Enterprise.
+6. Add sample-run links and monthly cost projections to the pricing surface so the buyer sees evidence, not just plan cards.
+
+Landing copy audit against what is now *actually real* post-Phase 2 — the docs themselves flag the current copy as over-broad ("AI coworker that does everything" → "the reviewable AI operator for founder-led teams" wedge). Ship the SEO comparison pages from the campaign doc ("Zapier AI vs AI operator", "n8n vs AI agent") once the claims are true.
 
 ### WP-5.3 The demo path
 A scripted, seeded, unbreakable demo workspace: investor update template installed, real (own-company) Stripe+GitHub connected, run history showing weeks of reviewed runs with costs, one live "run now" that completes in <60s. Rehearsable, resettable via one script.
@@ -302,7 +357,7 @@ Each WP is a self-contained brief: problem, file references, ordered steps, acce
 ## Open items requiring Max (not Opus)
 
 1. **Env vars on VPS** — Google/Microsoft OAuth client creds, `AUTH_STATE_SECRET`, `CREDENTIAL_VAULT_KEY` (new, WP-2.2), Composio key. Opus can't mint these.
-2. **Pricing decision** (WP-5.2 / 4.2): $79/2000-credit economics vs the $29/$50/$149 plan-doc tiers — pick before landing copy work.
+2. **Pricing implementation follow-through** (WP-5.2 / 4.2): decision is call-led workflow audit + bounded free preview + Start/Founder at $79/mo + Pro at $249/mo + Enterprise custom. First code pass reuses existing Stripe products/price IDs and ships `/pricing`; remaining work is landing CTA alignment, sample-run/monthly-cost links, and live Stripe env verification.
 3. **[VAULT] reconciliation** — run this plan past `Violema - Dashboard.md`, `Violema - Runbook.md`, and the Deployment/Auth/SEO canon on a machine with vault access; anything the canon contradicts, the canon wins and this doc gets amended.
 4. **Beta cohort** — Phases 0–1 done = safe to onboard the 3–5 friendly founders the beta-readiness audit calls for; their reviewed-run data feeds the Phase 5 metrics.
 5. **VPS model-provider env cleanup** (carried from PR #2 findings) — Anthropic direct test returns premature-close, the OpenAI env var appears to hold an Anthropic-shaped key, and OpenRouter returns `User not found`. Workflows degrade safely to review, but production model routing must be fixed before relying on generated briefs.

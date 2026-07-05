@@ -212,9 +212,9 @@ Important nuance:
 
 Pricing model in code:
 
-- Starter: `$29`
-- Pro: `$79`
-- Team: `$249`
+- Legacy Starter: `$29` (hidden/internal fallback; do not market publicly)
+- Start: `$79` (uses existing backend `pro` Stripe price/env key)
+- Pro: `$249` (uses existing backend `team` Stripe price/env key)
 - Enterprise: custom
 
 Top-ups:
@@ -227,7 +227,6 @@ Key files:
 
 - `/Users/maximisto/Documents/New project/backend/src/platform/billing.ts`
 - `/Users/maximisto/Documents/New project/backend/src/platform/stripe.ts`
-- `/Users/maximisto/Documents/New project/frontend/src/components/Pricing.tsx`
 - `/Users/maximisto/Documents/New project/frontend/src/pages/Billing.tsx`
 
 Important reality:

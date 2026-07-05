@@ -170,7 +170,7 @@ const PROVIDER_COST_USD_PER_1M_TOKENS: Record<ModelTier, number> = {
   ops: 0.20,
 };
 
-// Approximate USD value of one credit at Pro-plan rates ($79 / 2000 credits).
+// Approximate USD value of one credit at Start-plan rates ($79 / 2000 credits).
 export const CREDIT_VALUE_USD = 0.0395;
 
 export function estimateProviderCostUsd(modelTier: ModelTier, totalTokens: number): number {

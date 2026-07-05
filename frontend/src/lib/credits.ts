@@ -76,7 +76,7 @@ const MOCK_CREDIT_SNAPSHOT: CreditSnapshot = {
   source: 'mock',
   workspaceId: 'purpleorangehq',
   workspaceName: 'Purple Orange HQ',
-  planName: 'Pro',
+  planName: 'Start',
   creditsRemaining: 1684,
   creditsTotal: 2000,
   estimatedTaskCost: 18,
@@ -358,8 +358,8 @@ export function getSuggestedTopUpOfferId(snapshot: CreditSnapshot): TopUpOfferId
 }
 
 export function getSuggestedUpgradePlanId(planName: string): 'pro' | 'team' | null {
-  if (planName === 'Starter') return 'pro';
-  if (planName === 'Pro') return 'team';
+  if (planName === 'Starter' || planName === 'Legacy Starter') return 'pro';
+  if (planName === 'Start' || planName === 'Founder') return 'team';
   return null;
 }
 
@@ -377,7 +377,13 @@ export async function createBillingCheckout(input: {
   );
   const successUrl = input.successUrl || `${window.location.origin}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = input.cancelUrl
-    || `${window.location.origin}${window.location.pathname.startsWith('/dashboard') ? '/dashboard?checkout=cancel' : '/plans?checkout=cancel'}`;
+    || `${window.location.origin}${
+      window.location.pathname.startsWith('/dashboard')
+        ? '/dashboard?checkout=cancel'
+        : window.location.pathname.startsWith('/pricing')
+          ? '/pricing?checkout=cancel'
+          : '/plans?checkout=cancel'
+    }`;
 
   const response = await fetch(request.url, {
     method: 'POST',

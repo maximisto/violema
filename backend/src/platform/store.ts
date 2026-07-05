@@ -106,7 +106,7 @@ function assertCreditHoldOpen(entries: CreditLedgerEntry[], holdId: string) {
 
 export function ensureWorkspaceCredits(
   workspaceId: string,
-  planName = 'Starter',
+  planName = 'Legacy Starter',
   monthlyCredits = 500
 ) {
   const state = getPlatformState();
