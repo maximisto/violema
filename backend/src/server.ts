@@ -5424,6 +5424,10 @@ function readBodyString(value: unknown, fallback = '') {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
+function readDryRunFlag(value: unknown) {
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
 function findAutomationReviewContext(workspaceId: string, automationId: string, runId: string) {
   const automation = getAutomationById(automationId);
   if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
@@ -5601,35 +5605,61 @@ app.post('/api/automations/:id/reviews/:runId/approve', async (req: Request, res
   }
 
   try {
+    const dryRun = readDryRunFlag(req.body?.dryRun);
     const result = await approveAutomationReview({
       task: context.task,
       taskRun: context.taskRun,
       reviewer: readBodyString(req.body?.reviewer, 'Violema reviewer'),
-      send: ({ to, body, subject, channel }) => sendMessage({ to, body, subject, channel }),
+      send: dryRun
+        ? async ({ to, subject, channel }) => ({
+            success: true,
+            dryRun: true,
+            skippedExternalDelivery: true,
+            status: 'dry_run',
+            channel: channel || (to.includes('@') ? 'email' : 'slack'),
+            to,
+            subject,
+          })
+        : ({ to, body, subject, channel }) => sendMessage({ to, body, subject, channel }),
     });
     const workflowId = inferWorkflowIdFromAutomation(context.automation);
-    const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
-    const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
-    appendWorkflowLedgerEvent({
+    const approvalLedgerEvent = {
       workspaceId,
       workflowId,
       automationId: context.automation.id,
       taskId: context.task.id,
       taskRunId: context.taskRun.id,
-      type: 'approval_granted',
+      type: 'approval_granted' as const,
       summary: `Approved delivery to ${result.receipt.deliveryTarget || 'configured destination'}.`,
       metadata: { receipt: result.receipt },
-    });
-    appendWorkflowLedgerEvent({
+    };
+    const deliveryLedgerEvent = {
       workspaceId,
       workflowId,
       automationId: context.automation.id,
       taskId: context.task.id,
       taskRunId: context.taskRun.id,
-      type: 'external_action_executed',
+      type: 'external_action_executed' as const,
       summary: `Delivered approved workflow output to ${result.receipt.deliveryTarget || 'configured destination'}.`,
       metadata: { delivery: result.delivery },
-    });
+    };
+    if (dryRun) {
+      res.json({
+        ok: true,
+        dryRun: true,
+        receipt: result.receipt,
+        delivery: result.delivery,
+        wouldPatchTask: result.taskPatch,
+        wouldPatchTaskRun: result.runPatch,
+        wouldAppendLedgerEvents: [approvalLedgerEvent, deliveryLedgerEvent],
+      });
+      return;
+    }
+
+    const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
+    const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
+    appendWorkflowLedgerEvent(approvalLedgerEvent);
+    appendWorkflowLedgerEvent(deliveryLedgerEvent);
     broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_approved');
     res.json({ ok: true, receipt: result.receipt, delivery: result.delivery, task, taskRun });
   } catch (error) {
@@ -5646,6 +5676,7 @@ app.post('/api/automations/:id/reviews/:runId/request-changes', (req: Request, r
   }
 
   try {
+    const dryRun = readDryRunFlag(req.body?.dryRun);
     const result = requestAutomationChanges({
       task: context.task,
       taskRun: context.taskRun,
@@ -5653,18 +5684,31 @@ app.post('/api/automations/:id/reviews/:runId/request-changes', (req: Request, r
       note: readBodyString(req.body?.note, 'Changes requested before delivery.'),
     });
     const workflowId = inferWorkflowIdFromAutomation(context.automation);
-    const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
-    const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
-    appendWorkflowLedgerEvent({
+    const deniedLedgerEvent = {
       workspaceId,
       workflowId,
       automationId: context.automation.id,
       taskId: context.task.id,
       taskRunId: context.taskRun.id,
-      type: 'approval_denied',
+      type: 'approval_denied' as const,
       summary: 'Reviewer requested changes before delivery.',
       metadata: { reviewRequest: result.reviewRequest },
-    });
+    };
+    if (dryRun) {
+      res.json({
+        ok: true,
+        dryRun: true,
+        reviewRequest: result.reviewRequest,
+        wouldPatchTask: result.taskPatch,
+        wouldPatchTaskRun: result.runPatch,
+        wouldAppendLedgerEvents: [deniedLedgerEvent],
+      });
+      return;
+    }
+
+    const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
+    const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
+    appendWorkflowLedgerEvent(deniedLedgerEvent);
     broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_changes_requested');
     res.json({ ok: true, reviewRequest: result.reviewRequest, task, taskRun });
   } catch (error) {
@@ -5682,7 +5726,8 @@ app.post('/api/automations/:id/reviews/:runId/rerun', (req: Request, res: Respon
 
   const reviewer = readBodyString(req.body?.reviewer, 'Violema reviewer');
   const note = readBodyString(req.body?.note, 'Reviewer requested a fresh run.');
-  updateTask(context.task.id, {
+  const dryRun = readDryRunFlag(req.body?.dryRun);
+  const taskPatch = {
     status: 'running',
     delegationState: 'in_progress',
     metadata: {
@@ -5694,7 +5739,19 @@ app.post('/api/automations/:id/reviews/:runId/rerun', (req: Request, res: Respon
         previousRunId: context.taskRun.id,
       },
     },
-  });
+  } as const;
+  if (dryRun) {
+    res.json({
+      ok: true,
+      dryRun: true,
+      item: context.automation,
+      wouldPatchTask: taskPatch,
+      message: `Dry run: would request a fresh run for ${context.automation.name}`,
+    });
+    return;
+  }
+
+  updateTask(context.task.id, taskPatch);
   const record = triggerAutomationNow(req.params.id, runAutomation);
   broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_rerun_requested');
   res.json({ ok: true, item: record, message: `Requested a fresh run for ${context.automation.name}` });
