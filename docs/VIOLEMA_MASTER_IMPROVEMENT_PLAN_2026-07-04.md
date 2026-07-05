@@ -311,6 +311,7 @@ Phase 0 (WP-0.1 → 0.4)            [BLOCKS EVERYTHING — security + money]
 
 Notes:
 - **WP-2.1 (truth-labeling) jumps the queue** — it's a half-day and removes the single biggest demo landmine.
+- **WP-0.1 first hardening pass shipped on this PR branch:** authenticated users already get server-owned `workspaceIds`/`defaultWorkspaceId`, `resolveWorkspaceContext` treats client workspace values as selectors and 403s cross-tenant access, automation routes filter by workspace, and Slack event callbacks now resolve team/channel to a stored user Slack connection instead of falling back to the default workspace. Remaining scope is full Express-level cross-tenant 403 coverage for settings, tasks, automations, and billing plus explicit `owner_user_id` on automations.
 - **WP-2.1 first hardening pass shipped on this PR branch:** legacy non-Stripe `query_data` results now return `simulated: true`, an integration connection CTA, and non-live automation summaries; chat tool cards render a visible **Simulated** chip; fake `run_code` and Linear-style `create_task` outputs are labeled simulated. Remaining scope is a full sweep of any future/demo tool outputs as new integrations land.
 - **WP-0.2 first hardening pass shipped on this PR branch:** backend admin route checks now derive the actor from `req.authUser.role`, the client auth cache no longer persists or restores admin role, `/admin` requires a fresh backend admin session, and Agent Studio is admin-gated. Remaining scope is an end-to-end Express admin endpoint test once the test harness can import the app without local startup drag.
 - **WP-0.4 first hardening pass shipped on this PR branch:** JSON stores already used atomic temp writes, backups, and corrupt-file quarantine; this PR adds a `updateJsonFile` read-modify-write helper and moves task/run/ledger mutations, including credit holds, onto it. SQLite remains the durable Phase 1 fix.
@@ -328,7 +329,7 @@ Each WP is a self-contained brief: problem, file references, ordered steps, acce
 
 | WP | Phase | Status |
 |----|-------|--------|
-| 0.1 Tenant authorization | 0 | ☐ |
+| 0.1 Tenant authorization | 0 | ◐ |
 | 0.2 Server-side role | 0 | ◐ |
 | 0.3 Loop cap + credit holds | 0 | ☐ |
 | 0.4 Atomic writes | 0 | ◐ |
@@ -357,10 +358,15 @@ Each WP is a self-contained brief: problem, file references, ordered steps, acce
 | 5.3 Demo path | 5 | ☐ |
 | 5.4 Security posture doc | 5 | ☐ |
 
-## Open items requiring Max (not Opus)
+## Max step-by-step checklist
 
-1. **Env vars on VPS** — Google/Microsoft OAuth client creds, `AUTH_STATE_SECRET`, `CREDENTIAL_VAULT_KEY` (new, WP-2.2), Composio key. Opus can't mint these.
-2. **Pricing implementation follow-through** (WP-5.2 / 4.2): decision is call-led workflow audit + bounded free preview + Start/Founder at $79/mo + Pro at $249/mo + Enterprise custom. First code pass reuses existing Stripe products/price IDs, ships `/pricing`, aligns landing CTAs, aligns Stripe checkout return URLs, and adds public sample Run pages with monthly projections; remaining work is tenant-backed live Run pages and live Stripe price-object verification.
-3. **[VAULT] reconciliation** — run this plan past `Violema - Dashboard.md`, `Violema - Runbook.md`, and the Deployment/Auth/SEO canon on a machine with vault access; anything the canon contradicts, the canon wins and this doc gets amended.
-4. **Beta cohort** — Phases 0–1 done = safe to onboard the 3–5 friendly founders the beta-readiness audit calls for; their reviewed-run data feeds the Phase 5 metrics.
-5. **VPS model-provider env cleanup** (carried from PR #2 findings) — Anthropic direct test returns premature-close, the OpenAI env var appears to hold an Anthropic-shaped key, and OpenRouter returns `User not found`. Workflows degrade safely to review, but production model routing must be fixed before relying on generated briefs.
+1. **Confirm the pricing decision in Stripe:** keep existing Stripe price env keys/products, but make sure the checkout object behind backend `pro` is the public **Start / Founder $79/mo** offer and backend `team` is the public **Pro $249/mo** offer. Leave backend `starter` as hidden/legacy.
+2. **Set the call-led conversion path:** decide where "Book workflow audit" should point (calendar link, email, or short form). That CTA is the primary public path; "Start free preview" stays secondary.
+3. **Prepare production auth env vars:** add/verify `AUTH_PUBLIC_URL`, `AUTH_STATE_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, and `MICROSOFT_TENANT_ID` on the VPS.
+4. **Prepare production integration env vars:** verify `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, Postmark sender config, Composio key, and any Google Workspace/GitHub/Stripe credentials needed for the first live mission.
+5. **Fix model-provider env routing:** verify Anthropic, OpenAI, and OpenRouter keys are in the right env vars. Current PR #2 findings showed Anthropic premature-close, an Anthropic-shaped key in the OpenAI slot, and OpenRouter `User not found`.
+6. **Choose the first beta cohort:** pick 3-5 founder-led teams, collect approved login emails, preferred Slack channel IDs, and the first recurring workflow for each. Do this only after Phase 0 and the Phase 1 data/CI floor are green.
+7. **Pick the first proof workflow:** use Revenue Watch or Weekly Founder Update as the canonical demo; connect real own-company Stripe/GitHub/Slack data and produce 2-3 reviewed sample runs.
+8. **Reconcile with the vault canon:** compare this plan against `Violema - Dashboard.md`, `Violema - Runbook.md`, and the Deployment/Auth/SEO canon; if they disagree, update this file to match the canon.
+9. **Before SQLite migration:** pull a fresh copy of production JSON state from the VPS, back it up, and use it as the importer test fixture for WP-1.1.
+10. **Before public onboarding:** review the one-page security posture doc after Phases 0-1: tenant isolation, encrypted credential vault, hashed sessions, signature-verified webhooks, rate limits, backups, and audit logging.

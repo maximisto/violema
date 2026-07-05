@@ -437,6 +437,38 @@ export function assertAuthUserCanAccessWorkspace(user: AuthUserRecord, workspace
   }
 }
 
+function normalizeSlackLookupValue(value: string | undefined) {
+  return value?.trim().toLowerCase() || '';
+}
+
+export function resolveSlackEventWorkspace(input: {
+  teamId?: string;
+  channelId?: string;
+}): { workspaceId: string; userId: string; match: 'team_channel' | 'channel' } | null {
+  const channelId = normalizeSlackLookupValue(input.channelId);
+  if (!channelId) return null;
+
+  const teamId = normalizeSlackLookupValue(input.teamId);
+  let channelMatch: AuthUserRecord | null = null;
+
+  for (const user of listAuthUsers()) {
+    if (normalizeSlackLookupValue(user.slackChannelId) !== channelId) continue;
+    const workspaceId = getAuthUserDefaultWorkspaceId(user);
+    if (teamId && normalizeSlackLookupValue(user.slackWorkspace) === teamId) {
+      return { workspaceId, userId: user.id, match: 'team_channel' };
+    }
+    if (!channelMatch) channelMatch = user;
+  }
+
+  return channelMatch
+    ? {
+        workspaceId: getAuthUserDefaultWorkspaceId(channelMatch),
+        userId: channelMatch.id,
+        match: 'channel',
+      }
+    : null;
+}
+
 export function createAuthSession(userId: string) {
   const sessions = readSessions().filter((session) => session.expiresAt > new Date().toISOString());
   const token = crypto.randomBytes(32).toString('hex');

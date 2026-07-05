@@ -27,6 +27,7 @@ import {
   isUnverifiedEmailSessionAllowed,
   requestBetaAccess,
   resolveAuthRole,
+  resolveSlackEventWorkspace,
   type AuthMethod as PersistedAuthMethod,
   type AuthUserRecord,
   upsertAuthUser,
@@ -5258,11 +5259,23 @@ app.post('/api/slack/events', async (req: Request, res: Response) => {
 
   res.json({ ok: true });
 
-  const workspaceId = DEFAULT_WORKSPACE_ID;
+  const slackWorkspace = resolveSlackEventWorkspace({
+    teamId: body.team_id,
+    channelId: typeof body.event.channel === 'string' ? body.event.channel : undefined,
+  });
+  if (!slackWorkspace) {
+    console.warn('[slack] dropped unmapped event', {
+      eventId: body.event_id,
+      teamId: body.team_id,
+      channelId: typeof body.event.channel === 'string' ? body.event.channel : undefined,
+    });
+    return;
+  }
+
   void handleSlackIncomingEvent({
     eventId: body.event_id,
     event: body.event,
-    workspaceId,
+    workspaceId: slackWorkspace.workspaceId,
   });
 });
 
