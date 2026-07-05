@@ -278,14 +278,14 @@ From WP-1.4 telemetry, build the internal one-pager investors will ask for: WAU,
 ### WP-5.2 Pricing + narrative coherence
 Fix the pricing contradiction (plan doc vs `cost.ts` vs blank `/pricing` route — real route is `/plans`) around the new target: **workflow audit primary, free preview secondary, Start/Founder $79/mo, Pro $249/mo, Enterprise custom**.
 
-**First pass shipped on this PR branch:** `/pricing` now renders the billing surface, public cards show Start $79 and Pro $249, backend display names match while existing Stripe `pro`/`team` IDs and price env keys are reused, Legacy Starter is hidden from the public ladder, and the landing/footer CTAs now lead with "Book workflow audit" plus "Start free preview."
+**First pass shipped on this PR branch:** `/pricing` now renders the billing surface, public cards show Start $79 and Pro $249, backend display names match while existing Stripe `pro`/`team` IDs and price env keys are reused, Legacy Starter is hidden from the public ladder, the landing/footer CTAs now lead with "Book workflow audit" plus "Start free preview", and `/pricing` includes sample run ledgers with monthly credit projections for Start, Pro, and Enterprise.
 
 1. Replace the current `$29 Starter` public offer with `Start / Founder — $79/mo`; move the serious production tier to `Pro — $249/mo`.
 2. Reuse existing Stripe env keys and price IDs: backend `pro` remains the checkout id for $79, backend `team` remains the checkout id for $249, and backend `starter` stays as hidden/legacy fallback rather than a public plan.
 3. Align credit economics in `backend/src/platform/cost.ts`, backend plan display names, `frontend/src/pages/Billing.tsx`, landing CTAs, and any plan docs in one PR. Do not change copy without changing billing math.
 4. Make `/pricing` canonical and keep `/plans` as a redirect or backwards-compatible alias.
 5. Add "Book workflow audit" as the primary public CTA and "Start free preview" as the secondary CTA. Avoid generic "Contact sales" language except for Enterprise.
-6. Add sample-run links and monthly cost projections to the pricing surface so the buyer sees evidence, not just plan cards.
+6. Add sample-run links and monthly cost projections to the pricing surface so the buyer sees evidence, not just plan cards. First pass uses in-page sample ledgers; replace with permanent Run page URLs when WP-4.2 ships.
 
 Landing copy audit against what is now *actually real* post-Phase 2 — the docs themselves flag the current copy as over-broad ("AI coworker that does everything" → "the reviewable AI operator for founder-led teams" wedge). Ship the SEO comparison pages from the campaign doc ("Zapier AI vs AI operator", "n8n vs AI agent") once the claims are true.
 
@@ -357,7 +357,7 @@ Each WP is a self-contained brief: problem, file references, ordered steps, acce
 ## Open items requiring Max (not Opus)
 
 1. **Env vars on VPS** — Google/Microsoft OAuth client creds, `AUTH_STATE_SECRET`, `CREDENTIAL_VAULT_KEY` (new, WP-2.2), Composio key. Opus can't mint these.
-2. **Pricing implementation follow-through** (WP-5.2 / 4.2): decision is call-led workflow audit + bounded free preview + Start/Founder at $79/mo + Pro at $249/mo + Enterprise custom. First code pass reuses existing Stripe products/price IDs, ships `/pricing`, and aligns landing CTAs; remaining work is sample-run/monthly-cost links and live Stripe env verification.
+2. **Pricing implementation follow-through** (WP-5.2 / 4.2): decision is call-led workflow audit + bounded free preview + Start/Founder at $79/mo + Pro at $249/mo + Enterprise custom. First code pass reuses existing Stripe products/price IDs, ships `/pricing`, aligns landing CTAs, and adds sample run ledgers with monthly projections; remaining work is permanent Run page URLs and live Stripe env verification.
 3. **[VAULT] reconciliation** — run this plan past `Violema - Dashboard.md`, `Violema - Runbook.md`, and the Deployment/Auth/SEO canon on a machine with vault access; anything the canon contradicts, the canon wins and this doc gets amended.
 4. **Beta cohort** — Phases 0–1 done = safe to onboard the 3–5 friendly founders the beta-readiness audit calls for; their reviewed-run data feeds the Phase 5 metrics.
 5. **VPS model-provider env cleanup** (carried from PR #2 findings) — Anthropic direct test returns premature-close, the OpenAI env var appears to hold an Anthropic-shaped key, and OpenRouter returns `User not found`. Workflows degrade safely to review, but production model routing must be fixed before relying on generated briefs.
