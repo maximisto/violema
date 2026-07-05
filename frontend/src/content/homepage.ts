@@ -90,7 +90,7 @@ export const homepageNav: HomepageNavItem[] = [
   { label: 'Product', href: '#features' },
   { label: 'Use cases', href: '#how-it-works' },
   { label: 'Integrations', href: '/integrations' },
-  { label: 'Beta access', href: '#beta-access' },
+  { label: 'Pricing', href: '/pricing' },
   { label: 'Resources', href: '/blog/' },
 ];
 
@@ -98,9 +98,9 @@ export const heroCopy = {
   eyebrow: 'Runs the week so you can build',
   headline: 'AI agents for founder work.',
   subhead:
-    'Violema turns weekly updates, revenue checks, competitor briefs, customer-risk digests, follow-up queues, and team handoffs into source-linked missions you can verify before anything sensitive ships.',
-  primaryCta: 'Set up beta access',
-  secondaryCta: 'See a workflow run',
+    'Violema turns recurring founder workflows into source-linked missions with review gates, delivery, run history, and visible costs.',
+  primaryCta: 'Book workflow audit',
+  secondaryCta: 'Start free preview',
   surfaceNote: 'Slack ready today. Discord, Telegram, and iMessage coming soon.',
 };
 
@@ -581,27 +581,27 @@ export const connectedSystems: ConnectedSystem[] = [
 
 export const betaAccessSteps: BetaAccessStep[] = [
   {
-    label: '01',
+    label: 'Map',
     title: 'Scope one painful workflow',
-    body: 'We pick a beta workflow with clear inputs, approval rules, delivery channel, and a visible weekly payoff.',
+    body: 'We pick one recurring workflow with clear inputs, approval rules, delivery channel, and a visible weekly payoff.',
   },
   {
-    label: '02',
+    label: 'Run',
     title: 'Run it with review gates',
     body: 'Violema executes the recurring mission, keeps a source trail, and pauses for human approval before sensitive output ships.',
   },
   {
-    label: '03',
-    title: 'Set terms from real usage',
-    body: 'Commercial terms come after setup, measured run cost, support load, and proof that the workflow is worth repeating.',
+    label: 'Price',
+    title: 'Pick the right plan',
+    body: 'Start at $79 for the first reliable mission, move to $249 Pro for recurring operating cadence, or go custom for Enterprise.',
   },
 ];
 
 export const betaAccessSignals: BetaAccessSignal[] = [
-  { label: 'Commercial model', value: 'Scoped after workflow fit' },
-  { label: 'First useful run', value: 'Designed before checkout' },
+  { label: 'Workflow audit', value: 'Call first' },
+  { label: 'Start plan', value: '$79/mo' },
+  { label: 'Pro plan', value: '$249/mo' },
   { label: 'Founder control', value: 'Approval gates included' },
-  { label: 'Package learning', value: 'Margins measured in beta' },
 ];
 
 export const comparisonRows = [

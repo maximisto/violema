@@ -226,7 +226,7 @@ export default function FAQ() {
             </span>
           </h1>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Everything you need to know about VIOLEMA — from capabilities and beta access to security and integrations.
+            Everything you need to know about VIOLEMA — from capabilities and pricing to security and integrations.
           </p>
         </div>
       </section>
@@ -324,14 +324,14 @@ export default function FAQ() {
         <div className="mt-16 text-center p-10 rounded-2xl bg-gradient-to-br from-violet-900/30 to-navy-800/60 border border-violet-700/30">
           <h3 className="text-2xl font-bold text-white mb-3">Still have questions?</h3>
           <p className="text-slate-400 mb-6 max-w-md mx-auto">
-            Our team is online and ready to help. Usually responds within a few minutes.
+            Book a workflow audit when you have a recurring founder workflow ready, or start a free preview first.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <button
               onClick={() => navigate('/signup?next=%2Fdashboard')}
               className="btn-primary"
             >
-              Set up access
+              Start free preview
             </button>
             <a
               href="mailto:hello@purpleorange.io"

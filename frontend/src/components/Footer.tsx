@@ -1,5 +1,4 @@
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
-import Play from 'lucide-react/dist/esm/icons/play.js';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import { Link, useNavigate } from 'react-router-dom';
 import { consultationUrl, openCalendlyConsultation } from '../lib/calendly';
@@ -11,7 +10,8 @@ const footerLinks = {
     { label: 'Product', path: '/#features' },
     { label: 'Workflows', path: '/#how-it-works' },
     { label: 'Integrations', path: '/integrations' },
-    { label: 'Beta access', path: '/#beta-access' },
+    { label: 'Pricing', path: '/pricing' },
+    { label: 'Workflow audit', path: '/#beta-access' },
     { label: 'Compare', path: '/#compare' },
   ],
   Resources: [
@@ -22,13 +22,13 @@ const footerLinks = {
   ],
   Company: [
     { label: 'Contact', path: 'mailto:hello@purpleorange.io' },
-    { label: 'Sales', path: consultationUrl },
+    { label: 'Workflow audit', path: consultationUrl },
     { label: 'Security', path: 'mailto:security@purpleorange.io' },
   ],
   Support: [
     { label: 'FAQ', path: '/faq' },
     { label: 'Sign in', path: '/login' },
-    { label: 'Set up access', path: '/signup?next=%2Fdashboard' },
+    { label: 'Start free preview', path: '/signup?next=%2Fdashboard' },
   ],
   Legal: [
     { label: 'Privacy', path: '/privacy' },
@@ -126,19 +126,19 @@ export default function Footer() {
               <div className="relative mt-8 flex flex-col gap-3 sm:flex-row lg:mt-0 lg:flex-col xl:flex-row">
                 <button
                   type="button"
-                  onClick={() => navigate('/signup?next=%2Fdashboard')}
+                  onClick={(event) => { void openCalendlyConsultation(event, 'footer-cta-workflow-audit'); }}
                   className="group inline-flex min-h-[3.25rem] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] px-6 text-sm font-bold text-white shadow-[0_22px_60px_-18px_rgba(124,58,237,0.8)] transition duration-200 hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
                 >
                   <Sparkles className="h-4 w-4" />
-                  Set up access
+                  Book workflow audit
                   <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
                 </button>
                 <a
-                  href="#how-it-works"
+                  href="/signup?next=%2Fdashboard"
                   className="inline-flex min-h-[3.25rem] items-center justify-center gap-2 rounded-2xl border border-white/14 bg-white/[0.04] px-6 text-sm font-bold text-white transition duration-200 hover:border-signal-500/40 hover:bg-signal-500/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
                 >
-                  <Play className="h-4 w-4" />
-                  See workflow demo
+                  <ArrowRight className="h-4 w-4" />
+                  Start free preview
                 </a>
               </div>
             </div>

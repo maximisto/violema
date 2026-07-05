@@ -4,7 +4,6 @@ import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2.js';
 import DollarSign from 'lucide-react/dist/esm/icons/dollar-sign.js';
 import Link2 from 'lucide-react/dist/esm/icons/link-2.js';
 import Lock from 'lucide-react/dist/esm/icons/lock.js';
-import Play from 'lucide-react/dist/esm/icons/play.js';
 import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check.js';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
@@ -15,8 +14,9 @@ import Reveal from './Reveal';
 import SlackPhone from './SlackPhone';
 import HeroActivityFeed from './HeroActivityFeed';
 import { HeroTourImages, HERO_TOUR_MS, heroImageSrc, useHeroTour } from './HeroProductTour';
+import { openCalendlyConsultation } from '../lib/calendly';
 
-type HeroCtaAction = 'set_up_access' | 'watch_workflow_run';
+type HeroCtaAction = 'book_workflow_audit' | 'start_free_preview';
 
 const proofIcons = [CalendarDays, ShieldCheck, Link2, DollarSign];
 
@@ -30,10 +30,6 @@ function trackHeroCta(action: HeroCtaAction, placement: 'hero' | 'mobile_sticky'
   });
 }
 
-function scrollToDemo() {
-  document.getElementById('product-demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
 function HeroActions({ placement = 'hero' }: { placement?: 'hero' | 'mobile_sticky' }) {
   const navigate = useNavigate();
 
@@ -41,9 +37,9 @@ function HeroActions({ placement = 'hero' }: { placement?: 'hero' | 'mobile_stic
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
       <button
         type="button"
-        onClick={() => {
-          trackHeroCta('set_up_access', placement);
-          navigate('/signup?next=%2Fdashboard');
+        onClick={(event) => {
+          trackHeroCta('book_workflow_audit', placement);
+          void openCalendlyConsultation(event, `${placement}-workflow-audit`);
         }}
         className="group relative inline-flex min-h-[3.5rem] items-center justify-center gap-2.5 overflow-hidden rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] px-6 text-base font-bold tracking-[-0.01em] text-white shadow-[0_22px_60px_-18px_rgba(124,58,237,0.85)] transition duration-200 hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 sm:min-h-[3.25rem]"
       >
@@ -56,13 +52,13 @@ function HeroActions({ placement = 'hero' }: { placement?: 'hero' | 'mobile_stic
       <button
         type="button"
         onClick={() => {
-          trackHeroCta('watch_workflow_run', placement);
-          scrollToDemo();
+          trackHeroCta('start_free_preview', placement);
+          navigate('/signup?next=%2Fdashboard');
         }}
-        className="inline-flex min-h-[3.5rem] items-center justify-center gap-2.5 rounded-2xl border border-white/14 bg-white/[0.04] px-6 text-base font-semibold tracking-[-0.01em] text-copy-hi transition duration-200 hover:border-violet-200/40 hover:bg-white/[0.07] active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 sm:min-h-[3.25rem]"
+        className="group inline-flex min-h-[3.5rem] items-center justify-center gap-2.5 rounded-2xl border border-white/14 bg-white/[0.04] px-6 text-base font-semibold tracking-[-0.01em] text-copy-hi transition duration-200 hover:border-violet-200/40 hover:bg-white/[0.07] active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 sm:min-h-[3.25rem]"
       >
-        <Play className="h-[1.1rem] w-[1.1rem]" />
         {heroCopy.secondaryCta}
+        <ArrowRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5" />
       </button>
     </div>
   );
@@ -243,21 +239,21 @@ function MobileStickyCta() {
       <div className="flex items-center gap-2.5">
         <button
           type="button"
-          onClick={() => {
-            trackHeroCta('set_up_access', 'mobile_sticky');
-            navigate('/signup?next=%2Fdashboard');
+          onClick={(event) => {
+            trackHeroCta('book_workflow_audit', 'mobile_sticky');
+            void openCalendlyConsultation(event, 'mobile-sticky-workflow-audit');
           }}
           className="group flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] py-4 text-base font-bold text-white shadow-[0_14px_40px_-10px_rgba(124,58,237,0.7)] transition active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
         >
-          Set up beta access
+          Book audit
           <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </button>
         <button
           type="button"
-          onClick={() => navigate('/login')}
+          onClick={() => navigate('/signup?next=%2Fdashboard')}
           className="rounded-2xl border border-white/14 bg-white/[0.05] px-5 py-4 text-base font-semibold text-copy-hi focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
         >
-          Sign in
+          Start free
         </button>
       </div>
     </div>

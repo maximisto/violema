@@ -114,7 +114,7 @@ export default function Billing() {
         backHref="/"
         backLabel="Home"
         actionHref={hasAccess ? '/dashboard' : '/signup?next=%2Fdashboard'}
-        actionLabel={hasAccess ? 'Open workspace' : 'Create access'}
+        actionLabel={hasAccess ? 'Open workspace' : 'Start free'}
       />
       <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="rounded-[2rem] border border-navy-700/60 bg-navy-950/40 px-5 py-6 shadow-[0_24px_80px_rgba(3,8,24,0.3)] sm:px-7 lg:px-8">

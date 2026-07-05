@@ -7,11 +7,11 @@ import { consultationUrl, openCalendlyConsultation } from '../lib/calendly';
 import Reveal from './Reveal';
 
 const accessIncludes = [
-  'Setup call and workflow scoping',
+  'Workflow audit and first-mission scoping',
   'One recurring mission with review gates',
   'Slack or web delivery',
   'Run log and source trail',
-  'Weekly usage and cost readout',
+  'Start at $79 or Pro at $249',
 ];
 
 export default function BetaAccess() {
@@ -20,13 +20,13 @@ export default function BetaAccess() {
       <div className="mx-auto max-w-[88rem] px-4 sm:px-6 lg:px-8">
         <Reveal className="max-w-4xl">
           <div>
-            <p className="text-telemetry text-[0.62rem] text-signal-400">// beta access</p>
+            <p className="text-telemetry text-[0.62rem] text-signal-400">// workflow audit</p>
             <h2 className="mt-4 font-display text-[2.6rem] font-semibold leading-[0.98] tracking-[-0.03em] text-white sm:text-[3.5rem]">
               Launch with one workflow we can prove.
             </h2>
           </div>
           <p className="mt-5 max-w-2xl text-base leading-7 text-[#aeb7cd] sm:text-lg">
-            Violema is onboarding controlled beta customers before opening self-serve checkout. We scope the first workflow, measure real run cost, and set commercial terms from live operating value.
+            Most teams should not pick a tier blind. We map the first mission, confirm sources and approvals, then choose Start, Pro, or custom Enterprise.
           </p>
         </Reveal>
 
@@ -47,32 +47,32 @@ export default function BetaAccess() {
               <div className="flex flex-wrap items-center gap-3">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/30 bg-signal-500/12 px-2.5 py-1">
                   <Sparkles className="h-3 w-3 text-signal-300" />
-                  <span className="text-telemetry text-[0.5rem] text-signal-200">Controlled beta</span>
+                  <span className="text-telemetry text-[0.5rem] text-signal-200">Call first</span>
                 </span>
-                <span className="text-telemetry text-[0.54rem] text-[#8793ad]">Limited onboarding capacity</span>
+                <span className="text-telemetry text-[0.54rem] text-[#8793ad]">Start free preview available</span>
               </div>
 
               <h3 className="mt-5 max-w-2xl font-display text-3xl font-semibold leading-tight tracking-[-0.03em] text-white sm:text-4xl">
-                Request access when one founder workflow is ready to run every week.
+                Book the audit when one founder workflow is ready to run every week.
               </h3>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-[#aeb7cd] sm:text-base sm:leading-7">
-                The beta is for teams that can point to a recurring workflow, a real owner, connected context, and an approval rule. That keeps the first implementation narrow enough to prove.
+                The first implementation should have a real owner, connected context, an approval rule, and a payoff clear enough to repeat.
               </p>
 
               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
                 <a
-                  href="/signup?next=%2Fdashboard"
+                  href={consultationUrl}
+                  onClick={(event) => { void openCalendlyConsultation(event, 'workflow-audit-primary'); }}
                   className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-bold text-[#070b16] transition duration-200 hover:bg-[#eef2ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
                 >
-                  <span>Request beta access</span>
+                  <span>Book workflow audit</span>
                   <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
                 </a>
                 <a
-                  href={consultationUrl}
-                  onClick={(event) => { void openCalendlyConsultation(event, 'beta-access-primary'); }}
+                  href="/signup?next=%2Fdashboard"
                   className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] px-5 text-sm font-semibold text-white transition duration-200 hover:border-signal-500/40 hover:bg-signal-500/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
                 >
-                  Book setup call
+                  Start free preview
                 </a>
               </div>
 
@@ -110,25 +110,25 @@ export default function BetaAccess() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/14 text-violet-100">
                 <ShieldCheck className="h-5 w-5" />
               </span>
-              <p className="font-display text-xl font-semibold tracking-[-0.02em] text-white">Why no public checkout yet?</p>
+              <p className="font-display text-xl font-semibold tracking-[-0.02em] text-white">How pricing works now</p>
             </div>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[#aeb7cd]">
-              Billing and usage controls stay inside approved workspaces. Self-serve checkout waits until beta data shows repeatable margins, support load, and workflow profitability.
+              Start is $79 per month for the first reliable mission. Pro is $249 for recurring operating cadence. Enterprise is custom.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
             <a
-              href="/signup?next=%2Fdashboard"
+              href="/pricing"
               className="inline-flex min-h-12 items-center justify-center rounded-xl bg-white px-5 text-sm font-semibold text-[#070b16] transition duration-200 hover:bg-[#eef2ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
-              Request beta access
+              View pricing
             </a>
             <a
               href={consultationUrl}
-              onClick={(event) => { void openCalendlyConsultation(event, 'beta-access-secondary'); }}
+              onClick={(event) => { void openCalendlyConsultation(event, 'workflow-audit-secondary'); }}
               className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] px-5 text-sm font-semibold text-white transition duration-200 hover:border-signal-500/40 hover:bg-signal-500/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
-              Book setup call
+              Book workflow audit
             </a>
           </div>
         </Reveal>
