@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
 import Check from 'lucide-react/dist/esm/icons/check.js';
 import CreditCard from 'lucide-react/dist/esm/icons/credit-card.js';
@@ -13,6 +13,14 @@ import { fetchBackendAuthSession, getAuthSession } from '../lib/auth';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
 import { useTheme } from '../lib/useTheme';
+import {
+  SAMPLE_RUNS,
+  formatSampleUsd,
+  getCreditValueUsd,
+  getMonthlyCredits,
+  getSampleRunById,
+  getSampleRunPath,
+} from '../content/sampleRuns';
 
 const PLANS = [
   {
@@ -43,67 +51,8 @@ const PLANS = [
   },
 ];
 
-const CREDIT_VALUE_USD = 0.0395;
-
-const SAMPLE_RUNS = [
-  {
-    id: 'pricing-proof-founder-brief',
-    planId: 'pro' as const,
-    planLabel: 'Start sample',
-    title: 'Founder market brief',
-    summary: 'Weekly competitor and pricing scan with sources, a draft founder note, review, and Slack delivery.',
-    cadence: 'Weekly',
-    runCredits: 56,
-    monthlyRuns: 4,
-    providerCostUsd: 0.74,
-    approvalState: 'Reviewed',
-    sources: ['Pricing pages', 'Launch notes', 'Funding coverage'],
-    ledger: ['Source scan completed', 'Brief drafted', 'Founder approval recorded', 'Slack update sent'],
-  },
-  {
-    id: 'pricing-proof-operating-cadence',
-    planId: 'team' as const,
-    planLabel: 'Pro sample',
-    title: 'Revenue and delivery monitor',
-    summary: 'Twice-weekly Stripe, GitHub, and Slack check that flags revenue movement, blockers, and follow-up work.',
-    cadence: 'Twice weekly',
-    runCredits: 72,
-    monthlyRuns: 8,
-    providerCostUsd: 1.08,
-    approvalState: 'Approval gate',
-    sources: ['Stripe snapshot', 'GitHub blockers', 'Slack queue'],
-    ledger: ['Data read completed', 'Exceptions detected', 'Review requested', 'Digest delivered'],
-  },
-  {
-    id: 'pricing-proof-enterprise-readiness',
-    planId: 'enterprise' as const,
-    planLabel: 'Enterprise sample',
-    title: 'Executive operating digest',
-    summary: 'Daily multi-workspace digest with evidence links, owner routing, budget pressure, and admin visibility.',
-    cadence: 'Daily weekday',
-    runCredits: 118,
-    monthlyRuns: 22,
-    providerCostUsd: 2.05,
-    approvalState: 'Policy reviewed',
-    sources: ['Workspace metrics', 'CRM activity', 'Support risk'],
-    ledger: ['Admin scope checked', 'Digest assembled', 'Policy review passed', 'Owners notified'],
-  },
-];
-
-function formatUsd(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-}
-
-function getMonthlyCredits(run: (typeof SAMPLE_RUNS)[number]) {
-  return run.runCredits * run.monthlyRuns;
-}
-
-function getCreditValueUsd(run: (typeof SAMPLE_RUNS)[number]) {
-  return run.runCredits * CREDIT_VALUE_USD;
-}
-
 function getProofRunById(id: string) {
-  return SAMPLE_RUNS.find((run) => run.id === id) || SAMPLE_RUNS[0];
+  return getSampleRunById(id) || SAMPLE_RUNS[0];
 }
 
 export default function Billing() {
@@ -426,7 +375,7 @@ export default function Billing() {
                         </div>
                         <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
                           <p className="text-[10px] uppercase tracking-[0.16em] text-slate-600">Provider cost</p>
-                          <p className="mt-1 text-sm font-semibold text-white">{formatUsd(run.providerCostUsd)}</p>
+                          <p className="mt-1 text-sm font-semibold text-white">{formatSampleUsd(run.providerCostUsd)}</p>
                         </div>
                       </div>
 
@@ -455,8 +404,15 @@ export default function Billing() {
                       </div>
 
                       <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-xs leading-5 text-amber-100">
-                        Sample value check: {formatCredits(run.runCredits)} credits equals about {formatUsd(getCreditValueUsd(run))} in Start-plan credit value before top-ups.
+                        Sample value check: {formatCredits(run.runCredits)} credits equals about {formatSampleUsd(getCreditValueUsd(run))} in Start-plan credit value before top-ups.
                       </div>
+                      <Link
+                        to={getSampleRunPath(run.id)}
+                        className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:border-violet-500/35 hover:bg-violet-500/10"
+                      >
+                        Open run page
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
                     </article>
                   ))}
                 </div>
@@ -549,13 +505,13 @@ export default function Billing() {
                     <p className="mt-1 text-sm text-slate-300">
                       {formatCredits(proofRun.runCredits)} cr/run, {formatCredits(getMonthlyCredits(proofRun))} cr/month at {proofRun.cadence.toLowerCase()} cadence.
                     </p>
-                    <a
-                      href={`#${proofRun.id}`}
+                    <Link
+                      to={getSampleRunPath(proofRun.id)}
                       className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-100 transition-colors hover:text-white"
                     >
-                      View sample run
+                      Open run page
                       <ArrowRight className="h-3.5 w-3.5" />
-                    </a>
+                    </Link>
                   </div>
 
                   <ul className="mt-5 flex-1 space-y-3">
@@ -597,13 +553,13 @@ export default function Billing() {
                     Custom mission volume, security controls, admin workflows, onboarding support, and SLA-ready positioning. Use this when Violema is becoming part of a broader operating stack.
                   </p>
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                    <a
-                      href="#pricing-proof-enterprise-readiness"
+                    <Link
+                      to={getSampleRunPath('pricing-proof-enterprise-readiness')}
                       className="inline-flex items-center justify-center gap-2 rounded-2xl border border-navy-700/70 bg-navy-950/45 px-4 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:border-cyan-500/30 hover:text-white"
                     >
                       View enterprise sample
                       <ArrowRight className="h-4 w-4" />
-                    </a>
+                    </Link>
                     <a
                       href="mailto:sales@purpleorange.io?subject=Violema%20Enterprise"
                       className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-5 py-2.5 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/16"

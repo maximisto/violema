@@ -10,6 +10,7 @@ const TermsOfService = lazy(() => import('./pages/TermsOfService'));
 const Signup = lazy(() => import('./pages/Signup'));
 const Login = lazy(() => import('./pages/Login'));
 const Billing = lazy(() => import('./pages/Billing'));
+const RunProof = lazy(() => import('./pages/RunProof'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
 const SlackSetup = lazy(() => import('./pages/SlackSetup'));
 const AgentStudio = lazy(() => import('./pages/AgentStudio'));
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/plans" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
           <Route path="/pricing" element={<Billing />} />
+          <Route path="/runs/:runId" element={<RunProof />} />
           <Route path="/settings/billing" element={<ProtectedRoute><Navigate to="/plans" replace /></ProtectedRoute>} />
           <Route path="/connect/slack" element={<ProtectedRoute><SlackSetup /></ProtectedRoute>} />
           <Route path="/integrations" element={<IntegrationsPage />} />
