@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import Landing from './pages/Landing';
 import ProtectedRoute from './components/ProtectedRoute';
+import CalendlyAuditModal from './components/CalendlyAuditModal';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const FAQ = lazy(() => import('./pages/FAQ'));
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="/terms" element={<TermsOfService />} />
         </Routes>
       </Suspense>
+      <CalendlyAuditModal />
     </BrowserRouter>
   );
 }

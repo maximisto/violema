@@ -154,6 +154,11 @@ import {
   withModelRetry,
 } from './models';
 import {
+  buildToolLoopCapMessage,
+  parseToolResultPayload,
+  readPositiveIntegerEnv,
+} from './toolLoopSafety';
+import {
   getIntegrationCredential,
   getWorkspaceProviderToken,
   getWorkspaceSettingsView,
@@ -204,27 +209,6 @@ const ALLOWED_ORIGINS = [
 const AUTH_COOKIE_NAME = 'violema_session';
 type AnthropicConstructor = typeof import('@anthropic-ai/sdk').default;
 let cachedAnthropicConstructor: AnthropicConstructor | null = null;
-
-function readPositiveIntegerEnv(name: string, fallback: number) {
-  const parsed = Number(process.env[name] || fallback);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(1, Math.trunc(parsed));
-}
-
-function parseToolResultPayload(result: string): unknown {
-  try {
-    return JSON.parse(result);
-  } catch {
-    return {
-      raw: result,
-      parse_error: true,
-    };
-  }
-}
-
-function buildToolLoopCapMessage() {
-  return `\n\nI hit the ${MAX_TOOL_ITERATIONS}-step tool limit for this task, so I stopped before spending more credits. Narrow the request or continue with a smaller next step.`;
-}
 
 function addTaskPanelStreamClient(workspaceId: string, res: Response) {
   const set = taskPanelStreamClients.get(workspaceId) || new Set<Response>();
@@ -1240,7 +1224,7 @@ async function runAnthropicChatLoop(
         max_tool_iterations: MAX_TOOL_ITERATIONS,
         tool_calls_executed: toolCallsExecuted,
       });
-      sendEvent({ type: 'text', content: buildToolLoopCapMessage() });
+      sendEvent({ type: 'text', content: buildToolLoopCapMessage(MAX_TOOL_ITERATIONS) });
       break;
     }
 
@@ -1328,7 +1312,7 @@ async function runAnthropicChatLoop(
             max_tool_iterations: MAX_TOOL_ITERATIONS,
             tool_calls_executed: toolCallsExecuted,
           });
-          sendEvent({ type: 'text', content: buildToolLoopCapMessage() });
+          sendEvent({ type: 'text', content: buildToolLoopCapMessage(MAX_TOOL_ITERATIONS) });
           break;
         }
 
@@ -1392,7 +1376,7 @@ async function runOpenAIChatLoop(
         max_tool_iterations: MAX_TOOL_ITERATIONS,
         tool_calls_executed: toolCallsExecuted,
       });
-      sendEvent({ type: 'text', content: buildToolLoopCapMessage() });
+      sendEvent({ type: 'text', content: buildToolLoopCapMessage(MAX_TOOL_ITERATIONS) });
       break;
     }
 
@@ -1451,7 +1435,7 @@ async function runOpenAIChatLoop(
             max_tool_iterations: MAX_TOOL_ITERATIONS,
             tool_calls_executed: toolCallsExecuted,
           });
-          sendEvent({ type: 'text', content: buildToolLoopCapMessage() });
+          sendEvent({ type: 'text', content: buildToolLoopCapMessage(MAX_TOOL_ITERATIONS) });
           break;
         }
 

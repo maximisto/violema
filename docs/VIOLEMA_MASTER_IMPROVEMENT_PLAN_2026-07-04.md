@@ -312,6 +312,7 @@ Phase 0 (WP-0.1 → 0.4)            [BLOCKS EVERYTHING — security + money]
 Notes:
 - **WP-2.1 (truth-labeling) jumps the queue** — it's a half-day and removes the single biggest demo landmine.
 - **WP-0.1 first hardening pass shipped on this PR branch:** authenticated users already get server-owned `workspaceIds`/`defaultWorkspaceId`, `resolveWorkspaceContext` treats client workspace values as selectors and 403s cross-tenant access, automation routes filter by workspace, and Slack event callbacks now resolve team/channel to a stored user Slack connection instead of falling back to the default workspace. Remaining scope is full Express-level cross-tenant 403 coverage for settings, tasks, automations, and billing plus explicit `owner_user_id` on automations.
+- **WP-0.3 first hardening pass shipped on this PR branch:** chat loops now use `MAX_TOOL_ITERATIONS` (default 24), malformed tool-result JSON is preserved as raw output instead of aborting the stream, model calls retry transient 429/5xx/network failures, and chat/automation runs acquire credit holds before execution then settle or release them. Remaining scope is deeper integration coverage for mocked always-tool-calling providers and concurrent chat request races.
 - **WP-2.1 first hardening pass shipped on this PR branch:** legacy non-Stripe `query_data` results now return `simulated: true`, an integration connection CTA, and non-live automation summaries; chat tool cards render a visible **Simulated** chip; fake `run_code` and Linear-style `create_task` outputs are labeled simulated. Remaining scope is a full sweep of any future/demo tool outputs as new integrations land.
 - **WP-0.2 first hardening pass shipped on this PR branch:** backend admin route checks now derive the actor from `req.authUser.role`, the client auth cache no longer persists or restores admin role, `/admin` requires a fresh backend admin session, and Agent Studio is admin-gated. Remaining scope is an end-to-end Express admin endpoint test once the test harness can import the app without local startup drag.
 - **WP-0.4 first hardening pass shipped on this PR branch:** JSON stores already used atomic temp writes, backups, and corrupt-file quarantine; this PR adds a `updateJsonFile` read-modify-write helper and moves task/run/ledger mutations, including credit holds, onto it. SQLite remains the durable Phase 1 fix.
@@ -331,7 +332,7 @@ Each WP is a self-contained brief: problem, file references, ordered steps, acce
 |----|-------|--------|
 | 0.1 Tenant authorization | 0 | ◐ |
 | 0.2 Server-side role | 0 | ◐ |
-| 0.3 Loop cap + credit holds | 0 | ☐ |
+| 0.3 Loop cap + credit holds | 0 | ◐ |
 | 0.4 Atomic writes | 0 | ◐ |
 | 1.1 SQLite migration | 1 | ☐ |
 | 1.2 Durable scheduler | 1 | ☐ |
@@ -360,8 +361,8 @@ Each WP is a self-contained brief: problem, file references, ordered steps, acce
 
 ## Max step-by-step checklist
 
-1. **Confirm the pricing decision in Stripe:** keep existing Stripe price env keys/products, but make sure the checkout object behind backend `pro` is the public **Start / Founder $79/mo** offer and backend `team` is the public **Pro $249/mo** offer. Leave backend `starter` as hidden/legacy.
-2. **Set the call-led conversion path:** decide where "Book workflow audit" should point (calendar link, email, or short form). That CTA is the primary public path; "Start free preview" stays secondary.
+1. **Pricing decision confirmed:** keep existing Stripe price env keys/products; backend `pro` is the public **Start / Founder $79/mo** offer, backend `team` is the public **Pro $249/mo** offer, and backend `starter` stays hidden/legacy.
+2. **Workflow-audit CTA path confirmed:** "Book workflow audit" opens `https://calendly.com/max-purpleorange/30min` inside the in-page boxed scheduler modal for now. "Start free preview" stays secondary.
 3. **Prepare production auth env vars:** add/verify `AUTH_PUBLIC_URL`, `AUTH_STATE_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, and `MICROSOFT_TENANT_ID` on the VPS.
 4. **Prepare production integration env vars:** verify `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, Postmark sender config, Composio key, and any Google Workspace/GitHub/Stripe credentials needed for the first live mission.
 5. **Fix model-provider env routing:** verify Anthropic, OpenAI, and OpenRouter keys are in the right env vars. Current PR #2 findings showed Anthropic premature-close, an Anthropic-shaped key in the OpenAI slot, and OpenRouter `User not found`.
