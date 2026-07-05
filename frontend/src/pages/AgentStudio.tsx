@@ -69,6 +69,7 @@ import { OptimizeScenarioSimulatorSection } from '../features/agent-studio/compo
 import { OptimizeAdvancedControlsSection } from '../features/agent-studio/components/OptimizeAdvancedControlsSection';
 import { AgentStudioGuidePanel } from '../features/agent-studio/components/AgentStudioGuidePanel';
 import { ControlLoopHandoffStrip } from '../features/agent-studio/components/ControlLoopHandoffStrip';
+import { DimaStudioAdvisorPanel } from '../features/agent-studio/components/DimaStudioAdvisorPanel';
 import { OperationalContextMapSection } from '../features/agent-studio/components/OperationalContextMapSection';
 import { ReplayDecisionBriefSection } from '../features/agent-studio/components/ReplayDecisionBriefSection';
 import { ReplayDecisionSupportSection } from '../features/agent-studio/components/ReplayDecisionSupportSection';
@@ -7649,6 +7650,16 @@ export default function AgentStudio() {
                     secondaryLabel={controlLoopHandoff.secondaryLabel}
                     onSecondary={controlLoopHandoff.onSecondary}
                   />
+
+                  <div className="mt-5">
+                    <DimaStudioAdvisorPanel
+                      activeRoom={activeRoom}
+                      row={selectedRow}
+                      workflow={selectedRow.automation}
+                      selectedRun={selectedCohortRun || liveRun || selectedRow.latestRun}
+                      operationalContext={operationalContext}
+                    />
+                  </div>
 
                   {showStudioGuide ? (
                     <div className="mt-5">
