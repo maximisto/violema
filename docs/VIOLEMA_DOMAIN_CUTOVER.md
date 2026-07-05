@@ -60,8 +60,8 @@ PUBLIC_APP_URL=https://violema.com
 APP_BASE_URL=https://violema.com
 AUTH_PUBLIC_URL=https://violema.com
 AUTH_COOKIE_DOMAIN=violema.com
-STRIPE_SUCCESS_URL=https://violema.com/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}
-STRIPE_CANCEL_URL=https://violema.com/plans?checkout=cancel
+STRIPE_SUCCESS_URL=https://violema.com/pricing?checkout=success&session_id={CHECKOUT_SESSION_ID}
+STRIPE_CANCEL_URL=https://violema.com/pricing?checkout=cancel
 OPENROUTER_SITE_URL=https://violema.com
 ```
 

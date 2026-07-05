@@ -5269,11 +5269,13 @@ app.get('/api/billing/stripe/config', (req: Request, res: Response) => {
 
 app.post('/api/billing/stripe/checkout/subscription', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
-  const body = req.body as { planId?: string; metadata?: Record<string, string> };
+  const body = req.body as { planId?: string; successUrl?: string; cancelUrl?: string; metadata?: Record<string, string> };
   const planId = body.planId && ['starter', 'pro', 'team'].includes(body.planId) ? (body.planId as 'starter' | 'pro' | 'team') : getBillingStatus(workspaceId).config.planId;
 
   try {
     const session = await createSubscriptionCheckoutSession(workspaceId, planId, {
+      successUrl: body.successUrl,
+      cancelUrl: body.cancelUrl,
       metadata: body.metadata,
     });
 
@@ -5289,7 +5291,7 @@ app.post('/api/billing/stripe/checkout/subscription', async (req: Request, res: 
 
 app.post('/api/billing/stripe/checkout/top-up', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
-  const body = req.body as { offerId?: string; quantity?: number; metadata?: Record<string, string> };
+  const body = req.body as { offerId?: string; quantity?: number; successUrl?: string; cancelUrl?: string; metadata?: Record<string, string> };
   if (!body.offerId) {
     res.status(400).json({ error: 'offerId is required' });
     return;
@@ -5298,6 +5300,8 @@ app.post('/api/billing/stripe/checkout/top-up', async (req: Request, res: Respon
   try {
     const session = await createTopUpCheckoutSession(workspaceId, body.offerId, {
       quantity: Number.isFinite(body.quantity) ? body.quantity : undefined,
+      successUrl: body.successUrl,
+      cancelUrl: body.cancelUrl,
       metadata: body.metadata,
     });
 

@@ -375,15 +375,14 @@ export async function createBillingCheckout(input: {
       ? '/api/billing/stripe/checkout/subscription'
       : '/api/billing/stripe/checkout/top-up'
   );
-  const successUrl = input.successUrl || `${window.location.origin}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+  const billingReturnPath = window.location.pathname.startsWith('/dashboard')
+    ? '/dashboard'
+    : window.location.pathname.startsWith('/pricing')
+      ? '/pricing'
+      : '/plans';
+  const successUrl = input.successUrl || `${window.location.origin}${billingReturnPath}?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = input.cancelUrl
-    || `${window.location.origin}${
-      window.location.pathname.startsWith('/dashboard')
-        ? '/dashboard?checkout=cancel'
-        : window.location.pathname.startsWith('/pricing')
-          ? '/pricing?checkout=cancel'
-          : '/plans?checkout=cancel'
-    }`;
+    || `${window.location.origin}${billingReturnPath}?checkout=cancel`;
 
   const response = await fetch(request.url, {
     method: 'POST',
