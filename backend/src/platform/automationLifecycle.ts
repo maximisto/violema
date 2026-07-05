@@ -312,6 +312,7 @@ export function validateAutomationDeliveryDraft(input: {
   steps?: PersistedAutomationStep[];
 }): AutomationDeliveryDraftValidation {
   const warnings: AutomationPreflightBlocker[] = [];
+  const warningKeys = new Set<string>();
 
   for (const item of collectDeliveryTargets(input)) {
     if (item.channel === 'email') {
@@ -322,8 +323,11 @@ export function validateAutomationDeliveryDraft(input: {
     }
 
     if (!isSlackChannelId(item.target)) {
+      const key = `SLACK_TARGET:${item.target}`;
+      if (warningKeys.has(key)) continue;
+      warningKeys.add(key);
       warnings.push(warning(
-        `SLACK_TARGET:${item.target}`,
+        key,
         'Slack channel visibility',
         `${item.source} uses ${item.target}. Violema will verify the Slack channel at delivery time; invite the app to private channels or use a channel ID for the most reliable run.`,
       ));

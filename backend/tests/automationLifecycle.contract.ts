@@ -176,6 +176,26 @@ test('validateAutomationDeliveryDraft allows Slack names at save time but valida
   );
 });
 
+test('validateAutomationDeliveryDraft deduplicates repeated Slack target warnings', () => {
+  const draft = validateAutomationDeliveryDraft({
+    notify: '#all-purple-orange',
+    steps: [
+      {
+        id: 'deliver',
+        kind: 'deliver',
+        title: 'Deliver to Slack',
+        objective: 'Send the reviewed output.',
+        deliveryTarget: { channel: 'slack', target: '#all-purple-orange' },
+      },
+    ],
+  });
+
+  assert.equal(draft.ok, true);
+  assert.equal(draft.warnings.length, 1);
+  assert.equal(draft.warnings[0]?.key, 'SLACK_TARGET:#all-purple-orange');
+  assert.match(draft.warnings[0]?.detail || '', /workspace destination/i);
+});
+
 test('classifyAutomationRunOutcome blocks failed delivery but preserves review gates', () => {
   const reviewOutcome = classifyAutomationRunOutcome({
     deliveryWaitingForReview: true,
