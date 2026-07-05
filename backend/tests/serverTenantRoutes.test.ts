@@ -193,6 +193,53 @@ test('tenant routes reject valid sessions selecting another user workspace', asy
   const aliceStudioPolicies = await fetch(`${baseUrl}/api/studio/policies/${bobAutomation.id}`, { headers: aliceHeaders });
   assert.equal(aliceStudioPolicies.status, 404);
 
+  const aliceAutomationMutations = [
+    {
+      method: 'POST',
+      path: `/api/automations/${bobAutomation.id}/run`,
+      body: undefined,
+    },
+    {
+      method: 'PATCH',
+      path: `/api/automations/${bobAutomation.id}`,
+      body: { name: 'Alice should not rename Bob automation' },
+    },
+    {
+      method: 'POST',
+      path: `/api/automations/${bobAutomation.id}/reviews/${bobRun.id}/approve`,
+      body: { reviewer: 'Alice' },
+    },
+    {
+      method: 'POST',
+      path: `/api/automations/${bobAutomation.id}/reviews/${bobRun.id}/request-changes`,
+      body: { reviewer: 'Alice', note: 'No cross-tenant review changes' },
+    },
+    {
+      method: 'POST',
+      path: `/api/automations/${bobAutomation.id}/reviews/${bobRun.id}/rerun`,
+      body: { reviewer: 'Alice', note: 'No cross-tenant reruns' },
+    },
+    {
+      method: 'DELETE',
+      path: `/api/automations/${bobAutomation.id}`,
+      body: undefined,
+    },
+  ];
+
+  for (const request of aliceAutomationMutations) {
+    const response = await fetch(`${baseUrl}${request.path}`, {
+      method: request.method,
+      headers: {
+        ...aliceHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: request.body ? JSON.stringify(request.body) : undefined,
+    });
+    assert.equal(response.status, 404, `${request.method} ${request.path} should not expose Bob's automation`);
+    const payload = await readJson(response);
+    assert.match(String(payload.error), /Automation not found|Workflow not found/);
+  }
+
   const bobTasks = await fetch(`${baseUrl}/api/platform/tasks`, { headers: bobHeaders });
   assert.equal(bobTasks.status, 200);
   const bobTaskPayload = await readJson(bobTasks);
