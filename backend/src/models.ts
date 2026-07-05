@@ -41,6 +41,16 @@ export interface TextGenerationResult {
 }
 
 let cachedAnthropicConstructor: AnthropicConstructor | null = null;
+const DEFAULT_MODEL_RETRY_DELAYS_MS = [1000, 4000, 10000];
+
+class RetryableModelStatusError extends Error {
+  status: number;
+
+  constructor(response: Response) {
+    super(`Retryable model request failed with ${response.status} ${response.statusText}`);
+    this.status = response.status;
+  }
+}
 
 function env(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
@@ -50,6 +60,75 @@ function requireEnv(name: string): string {
   const value = env(name);
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
+}
+
+function getErrorStatus(error: unknown) {
+  const candidate = error as { status?: unknown; statusCode?: unknown; code?: unknown };
+  if (typeof candidate.status === 'number') return candidate.status;
+  if (typeof candidate.statusCode === 'number') return candidate.statusCode;
+  return undefined;
+}
+
+export function isRetryableModelError(error: unknown) {
+  const status = getErrorStatus(error);
+  if (status === 429 || (typeof status === 'number' && status >= 500)) return true;
+
+  const candidate = error as { code?: unknown; name?: unknown; message?: unknown };
+  const code = typeof candidate.code === 'string' ? candidate.code : '';
+  if (['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EAI_AGAIN'].includes(code)) return true;
+  const name = typeof candidate.name === 'string' ? candidate.name : '';
+  if (/timeout|abort/i.test(name)) return true;
+  const message = typeof candidate.message === 'string' ? candidate.message : '';
+  return /fetch failed|network|socket|timeout|temporar/i.test(message);
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getModelRetryDelaysMs() {
+  const configured = env('MODEL_RETRY_DELAYS_MS');
+  if (!configured) return DEFAULT_MODEL_RETRY_DELAYS_MS;
+  const parsed = configured
+    .split(',')
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item) && item >= 0)
+    .map((item) => Math.trunc(item));
+  return parsed.length > 0 ? parsed : DEFAULT_MODEL_RETRY_DELAYS_MS;
+}
+
+export async function withModelRetry<T>(label: string, operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  const retryDelays = getModelRetryDelaysMs();
+
+  for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt >= retryDelays.length || !isRetryableModelError(error)) {
+        throw error;
+      }
+      const delayMs = retryDelays[attempt];
+      console.warn(`[models] ${label} failed; retrying in ${delayMs}ms`, {
+        attempt: attempt + 1,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+export async function fetchModelResponseWithRetry(label: string, url: string, init: RequestInit): Promise<Response> {
+  return withModelRetry(label, async () => {
+    const response = await fetch(url, init);
+    if (response.status === 429 || response.status >= 500) {
+      throw new RetryableModelStatusError(response);
+    }
+    return response;
+  });
 }
 
 function getAnthropicConstructor(): AnthropicConstructor {
@@ -361,7 +440,7 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
     headers['X-Title'] = env('OPENROUTER_APP_NAME') || 'Violema';
   }
 
-  const response = await fetch(`${route.baseUrl}/chat/completions`, {
+  const response = await fetchModelResponseWithRetry('OpenAI text generation', `${route.baseUrl}/chat/completions`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -411,12 +490,14 @@ async function generateWithAnthropicLike(profile: TextProfile, system: string, m
   }
 
   const { client, route } = getAnthropicCompatibleClient(profile, workspaceId);
-  const response = await client.messages.create({
-    model: route.model,
-    max_tokens: maxTokens,
-    system,
-    messages,
-  });
+  const response = await withModelRetry('Anthropic text generation', () =>
+    client.messages.create({
+      model: route.model,
+      max_tokens: maxTokens,
+      system,
+      messages,
+    })
+  );
 
   const usage = 'usage' in response && response.usage
     ? {
@@ -563,7 +644,7 @@ export async function routeChatProfile(messages: Array<{ role: string; content: 
 
 export async function createMemoryEmbeddings(input: string | string[], workspaceId?: string) {
   const route = getEmbeddingRoute('memory', workspaceId);
-  const response = await fetch(`${route.baseUrl}/embeddings`, {
+  const response = await fetchModelResponseWithRetry('Embedding generation', `${route.baseUrl}/embeddings`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

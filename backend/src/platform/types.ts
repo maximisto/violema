@@ -4,6 +4,7 @@ export type CreditSource =
   | 'referral_bonus'
   | 'task_run'
   | 'automation_run'
+  | 'credit_hold'
   | 'manual_adjustment'
   | 'refund'
   | 'promo';

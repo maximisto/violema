@@ -9,7 +9,7 @@
     "build": "npm run clean && tsc",
     "typecheck": "tsc --noEmit",
     "test": "NODE_ENV=test VIOLEMA_DISABLE_AUTOMATION_SCHEDULER=1 node --test -r ts-node/register \"tests/**/*.test.ts\" \"tests/**/*.contract.ts\"",
-    "test:platform": "NODE_ENV=test VIOLEMA_DISABLE_AUTOMATION_SCHEDULER=1 node --test -r ts-node/register tests/jsonStore.test.ts",
+    "test:platform": "NODE_ENV=test VIOLEMA_DISABLE_AUTOMATION_SCHEDULER=1 node --test -r ts-node/register tests/jsonStore.test.ts tests/creditHolds.test.ts",
     "start": "node dist/server.js"
   },
   "dependencies": {

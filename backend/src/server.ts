@@ -75,12 +75,12 @@ import {
 } from './scheduler';
 import {
   addLedgerEntry,
+  acquireCreditHold,
   applyWorkerRuntimeActivity,
   type AgentRole,
   type AutomationExecutionPolicy,
   type AutomationOptimizationGoal,
   type AutomationReviewPolicy,
-  assertCanSpendCredits,
   calculateRuntimeCredits,
   type AutomationExecutionPlan,
   type AutomationRolePlan,
@@ -113,6 +113,8 @@ import {
   type ModelTier,
   purchaseTopUp,
   recordReferralEvent,
+  releaseCreditHold,
+  settleCreditHold,
   summarizeReferralRewards,
   mapTaskRunToStatus,
   isElasticLane,
@@ -128,6 +130,7 @@ import {
 } from './platform';
 import {
   createMemoryEmbeddings,
+  fetchModelResponseWithRetry,
   generateText,
   generateTextDetailed,
   getChatClient,
@@ -141,6 +144,7 @@ import {
   getUtilityModelConfig,
   routeChatProfile,
   type TextProfile,
+  withModelRetry,
 } from './models';
 import {
   getIntegrationCredential,
@@ -176,6 +180,8 @@ const SCREENSHOT_DIR = path.join(process.cwd(), 'generated-screenshots');
 const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
 const SLACK_EVENT_CACHE_WINDOW_MS = 5 * 60 * 1000;
 const AUTOMATION_STEP_TIMEOUT_MS = Number(process.env.AUTOMATION_STEP_TIMEOUT_MS || 45000);
+const MAX_TOOL_ITERATIONS = readPositiveIntegerEnv('MAX_TOOL_ITERATIONS', 24);
+const CHAT_MAX_OUTPUT_TOKENS = readPositiveIntegerEnv('CHAT_MAX_OUTPUT_TOKENS', 8000);
 const handledSlackEvents = new Map<string, number>();
 const taskPanelStreamClients = new Map<string, Set<Response>>();
 const ALLOWED_ORIGINS = [
@@ -192,6 +198,27 @@ const AUTH_COOKIE_NAME = 'violema_session';
 type AuthenticatedRequest = Request & { authUser?: AuthUserRecord };
 type AnthropicConstructor = typeof import('@anthropic-ai/sdk').default;
 let cachedAnthropicConstructor: AnthropicConstructor | null = null;
+
+function readPositiveIntegerEnv(name: string, fallback: number) {
+  const parsed = Number(process.env[name] || fallback);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.trunc(parsed));
+}
+
+function parseToolResultPayload(result: string): unknown {
+  try {
+    return JSON.parse(result);
+  } catch {
+    return {
+      raw: result,
+      parse_error: true,
+    };
+  }
+}
+
+function buildToolLoopCapMessage() {
+  return `\n\nI hit the ${MAX_TOOL_ITERATIONS}-step tool limit for this task, so I stopped before spending more credits. Narrow the request or continue with a smaller next step.`;
+}
 
 function addTaskPanelStreamClient(workspaceId: string, res: Response) {
   const set = taskPanelStreamClients.get(workspaceId) || new Set<Response>();
@@ -1204,19 +1231,33 @@ async function runAnthropicChatLoop(
   autonomyMode: string,
   workspaceId: string,
   sendEvent: (data: Record<string, unknown>) => void
-): Promise<{ toolCallsExecuted: number }> {
+): Promise<{ toolCallsExecuted: number; capped: boolean }> {
   let continueLoop = true;
   let currentMessages = [...anthropicMessages];
   let toolCallsExecuted = 0;
+  let capped = false;
 
   while (continueLoop) {
-    const stream = client.messages.stream({
-      model: route.model,
-      max_tokens: 8000,
-      system: buildSystemPrompt(autonomyMode),
-      tools: NEXUS_TOOLS,
-      messages: currentMessages,
-    });
+    if (toolCallsExecuted >= MAX_TOOL_ITERATIONS) {
+      capped = true;
+      sendEvent({
+        type: 'tool_loop_capped',
+        max_tool_iterations: MAX_TOOL_ITERATIONS,
+        tool_calls_executed: toolCallsExecuted,
+      });
+      sendEvent({ type: 'text', content: buildToolLoopCapMessage() });
+      break;
+    }
+
+    const stream = await withModelRetry('Anthropic-compatible chat stream', async () =>
+      client.messages.stream({
+        model: route.model,
+        max_tokens: CHAT_MAX_OUTPUT_TOKENS,
+        system: buildSystemPrompt(autonomyMode),
+        tools: NEXUS_TOOLS,
+        messages: currentMessages,
+      })
+    );
 
     const toolUseBlocks: ToolUseBlock[] = [];
     let currentToolUse: { id: string; name: string; input: string; startedAt: number } | null = null;
@@ -1285,6 +1326,17 @@ async function runAnthropicChatLoop(
       const toolResults: ToolResultBlockParam[] = [];
 
       for (const toolUseBlock of toolUseBlocks) {
+        if (toolCallsExecuted >= MAX_TOOL_ITERATIONS) {
+          capped = true;
+          sendEvent({
+            type: 'tool_loop_capped',
+            max_tool_iterations: MAX_TOOL_ITERATIONS,
+            tool_calls_executed: toolCallsExecuted,
+          });
+          sendEvent({ type: 'text', content: buildToolLoopCapMessage() });
+          break;
+        }
+
         const toolInput = toolUseBlock.input as Record<string, unknown>;
         const toolStart = Date.now();
         const result = await executeToolCall(toolUseBlock.name, toolInput, { workspaceId });
@@ -1295,7 +1347,7 @@ async function runAnthropicChatLoop(
           type: 'tool_result',
           tool_id: toolUseBlock.id,
           tool_name: toolUseBlock.name,
-          result: JSON.parse(result),
+          result: parseToolResultPayload(result),
           elapsed_ms: elapsed,
           confidence,
         });
@@ -1308,13 +1360,17 @@ async function runAnthropicChatLoop(
         toolCallsExecuted += 1;
       }
 
-      currentMessages.push({ role: 'user', content: toolResults });
+      if (toolResults.length > 0 && !capped) {
+        currentMessages.push({ role: 'user', content: toolResults });
+      } else {
+        continueLoop = false;
+      }
     } else {
       continueLoop = false;
     }
   }
 
-  return { toolCallsExecuted };
+  return { toolCallsExecuted, capped };
 }
 
 async function runOpenAIChatLoop(
@@ -1323,7 +1379,7 @@ async function runOpenAIChatLoop(
   autonomyMode: string,
   workspaceId: string,
   sendEvent: (data: Record<string, unknown>) => void
-): Promise<{ toolCallsExecuted: number }> {
+): Promise<{ toolCallsExecuted: number; capped: boolean }> {
   const currentMessages: Array<Record<string, unknown>> = [
     { role: 'system', content: buildSystemPrompt(autonomyMode) },
     ...messages.map((message) => ({ role: message.role, content: message.content })),
@@ -1331,9 +1387,21 @@ async function runOpenAIChatLoop(
 
   let continueLoop = true;
   let toolCallsExecuted = 0;
+  let capped = false;
 
   while (continueLoop) {
-    const response = await fetch(`${route.baseUrl}/chat/completions`, {
+    if (toolCallsExecuted >= MAX_TOOL_ITERATIONS) {
+      capped = true;
+      sendEvent({
+        type: 'tool_loop_capped',
+        max_tool_iterations: MAX_TOOL_ITERATIONS,
+        tool_calls_executed: toolCallsExecuted,
+      });
+      sendEvent({ type: 'text', content: buildToolLoopCapMessage() });
+      break;
+    }
+
+    const response = await fetchModelResponseWithRetry('OpenAI-compatible chat loop', `${route.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: buildOpenAIHeaders(route),
       body: JSON.stringify({
@@ -1341,6 +1409,7 @@ async function runOpenAIChatLoop(
         messages: currentMessages,
         tools: buildOpenAITools(),
         tool_choice: 'auto',
+        max_tokens: CHAT_MAX_OUTPUT_TOKENS,
       }),
     });
 
@@ -1380,6 +1449,17 @@ async function runOpenAIChatLoop(
       });
 
       for (const toolCall of toolCalls) {
+        if (toolCallsExecuted >= MAX_TOOL_ITERATIONS) {
+          capped = true;
+          sendEvent({
+            type: 'tool_loop_capped',
+            max_tool_iterations: MAX_TOOL_ITERATIONS,
+            tool_calls_executed: toolCallsExecuted,
+          });
+          sendEvent({ type: 'text', content: buildToolLoopCapMessage() });
+          break;
+        }
+
         const toolId = toolCall.id || `tool_${Date.now()}`;
         const toolName = toolCall.function?.name || 'unknown_tool';
         const startedAt = Date.now();
@@ -1412,7 +1492,7 @@ async function runOpenAIChatLoop(
           type: 'tool_result',
           tool_id: toolId,
           tool_name: toolName,
-          result: JSON.parse(result),
+          result: parseToolResultPayload(result),
           elapsed_ms: elapsed,
           confidence,
         });
@@ -1424,12 +1504,16 @@ async function runOpenAIChatLoop(
         });
         toolCallsExecuted += 1;
       }
+
+      if (capped) {
+        continueLoop = false;
+      }
     } else {
       continueLoop = false;
     }
   }
 
-  return { toolCallsExecuted };
+  return { toolCallsExecuted, capped };
 }
 
 const NEXUS_TOOLS: Tool[] = [
@@ -2025,99 +2109,164 @@ async function executeConversationTask(input: {
     toolCalls: 0,
     complexity: combinedContent.length > 1200 ? 'high' : combinedContent.length > 500 ? 'medium' : 'low',
   });
-  assertCanSpendCredits(workspaceId, estimatedCost.estimatedCredits);
-  const taskRun = createTaskRun({
-    workspaceId,
-    taskId: task.id,
-    ...delegation.taskRunPatch,
-    modelTier,
-    estimatedCredits: estimatedCost.estimatedCredits,
-    delegationPlan: delegation.plan,
-    metadata: {
-      requestedProfile: modelProfile,
-      title: task.title,
-      delegation: delegation.ownership,
-      modelSource,
-      modelSourceLabel: getModelSourceLabel(modelSource),
-    },
-  });
-  const anthropicMessages: MessageParam[] = messages.map((message) => ({
-    role: message.role,
-    content: message.content,
-  }));
-
-  collectEvent({
-    type: 'routing',
-    requested_profile: modelProfile,
-    selected_profile: resolvedProfile,
-    selected_model: requestedRoute.model,
-    selected_model_source: modelSource,
-    selected_model_source_label: getModelSourceLabel(modelSource),
-    reason: routingDecision?.reason || 'explicit_profile',
-    risk: routingDecision?.risk || 'low',
-    needs_tools: routingDecision?.needsTools ?? true,
-  });
-  collectEvent({
-    type: 'delegation_planned',
-    task_id: task.id,
-    task_run_id: taskRun.id,
-    plan: delegation.plan,
-    ownership: delegation.ownership,
-  });
-
-  let toolCallsExecuted = 0;
-  if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
-    if (!client) throw new Error('Missing Anthropic-compatible client.');
-    const execution = await runAnthropicChatLoop(client, executingRoute, anthropicMessages, autonomyMode, workspaceId, collectEvent);
-    toolCallsExecuted = execution.toolCallsExecuted;
-  } else {
-    const execution = await runOpenAIChatLoop(requestedRoute, messages, autonomyMode, workspaceId, collectEvent);
-    toolCallsExecuted = execution.toolCallsExecuted;
-  }
-
-  const actualCost = estimateCreditCost({
+  const heldCost = estimateCreditCost({
     taskKind,
     modelTier,
-    toolCalls: toolCallsExecuted,
-    complexity: estimatedCost.breakdown.complexityCredits > 0 ? 'medium' : 'low',
+    toolCalls: MAX_TOOL_ITERATIONS,
+    complexity: combinedContent.length > 1200 ? 'high' : combinedContent.length > 500 ? 'medium' : 'low',
   });
-  finalizeTaskRun(taskRun.id, {
-    status: 'succeeded',
-    actualCredits: actualCost.estimatedCredits,
-    metadata: {
-      toolCallsExecuted,
-      summary: textParts.join('').trim() || undefined,
-      artifacts: toolArtifacts,
-    },
-  });
-  updateTask(task.id, {
-    status: 'completed',
-    delegationState: 'completed',
-    metadata: {
-      ...(task.metadata || {}),
-      latestSummary: textParts.join('').trim() || undefined,
-      latestArtifacts: toolArtifacts,
-    },
-  });
-  addLedgerEntry({
+  const creditHold = acquireCreditHold({
     workspaceId,
-    source: 'task_run',
-    deltaCredits: -actualCost.estimatedCredits,
+    amountCredits: Math.max(estimatedCost.estimatedCredits, heldCost.estimatedCredits),
     referenceType: 'task',
     referenceId: task.id,
-    note: `Chat task completed: ${task.title}`,
-    metadata: { taskRunId: taskRun.id, toolCallsExecuted },
+    note: `Held credits for chat task: ${task.title}`,
+    metadata: {
+      estimatedCredits: estimatedCost.estimatedCredits,
+      maxToolIterations: MAX_TOOL_ITERATIONS,
+    },
   });
 
-  return {
-    taskId: task.id,
-    taskRunId: taskRun.id,
-    resolvedProfile,
-    selectedModel: requestedRoute.model,
-    modelSource,
-    outputText: textParts.join('').trim(),
-    toolCallsExecuted,
-  };
+  let taskRun: ReturnType<typeof createTaskRun> | null = null;
+  let creditHoldSettled = false;
+
+  try {
+    taskRun = createTaskRun({
+      workspaceId,
+      taskId: task.id,
+      ...delegation.taskRunPatch,
+      modelTier,
+      estimatedCredits: estimatedCost.estimatedCredits,
+      delegationPlan: delegation.plan,
+      metadata: {
+        requestedProfile: modelProfile,
+        title: task.title,
+        delegation: delegation.ownership,
+        modelSource,
+        modelSourceLabel: getModelSourceLabel(modelSource),
+        creditHoldId: creditHold.holdId,
+        heldCredits: creditHold.heldCredits,
+      },
+    });
+    const anthropicMessages: MessageParam[] = messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
+
+    collectEvent({
+      type: 'routing',
+      requested_profile: modelProfile,
+      selected_profile: resolvedProfile,
+      selected_model: requestedRoute.model,
+      selected_model_source: modelSource,
+      selected_model_source_label: getModelSourceLabel(modelSource),
+      reason: routingDecision?.reason || 'explicit_profile',
+      risk: routingDecision?.risk || 'low',
+      needs_tools: routingDecision?.needsTools ?? true,
+    });
+    collectEvent({
+      type: 'delegation_planned',
+      task_id: task.id,
+      task_run_id: taskRun.id,
+      plan: delegation.plan,
+      ownership: delegation.ownership,
+    });
+
+    let toolCallsExecuted = 0;
+    let toolLoopCapped = false;
+    if (requestedRoute.provider === 'anthropic' || requestedRoute.provider === 'minimax') {
+      if (!client) throw new Error('Missing Anthropic-compatible client.');
+      const execution = await runAnthropicChatLoop(client, executingRoute, anthropicMessages, autonomyMode, workspaceId, collectEvent);
+      toolCallsExecuted = execution.toolCallsExecuted;
+      toolLoopCapped = execution.capped;
+    } else {
+      const execution = await runOpenAIChatLoop(requestedRoute, messages, autonomyMode, workspaceId, collectEvent);
+      toolCallsExecuted = execution.toolCallsExecuted;
+      toolLoopCapped = execution.capped;
+    }
+
+    const actualCost = estimateCreditCost({
+      taskKind,
+      modelTier,
+      toolCalls: toolCallsExecuted,
+      complexity: estimatedCost.breakdown.complexityCredits > 0 ? 'medium' : 'low',
+    });
+    finalizeTaskRun(taskRun.id, {
+      status: 'succeeded',
+      actualCredits: actualCost.estimatedCredits,
+      metadata: {
+        toolCallsExecuted,
+        capped: toolLoopCapped,
+        summary: textParts.join('').trim() || undefined,
+        artifacts: toolArtifacts,
+      },
+    });
+    updateTask(task.id, {
+      status: 'completed',
+      delegationState: 'completed',
+      metadata: {
+        ...(task.metadata || {}),
+        latestSummary: textParts.join('').trim() || undefined,
+        latestArtifacts: toolArtifacts,
+        capped: toolLoopCapped,
+      },
+    });
+    settleCreditHold(creditHold.holdId, {
+      workspaceId,
+      source: 'task_run',
+      actualCredits: actualCost.estimatedCredits,
+      referenceType: 'task',
+      referenceId: task.id,
+      note: `Chat task completed: ${task.title}`,
+      metadata: { taskRunId: taskRun.id, toolCallsExecuted, capped: toolLoopCapped },
+    });
+    creditHoldSettled = true;
+
+    return {
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      resolvedProfile,
+      selectedModel: requestedRoute.model,
+      modelSource,
+      outputText: textParts.join('').trim(),
+      toolCallsExecuted,
+    };
+  } catch (error) {
+    if (!creditHoldSettled) {
+      try {
+        releaseCreditHold(creditHold.holdId, {
+          workspaceId,
+          referenceType: 'task',
+          referenceId: task.id,
+          note: `Released held credits after chat task failure: ${task.title}`,
+          metadata: {
+            taskRunId: taskRun?.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      } catch {
+        // Best-effort release; the hold expires automatically if this fails.
+      }
+    }
+
+    if (taskRun) {
+      finalizeTaskRun(taskRun.id, {
+        status: 'failed',
+        actualCredits: 0,
+        error: error instanceof Error ? error.message : String(error),
+        metadata: { releasedCreditHoldId: creditHold.holdId },
+      });
+    }
+    updateTask(task.id, {
+      status: 'failed',
+      delegationState: 'review',
+      metadata: {
+        ...(task.metadata || {}),
+        latestSummary: error instanceof Error ? error.message : String(error),
+      },
+    });
+    throw error;
+  }
 }
 
 interface AutomationExecutionArtifact {
@@ -3837,8 +3986,23 @@ async function runAutomation(automation: {
     taskRunId: taskRun.id,
   });
 
+  let creditHold: ReturnType<typeof acquireCreditHold> | null = null;
+  let creditHoldSettled = false;
+
   try {
-    assertCanSpendCredits(workspaceId, estimatedCredits);
+    creditHold = acquireCreditHold({
+      workspaceId,
+      amountCredits: estimatedCredits,
+      referenceType: 'automation',
+      referenceId: automation.id,
+      note: `Held credits for automation run: ${automation.name}`,
+      metadata: {
+        taskId: task.id,
+        taskRunId: taskRun.id,
+        estimatedCredits,
+        workflowId,
+      },
+    });
     updateTask(task.id, { status: 'running', delegationState: 'in_progress' });
 
     const persistProgress = async (progress: {
@@ -4041,10 +4205,10 @@ async function runAutomation(automation: {
         runOutcome: outcome,
       },
     });
-    addLedgerEntry({
+    settleCreditHold(creditHold.holdId, {
       workspaceId,
       source: 'automation_run',
-      deltaCredits: -actualCredits,
+      actualCredits,
       referenceType: 'automation',
       referenceId: automation.id,
       note: `Automation run: ${automation.name}`,
@@ -4065,6 +4229,7 @@ async function runAutomation(automation: {
         runOutcome: outcome,
       },
     });
+    creditHoldSettled = true;
     const completedSnapshot = buildTaskRunSnapshotEvent(workspaceId, taskRun.id, outcome.runStatus === 'failed' ? 'failed' : 'completed');
     if (completedSnapshot) {
       broadcastTaskPanelEvent(workspaceId, completedSnapshot);
@@ -4075,6 +4240,23 @@ async function runAutomation(automation: {
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown automation error';
+    if (creditHold && !creditHoldSettled) {
+      try {
+        releaseCreditHold(creditHold.holdId, {
+          workspaceId,
+          referenceType: 'automation',
+          referenceId: automation.id,
+          note: `Released held credits after automation failure: ${automation.name}`,
+          metadata: {
+            taskId: task.id,
+            taskRunId: taskRun.id,
+            error: errorMessage,
+          },
+        });
+      } catch {
+        // Best-effort release; the hold expires automatically if this fails.
+      }
+    }
     const failureSummary = errorMessage.toLowerCase().includes('insufficient credits')
       ? `Automation could not start because the workspace does not have enough credits for this run.\n\n${errorMessage}`
       : `Automation failed before it could finish cleanly.\n\n${errorMessage}`;

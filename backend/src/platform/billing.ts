@@ -1,7 +1,7 @@
 import path from 'path';
 import { canSpendCredits } from './ledger';
 import { readJsonFile, writeJsonFile } from './jsonStore';
-import { getWorkspaceLedgerSummary, listLedgerEntries, addLedgerEntry } from './store';
+import { getWorkspaceCreditReserve, getWorkspaceLedgerSummary, listLedgerEntries, addLedgerEntry } from './store';
 import type { BillingPlanId, PlanDefinition, TopUpOffer, WorkspaceBillingConfig } from './types';
 
 export type BillingPlanTier = BillingPlanId;
@@ -414,12 +414,13 @@ export function getBillingStatusSnapshot(workspaceId: string): BillingStatus {
   return buildPlanSummary(workspaceId, { seedCredits: false });
 }
 
-export function assertCanSpendCredits(workspaceId: string, estimatedCredits: number) {
-  const status = buildPlanSummary(workspaceId);
-  if (!canSpendCredits(status.summary.balanceCredits, estimatedCredits)) {
-    const offer = getApplicableTopUpOffer(status.summary.balanceCredits, estimatedCredits);
+export function assertCanSpendCredits(workspaceId: string, estimatedCredits: number, now = new Date()) {
+  buildPlanSummary(workspaceId);
+  const reserve = getWorkspaceCreditReserve(workspaceId, now);
+  if (!canSpendCredits(reserve.availableCredits, estimatedCredits)) {
+    const offer = getApplicableTopUpOffer(reserve.availableCredits, estimatedCredits);
     throw new Error(
-      `Insufficient credits. ${status.summary.balanceCredits} remaining, ${estimatedCredits} required. Add ${offer.credits} credits or upgrade your plan.`
+      `Insufficient credits. ${reserve.availableCredits} available, ${estimatedCredits} required. Add ${offer.credits} credits or upgrade your plan.`
     );
   }
 }
