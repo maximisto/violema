@@ -7556,20 +7556,20 @@ export default function AgentStudio() {
           <section className="mx-auto w-full max-w-[1180px] space-y-6">
             {selectedRow ? (
               <>
-                <div className="rounded-[2rem] border border-navy-800/80 bg-gradient-to-br from-navy-900/84 via-navy-900/56 to-navy-950/92 p-5">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="rounded-[2.25rem] border border-navy-800/80 bg-gradient-to-br from-navy-900/84 via-navy-900/56 to-navy-950/92 p-6 md:p-7">
+                  <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0">
                       <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300/80">Agent system for this workflow</p>
-                      <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">{selectedRow.automation.name}</h2>
-                      <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
+                      <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-white md:text-4xl">{selectedRow.automation.name}</h2>
+                      <p className="mt-3 max-w-4xl text-base leading-relaxed text-slate-400">
                         Agent Studio is now split into Live, Optimize, and Replay so users can understand the system instantly: what is running, what to change, and what actually worked.
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2.5">
                       <button
                         type="button"
                         onClick={() => navigate(`/dashboard?automation=${selectedRow.automation.id}&panel=schedules`)}
-                        className="flex items-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-500/12"
+                        className="flex items-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/8 px-4 py-2.5 text-sm font-medium text-violet-200 transition-colors hover:bg-violet-500/12"
                       >
                         Open schedule
                         <ChevronRight className="h-3.5 w-3.5" />
@@ -7577,7 +7577,7 @@ export default function AgentStudio() {
                       <button
                         type="button"
                         onClick={() => navigate(`/dashboard?automation=${selectedRow.automation.id}&panel=schedules&edit=workflow`)}
-                        className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-3 py-2 text-xs text-slate-300 transition-colors hover:border-cyan-500/30 hover:text-white"
+                        className="flex items-center gap-2 rounded-xl border border-navy-700 bg-navy-900/72 px-4 py-2.5 text-sm text-slate-300 transition-colors hover:border-cyan-500/30 hover:text-white"
                       >
                         Edit workflow
                         <ArrowUpRight className="h-3.5 w-3.5" />
@@ -7585,25 +7585,25 @@ export default function AgentStudio() {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                  <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow shape</p>
                       <p className="mt-1 text-sm font-medium text-white">{selectedRow.automation.authoring_mode === 'describe' ? 'Natural-language brief' : 'Guided steps'}</p>
                       <p className="mt-1 text-[11px] text-slate-500">{selectedRow.workflowSteps.length} workflow blocks</p>
                     </div>
-                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Current policy</p>
                       <p className="mt-1 text-sm font-medium text-white">
                         {activePresetId === 'custom_live' ? 'Custom live policy' : POLICY_PRESETS.find((preset) => preset.id === activePresetId)?.label || 'System recommended'}
                       </p>
                       <p className="mt-1 text-[11px] text-slate-500">{getReviewPolicyLabel(selectedPolicy.reviewPolicy)}</p>
                     </div>
-                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Next run</p>
                       <p className="mt-1 text-sm font-medium text-white">{formatAutomationRunTime(selectedRow.automation.next_run_at)}</p>
                       <p className="mt-1 text-[11px] text-slate-500">{liveRun?.status === 'running' ? 'Live run in progress' : 'Standing by'}</p>
                     </div>
-                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-3">
+                    <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Result health</p>
                       <p className="mt-1 text-sm font-medium text-white">{Math.round(selectedRow.successRate * 100)}% success</p>
                       <p className="mt-1 text-[11px] text-slate-500">{selectedRow.averageCredits ? `${formatCredits(selectedRow.averageCredits)} cr average spend` : 'No completed runs yet'}</p>
