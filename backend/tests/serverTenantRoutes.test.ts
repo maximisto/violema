@@ -141,4 +141,20 @@ test('tenant routes reject valid sessions selecting another user workspace', asy
     (bobAutomationPayload.items as Array<{ id: string }>).map((item) => item.id),
     [bobAutomation.id],
   );
+
+  const aliceCreatedAutomation = await fetch(`${baseUrl}/api/automations`, {
+    method: 'POST',
+    headers: {
+      ...aliceHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'Alice owned automation',
+      schedule: 'daily at 11am',
+      actions: ['Summarize Alice-only data'],
+    }),
+  });
+  assert.equal(aliceCreatedAutomation.status, 201);
+  const aliceCreatedPayload = await readJson(aliceCreatedAutomation);
+  assert.equal((aliceCreatedPayload.item as { owner_user_id?: string }).owner_user_id, alice.id);
 }));

@@ -29,6 +29,7 @@ export interface AutomationRecord {
   id: string;
   version?: 2;
   workspaceId?: string;
+  owner_user_id?: string;
   name: string;
   description?: string;
   authoring_mode?: 'guided' | 'describe';
@@ -645,6 +646,7 @@ export function createAutomation(
     id: `auto_${Date.now()}`,
     version: input.steps?.length ? 2 : undefined,
     workspaceId: input.workspaceId,
+    owner_user_id: input.owner_user_id,
     name: input.name,
     description: input.description,
     authoring_mode: input.authoring_mode,

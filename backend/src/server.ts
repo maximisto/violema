@@ -1964,6 +1964,7 @@ async function executeToolCall(
 
     case 'schedule_automation': {
       const record = createAutomation({
+        workspaceId: ctx?.workspaceId || DEFAULT_WORKSPACE_ID,
         name: String(toolInput.name || ''),
         description: toolInput.description ? String(toolInput.description) : undefined,
         schedule: String(toolInput.schedule || ''),
@@ -5510,6 +5511,7 @@ app.get('/api/automations/:id/preflight', (req: Request, res: Response) => {
 
 app.post('/api/automations', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
+  const authUser = getAuthenticatedUser(req);
   const body = req.body as {
     name?: string;
     description?: string;
@@ -5544,6 +5546,7 @@ app.post('/api/automations', async (req: Request, res: Response) => {
     });
     const record = createAutomation({
       workspaceId,
+      owner_user_id: authUser?.id,
       name: body.name.trim(),
       description: typeof body.description === 'string' ? body.description.trim() || undefined : undefined,
       authoring_mode: body.authoringMode === 'describe' ? 'describe' : 'guided',
