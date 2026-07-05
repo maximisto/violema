@@ -311,6 +311,27 @@ function extractResultMetrics(result?: Record<string, unknown>) {
     }));
 }
 
+function getSimulatedResultNotice(result?: Record<string, unknown>) {
+  if (!result) return null;
+  const isSimulated = result.simulated === true || result.live === false || result.provider === 'mock' || result.status === 'mocked';
+  if (!isSimulated) return null;
+
+  const message = typeof result.message === 'string' && result.message.trim()
+    ? result.message.trim()
+    : 'Simulated data. Connect the source to query live workspace data.';
+  const nextAction = result.nextAction && typeof result.nextAction === 'object'
+    ? result.nextAction as Record<string, unknown>
+    : null;
+  const label = typeof nextAction?.label === 'string' && nextAction.label.trim()
+    ? nextAction.label.trim()
+    : undefined;
+  const route = typeof nextAction?.route === 'string' && nextAction.route.trim()
+    ? nextAction.route.trim()
+    : undefined;
+
+  return { message, label, route };
+}
+
 interface ToolArtifact {
   kind: 'screenshot' | 'report' | 'chart' | 'link';
   title: string;
@@ -647,6 +668,7 @@ const ToolCallBlock = memo(function ToolCallBlock({
   const resultMetrics = extractResultMetrics(toolCall.result);
   const artifacts = extractToolArtifacts(toolCall.name, toolCall.result);
   const hasChartArtifact = artifacts.some((artifact) => artifact.kind === 'chart');
+  const simulatedNotice = getSimulatedResultNotice(toolCall.result);
 
   useEffect(() => {
     if (hasChartArtifact) setExpanded(true);
@@ -685,6 +707,11 @@ const ToolCallBlock = memo(function ToolCallBlock({
               </span>
             )}
             {isDone && confidence !== undefined && <ConfidenceBar score={confidence} />}
+            {simulatedNotice && (
+              <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200">
+                Simulated
+              </span>
+            )}
           </div>
           {inputSummary && typeof inputSummary === 'string' && (
             <p className="mt-0.5 truncate font-mono text-xs text-slate-500">
@@ -717,6 +744,21 @@ const ToolCallBlock = memo(function ToolCallBlock({
 
       {expanded && (
         <div className="border-t border-white/5 px-4 pb-4 pt-3 space-y-3">
+          {simulatedNotice && (
+            <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium">{simulatedNotice.message}</p>
+                {simulatedNotice.route && simulatedNotice.label && (
+                  <a
+                    href={simulatedNotice.route}
+                    className="rounded-full border border-amber-300/30 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100 transition-colors hover:bg-amber-300/16"
+                  >
+                    {simulatedNotice.label}
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
           {toolCall.input && (
             <div className="rounded-xl border border-navy-800/70 bg-black/20 p-3">
               <div className="mb-2 flex items-center justify-between gap-3">

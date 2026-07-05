@@ -44,9 +44,9 @@ export default function App() {
           <Route path="/connect/slack" element={<ProtectedRoute><SlackSetup /></ProtectedRoute>} />
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute blockedRedirectPath="/login"><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute blockedRedirectPath="/login" requireAdmin><AdminDashboard /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/dashboard/agents" element={<ProtectedRoute><AgentStudio /></ProtectedRoute>} />
+          <Route path="/dashboard/agents" element={<ProtectedRoute requireAdmin><AgentStudio /></ProtectedRoute>} />
           {enableLocalReviewRoutes && <Route path="/dashboard-preview" element={<Dashboard />} />}
           <Route path="/faq" element={<FAQ />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />

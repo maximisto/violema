@@ -104,6 +104,12 @@ export function writeJsonFile<T>(filePath: string, value: T) {
   writeFileDurably(filePath, JSON.stringify(value, null, 2));
 }
 
+export function updateJsonFile<T>(filePath: string, fallback: T, updater: (current: T) => T): T {
+  const next = updater(readJsonFile(filePath, fallback));
+  writeJsonFile(filePath, next);
+  return next;
+}
+
 export function upsertJsonRecord<T extends { id: string }>(items: T[], record: T): T[] {
   const index = items.findIndex((item) => item.id === record.id);
   if (index === -1) return [record, ...items];

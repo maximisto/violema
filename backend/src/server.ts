@@ -33,6 +33,12 @@ import {
   verifyAdminMagicLoginToken,
 } from './auth';
 import { registerAdminRoutes } from './adminRoutes';
+import {
+  assertAuthenticatedAdminAccess,
+  getAuthenticatedAdminActor,
+  getAuthenticatedUser,
+  type AuthenticatedRequest,
+} from './authRequest';
 import { isPublicBetaApiPath } from './betaAccess';
 import {
   GENERAL_RATE_LIMIT_MAX,
@@ -195,7 +201,6 @@ const ALLOWED_ORIGINS = [
   'http://nexus.purpleorange.io',
 ];
 const AUTH_COOKIE_NAME = 'violema_session';
-type AuthenticatedRequest = Request & { authUser?: AuthUserRecord };
 type AnthropicConstructor = typeof import('@anthropic-ai/sdk').default;
 let cachedAnthropicConstructor: AnthropicConstructor | null = null;
 
@@ -447,10 +452,6 @@ function readRequestedWorkspaceId(req: Request) {
     normalizeWorkspaceSelector(req.query.workspace_id) ||
     normalizeWorkspaceSelector((req.body as Record<string, unknown> | undefined)?.workspaceId)
   );
-}
-
-function getAuthenticatedUser(req: Request) {
-  return (req as AuthenticatedRequest).authUser || null;
 }
 
 function resolveWorkspaceContext(req: Request) {
@@ -1039,14 +1040,7 @@ function recordDeniedBetaAccessRequest(input: {
 }
 
 function assertAdminAccess(req: Request) {
-  const token = parseCookieValue(req, AUTH_COOKIE_NAME);
-  const record = token ? getAuthUserByToken(token) : null;
-  if (!record || !isEmailAdminForAccess(record.user.email)) {
-    const error = new Error('Admin access required');
-    (error as Error & { statusCode?: number }).statusCode = 403;
-    throw error;
-  }
-  return record.user.email;
+  return assertAuthenticatedAdminAccess(req);
 }
 
 function verifySlackSignature(rawBody: Buffer, signature: string, timestamp: string) {
@@ -1871,6 +1865,8 @@ async function executeToolCall(
       if (language === 'python') {
         if (code.includes('import pandas') || code.includes('import numpy')) {
           return JSON.stringify({
+            simulated: true,
+            message: 'Simulated code execution. Connect a sandbox runtime before relying on this output for production work.',
             stdout: `DataFrame loaded: 1,247 rows × 8 cols\n\nSummary statistics:\n  mean: 42,318.44\n  std:  12,847.22\n  min:  1,200.00\n  max:  98,750.00\n\nTop categories:\n  Enterprise  428 (34.3%)\n  Startup     312 (25.0%)\n  SMB         289 (23.2%)`,
             stderr: '',
             exit_code: 0,
@@ -1881,9 +1877,19 @@ async function executeToolCall(
         const lines = code.split('\n').filter(l => l.includes('print('));
         if (lines.length > 0) {
           const out = lines.map(l => l.replace(/print\(['"]?|['"]?\)/g, '')).join('\n');
-          return JSON.stringify({ stdout: out || 'Script completed.', stderr: '', exit_code: 0, language, execution_time: execTime });
+          return JSON.stringify({
+            simulated: true,
+            message: 'Simulated code execution. Connect a sandbox runtime before relying on this output for production work.',
+            stdout: out || 'Script completed.',
+            stderr: '',
+            exit_code: 0,
+            language,
+            execution_time: execTime,
+          });
         }
         return JSON.stringify({
+          simulated: true,
+          message: 'Simulated code execution. Connect a sandbox runtime before relying on this output for production work.',
           stdout: 'Script executed successfully.\nResult: [computation complete]',
           stderr: '',
           exit_code: 0,
@@ -1894,6 +1900,8 @@ async function executeToolCall(
 
       if (language === 'javascript' || language === 'typescript') {
         return JSON.stringify({
+          simulated: true,
+          message: 'Simulated code execution. Connect a sandbox runtime before relying on this output for production work.',
           stdout: '> Execution complete\n> Result: [object Object] — use JSON.stringify for details',
           stderr: '',
           exit_code: 0,
@@ -1903,6 +1911,8 @@ async function executeToolCall(
       }
 
       return JSON.stringify({
+        simulated: true,
+        message: 'Simulated code execution. Connect a sandbox runtime before relying on this output for production work.',
         stdout: `${language} script executed successfully.`,
         stderr: '',
         exit_code: 0,
@@ -1915,6 +1925,12 @@ async function executeToolCall(
       const taskId = `TASK-${Math.floor(Math.random() * 9000) + 1000}`;
       return JSON.stringify({
         success: true,
+        simulated: true,
+        message: 'Simulated Linear task. Connect Linear to create live workspace tasks.',
+        nextAction: {
+          label: 'Connect Linear',
+          route: '/integrations?provider=linear',
+        },
         task_id: taskId,
         title: toolInput.title,
         description: toolInput.description,
@@ -5017,19 +5033,7 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
 });
 
 registerAdminRoutes(app, {
-  getAdminActor: (req) => {
-    const token = parseCookieValue(req, AUTH_COOKIE_NAME);
-    const record = token ? getAuthUserByToken(token) : null;
-    if (!record) {
-      const error = new Error('Admin session required') as Error & { statusCode?: number };
-      error.statusCode = 401;
-      throw error;
-    }
-    return {
-      email: record.user.email,
-      role: isEmailAdminForAccess(record.user.email) ? 'admin' : 'user',
-    };
-  },
+  getAdminActor: getAuthenticatedAdminActor,
 });
 
 app.get('/api/workspace', (req: Request, res: Response) => {

@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { fetchBackendAuthSession } from '../lib/auth';
+import { fetchBackendAuthSession, isAdminSession } from '../lib/auth';
 
 interface ProtectedRouteProps {
   children: JSX.Element;
   blockedRedirectPath?: '/signup' | '/login';
+  requireAdmin?: boolean;
 }
 
-export default function ProtectedRoute({ children, blockedRedirectPath = '/signup' }: ProtectedRouteProps) {
+export default function ProtectedRoute({ children, blockedRedirectPath = '/signup', requireAdmin = false }: ProtectedRouteProps) {
   const location = useLocation();
-  const [status, setStatus] = useState<'checking' | 'allowed' | 'blocked'>('checking');
+  const [status, setStatus] = useState<'checking' | 'allowed' | 'blocked' | 'denied'>('checking');
 
   useEffect(() => {
     let active = true;
@@ -19,6 +20,10 @@ export default function ProtectedRoute({ children, blockedRedirectPath = '/signu
       if (!active) return;
 
       if (backendSession?.acceptedTerms && backendSession.acceptedEducation) {
+        if (requireAdmin && !isAdminSession(backendSession)) {
+          setStatus('denied');
+          return;
+        }
         setStatus('allowed');
         return;
       }
@@ -42,6 +47,9 @@ export default function ProtectedRoute({ children, blockedRedirectPath = '/signu
   }
 
   if (status !== 'allowed') {
+    if (status === 'denied') {
+      return <Navigate to="/dashboard" replace />;
+    }
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
     return <Navigate to={`${blockedRedirectPath}?next=${next}`} replace />;
   }

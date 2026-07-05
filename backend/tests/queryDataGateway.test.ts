@@ -67,6 +67,12 @@ test('executeQueryData keeps legacy non-Stripe sample data isolated', async () =
   if (!result.ok) throw new Error('expected GitHub mock success');
   assert.equal(result.source, 'github');
   assert.equal(result.live, false);
+  assert.equal(result.simulated, true);
+  assert.equal(result.message, 'Simulated GitHub sample data. Connect GitHub to query your live workspace data.');
+  assert.deepEqual(result.nextAction, {
+    label: 'Connect GitHub',
+    route: '/integrations?provider=github',
+  });
   assert.equal((result.data as { total: number }).total, 34);
 });
 
@@ -115,6 +121,9 @@ test('applyQueryStepPayloadToExecution keeps successful query payloads successfu
       source: 'github',
       query_type: 'open_issues',
       data: { total: 34 },
+      live: false,
+      simulated: true,
+      message: 'Simulated GitHub sample data. Connect GitHub to query your live workspace data.',
     },
     stepExecution,
     stepErrors,
@@ -122,7 +131,7 @@ test('applyQueryStepPayloadToExecution keeps successful query payloads successfu
   });
 
   assert.equal(stepExecution.status, 'succeeded');
-  assert.equal(stepExecution.summary, 'Pulled the requested live data successfully.');
+  assert.equal(stepExecution.summary, 'Pulled simulated GitHub sample data. Connect GitHub to query your live workspace data.');
   assert.equal(stepExecution.error, undefined);
   assert.equal(stepExecution.artifactKind, 'query_data');
   assert.equal(stepExecution.toolCalls, 1);
@@ -132,6 +141,9 @@ test('applyQueryStepPayloadToExecution keeps successful query payloads successfu
     source: 'github',
     query_type: 'open_issues',
     data: { total: 34 },
+    live: false,
+    simulated: true,
+    message: 'Simulated GitHub sample data. Connect GitHub to query your live workspace data.',
   });
   assert.deepEqual(stepErrors, []);
 });

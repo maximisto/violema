@@ -1,6 +1,6 @@
 import path from 'path';
 import { calculateAvailableCredits, createCreditLedgerEntry, normalizeCreditDelta, summarizeCreditLedger } from './ledger';
-import { readJsonFile, writeJsonFile } from './jsonStore';
+import { readJsonFile, updateJsonFile, writeJsonFile } from './jsonStore';
 import type {
   AgentRole,
   CreditLedgerEntry,
@@ -109,24 +109,28 @@ export function ensureWorkspaceCredits(
   planName = 'Legacy Starter',
   monthlyCredits = 500
 ) {
-  const state = getPlatformState();
-  const existing = state.ledger.filter((entry) => entry.workspaceId === workspaceId);
-  if (existing.length > 0) return summarizeCreditLedger(existing);
+  let workspaceEntries: CreditLedgerEntry[] = [];
 
-  const initialEntry = createCreditLedgerEntry({
-    workspaceId,
-    direction: 'grant',
-    source: 'monthly_subscription',
-    deltaCredits: monthlyCredits,
-    balanceAfterCredits: monthlyCredits,
-    referenceType: 'subscription',
-    referenceId: `plan_${planName.toLowerCase()}`,
-    note: `${planName} monthly credit grant`,
+  updateJsonFile<CreditLedgerEntry[]>(LEDGER_FILE, [], (entries) => {
+    workspaceEntries = entries.filter((entry) => entry.workspaceId === workspaceId);
+    if (workspaceEntries.length > 0) return entries;
+
+    const initialEntry = createCreditLedgerEntry({
+      workspaceId,
+      direction: 'grant',
+      source: 'monthly_subscription',
+      deltaCredits: monthlyCredits,
+      balanceAfterCredits: monthlyCredits,
+      referenceType: 'subscription',
+      referenceId: `plan_${planName.toLowerCase()}`,
+      note: `${planName} monthly credit grant`,
+    });
+
+    workspaceEntries = [initialEntry];
+    return [...entries, initialEntry];
   });
 
-  state.ledger.push(initialEntry);
-  savePlatformState({ ledger: state.ledger });
-  return summarizeCreditLedger([initialEntry]);
+  return summarizeCreditLedger(workspaceEntries);
 }
 
 export function createTask(input: {
@@ -147,7 +151,6 @@ export function createTask(input: {
   budgetCredits?: number;
   metadata?: Record<string, unknown>;
 }): TaskRecord {
-  const state = getPlatformState();
   const now = new Date().toISOString();
   const task: TaskRecord = {
     id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -174,20 +177,20 @@ export function createTask(input: {
     },
   };
 
-  state.tasks.unshift(task);
-  savePlatformState({ tasks: state.tasks });
+  updateJsonFile<TaskRecord[]>(TASKS_FILE, [], (tasks) => [task, ...tasks]);
   return task;
 }
 
 export function updateTask(taskId: string, patch: Partial<TaskRecord>) {
-  const state = getPlatformState();
-  const tasks = state.tasks.map((task) =>
-    task.id === taskId
-      ? { ...task, ...patch, updatedAt: new Date().toISOString() }
-      : task
-  );
-  savePlatformState({ tasks });
-  return tasks.find((task) => task.id === taskId) || null;
+  let updatedTask: TaskRecord | null = null;
+
+  updateJsonFile<TaskRecord[]>(TASKS_FILE, [], (tasks) => tasks.map((task) => {
+    if (task.id !== taskId) return task;
+    updatedTask = { ...task, ...patch, updatedAt: new Date().toISOString() };
+    return updatedTask;
+  }));
+
+  return updatedTask;
 }
 
 export function createTaskRun(input: {
@@ -203,7 +206,6 @@ export function createTaskRun(input: {
   delegationPlan?: DelegationPlan;
   metadata?: Record<string, unknown>;
 }): TaskRunRecord {
-  const state = getPlatformState();
   const taskRun: TaskRunRecord = {
     id: `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     workspaceId: input.workspaceId,
@@ -223,8 +225,7 @@ export function createTaskRun(input: {
     },
   };
 
-  state.taskRuns.unshift(taskRun);
-  savePlatformState({ taskRuns: state.taskRuns });
+  updateJsonFile<TaskRunRecord[]>(TASK_RUNS_FILE, [], (taskRuns) => [taskRun, ...taskRuns]);
   return taskRun;
 }
 
@@ -234,34 +235,36 @@ export function finalizeTaskRun(taskRunId: string, patch: {
   error?: string;
   metadata?: Record<string, unknown>;
 }) {
-  const state = getPlatformState();
-  const taskRuns = state.taskRuns.map((run) =>
-    run.id === taskRunId
-      ? {
-          ...run,
-          ...patch,
-          finishedAt: new Date().toISOString(),
-          metadata: { ...run.metadata, ...patch.metadata },
-        }
-      : run
-  );
-  savePlatformState({ taskRuns });
-  return taskRuns.find((run) => run.id === taskRunId) || null;
+  let updatedRun: TaskRunRecord | null = null;
+
+  updateJsonFile<TaskRunRecord[]>(TASK_RUNS_FILE, [], (taskRuns) => taskRuns.map((run) => {
+    if (run.id !== taskRunId) return run;
+    updatedRun = {
+      ...run,
+      ...patch,
+      finishedAt: new Date().toISOString(),
+      metadata: { ...run.metadata, ...patch.metadata },
+    };
+    return updatedRun;
+  }));
+
+  return updatedRun;
 }
 
 export function updateTaskRun(taskRunId: string, patch: Partial<Omit<TaskRunRecord, 'id' | 'workspaceId' | 'taskId' | 'startedAt'>>) {
-  const state = getPlatformState();
-  const taskRuns = state.taskRuns.map((run) =>
-    run.id === taskRunId
-      ? {
-          ...run,
-          ...patch,
-          metadata: patch.metadata ? { ...run.metadata, ...patch.metadata } : run.metadata,
-        }
-      : run
-  );
-  savePlatformState({ taskRuns });
-  return taskRuns.find((run) => run.id === taskRunId) || null;
+  let updatedRun: TaskRunRecord | null = null;
+
+  updateJsonFile<TaskRunRecord[]>(TASK_RUNS_FILE, [], (taskRuns) => taskRuns.map((run) => {
+    if (run.id !== taskRunId) return run;
+    updatedRun = {
+      ...run,
+      ...patch,
+      metadata: patch.metadata ? { ...run.metadata, ...patch.metadata } : run.metadata,
+    };
+    return updatedRun;
+  }));
+
+  return updatedRun;
 }
 
 export function addLedgerEntry(input: {
@@ -273,28 +276,46 @@ export function addLedgerEntry(input: {
   note?: string;
   metadata?: Record<string, unknown>;
 }) {
-  const state = getPlatformState();
-  const workspaceEntries = state.ledger.filter((entry) => entry.workspaceId === input.workspaceId);
-  const summary = workspaceEntries.length > 0
-    ? summarizeCreditLedger(workspaceEntries)
-    : ensureWorkspaceCredits(input.workspaceId);
-  const balanceAfterCredits = summary.balanceCredits + Math.trunc(input.deltaCredits);
+  let createdEntry: CreditLedgerEntry | null = null;
 
-  const entry = createCreditLedgerEntry({
-    workspaceId: input.workspaceId,
-    direction: input.deltaCredits >= 0 ? 'grant' : 'debit',
-    source: input.source,
-    deltaCredits: input.deltaCredits,
-    balanceAfterCredits,
-    referenceType: input.referenceType,
-    referenceId: input.referenceId,
-    note: input.note,
-    metadata: input.metadata,
+  updateJsonFile<CreditLedgerEntry[]>(LEDGER_FILE, [], (entries) => {
+    let nextEntries = entries;
+    let workspaceEntries = entries.filter((entry) => entry.workspaceId === input.workspaceId);
+
+    if (workspaceEntries.length === 0) {
+      const initialEntry = createCreditLedgerEntry({
+        workspaceId: input.workspaceId,
+        direction: 'grant',
+        source: 'monthly_subscription',
+        deltaCredits: 500,
+        balanceAfterCredits: 500,
+        referenceType: 'subscription',
+        referenceId: 'plan_legacy starter',
+        note: 'Legacy Starter monthly credit grant',
+      });
+      nextEntries = [...entries, initialEntry];
+      workspaceEntries = [initialEntry];
+    }
+
+    const summary = summarizeCreditLedger(workspaceEntries);
+    const balanceAfterCredits = summary.balanceCredits + Math.trunc(input.deltaCredits);
+    createdEntry = createCreditLedgerEntry({
+      workspaceId: input.workspaceId,
+      direction: input.deltaCredits >= 0 ? 'grant' : 'debit',
+      source: input.source,
+      deltaCredits: input.deltaCredits,
+      balanceAfterCredits,
+      referenceType: input.referenceType,
+      referenceId: input.referenceId,
+      note: input.note,
+      metadata: input.metadata,
+    });
+
+    return [...nextEntries, createdEntry];
   });
 
-  state.ledger.push(entry);
-  savePlatformState({ ledger: state.ledger });
-  return entry;
+  if (!createdEntry) throw new Error('Could not add ledger entry.');
+  return createdEntry;
 }
 
 export function getWorkspaceCreditReserve(workspaceId: string, now = new Date()) {
@@ -323,54 +344,79 @@ export function acquireCreditHold(input: {
     throw new Error('Credit hold amount must be greater than zero.');
   }
 
-  let state = getPlatformState();
-  let workspaceEntries = state.ledger.filter((entry) => entry.workspaceId === input.workspaceId);
-  if (workspaceEntries.length === 0) {
-    ensureWorkspaceCredits(input.workspaceId);
-    state = getPlatformState();
-    workspaceEntries = state.ledger.filter((entry) => entry.workspaceId === input.workspaceId);
-  }
-
   const now = input.now || new Date();
-  const summary = summarizeCreditLedger(workspaceEntries);
-  const reserve = getWorkspaceCreditReserve(input.workspaceId, now);
-  if (reserve.availableCredits < amountCredits) {
-    throw new Error(
-      `Insufficient credits. ${reserve.availableCredits} available, ${amountCredits} required.`
-    );
-  }
-
   const holdId = input.holdId || createStoreId('hold');
   const expiresAt = new Date(now.getTime() + Math.max(1, input.ttlMs || DEFAULT_CREDIT_HOLD_TTL_MS)).toISOString();
-  const entry = createCreditLedgerEntry({
-    workspaceId: input.workspaceId,
-    direction: 'debit',
-    source: 'credit_hold',
-    deltaCredits: 0,
-    balanceAfterCredits: summary.balanceCredits,
-    referenceType: input.referenceType,
-    referenceId: input.referenceId,
-    note: input.note || `Held ${amountCredits} credits`,
-    metadata: {
-      ...(input.metadata || {}),
+  type CreditHoldResult = {
+    holdId: string;
+    heldCredits: number;
+    expiresAt: string;
+    availableCredits: number;
+    entry: CreditLedgerEntry;
+  };
+  const resultRef: { value?: CreditHoldResult } = {};
+
+  updateJsonFile<CreditLedgerEntry[]>(LEDGER_FILE, [], (entries) => {
+    let nextEntries = entries;
+    let workspaceEntries = entries.filter((entry) => entry.workspaceId === input.workspaceId);
+
+    if (workspaceEntries.length === 0) {
+      const initialEntry = createCreditLedgerEntry({
+        workspaceId: input.workspaceId,
+        direction: 'grant',
+        source: 'monthly_subscription',
+        deltaCredits: 500,
+        balanceAfterCredits: 500,
+        referenceType: 'subscription',
+        referenceId: 'plan_legacy starter',
+        note: 'Legacy Starter monthly credit grant',
+      });
+      nextEntries = [...entries, initialEntry];
+      workspaceEntries = [initialEntry];
+    }
+
+    const summary = summarizeCreditLedger(workspaceEntries);
+    const reservedCredits = listActiveHoldEntries(workspaceEntries, now)
+      .reduce((total, entry) => total + readCreditHoldCredits(entry), 0);
+    const reserve = calculateAvailableCredits(input.workspaceId, summary.balanceCredits, reservedCredits);
+    if (reserve.availableCredits < amountCredits) {
+      throw new Error(
+        `Insufficient credits. ${reserve.availableCredits} available, ${amountCredits} required.`
+      );
+    }
+
+    const entry = createCreditLedgerEntry({
+      workspaceId: input.workspaceId,
+      direction: 'debit',
+      source: 'credit_hold',
+      deltaCredits: 0,
+      balanceAfterCredits: summary.balanceCredits,
+      referenceType: input.referenceType,
+      referenceId: input.referenceId,
+      note: input.note || `Held ${amountCredits} credits`,
+      metadata: {
+        ...(input.metadata || {}),
+        holdId,
+        holdStatus: 'active',
+        heldCredits: amountCredits,
+        expiresAt,
+      },
+      createdAt: now.toISOString(),
+    });
+
+    resultRef.value = {
       holdId,
-      holdStatus: 'active',
       heldCredits: amountCredits,
       expiresAt,
-    },
-    createdAt: now.toISOString(),
+      availableCredits: Math.max(0, reserve.availableCredits - amountCredits),
+      entry,
+    };
+
+    return [...nextEntries, entry];
   });
 
-  state.ledger.push(entry);
-  savePlatformState({ ledger: state.ledger });
-
-  return {
-    holdId,
-    heldCredits: amountCredits,
-    expiresAt,
-    availableCredits: Math.max(0, reserve.availableCredits - amountCredits),
-    entry,
-  };
+  if (!resultRef.value) throw new Error('Could not acquire credit hold.');
+  return resultRef.value;
 }
 
 export function releaseCreditHold(
@@ -384,35 +430,40 @@ export function releaseCreditHold(
     now?: Date;
   },
 ) {
-  const state = getPlatformState();
-  const workspaceEntries = state.ledger.filter((entry) => entry.workspaceId === input.workspaceId);
-  const hold = findCreditHold(workspaceEntries, holdId);
-  assertCreditHoldOpen(workspaceEntries, holdId);
-  const summary = summarizeCreditLedger(workspaceEntries);
   const now = input.now || new Date();
-  const heldCredits = readCreditHoldCredits(hold);
-  const entry = createCreditLedgerEntry({
-    workspaceId: input.workspaceId,
-    direction: 'grant',
-    source: 'credit_hold',
-    deltaCredits: 0,
-    balanceAfterCredits: summary.balanceCredits,
-    referenceType: input.referenceType || hold.referenceType,
-    referenceId: input.referenceId || hold.referenceId,
-    note: input.note || `Released ${heldCredits} held credits`,
-    metadata: {
-      ...(input.metadata || {}),
-      holdId,
-      holdStatus: 'released',
-      heldCredits,
-      releasedAt: now.toISOString(),
-    },
-    createdAt: now.toISOString(),
+  const releasedEntryRef: { value?: CreditLedgerEntry } = {};
+
+  updateJsonFile<CreditLedgerEntry[]>(LEDGER_FILE, [], (entries) => {
+    const workspaceEntries = entries.filter((entry) => entry.workspaceId === input.workspaceId);
+    const hold = findCreditHold(workspaceEntries, holdId);
+    assertCreditHoldOpen(workspaceEntries, holdId);
+    const summary = summarizeCreditLedger(workspaceEntries);
+    const heldCredits = readCreditHoldCredits(hold);
+
+    releasedEntryRef.value = createCreditLedgerEntry({
+      workspaceId: input.workspaceId,
+      direction: 'grant',
+      source: 'credit_hold',
+      deltaCredits: 0,
+      balanceAfterCredits: summary.balanceCredits,
+      referenceType: input.referenceType || hold.referenceType,
+      referenceId: input.referenceId || hold.referenceId,
+      note: input.note || `Released ${heldCredits} held credits`,
+      metadata: {
+        ...(input.metadata || {}),
+        holdId,
+        holdStatus: 'released',
+        heldCredits,
+        releasedAt: now.toISOString(),
+      },
+      createdAt: now.toISOString(),
+    });
+
+    return [...entries, releasedEntryRef.value];
   });
 
-  state.ledger.push(entry);
-  savePlatformState({ ledger: state.ledger });
-  return entry;
+  if (!releasedEntryRef.value) throw new Error(`Could not release credit hold: ${holdId}`);
+  return releasedEntryRef.value;
 }
 
 export function settleCreditHold(
@@ -429,46 +480,50 @@ export function settleCreditHold(
   },
 ) {
   const actualCredits = Math.max(0, normalizeCreditDelta(input.actualCredits));
-  const state = getPlatformState();
-  const workspaceEntries = state.ledger.filter((entry) => entry.workspaceId === input.workspaceId);
-  const hold = findCreditHold(workspaceEntries, holdId);
-  assertCreditHoldOpen(workspaceEntries, holdId);
-  const heldCredits = readCreditHoldCredits(hold);
   const now = input.now || new Date();
-  const summary = summarizeCreditLedger(workspaceEntries);
-  const reservedForOtherHolds = listActiveHoldEntries(workspaceEntries, now)
-    .filter((entry) => readCreditHoldId(entry) !== holdId)
-    .reduce((total, entry) => total + readCreditHoldCredits(entry), 0);
-  const spendableCredits = Math.max(0, summary.balanceCredits - reservedForOtherHolds);
-  if (actualCredits > spendableCredits) {
-    throw new Error(
-      `Insufficient credits. ${spendableCredits} available, ${actualCredits} required.`
-    );
-  }
+  const settledEntryRef: { value?: CreditLedgerEntry } = {};
 
-  const entry = createCreditLedgerEntry({
-    workspaceId: input.workspaceId,
-    direction: actualCredits > 0 ? 'debit' : 'grant',
-    source: input.source,
-    deltaCredits: -actualCredits,
-    balanceAfterCredits: summary.balanceCredits - actualCredits,
-    referenceType: input.referenceType || hold.referenceType,
-    referenceId: input.referenceId || hold.referenceId,
-    note: input.note || `Settled ${actualCredits} credits from hold`,
-    metadata: {
-      ...(input.metadata || {}),
-      holdId,
-      holdStatus: 'settled',
-      heldCredits,
-      actualCredits,
-      settledAt: now.toISOString(),
-    },
-    createdAt: now.toISOString(),
+  updateJsonFile<CreditLedgerEntry[]>(LEDGER_FILE, [], (entries) => {
+    const workspaceEntries = entries.filter((entry) => entry.workspaceId === input.workspaceId);
+    const hold = findCreditHold(workspaceEntries, holdId);
+    assertCreditHoldOpen(workspaceEntries, holdId);
+    const heldCredits = readCreditHoldCredits(hold);
+    const summary = summarizeCreditLedger(workspaceEntries);
+    const reservedForOtherHolds = listActiveHoldEntries(workspaceEntries, now)
+      .filter((entry) => readCreditHoldId(entry) !== holdId)
+      .reduce((total, entry) => total + readCreditHoldCredits(entry), 0);
+    const spendableCredits = Math.max(0, summary.balanceCredits - reservedForOtherHolds);
+    if (actualCredits > spendableCredits) {
+      throw new Error(
+        `Insufficient credits. ${spendableCredits} available, ${actualCredits} required.`
+      );
+    }
+
+    settledEntryRef.value = createCreditLedgerEntry({
+      workspaceId: input.workspaceId,
+      direction: actualCredits > 0 ? 'debit' : 'grant',
+      source: input.source,
+      deltaCredits: -actualCredits,
+      balanceAfterCredits: summary.balanceCredits - actualCredits,
+      referenceType: input.referenceType || hold.referenceType,
+      referenceId: input.referenceId || hold.referenceId,
+      note: input.note || `Settled ${actualCredits} credits from hold`,
+      metadata: {
+        ...(input.metadata || {}),
+        holdId,
+        holdStatus: 'settled',
+        heldCredits,
+        actualCredits,
+        settledAt: now.toISOString(),
+      },
+      createdAt: now.toISOString(),
+    });
+
+    return [...entries, settledEntryRef.value];
   });
 
-  state.ledger.push(entry);
-  savePlatformState({ ledger: state.ledger });
-  return entry;
+  if (!settledEntryRef.value) throw new Error(`Could not settle credit hold: ${holdId}`);
+  return settledEntryRef.value;
 }
 
 export function getWorkspaceLedgerSummary(workspaceId: string) {

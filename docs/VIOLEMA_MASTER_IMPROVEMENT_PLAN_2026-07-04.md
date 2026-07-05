@@ -311,6 +311,9 @@ Phase 0 (WP-0.1 → 0.4)            [BLOCKS EVERYTHING — security + money]
 
 Notes:
 - **WP-2.1 (truth-labeling) jumps the queue** — it's a half-day and removes the single biggest demo landmine.
+- **WP-2.1 first hardening pass shipped on this PR branch:** legacy non-Stripe `query_data` results now return `simulated: true`, an integration connection CTA, and non-live automation summaries; chat tool cards render a visible **Simulated** chip; fake `run_code` and Linear-style `create_task` outputs are labeled simulated. Remaining scope is a full sweep of any future/demo tool outputs as new integrations land.
+- **WP-0.2 first hardening pass shipped on this PR branch:** backend admin route checks now derive the actor from `req.authUser.role`, the client auth cache no longer persists or restores admin role, `/admin` requires a fresh backend admin session, and Agent Studio is admin-gated. Remaining scope is an end-to-end Express admin endpoint test once the test harness can import the app without local startup drag.
+- **WP-0.4 first hardening pass shipped on this PR branch:** JSON stores already used atomic temp writes, backups, and corrupt-file quarantine; this PR adds a `updateJsonFile` read-modify-write helper and moves task/run/ledger mutations, including credit holds, onto it. SQLite remains the durable Phase 1 fix.
 - Phases 2 and 3 parallelize across sessions once Phase 1 lands.
 - Already-shipped work this plan builds on (don't redo): P5 cost plumbing, Save & run, per-step results panel, fail-closed conditions, compact sidebar, Settings account section, OAuth code paths (need only env vars + the WP-0 hardening).
 - **Codex work already on this branch (PR #2, commits `6b5365b..1d0efb0`) partially delivers Phase 2/4 for the Revenue Watch workflow** — before starting the WPs below, read `backend/src/integrationGateway/` (nativeStripe adapter, `workflowReadiness.ts`, `approvalLedger.ts`, `auditLog.ts`, `workflowPolicy.ts`) and extend rather than duplicate:
@@ -326,15 +329,15 @@ Each WP is a self-contained brief: problem, file references, ordered steps, acce
 | WP | Phase | Status |
 |----|-------|--------|
 | 0.1 Tenant authorization | 0 | ☐ |
-| 0.2 Server-side role | 0 | ☐ |
+| 0.2 Server-side role | 0 | ◐ |
 | 0.3 Loop cap + credit holds | 0 | ☐ |
-| 0.4 Atomic writes | 0 | ☐ |
+| 0.4 Atomic writes | 0 | ◐ |
 | 1.1 SQLite migration | 1 | ☐ |
 | 1.2 Durable scheduler | 1 | ☐ |
 | 1.3 Tests + CI + deploy | 1 | ☐ |
 | 1.4 Observability | 1 | ☐ |
 | 1.5 server.ts split | 1 | ☐ |
-| 2.1 Truth-labeling | 2 | ☐ |
+| 2.1 Truth-labeling | 2 | ◐ |
 | 2.2 Vault + OAuth spine | 2 | ☐ |
 | 2.3 Hero integrations ×3 | 2 | ☐ |
 | 2.4 Composio flag | 2 | ☐ |

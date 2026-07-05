@@ -6,6 +6,12 @@ export interface LegacyQueryDataSuccess<T = unknown>
   extends Omit<IntegrationQuerySuccess<T>, 'live' | 'cache_hit'> {
   cache_hit: boolean;
   live: false;
+  simulated: true;
+  message: string;
+  nextAction: {
+    label: string;
+    route: string;
+  };
 }
 
 export interface ExecuteQueryDataInput {
@@ -107,6 +113,16 @@ export function applyQueryStepPayloadToExecution(
   }
 
   stepExecution.status = 'succeeded';
+  if (payload.simulated === true || payload.live === false) {
+    const source = typeof payload.source === 'string' && payload.source.trim()
+      ? payload.source.trim()
+      : 'integration';
+    const sourceLabel = labelizeIntegrationSource(source);
+    stepExecution.summary = `Pulled simulated ${sourceLabel} sample data. Connect ${sourceLabel} to query your live workspace data.`;
+    stepExecution.error = undefined;
+    return;
+  }
+
   stepExecution.summary = 'Pulled the requested live data successfully.';
   stepExecution.error = undefined;
 }
@@ -139,5 +155,31 @@ export async function executeQueryData(
     latency_ms: 80,
     cache_hit: false,
     live: false,
+    simulated: true,
+    message: `Simulated ${labelizeIntegrationSource(input.source)} sample data. Connect ${labelizeIntegrationSource(input.source)} to query your live workspace data.`,
+    nextAction: {
+      label: `Connect ${labelizeIntegrationSource(input.source)}`,
+      route: `/integrations?provider=${encodeURIComponent(input.source)}`,
+    },
   };
+}
+
+function labelizeIntegrationSource(source: string) {
+  const knownLabels: Record<string, string> = {
+    github: 'GitHub',
+    google_analytics: 'Google Analytics',
+    hubspot: 'HubSpot',
+    posthog: 'PostHog',
+    salesforce: 'Salesforce',
+    linear: 'Linear',
+    jira: 'Jira',
+    notion: 'Notion',
+  };
+  if (knownLabels[source]) return knownLabels[source];
+
+  return source
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ') || 'Integration';
 }

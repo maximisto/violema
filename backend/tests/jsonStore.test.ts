@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { readJsonFile, writeJsonFile } from '../src/platform/jsonStore';
+import { readJsonFile, updateJsonFile, writeJsonFile } from '../src/platform/jsonStore';
 
 function withTempDirectory(run: (directory: string) => void) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'violema-json-store-'));
@@ -52,4 +52,22 @@ test('readJsonFile quarantines corrupt stores and falls back to the last valid b
   } finally {
     console.error = originalConsoleError;
   }
+}));
+
+test('updateJsonFile performs a read-modify-write against the latest stored value', () => withTempDirectory((directory) => {
+  const filePath = path.join(directory, 'store.json');
+
+  writeJsonFile(filePath, { items: ['first'] });
+  const firstUpdate = updateJsonFile(filePath, { items: [] as string[] }, (current) => ({
+    items: [...current.items, 'second'],
+  }));
+  const secondUpdate = updateJsonFile(filePath, { items: [] as string[] }, (current) => ({
+    items: [...current.items, 'third'],
+  }));
+
+  assert.deepEqual(firstUpdate, { items: ['first', 'second'] });
+  assert.deepEqual(secondUpdate, { items: ['first', 'second', 'third'] });
+  assert.deepEqual(readJsonFile(filePath, { items: [] as string[] }), {
+    items: ['first', 'second', 'third'],
+  });
 }));
