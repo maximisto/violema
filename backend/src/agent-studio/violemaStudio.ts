@@ -3,6 +3,7 @@ import type { TaskRecord, TaskRunRecord } from '../platform/types';
 import type { AutomationRecord } from '../scheduler';
 import { listAutomations, getAutomationById } from '../scheduler';
 import { listTasks, listTaskRuns } from '../platform/store';
+import { DEFAULT_WORKSPACE_ID } from '../platform/workspace';
 import { getAutomationPresetLabel, getAutomationScenarioLabel } from './automationStudio';
 import {
   mapViolemaRunToAgentStudioRun,
@@ -109,7 +110,7 @@ export function registerAgentStudioRoutes(app: Express, deps: StudioRoutesDeps) 
   app.get('/api/studio/policies/:workflowId', (req, res) => {
     const { workspaceId } = deps.resolveWorkspaceContext(req);
     const automation = getAutomationById(req.params.workflowId);
-    if (!automation) {
+    if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
       res.status(404).json({ error: 'Workflow not found' });
       return;
     }
@@ -123,7 +124,7 @@ export function registerAgentStudioRoutes(app: Express, deps: StudioRoutesDeps) 
 }
 
 function buildStudioWorkflowRows(workspaceId: string): StudioRowSummary[] {
-  const automations = listAutomations();
+  const automations = listAutomations().filter((automation) => automationBelongsToWorkspace(automation, workspaceId));
   const tasks = listTasks(workspaceId);
   const runs = listTaskRuns(workspaceId);
 
@@ -208,6 +209,10 @@ function buildStudioWorkflowRows(workspaceId: string): StudioRowSummary[] {
       const bTime = Date.parse(b.automation.next_run_at || b.latestRun?.finishedAt || b.automation.created_at || '');
       return bTime - aTime;
     });
+}
+
+function automationBelongsToWorkspace(automation: { workspaceId?: string }, workspaceId: string) {
+  return (automation.workspaceId || DEFAULT_WORKSPACE_ID) === workspaceId;
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
