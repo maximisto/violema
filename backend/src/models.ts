@@ -604,25 +604,34 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
     headers['X-Title'] = env('OPENROUTER_APP_NAME') || 'Violema';
   }
 
+  const requestBody: Record<string, unknown> = {
+    model: route.model,
+    max_completion_tokens: maxTokens,
+    messages: [
+      { role: 'system', content: system },
+      ...messages.map((message) => ({
+        role: message.role,
+        content: typeof message.content === 'string'
+          ? message.content
+          : message.content
+              .map((item) => ('text' in item ? item.text : ''))
+              .join('\n'),
+      })),
+    ],
+  };
+
+  if (route.provider === 'openrouter') {
+    requestBody.reasoning = route.reasoningEffort && route.reasoningEffort !== 'none'
+      ? { effort: route.reasoningEffort }
+      : { enabled: false };
+  } else if (route.reasoningEffort) {
+    requestBody.reasoning_effort = route.reasoningEffort;
+  }
+
   const response = await fetchModelResponseWithRetry('OpenAI text generation', `${route.baseUrl}/chat/completions`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      model: route.model,
-      max_completion_tokens: maxTokens,
-      ...(route.reasoningEffort ? { reasoning_effort: route.reasoningEffort } : {}),
-      messages: [
-        { role: 'system', content: system },
-        ...messages.map((message) => ({
-          role: message.role,
-          content: typeof message.content === 'string'
-            ? message.content
-            : message.content
-                .map((item) => ('text' in item ? item.text : ''))
-                .join('\n'),
-        })),
-      ],
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   const data = await response.json() as {

@@ -162,7 +162,7 @@ test('generateTextDetailed keeps walking backup route chain when the first fallb
 
     global.fetch = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       const url = String(input);
-      const body = JSON.parse(String(init?.body || '{}')) as { model?: string };
+      const body = JSON.parse(String(init?.body || '{}')) as { model?: string; reasoning?: unknown };
       if (url === 'https://api.openai.com/v1/chat/completions') {
         openaiCalls += 1;
         assert.equal(body.model, 'gpt-4.1-mini');
@@ -174,6 +174,7 @@ test('generateTextDetailed keeps walking backup route chain when the first fallb
       if (url === 'https://openrouter.ai/api/v1/chat/completions') {
         openrouterCalls += 1;
         assert.equal(body.model, 'z-ai/glm-5.2');
+        assert.deepEqual(body.reasoning, { enabled: false });
         return new Response(JSON.stringify({
           choices: [{ message: { content: 'GLM fallback founder brief' } }],
           usage: { prompt_tokens: 13, completion_tokens: 8, total_tokens: 21 },
