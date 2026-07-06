@@ -78,6 +78,7 @@ import {
 import {
   buildSelectedMissionSearch,
   findTaskByMissionTarget,
+  getFreshestMissionTaskContextByAutomationId,
   getMissionSelectionStorageKey,
   getMissionTargetFromSearch,
   getPreferredMissionTarget,
@@ -1516,10 +1517,6 @@ function getTaskFailureReason(task?: PlatformTaskRecord, run?: PlatformTaskRunRe
   );
 }
 
-function getTaskAutomationId(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
-  return readString(run?.metadata?.automationId) || readString(task?.metadata?.automationId);
-}
-
 function applyTaskRunSnapshot(item: DashboardTaskItem, task?: PlatformTaskRecord, run?: PlatformTaskRunRecord): DashboardTaskItem {
   const status = item.automationStatus === 'paused'
     ? 'alert'
@@ -2069,14 +2066,7 @@ export default function Dashboard() {
       if (!existing || runTime > existingTime) latestRunByTask.set(run.taskId, run);
     });
 
-    const taskContextByAutomationId = new Map<string, { task: PlatformTaskRecord; latestRun?: PlatformTaskRunRecord }>();
-
-    tasks.forEach((task) => {
-      const latestRun = latestRunByTask.get(task.id);
-      const context = { task, latestRun };
-      const automationId = getTaskAutomationId(task, latestRun);
-      if (automationId) taskContextByAutomationId.set(automationId, context);
-    });
+    const taskContextByAutomationId = getFreshestMissionTaskContextByAutomationId(tasks, runs);
 
     const liveTasks = tasks
       .slice(0, 12)

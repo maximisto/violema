@@ -145,6 +145,21 @@ function getLatestRunByTaskId(taskRuns: TaskRunRecord[]) {
   return latestRunByTaskId;
 }
 
+function readTimestamp(value?: string) {
+  if (!value) return 0;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : 0;
+}
+
+function getTaskContextTime(task: TaskRecord, run?: TaskRunRecord) {
+  return Math.max(
+    readTimestamp(run?.finishedAt),
+    readTimestamp(run?.startedAt),
+    readTimestamp(task.updatedAt),
+    readTimestamp(task.createdAt),
+  );
+}
+
 function getTaskContextByAutomationId(tasks: TaskRecord[], taskRuns: TaskRunRecord[]) {
   const latestRunByTaskId = getLatestRunByTaskId(taskRuns);
   const taskContextByAutomationId = new Map<string, { task: TaskRecord; latestRun?: TaskRunRecord }>();
@@ -153,6 +168,10 @@ function getTaskContextByAutomationId(tasks: TaskRecord[], taskRuns: TaskRunReco
     const latestRun = latestRunByTaskId.get(task.id);
     const automationId = getTaskAutomationId(task, latestRun);
     if (automationId) {
+      const existing = taskContextByAutomationId.get(automationId);
+      if (existing && getTaskContextTime(existing.task, existing.latestRun) >= getTaskContextTime(task, latestRun)) {
+        return;
+      }
       taskContextByAutomationId.set(automationId, { task, latestRun });
     }
   });

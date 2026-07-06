@@ -1,6 +1,7 @@
 import {
   buildSelectedMissionSearch,
   findTaskByMissionTarget,
+  getFreshestMissionTaskContextByAutomationId,
   getMissionSelectionStorageKey,
   resolveInitialSelectedTaskId,
 } from '../src/features/missions/missionSelectionState';
@@ -87,4 +88,45 @@ assert(
     title: 'Task-only mission',
   }) === '?task=task_live',
   'uses task id when no automation id exists and removes stale run targets',
+);
+
+const taskContextByAutomation = getFreshestMissionTaskContextByAutomationId(
+  [
+    {
+      id: 'task_current',
+      updatedAt: '2026-07-06T16:52:01.366Z',
+      metadata: { automationId: 'auto_weekly' },
+    },
+    {
+      id: 'task_stale',
+      updatedAt: '2026-06-28T02:29:22.613Z',
+      metadata: { automationId: 'auto_weekly', deliveryError: 'Slack target "#founders" is not resolvable.' },
+    },
+  ],
+  [
+    {
+      id: 'run_current',
+      taskId: 'task_current',
+      status: 'failed',
+      finishedAt: '2026-07-06T16:52:01.300Z',
+      metadata: { automationId: 'auto_weekly' },
+    },
+    {
+      id: 'run_stale',
+      taskId: 'task_stale',
+      status: 'succeeded',
+      finishedAt: '2026-06-15T14:00:26.412Z',
+      metadata: { automationId: 'auto_weekly' },
+    },
+  ],
+);
+
+assert(
+  taskContextByAutomation.get('auto_weekly')?.task.id === 'task_current',
+  'keeps the freshest task context for a repeated automation',
+);
+
+assert(
+  taskContextByAutomation.get('auto_weekly')?.latestRun?.id === 'run_current',
+  'keeps the freshest run with the selected task context',
 );

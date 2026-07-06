@@ -6,7 +6,45 @@ export interface MissionSelectableTask {
   title?: string;
 }
 
+export interface MissionTaskContextTask {
+  id: string;
+  updatedAt?: string;
+  createdAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface MissionTaskContextRun {
+  id: string;
+  taskId: string;
+  startedAt?: string;
+  finishedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
 const TARGET_QUERY_KEYS = ['automation', 'mission', 'task', 'run'] as const;
+
+function readString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function readTimestamp(value?: string) {
+  if (!value) return 0;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : 0;
+}
+
+function getTaskAutomationId(task?: MissionTaskContextTask, run?: MissionTaskContextRun) {
+  return readString(run?.metadata?.automationId) || readString(task?.metadata?.automationId);
+}
+
+function getTaskContextTime(task: MissionTaskContextTask, run?: MissionTaskContextRun) {
+  return Math.max(
+    readTimestamp(run?.finishedAt),
+    readTimestamp(run?.startedAt),
+    readTimestamp(task.updatedAt),
+    readTimestamp(task.createdAt),
+  );
+}
 
 export function getMissionSelectionStorageKey(workspaceId: string) {
   return `violema_selected_mission_${workspaceId}`;
@@ -79,4 +117,35 @@ export function buildSelectedMissionSearch(search: string, task: MissionSelectab
 
   const nextSearch = params.toString();
   return nextSearch ? `?${nextSearch}` : '';
+}
+
+export function getFreshestMissionTaskContextByAutomationId<
+  TTask extends MissionTaskContextTask,
+  TRun extends MissionTaskContextRun,
+>(tasks: TTask[], runs: TRun[]) {
+  const latestRunByTask = new Map<string, TRun>();
+
+  runs.forEach((run) => {
+    const existing = latestRunByTask.get(run.taskId);
+    const runTime = Math.max(readTimestamp(run.finishedAt), readTimestamp(run.startedAt));
+    const existingTime = existing ? Math.max(readTimestamp(existing.finishedAt), readTimestamp(existing.startedAt)) : 0;
+    if (!existing || runTime > existingTime) latestRunByTask.set(run.taskId, run);
+  });
+
+  const taskContextByAutomationId = new Map<string, { task: TTask; latestRun?: TRun }>();
+
+  tasks.forEach((task) => {
+    const latestRun = latestRunByTask.get(task.id);
+    const automationId = getTaskAutomationId(task, latestRun);
+    if (!automationId) return;
+
+    const existing = taskContextByAutomationId.get(automationId);
+    if (existing && getTaskContextTime(existing.task, existing.latestRun) >= getTaskContextTime(task, latestRun)) {
+      return;
+    }
+
+    taskContextByAutomationId.set(automationId, { task, latestRun });
+  });
+
+  return taskContextByAutomationId;
 }
