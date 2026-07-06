@@ -487,6 +487,8 @@ interface DashboardTaskItem {
   latestSummary?: string;
   latestArtifacts?: DashboardTaskArtifact[];
   latestStepExecutions?: DashboardTaskStepExecution[];
+  latestDelivery?: Record<string, unknown>;
+  reviewReceipt?: Record<string, unknown>;
   workerTopology?: DashboardWorkerTopology;
   taskUpdatedAt?: string;
   failureReason?: string;
@@ -1518,13 +1520,31 @@ function getTaskFailureReason(task?: PlatformTaskRecord, run?: PlatformTaskRunRe
   );
 }
 
+function getTaskLatestDelivery(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
+  return (
+    (isRecord(task?.metadata?.latestDelivery) ? task.metadata.latestDelivery : undefined) ||
+    (isRecord(run?.metadata?.delivery) ? run.metadata.delivery : undefined)
+  );
+}
+
+function getTaskReviewReceipt(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
+  return (
+    (isRecord(task?.metadata?.reviewReceipt) ? task.metadata.reviewReceipt : undefined) ||
+    (isRecord(run?.metadata?.reviewReceipt) ? run.metadata.reviewReceipt : undefined)
+  );
+}
+
 function applyTaskRunSnapshot(item: DashboardTaskItem, task?: PlatformTaskRecord, run?: PlatformTaskRunRecord): DashboardTaskItem {
   const latestStepExecutions = getTaskStepExecutions(task, run);
   const taskStatus = task?.status || item.taskStatus;
   const runStatus = run?.status || item.runStatus;
+  const latestDelivery = getTaskLatestDelivery(task, run) || item.latestDelivery;
+  const reviewReceipt = getTaskReviewReceipt(task, run) || item.reviewReceipt;
   const status = hasTaskReviewGate({
     taskStatus,
     runStatus,
+    latestDelivery,
+    reviewReceipt,
     latestStepExecutions: latestStepExecutions.length > 0 ? latestStepExecutions : item.latestStepExecutions,
   })
     ? 'alert'
@@ -1550,6 +1570,8 @@ function applyTaskRunSnapshot(item: DashboardTaskItem, task?: PlatformTaskRecord
     latestSummary: getTaskMetadataSummary(task, run) || item.latestSummary,
     latestArtifacts: getTaskMetadataArtifacts(task, run) || item.latestArtifacts,
     latestStepExecutions: latestStepExecutions.length > 0 ? latestStepExecutions : item.latestStepExecutions,
+    latestDelivery,
+    reviewReceipt,
     workerTopology: getTaskWorkerTopology(task, run) || item.workerTopology,
     failureReason: getTaskFailureReason(task, run) || undefined,
     taskUpdatedAt: task?.updatedAt || item.taskUpdatedAt,
@@ -1643,6 +1665,15 @@ function getTaskRunOutcome(task?: DashboardTaskItem) {
       label: 'No runs yet',
       tone: 'border-navy-700/70 bg-navy-950/50 text-slate-300',
       detail: 'This automation has not produced a result yet.',
+    };
+  }
+
+  if (task.latestDelivery?.status === 'delivered' || task.reviewReceipt?.status === 'delivered') {
+    const target = readString(task.latestDelivery?.to) || readString(task.reviewReceipt?.deliveryTarget) || task.notify || 'the configured destination';
+    return {
+      label: 'Delivered',
+      tone: 'border-green-500/25 bg-green-500/10 text-green-200',
+      detail: `Approved and sent to ${target}.`,
     };
   }
 
@@ -1777,9 +1808,12 @@ const getTaskStatusMeta = (status: 'scheduled' | 'complete' | 'alert') => {
 function hasTaskReviewGate(task?: {
   taskStatus?: string;
   runStatus?: string;
+  latestDelivery?: Record<string, unknown>;
+  reviewReceipt?: Record<string, unknown>;
   latestStepExecutions?: DashboardTaskStepExecution[];
 }) {
   if (!task) return false;
+  if (task.latestDelivery?.status === 'delivered' || task.reviewReceipt?.status === 'delivered') return false;
   if (task.taskStatus === 'waiting_review' || task.runStatus === 'waiting_review') return true;
   return Boolean(task.latestStepExecutions?.some((step) => (
     step.status === 'waiting_review' ||
@@ -1788,6 +1822,15 @@ function hasTaskReviewGate(task?: {
 }
 
 function getTaskDisplayMeta(task: DashboardTaskItem) {
+  if (task.latestDelivery?.status === 'delivered' || task.reviewReceipt?.status === 'delivered') {
+    return {
+      label: 'Delivered',
+      accent: 'from-green-950/24 via-navy-900/84 to-navy-950/92',
+      iconColor: 'text-green-300',
+      chip: 'border-green-500/25 bg-green-500/10 text-green-200',
+      dot: 'bg-green-300',
+    };
+  }
   if (hasTaskReviewGate(task)) {
     return {
       label: 'Needs approval',
@@ -2119,9 +2162,13 @@ export default function Dashboard() {
       .map((task) => {
         const latestRun = latestRunByTask.get(task.id);
         const latestStepExecutions = getTaskStepExecutions(task, latestRun);
+        const latestDelivery = getTaskLatestDelivery(task, latestRun);
+        const reviewReceipt = getTaskReviewReceipt(task, latestRun);
         const status = hasTaskReviewGate({
           taskStatus: task.status,
           runStatus: latestRun?.status,
+          latestDelivery,
+          reviewReceipt,
           latestStepExecutions,
         })
           ? 'alert'
@@ -2145,6 +2192,8 @@ export default function Dashboard() {
           latestSummary: getTaskMetadataSummary(task, latestRun),
           latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
           latestStepExecutions,
+          latestDelivery,
+          reviewReceipt,
           workerTopology: getTaskWorkerTopology(task, latestRun),
           executionPolicy: normalizeExecutionPolicy(task?.metadata?.executionPolicy),
           failureReason: getTaskFailureReason(task, latestRun),
@@ -2161,9 +2210,13 @@ export default function Dashboard() {
         const latestRun = taskContext?.latestRun;
         const task = taskContext?.task;
         const latestStepExecutions = getTaskStepExecutions(task, latestRun);
+        const latestDelivery = getTaskLatestDelivery(task, latestRun);
+        const reviewReceipt = getTaskReviewReceipt(task, latestRun);
         const status = hasTaskReviewGate({
           taskStatus: task?.status,
           runStatus: latestRun?.status,
+          latestDelivery,
+          reviewReceipt,
           latestStepExecutions,
         })
           ? 'alert' as DashboardTaskStatus
@@ -2207,6 +2260,8 @@ export default function Dashboard() {
           latestSummary: getTaskMetadataSummary(task, latestRun),
           latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
           latestStepExecutions,
+          latestDelivery,
+          reviewReceipt,
           workerTopology: getTaskWorkerTopology(task, latestRun),
           failureReason: getTaskFailureReason(task, latestRun),
           taskUpdatedAt: task?.updatedAt,
@@ -3062,6 +3117,18 @@ export default function Dashboard() {
       return;
     }
 
+    if (selectedMission.status === 'waiting_review') {
+      openMissionInspector('reviews');
+      showNotice('success', 'Review gate opened. Approve delivery there when ready.');
+      return;
+    }
+
+    if (selectedTask.latestDelivery?.status === 'delivered' || selectedTask.reviewReceipt?.status === 'delivered') {
+      openMissionInspector('reviews');
+      showNotice('success', 'Delivery receipt opened.');
+      return;
+    }
+
     const label = selectedArtifactActionKind === 'artifact_reviewed'
       ? 'Artifact reviewed'
       : 'Artifact opened';
@@ -3069,15 +3136,20 @@ export default function Dashboard() {
     showNotice('success', selectedArtifactActionKind === 'artifact_reviewed'
       ? 'Artifact marked reviewed for this mission.'
       : 'Artifact action saved for this mission.');
-  }, [recordMissionAction, selectedArtifactActionKind, selectedArtifactTargetId, selectedTask, showNotice]);
+  }, [openMissionInspector, recordMissionAction, selectedArtifactActionKind, selectedArtifactTargetId, selectedMission.status, selectedTask, showNotice]);
   const handleLessonAction = useCallback((lesson: MissionLessonView) => {
     recordMissionAction('lesson_saved', lesson.id, lesson.title);
     showNotice('success', `${lesson.title} saved to mission memory.`);
   }, [recordMissionAction, showNotice]);
+  const selectedMissionDelivered = Boolean(
+    selectedTask?.latestDelivery?.status === 'delivered' ||
+    selectedTask?.reviewReceipt?.status === 'delivered' ||
+    selectedMission.artifact.statusLabel === 'Delivered'
+  );
   const renderMissionArtifact = () => (
     <MissionArtifact
       mission={selectedMission}
-      actionSaved={Boolean(selectedArtifactAction)}
+      actionSaved={selectedMission.status === 'waiting_review' || selectedMissionDelivered ? false : Boolean(selectedArtifactAction)}
       savedActionLabel={selectedArtifactActionKind === 'artifact_reviewed' ? 'Reviewed' : 'Opened'}
       onPrimaryAction={handleArtifactPrimaryAction}
     />

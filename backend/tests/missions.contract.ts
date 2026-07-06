@@ -343,3 +343,112 @@ test('buildMissionRecords shows review gate when a paused automation has a stage
   assert.equal(mission.activeRunId, 'run_review_weekly');
   assert.equal(mission.plan.steps.find((step) => step.id === 'step_deliver')?.currentStatus, 'waiting_review');
 });
+
+test('buildMissionRecords shows delivered approval receipts instead of stale review gate output', () => {
+  const deliveredPlan = {
+    ...automationPlan,
+    steps: automationPlan.steps.map((step) => step.id === 'step_deliver'
+      ? { ...step, deliveryTarget: { channel: 'slack' as const, target: '#all-purple-orange' } }
+      : step),
+  } satisfies AutomationExecutionPlan;
+  const staleDeliveryStep = {
+    stepId: 'step_deliver',
+    kind: 'deliver',
+    title: 'Deliver to Slack',
+    assignedRole: 'messenger',
+    status: 'succeeded',
+    output: {
+      success: true,
+      channel: 'slack',
+      to: '#all-purple-orange',
+      status: 'waiting_review',
+      approval_required: true,
+    },
+  };
+  const reviewReceipt = {
+    id: 'receipt_run_delivered_weekly_delivered',
+    status: 'delivered',
+    reviewer: 'max@purpleorange.io',
+    reviewedAt: '2026-07-06T18:31:03.070Z',
+    automationId: 'auto_weekly',
+    taskId: 'task_delivered_weekly',
+    taskRunId: 'run_delivered_weekly',
+    deliveryTarget: '#all-purple-orange',
+  };
+  const latestDelivery = {
+    success: true,
+    channel: 'slack',
+    to: '#all-purple-orange',
+    status: 'delivered',
+    slack_channel: 'C07PCJAV1BJ',
+    slack_ts: '1783362663.292479',
+  };
+
+  const task = {
+    id: 'task_delivered_weekly',
+    workspaceId: 'purpleorangehq',
+    title: 'Weekly founder update',
+    description: 'Current weekly operating brief.',
+    kind: 'automation',
+    status: 'completed',
+    priority: 'medium',
+    executorRole: 'analyst',
+    createdAt: '2026-07-06T18:32:28.172Z',
+    updatedAt: '2026-07-06T18:32:57.384Z',
+    metadata: {
+      automationId: 'auto_weekly',
+      notify: '#all-purple-orange',
+      automationPlan: deliveredPlan,
+      latestSummary: 'Founder-ready draft was delivered.',
+      latestStepExecutions: [staleDeliveryStep],
+      reviewReceipt,
+      latestDelivery,
+    },
+  } satisfies TaskRecord;
+
+  const run = {
+    id: 'run_delivered_weekly',
+    workspaceId: 'purpleorangehq',
+    taskId: 'task_delivered_weekly',
+    agentRole: 'analyst',
+    modelTier: 'ops',
+    status: 'succeeded',
+    estimatedCredits: 72,
+    actualCredits: 208,
+    startedAt: '2026-07-06T18:32:28.218Z',
+    finishedAt: '2026-07-06T18:32:46.035Z',
+    metadata: {
+      automationId: 'auto_weekly',
+      automationPlan: deliveredPlan,
+      summary: 'Founder-ready draft was delivered.',
+      stepExecutions: [staleDeliveryStep],
+      reviewReceipt,
+    },
+  } satisfies TaskRunRecord;
+
+  const [mission] = buildMissionRecords({
+    workspaceId: 'purpleorangehq',
+    automations: [
+      {
+        id: 'auto_weekly',
+        name: 'Weekly founder update',
+        description: 'Create a source-linked weekly operating brief.',
+        schedule: 'every monday at 9am',
+        actions: ['Query Stripe revenue movement', 'Deliver latest result to #all-purple-orange'],
+        steps: deliveredPlan.steps,
+        execution_policy: { mode: 'recommended', optimizationGoal: 'balanced', reviewPolicy: 'standard', maxElasticLanes: 2 },
+        notify: '#all-purple-orange',
+        status: 'paused',
+        workflow_prompt: 'Query Stripe revenue movement\nDeliver latest result to #all-purple-orange',
+        last_run_at: '2026-07-06T18:32:46.035Z',
+      },
+    ],
+    tasks: [task],
+    taskRuns: [run],
+  });
+
+  assert.equal(mission.status, 'completed');
+  assert.equal(mission.metadata?.latestDelivery, latestDelivery);
+  assert.equal(mission.metadata?.reviewReceipt, reviewReceipt);
+  assert.equal(mission.plan.steps.find((step) => step.id === 'step_deliver')?.currentStatus, 'succeeded');
+});

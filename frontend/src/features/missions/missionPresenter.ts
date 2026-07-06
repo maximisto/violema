@@ -95,6 +95,8 @@ export interface MissionSourceTask {
   steps?: MissionSourceStep[];
   actions?: string[];
   workerTopology?: { summary?: string; workers?: MissionSourceAgent[] };
+  latestDelivery?: Record<string, unknown>;
+  reviewReceipt?: Record<string, unknown>;
 }
 
 type MissionSourceArtifact = NonNullable<MissionSourceTask['latestArtifacts']>[number];
@@ -109,8 +111,25 @@ function readArtifactChart(artifact?: MissionSourceArtifact): ChartArtifactSpec 
   };
 }
 
+function isDeliveredReview(task?: MissionSourceTask | null) {
+  return (
+    readStringValue(task?.latestDelivery?.status) === 'delivered' ||
+    readStringValue(task?.reviewReceipt?.status) === 'delivered'
+  );
+}
+
+function deliveredTargetLabel(task?: MissionSourceTask | null) {
+  return (
+    readStringValue(task?.latestDelivery?.to) ||
+    readStringValue(task?.reviewReceipt?.deliveryTarget) ||
+    task?.notify ||
+    'the configured delivery target'
+  );
+}
+
 export function normalizeMissionStatus(task?: MissionSourceTask | null): MissionStatus {
   if (!task) return 'planned';
+  if (isDeliveredReview(task)) return 'completed';
   if (task.automationStatus === 'paused') return 'paused';
   const status = task.runStatus || task.lastRunStatus || task.status || 'planned';
   if (status === 'running' || status === 'retrying' || status === 'active') return 'running';
@@ -146,8 +165,9 @@ function normalizeStepStatus(value?: string): MissionStatus {
   return 'planned';
 }
 
-function normalizeStepExecutionStatus(step: MissionSourceStep): MissionStatus {
+function normalizeStepExecutionStatus(step: MissionSourceStep, deliveredReview = false): MissionStatus {
   const outputStatus = readStringValue(step.output?.status);
+  if (deliveredReview && step.kind === 'deliver') return 'completed';
   if (step.kind === 'deliver' && outputStatus === 'waiting_review') return 'waiting_review';
   return normalizeStepStatus(step.status);
 }
@@ -337,7 +357,8 @@ function dedupeEvidenceItems(items: MissionEvidenceItem[]) {
   return deduped;
 }
 
-function artifactStatusLabel(status: MissionStatus, artifactCount: number) {
+function artifactStatusLabel(status: MissionStatus, artifactCount: number, deliveredReview = false) {
+  if (deliveredReview) return 'Delivered';
   if (status === 'running') return 'Updating now';
   if (status === 'waiting_review') return 'Ready for approval';
   if (status === 'failed') return 'Needs repair';
@@ -376,6 +397,8 @@ function buildArtifact(
   const efficiencyMetric = metrics.find((metric) => metric.label === 'Efficiency');
   const skills = buildArtifactSkills(steps);
   const validationTone = evidence.length > 0 ? 'green' : status === 'failed' ? 'amber' : 'slate';
+  const deliveredReview = isDeliveredReview(task);
+  const deliveryTarget = deliveredTargetLabel(task);
 
   if (!task) {
     return {
@@ -417,11 +440,11 @@ function buildArtifact(
     title: primaryArtifact?.title || task.title,
     kindLabel: artifactKindLabel(primaryArtifact?.kind),
     sourceLabel: primaryArtifact?.source || (artifactCount > 0 ? pluralize(artifactCount, 'stored output') : 'Run output'),
-    statusLabel: artifactStatusLabel(status, artifactCount),
+    statusLabel: artifactStatusLabel(status, artifactCount, deliveredReview),
     summary: chart?.insight || (primaryArtifact ? readArtifactDetail(primaryArtifact) : task.latestSummary || task.description || 'This mission has not produced a stored artifact yet.'),
     chart,
     lastUpdatedLabel: task.lastRunAt ? formatMissionDateTime(task.lastRunAt, 'Latest run') : task.latestArtifacts?.length ? 'Latest run' : 'Not run yet',
-    primaryActionLabel: status === 'waiting_review' ? 'Review artifact' : status === 'running' ? 'Watch run' : 'Open artifact',
+    primaryActionLabel: deliveredReview ? 'Open receipt' : status === 'waiting_review' ? 'Open review' : status === 'running' ? 'Watch run' : 'Open artifact',
     skills: skills.length > 0 ? skills : ['Planner', 'Reviewer', 'Delivery'],
     sections: [
       {
@@ -458,8 +481,12 @@ function buildArtifact(
         id: 'delivery',
         label: 'Delivery',
         value: task.notify || 'Review gate',
-        detail: status === 'waiting_review' ? 'Draft prepared. Slack has not been sent yet.' : 'Delivery follows this mission policy.',
-        tone: status === 'waiting_review' ? 'amber' : 'green',
+        detail: deliveredReview
+          ? `Delivered to ${deliveryTarget}.`
+          : status === 'waiting_review'
+            ? 'Draft prepared. Slack has not been sent yet.'
+            : 'Delivery follows this mission policy.',
+        tone: deliveredReview ? 'green' : status === 'waiting_review' ? 'amber' : 'green',
       },
     ],
   };
@@ -469,6 +496,7 @@ function buildSteps(task?: MissionSourceTask | null): MissionStepView[] {
   const sourceSteps = task?.latestStepExecutions?.length
     ? task.latestStepExecutions
     : task?.steps || [];
+  const deliveredReview = isDeliveredReview(task);
 
   if (sourceSteps.length > 0) {
     return sourceSteps.map((step, index) => {
@@ -478,7 +506,7 @@ function buildSteps(task?: MissionSourceTask | null): MissionStepView[] {
         title: step.title || step.objective || `Step ${index + 1}`,
         objective: step.objective || step.summary || step.title || 'Complete this mission step.',
         kind: step.kind || 'note',
-        status: normalizeStepExecutionStatus(step),
+        status: normalizeStepExecutionStatus(step, deliveredReview),
         agentLabel,
         toolLabel: step.toolName || step.modelSource || step.modelTier,
         estimatedCredits: step.estimatedCredits,
@@ -862,11 +890,13 @@ export function buildMissionWorkspaceView(task?: MissionSourceTask | null): Miss
     integrations: CORE_MISSION_INTEGRATIONS,
     artifact,
     lessons,
-    reviewSummary: task?.failureReason || (status === 'waiting_review'
-      ? `Run completed and prepared the draft. Approving will send it to ${task?.notify || 'the configured delivery target'}; requesting changes keeps delivery held.`
-      : task?.latestSummary || (task
-        ? 'Reviewer will hold sensitive claims and delivery until evidence is attached.'
-        : 'No mission is waiting for review.')),
+    reviewSummary: task?.failureReason || (isDeliveredReview(task)
+      ? `Delivered to ${deliveredTargetLabel(task)}. Approval receipt is stored with this run.`
+      : status === 'waiting_review'
+        ? `Run completed and prepared the draft. Approving will send it to ${task?.notify || 'the configured delivery target'}; requesting changes keeps delivery held.`
+        : task?.latestSummary || (task
+          ? 'Reviewer will hold sensitive claims and delivery until evidence is attached.'
+          : 'No mission is waiting for review.')),
     analyticsSummary: metrics[0].value === '—'
       ? (task ? 'Credit usage will appear after this mission runs.' : 'Credit usage will appear after you create or select a mission.')
       : metrics[2].value === '—'

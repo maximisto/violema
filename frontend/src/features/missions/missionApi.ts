@@ -194,6 +194,8 @@ export function mapMissionRecordToSourceTask(mission: MissionApiRecord): Mission
     latestSummary: readString(metadata.latestSummary),
     latestArtifacts: readArtifactItems(metadata.latestArtifacts),
     latestStepExecutions,
+    latestDelivery: readRecord(metadata.latestDelivery),
+    reviewReceipt: readRecord(metadata.reviewReceipt),
     steps: latestStepExecutions?.length ? undefined : mapPlanSteps(mission.plan.steps),
     actions: readStringArray(metadata.actions),
     workerTopology: readRecord(metadata.workerTopology) as MissionSourceTask['workerTopology'],

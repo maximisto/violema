@@ -23,9 +23,13 @@ export function MissionReviews({
   onRerunFailedStep,
 }: MissionReviewsProps) {
   const canAct = mission.status === 'waiting_review';
+  const deliveryComplete =
+    mission.artifact.statusLabel === 'Delivered' ||
+    mission.artifact.primaryActionLabel === 'Open receipt' ||
+    /^Delivered to\b/i.test(mission.reviewSummary);
   const hasBlockers = Boolean(preflight && !preflight.ready && preflight.blockers.length > 0);
   const warnings = preflight?.warnings || [];
-  const canApprove = canAct && !hasBlockers;
+  const canApprove = canAct && !deliveryComplete && !hasBlockers;
   const deliveryTarget = mission.deliveryLabel || 'configured target';
 
   return (
@@ -81,9 +85,17 @@ export function MissionReviews({
         <p className="mt-2 text-sm leading-6 text-slate-300">{mission.reviewSummary}</p>
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
           {[
-            { label: 'Run', value: canAct ? 'Complete' : mission.statusLabel, detail: mission.lastRunLabel },
-            { label: 'Delivery', value: canAct ? 'Not sent' : deliveryTarget, detail: canAct ? `Held for ${deliveryTarget}` : 'Uses mission policy' },
-            { label: 'Next', value: canAct ? 'Approve or revise' : 'No action', detail: canAct ? 'Approval sends the Slack message.' : 'No review gate is open.' },
+            { label: 'Run', value: canAct || deliveryComplete ? 'Complete' : mission.statusLabel, detail: mission.lastRunLabel },
+            {
+              label: 'Delivery',
+              value: deliveryComplete ? 'Sent' : canAct ? 'Not sent' : deliveryTarget,
+              detail: deliveryComplete ? mission.reviewSummary : canAct ? `Held for ${deliveryTarget}` : 'Uses mission policy',
+            },
+            {
+              label: 'Next',
+              value: deliveryComplete ? 'Receipt stored' : canAct ? 'Approve or revise' : 'No action',
+              detail: deliveryComplete ? 'No approval is needed now.' : canAct ? 'Approval sends the Slack message.' : 'No review gate is open.',
+            },
           ].map((item) => (
             <div key={item.label} className="rounded-lg border border-white/10 bg-navy-950/42 px-3 py-2.5">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
@@ -93,24 +105,37 @@ export function MissionReviews({
           ))}
         </div>
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
-          <button
-            type="button"
-            disabled={!canApprove || !onApproveDelivery || busyAction !== null}
-            title={hasBlockers ? 'Resolve preflight blockers before approving delivery.' : canAct ? 'Approve and deliver the prepared output.' : 'Approval is available when a mission is waiting for review.'}
-            onClick={onApproveDelivery}
-            className="rounded-lg border border-green-400/25 bg-green-400/10 px-3 py-2 text-[11px] font-semibold text-green-100 transition hover:border-green-300/45 hover:bg-green-400/15 disabled:cursor-not-allowed disabled:text-green-200/45 disabled:opacity-60"
-          >
-            {busyAction === 'approve' ? 'Approving...' : 'Approve delivery'}
-          </button>
-          <button
-            type="button"
-            disabled={!canAct || !onRequestChanges || busyAction !== null}
-            title={canAct ? 'Hold delivery and send instructions back to the mission.' : 'Change requests are available when a mission is waiting for review.'}
-            onClick={onRequestChanges}
-            className="rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-100 transition hover:border-amber-300/45 hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:text-amber-200/45 disabled:opacity-60"
-          >
-            {busyAction === 'changes' ? 'Saving...' : 'Request changes'}
-          </button>
+          {deliveryComplete ? (
+            <>
+              <div className="rounded-lg border border-green-400/25 bg-green-400/10 px-3 py-2 text-center text-[11px] font-semibold text-green-100">
+                Delivery complete
+              </div>
+              <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-center text-[11px] font-semibold text-cyan-100">
+                Receipt stored
+              </div>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                disabled={!canApprove || !onApproveDelivery || busyAction !== null}
+                title={hasBlockers ? 'Resolve preflight blockers before approving delivery.' : canAct ? 'Approve and deliver the prepared output.' : 'Approval is available when a mission is waiting for review.'}
+                onClick={onApproveDelivery}
+                className="rounded-lg border border-green-400/25 bg-green-400/10 px-3 py-2 text-[11px] font-semibold text-green-100 transition hover:border-green-300/45 hover:bg-green-400/15 disabled:cursor-not-allowed disabled:text-green-200/45 disabled:opacity-60"
+              >
+                {busyAction === 'approve' ? 'Approving...' : 'Approve delivery'}
+              </button>
+              <button
+                type="button"
+                disabled={!canAct || !onRequestChanges || busyAction !== null}
+                title={canAct ? 'Hold delivery and send instructions back to the mission.' : 'Change requests are available when a mission is waiting for review.'}
+                onClick={onRequestChanges}
+                className="rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-100 transition hover:border-amber-300/45 hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:text-amber-200/45 disabled:opacity-60"
+              >
+                {busyAction === 'changes' ? 'Saving...' : 'Request changes'}
+              </button>
+            </>
+          )}
           <button
             type="button"
             disabled={!onRerunFailedStep || busyAction !== null}
@@ -122,7 +147,9 @@ export function MissionReviews({
           </button>
         </div>
         <p className="mt-3 text-[10px] leading-4 text-slate-500">
-          Review actions create a run receipt with reviewer, delivery target, and delivery proof.
+          {deliveryComplete
+            ? 'The approval receipt includes reviewer, delivery target, and delivery proof.'
+            : 'Review actions create a run receipt with reviewer, delivery target, and delivery proof.'}
         </p>
       </div>
 

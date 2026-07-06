@@ -98,6 +98,15 @@ test('approveAutomationReview delivers waiting review content and records a run 
   assert.equal(result.receipt.deliveryTarget, '#founders');
   assert.equal(result.receipt.artifactTitle, 'Ready for review: Weekly founder update');
   assert.match(String(result.delivery.body), /Revenue is steady/);
+  const taskPatchMetadata = result.taskPatch.metadata as Record<string, unknown>;
+  const runPatchMetadata = result.runPatch.metadata as Record<string, unknown>;
+  const taskDeliverySteps = taskPatchMetadata.latestStepExecutions as Array<{ stepId?: string; output?: Record<string, unknown> }> | undefined;
+  const runDeliverySteps = runPatchMetadata.stepExecutions as Array<{ stepId?: string; output?: Record<string, unknown> }> | undefined;
+  const taskDeliveryStep = taskDeliverySteps?.find((step) => step.stepId === 'step_deliver');
+  const runDeliveryStep = runDeliverySteps?.find((step) => step.stepId === 'step_deliver');
+  assert.equal(taskDeliveryStep?.output?.status, 'delivered');
+  assert.equal(taskDeliveryStep?.output?.slack_ts, '1718722800.000000');
+  assert.equal(runDeliveryStep?.output?.status, 'delivered');
 });
 
 test('requestAutomationChanges keeps delivery held and records reviewer instructions', () => {

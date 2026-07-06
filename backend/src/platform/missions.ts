@@ -99,7 +99,20 @@ function readAutomationPlanFromMetadata(task?: TaskRecord, run?: TaskRunRecord) 
   );
 }
 
-function readStepExecutions(value: unknown): Map<string, AutomationStepStatus | 'waiting_review'> {
+function hasDeliveredReview(task?: TaskRecord, run?: TaskRunRecord) {
+  const taskReceipt = isRecord(task?.metadata?.reviewReceipt) ? task.metadata.reviewReceipt : undefined;
+  const runReceipt = isRecord(run?.metadata?.reviewReceipt) ? run.metadata.reviewReceipt : undefined;
+  const taskDelivery = isRecord(task?.metadata?.latestDelivery) ? task.metadata.latestDelivery : undefined;
+  const runDelivery = isRecord(run?.metadata?.delivery) ? run.metadata.delivery : undefined;
+  return (
+    readString(taskReceipt?.status) === 'delivered' ||
+    readString(runReceipt?.status) === 'delivered' ||
+    readString(taskDelivery?.status) === 'delivered' ||
+    readString(runDelivery?.status) === 'delivered'
+  );
+}
+
+function readStepExecutions(value: unknown, options?: { deliveredReview?: boolean }): Map<string, AutomationStepStatus | 'waiting_review'> {
   const statuses = new Map<string, AutomationStepStatus | 'waiting_review'>();
   if (!Array.isArray(value)) return statuses;
 
@@ -111,6 +124,10 @@ function readStepExecutions(value: unknown): Map<string, AutomationStepStatus | 
     const output = isRecord(item.output) ? item.output : undefined;
     const outputStatus = readString(output?.status);
     if (!stepId) return;
+    if (kind === 'deliver' && options?.deliveredReview) {
+      statuses.set(stepId, 'succeeded');
+      return;
+    }
     if (kind === 'deliver' && outputStatus === 'waiting_review') {
       statuses.set(stepId, 'waiting_review');
       return;
@@ -191,6 +208,8 @@ function missionStatusFromRecords(
   task: TaskRecord | undefined,
   run: TaskRunRecord | undefined,
 ): MissionStatus {
+  if (hasDeliveredReview(task, run)) return 'completed';
+
   const activeStatuses = [task?.status, run?.status].filter(Boolean);
   if (activeStatuses.includes('waiting_review')) return 'waiting_review';
   if (activeStatuses.some((status) => status === 'running' || status === 'retrying' || status === 'queued')) return 'running';
@@ -319,7 +338,9 @@ function buildMissionPlanSteps(
   run: TaskRunRecord | undefined,
 ) {
   const automationPlan = readAutomationPlanFromMetadata(task, run);
-  const statusByStepId = readStepExecutions(run?.metadata?.stepExecutions || task?.metadata?.latestStepExecutions);
+  const statusByStepId = readStepExecutions(run?.metadata?.stepExecutions || task?.metadata?.latestStepExecutions, {
+    deliveredReview: hasDeliveredReview(task, run),
+  });
 
   if (automationPlan?.steps?.length) {
     return automationPlan.steps.map((step) => mapPlanStep(step, statusByStepId));
@@ -354,6 +375,8 @@ function buildMissionMetadata(automation: MissionAutomationRecord, task?: TaskRe
     latestSummary: readLatestSummary(task, run),
     latestArtifacts: run?.metadata?.artifacts || task?.metadata?.latestArtifacts,
     latestStepExecutions: run?.metadata?.stepExecutions || task?.metadata?.latestStepExecutions,
+    reviewReceipt: run?.metadata?.reviewReceipt || task?.metadata?.reviewReceipt,
+    latestDelivery: task?.metadata?.latestDelivery || run?.metadata?.delivery,
     workerTopology: run?.metadata?.workerTopology || task?.metadata?.workerTopology,
     sourceSteps: automation.steps,
     actions: automation.actions,

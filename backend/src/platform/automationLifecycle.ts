@@ -152,6 +152,32 @@ function buildReceipt(input: {
   };
 }
 
+function markDeliveryStepDelivered(
+  value: unknown,
+  delivery: Record<string, unknown>,
+  reviewedAt: string,
+) {
+  if (!Array.isArray(value)) return undefined;
+
+  return value.map((item) => {
+    const record = readRecord(item);
+    if (!record || readString(record.kind) !== 'deliver') return item;
+    const output = readRecord(record.output) || {};
+    return {
+      ...record,
+      status: 'succeeded',
+      summary: `Delivered approved workflow output to ${readString(delivery.to) || readString(output.to) || 'the configured destination'}.`,
+      output: {
+        ...output,
+        ...delivery,
+        status: readString(delivery.status) || 'delivered',
+        approval_required: false,
+        approved_at: reviewedAt,
+      },
+    };
+  });
+}
+
 export async function approveAutomationReview(input: {
   task: TaskRecord;
   taskRun: TaskRunRecord;
@@ -169,6 +195,8 @@ export async function approveAutomationReview(input: {
     subject: artifact.title || input.task.title,
     channel: deliveryTarget.includes('@') ? 'email' : 'slack',
   });
+  const taskStepExecutions = markDeliveryStepDelivered(input.task.metadata?.latestStepExecutions, delivery, reviewedAt);
+  const runStepExecutions = markDeliveryStepDelivered(input.taskRun.metadata?.stepExecutions, delivery, reviewedAt);
   const receipt = buildReceipt({
     status: 'delivered',
     task: input.task,
@@ -190,6 +218,7 @@ export async function approveAutomationReview(input: {
         reviewRequired: false,
         reviewReceipt: receipt,
         latestDelivery: delivery,
+        latestStepExecutions: taskStepExecutions,
       },
     },
     runPatch: {
@@ -197,6 +226,7 @@ export async function approveAutomationReview(input: {
         reviewRequired: false,
         reviewReceipt: receipt,
         delivery,
+        stepExecutions: runStepExecutions,
       },
     },
   };
