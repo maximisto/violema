@@ -461,6 +461,7 @@ interface DashboardTaskItem {
   taskRunId?: string;
   title: string;
   status: DashboardTaskStatus;
+  taskStatus?: string;
   time: string;
   icon: typeof Clock;
   description?: string;
@@ -1518,19 +1519,29 @@ function getTaskFailureReason(task?: PlatformTaskRecord, run?: PlatformTaskRunRe
 }
 
 function applyTaskRunSnapshot(item: DashboardTaskItem, task?: PlatformTaskRecord, run?: PlatformTaskRunRecord): DashboardTaskItem {
-  const status = item.automationStatus === 'paused'
+  const latestStepExecutions = getTaskStepExecutions(task, run);
+  const taskStatus = task?.status || item.taskStatus;
+  const runStatus = run?.status || item.runStatus;
+  const status = hasTaskReviewGate({
+    taskStatus,
+    runStatus,
+    latestStepExecutions: latestStepExecutions.length > 0 ? latestStepExecutions : item.latestStepExecutions,
+  })
     ? 'alert'
-    : mapPlatformStatus(run?.status || item.runStatus || item.lastRunStatus || task?.status || 'queued');
+    : item.automationStatus === 'paused'
+    ? 'alert'
+    : mapPlatformStatus(runStatus || item.lastRunStatus || taskStatus || 'queued');
 
   return {
     ...item,
     taskId: task?.id || item.taskId,
     taskRunId: run?.id || item.taskRunId,
     status,
+    taskStatus,
     modelTier: run?.modelTier || item.modelTier,
     modelSource: getTaskModelSource(task, run) || item.modelSource,
     agentRole: run?.agentRole || item.agentRole,
-    runStatus: run?.status || item.runStatus,
+    runStatus,
     lastRunAt: run?.finishedAt || run?.startedAt || item.lastRunAt,
     lastRunStatus:
       run?.status === 'succeeded' || run?.status === 'failed'
@@ -1538,7 +1549,7 @@ function applyTaskRunSnapshot(item: DashboardTaskItem, task?: PlatformTaskRecord
         : item.lastRunStatus,
     latestSummary: getTaskMetadataSummary(task, run) || item.latestSummary,
     latestArtifacts: getTaskMetadataArtifacts(task, run) || item.latestArtifacts,
-    latestStepExecutions: getTaskStepExecutions(task, run),
+    latestStepExecutions: latestStepExecutions.length > 0 ? latestStepExecutions : item.latestStepExecutions,
     workerTopology: getTaskWorkerTopology(task, run) || item.workerTopology,
     failureReason: getTaskFailureReason(task, run) || undefined,
     taskUpdatedAt: task?.updatedAt || item.taskUpdatedAt,
@@ -1632,6 +1643,15 @@ function getTaskRunOutcome(task?: DashboardTaskItem) {
       label: 'No runs yet',
       tone: 'border-navy-700/70 bg-navy-950/50 text-slate-300',
       detail: 'This automation has not produced a result yet.',
+    };
+  }
+
+  if (hasTaskReviewGate(task)) {
+    const target = task.notify ? ` to ${task.notify}` : '';
+    return {
+      label: 'Waiting for approval',
+      tone: 'border-amber-500/25 bg-amber-500/10 text-amber-200',
+      detail: `The run completed and prepared the draft. Slack has not been sent${target} yet.`,
     };
   }
 
@@ -1753,6 +1773,32 @@ const getTaskStatusMeta = (status: 'scheduled' | 'complete' | 'alert') => {
     dot: 'bg-violet-400',
   };
 };
+
+function hasTaskReviewGate(task?: {
+  taskStatus?: string;
+  runStatus?: string;
+  latestStepExecutions?: DashboardTaskStepExecution[];
+}) {
+  if (!task) return false;
+  if (task.taskStatus === 'waiting_review' || task.runStatus === 'waiting_review') return true;
+  return Boolean(task.latestStepExecutions?.some((step) => (
+    step.status === 'waiting_review' ||
+    (step.kind === 'deliver' && typeof step.output?.status === 'string' && step.output.status === 'waiting_review')
+  )));
+}
+
+function getTaskDisplayMeta(task: DashboardTaskItem) {
+  if (hasTaskReviewGate(task)) {
+    return {
+      label: 'Needs approval',
+      accent: 'from-amber-950/28 via-navy-900/85 to-navy-950/92',
+      iconColor: 'text-amber-300',
+      chip: 'border-amber-500/25 bg-amber-500/10 text-amber-200',
+      dot: 'bg-amber-300',
+    };
+  }
+  return getTaskStatusMeta(task.status as 'scheduled' | 'complete' | 'alert');
+}
 
 const fetchSmartTitle = async (messages: { role: string; content: string }[]): Promise<string> => {
   try {
@@ -2072,13 +2118,21 @@ export default function Dashboard() {
       .slice(0, 12)
       .map((task) => {
         const latestRun = latestRunByTask.get(task.id);
-        const status = mapPlatformStatus(latestRun?.status || task.status);
+        const latestStepExecutions = getTaskStepExecutions(task, latestRun);
+        const status = hasTaskReviewGate({
+          taskStatus: task.status,
+          runStatus: latestRun?.status,
+          latestStepExecutions,
+        })
+          ? 'alert'
+          : mapPlatformStatus(latestRun?.status || task.status);
         return {
           id: task.id,
           taskId: task.id,
           taskRunId: latestRun?.id,
           title: task.title,
           status,
+          taskStatus: task.status,
           time: formatRelativeTimeFromIso(latestRun?.finishedAt || latestRun?.startedAt || task.updatedAt),
           icon: mapTaskIcon(status),
           description: task.description,
@@ -2090,7 +2144,7 @@ export default function Dashboard() {
           lastRunAt: latestRun?.finishedAt || latestRun?.startedAt,
           latestSummary: getTaskMetadataSummary(task, latestRun),
           latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
-          latestStepExecutions: getTaskStepExecutions(task, latestRun),
+          latestStepExecutions,
           workerTopology: getTaskWorkerTopology(task, latestRun),
           executionPolicy: normalizeExecutionPolicy(task?.metadata?.executionPolicy),
           failureReason: getTaskFailureReason(task, latestRun),
@@ -2106,7 +2160,14 @@ export default function Dashboard() {
         const taskContext = taskContextByAutomationId.get(automation.id);
         const latestRun = taskContext?.latestRun;
         const task = taskContext?.task;
-        const status = automation.status === 'paused'
+        const latestStepExecutions = getTaskStepExecutions(task, latestRun);
+        const status = hasTaskReviewGate({
+          taskStatus: task?.status,
+          runStatus: latestRun?.status,
+          latestStepExecutions,
+        })
+          ? 'alert' as DashboardTaskStatus
+          : automation.status === 'paused'
           ? 'alert' as DashboardTaskStatus
           : mapPlatformStatus(latestRun?.status || automation.last_run_status || task?.status || 'queued');
 
@@ -2116,6 +2177,7 @@ export default function Dashboard() {
           taskRunId: latestRun?.id,
           title: automation.name,
           status,
+          taskStatus: task?.status,
           time: automation.next_run_at ? `Next ${formatAutomationRunTime(automation.next_run_at)}` : automation.schedule,
           icon: status === 'alert' ? AlertCircle : mapTaskIcon(status),
           description: automation.description || task?.description,
@@ -2144,7 +2206,7 @@ export default function Dashboard() {
           nextRunAt: automation.next_run_at,
           latestSummary: getTaskMetadataSummary(task, latestRun),
           latestArtifacts: getTaskMetadataArtifacts(task, latestRun),
-          latestStepExecutions: getTaskStepExecutions(task, latestRun),
+          latestStepExecutions,
           workerTopology: getTaskWorkerTopology(task, latestRun),
           failureReason: getTaskFailureReason(task, latestRun),
           taskUpdatedAt: task?.updatedAt,
@@ -3027,7 +3089,9 @@ export default function Dashboard() {
       onLessonAction={handleLessonAction}
     />
   );
-  const selectedTaskMeta = selectedTask ? getTaskStatusMeta(selectedTask.status as 'scheduled' | 'complete' | 'alert') : null;
+  const selectedTaskMeta = selectedTask ? getTaskDisplayMeta(selectedTask) : null;
+  const selectedTaskNeedsReview = hasTaskReviewGate(selectedTask);
+  const selectedTaskDeliveryTarget = selectedMission.deliveryLabel || selectedTask?.notify || 'the configured delivery target';
   const selectedTaskOutcome = useMemo(() => getTaskRunOutcome(selectedTask), [selectedTask]);
   const selectedTaskSummary = useMemo(() => formatSummaryPreview(selectedTask?.latestSummary, 360), [selectedTask?.latestSummary]);
   const selectedTaskEvidenceLinks = useMemo(() => extractEvidenceLinks(selectedTask?.latestArtifacts), [selectedTask?.latestArtifacts]);
@@ -5046,7 +5110,7 @@ export default function Dashboard() {
               className={`${
                 isMobileSidebar
                   ? 'fixed inset-x-2 bottom-2 top-20 z-40 rounded-[1.5rem] shadow-[0_24px_64px_rgba(2,6,23,0.58)] [touch-action:pan-y]'
-                  : 'w-[22rem] flex-shrink-0'
+                  : 'w-[clamp(24rem,32vw,38rem)] flex-shrink-0'
               } min-h-0 border-l border-navy-800/80 bg-gradient-to-b from-navy-900/60 via-navy-900/36 to-navy-950/60 flex flex-col overflow-hidden backdrop-blur-md shadow-[inset_1px_0_0_rgba(255,255,255,0.03)]`}
             >
               <div className="flex items-center justify-between px-4 py-3.5 border-b border-navy-800/80 bg-gradient-to-r from-violet-500/8 via-navy-950/30 to-cyan-500/6">
@@ -5056,7 +5120,7 @@ export default function Dashboard() {
                   </span>
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.22em] text-slate-600">Workspace</p>
-                    <h3 className="text-sm font-semibold text-white">Schedules</h3>
+                    <h3 className="text-sm font-semibold text-white">Schedule Center</h3>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -5132,6 +5196,26 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </div>
+                      {selectedTaskNeedsReview ? (
+                        <div className="mt-3 rounded-2xl border border-amber-400/24 bg-amber-400/10 p-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/90">Delivery held</p>
+                              <p className="mt-1 text-sm font-semibold leading-snug text-white">Run complete, Slack not sent yet</p>
+                              <p className="mt-1 text-[11px] leading-5 text-amber-100/80">
+                                The founder update draft is staged for {selectedTaskDeliveryTarget}. Approve it in Reviews to send, or request changes to keep it held.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openMissionInspector('reviews')}
+                              className="shrink-0 rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-100 transition-colors hover:border-amber-200/45 hover:bg-amber-300/16"
+                            >
+                              Open review
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
                         <span className="ui-pill px-2 py-0.5 normal-case tracking-normal text-slate-300">
                           {selectedTask.source === 'live' ? 'Live task' : 'Preview task'}
@@ -5464,7 +5548,7 @@ export default function Dashboard() {
                   </div>
                 ) : taskItems.map((task) => {
                   const Icon = task.icon;
-                  const meta = getTaskStatusMeta(task.status as 'scheduled' | 'complete' | 'alert');
+                  const meta = getTaskDisplayMeta(task);
                   const isSelected = selectedTaskId === task.id;
                   return (
                     <div
@@ -5565,7 +5649,7 @@ export default function Dashboard() {
             onClick={closeAutomationEditor}
             className="absolute inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
           />
-            <aside className="absolute right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col border-l border-navy-700/80 bg-gradient-to-b from-navy-900/98 via-navy-900/96 to-navy-950/98 shadow-[0_24px_64px_rgba(2,6,23,0.58)] [touch-action:pan-y]">
+            <aside className="absolute right-0 top-0 z-50 flex h-full w-full max-w-4xl flex-col border-l border-navy-700/80 bg-gradient-to-b from-navy-900/98 via-navy-900/96 to-navy-950/98 shadow-[0_24px_64px_rgba(2,6,23,0.58)] [touch-action:pan-y]">
             <div className="flex items-center justify-between border-b border-navy-800/80 px-5 py-4">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-600">Automation editor</p>

@@ -26,6 +26,7 @@ export function MissionReviews({
   const hasBlockers = Boolean(preflight && !preflight.ready && preflight.blockers.length > 0);
   const warnings = preflight?.warnings || [];
   const canApprove = canAct && !hasBlockers;
+  const deliveryTarget = mission.deliveryLabel || 'configured target';
 
   return (
     <section className="space-y-4">
@@ -78,6 +79,19 @@ export function MissionReviews({
         <p className="text-[10px] font-medium text-signal-300">Review gate</p>
         <h3 className="mt-1 text-base font-semibold leading-snug text-white">{mission.title}</h3>
         <p className="mt-2 text-sm leading-6 text-slate-300">{mission.reviewSummary}</p>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
+          {[
+            { label: 'Run', value: canAct ? 'Complete' : mission.statusLabel, detail: mission.lastRunLabel },
+            { label: 'Delivery', value: canAct ? 'Not sent' : deliveryTarget, detail: canAct ? `Held for ${deliveryTarget}` : 'Uses mission policy' },
+            { label: 'Next', value: canAct ? 'Approve or revise' : 'No action', detail: canAct ? 'Approval sends the Slack message.' : 'No review gate is open.' },
+          ].map((item) => (
+            <div key={item.label} className="rounded-lg border border-white/10 bg-navy-950/42 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
+              <p className="mt-1 text-[12px] font-semibold text-white">{item.value}</p>
+              <p className="mt-1 truncate text-[10px] text-slate-500" title={item.detail}>{item.detail}</p>
+            </div>
+          ))}
+        </div>
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
           <button
             type="button"

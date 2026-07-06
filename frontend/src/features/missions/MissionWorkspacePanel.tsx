@@ -90,7 +90,7 @@ export function MissionWorkspacePanel({
       aria-modal={isModal ? true : undefined}
       aria-labelledby="context-inspector-title"
       tabIndex={isModal ? -1 : undefined}
-      className="fixed inset-x-2 bottom-2 top-24 z-40 flex min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-navy-800/90 bg-gradient-to-b from-navy-900/90 via-navy-950/95 to-black/80 shadow-[0_24px_64px_rgba(2,6,23,0.58),inset_1px_0_0_rgba(255,255,255,0.03)] backdrop-blur-md lg:static lg:inset-auto lg:z-auto lg:w-[24rem] lg:flex-shrink-0 lg:rounded-none lg:border-y-0 lg:border-r-0 lg:border-l xl:w-[28rem] 2xl:w-[32rem]"
+      className="fixed inset-x-2 bottom-2 top-24 z-40 flex min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-navy-800/90 bg-gradient-to-b from-navy-900/90 via-navy-950/95 to-black/80 shadow-[0_24px_64px_rgba(2,6,23,0.58),inset_1px_0_0_rgba(255,255,255,0.03)] backdrop-blur-md lg:static lg:inset-auto lg:z-auto lg:w-[26rem] lg:flex-shrink-0 lg:rounded-none lg:border-y-0 lg:border-r-0 lg:border-l xl:w-[32rem] 2xl:w-[38rem]"
     >
       <header className="border-b border-navy-800/80 bg-gradient-to-r from-violet-500/10 via-navy-950/40 to-cyan-500/10 px-4 py-3.5">
         <div className="flex items-start justify-between gap-3">

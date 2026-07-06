@@ -125,7 +125,7 @@ function statusLabel(status: MissionStatus) {
     case 'running':
       return 'Running';
     case 'waiting_review':
-      return 'Needs review';
+      return 'Needs approval';
     case 'failed':
       return 'Needs attention';
     case 'completed':
@@ -339,7 +339,7 @@ function dedupeEvidenceItems(items: MissionEvidenceItem[]) {
 
 function artifactStatusLabel(status: MissionStatus, artifactCount: number) {
   if (status === 'running') return 'Updating now';
-  if (status === 'waiting_review') return 'Ready for review';
+  if (status === 'waiting_review') return 'Ready for approval';
   if (status === 'failed') return 'Needs repair';
   if (status === 'paused') return 'Paused';
   if (artifactCount > 0) return 'Living artifact';
@@ -458,7 +458,7 @@ function buildArtifact(
         id: 'delivery',
         label: 'Delivery',
         value: task.notify || 'Review gate',
-        detail: status === 'waiting_review' ? 'Approval is required before delivery.' : 'Delivery follows this mission policy.',
+        detail: status === 'waiting_review' ? 'Draft prepared. Slack has not been sent yet.' : 'Delivery follows this mission policy.',
         tone: status === 'waiting_review' ? 'amber' : 'green',
       },
     ],
@@ -862,9 +862,11 @@ export function buildMissionWorkspaceView(task?: MissionSourceTask | null): Miss
     integrations: CORE_MISSION_INTEGRATIONS,
     artifact,
     lessons,
-    reviewSummary: task?.failureReason || task?.latestSummary || (task
-      ? 'Reviewer will hold sensitive claims and delivery until evidence is attached.'
-      : 'No mission is waiting for review.'),
+    reviewSummary: task?.failureReason || (status === 'waiting_review'
+      ? `Run completed and prepared the draft. Approving will send it to ${task?.notify || 'the configured delivery target'}; requesting changes keeps delivery held.`
+      : task?.latestSummary || (task
+        ? 'Reviewer will hold sensitive claims and delivery until evidence is attached.'
+        : 'No mission is waiting for review.')),
     analyticsSummary: metrics[0].value === '—'
       ? (task ? 'Credit usage will appear after this mission runs.' : 'Credit usage will appear after you create or select a mission.')
       : metrics[2].value === '—'

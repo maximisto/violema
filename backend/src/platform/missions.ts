@@ -106,8 +106,15 @@ function readStepExecutions(value: unknown): Map<string, AutomationStepStatus | 
   value.forEach((item) => {
     if (!isRecord(item)) return;
     const stepId = readString(item.stepId) || readString(item.id);
+    const kind = readString(item.kind);
     const status = readString(item.status);
+    const output = isRecord(item.output) ? item.output : undefined;
+    const outputStatus = readString(output?.status);
     if (!stepId) return;
+    if (kind === 'deliver' && outputStatus === 'waiting_review') {
+      statuses.set(stepId, 'waiting_review');
+      return;
+    }
     if (
       status === 'planned' ||
       status === 'running' ||
@@ -184,15 +191,17 @@ function missionStatusFromRecords(
   task: TaskRecord | undefined,
   run: TaskRunRecord | undefined,
 ): MissionStatus {
+  const activeStatuses = [task?.status, run?.status].filter(Boolean);
+  if (activeStatuses.includes('waiting_review')) return 'waiting_review';
+  if (activeStatuses.some((status) => status === 'running' || status === 'retrying' || status === 'queued')) return 'running';
+  if (activeStatuses.includes('failed')) return 'failed';
+  if (activeStatuses.includes('blocked')) return 'blocked';
+  if (activeStatuses.includes('canceled')) return 'canceled';
+
   if (automation?.status === 'paused') return 'paused';
 
   const status = run?.status || task?.status || automation?.last_run_status;
-  if (status === 'running' || status === 'retrying' || status === 'queued') return 'running';
   if (status === 'succeeded' || status === 'completed') return 'completed';
-  if (status === 'waiting_review') return 'waiting_review';
-  if (status === 'failed') return 'failed';
-  if (status === 'blocked') return 'blocked';
-  if (status === 'canceled') return 'canceled';
   return 'planned';
 }
 

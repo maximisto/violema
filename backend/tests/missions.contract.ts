@@ -260,3 +260,86 @@ test('buildMissionRecords keeps the freshest automation task context when stale 
   assert.equal(mission.plan.steps.find((step) => step.id === 'step_deliver')?.deliveryTarget?.target, '#all-purple-orange');
   assert.doesNotMatch(JSON.stringify(mission), /#founders/);
 });
+
+test('buildMissionRecords shows review gate when a paused automation has a staged delivery', () => {
+  const reviewPlan = {
+    ...automationPlan,
+    steps: automationPlan.steps.map((step) => step.id === 'step_deliver'
+      ? { ...step, deliveryTarget: { channel: 'slack' as const, target: '#all-purple-orange' } }
+      : step),
+  } satisfies AutomationExecutionPlan;
+
+  const task = {
+    id: 'task_review_weekly',
+    workspaceId: 'purpleorangehq',
+    title: 'Weekly founder update',
+    description: 'Current weekly operating brief.',
+    kind: 'automation',
+    status: 'waiting_review',
+    priority: 'medium',
+    executorRole: 'analyst',
+    createdAt: '2026-07-06T18:03:13.200Z',
+    updatedAt: '2026-07-06T18:03:31.488Z',
+    metadata: {
+      automationId: 'auto_weekly',
+      notify: '#all-purple-orange',
+      automationPlan: reviewPlan,
+      latestSummary: 'Founder-ready draft is prepared and waiting for approval.',
+      latestStepExecutions: [
+        {
+          stepId: 'step_deliver',
+          kind: 'deliver',
+          title: 'Deliver to Slack',
+          assignedRole: 'messenger',
+          status: 'succeeded',
+          output: { status: 'waiting_review', to: '#all-purple-orange' },
+        },
+      ],
+    },
+  } satisfies TaskRecord;
+
+  const run = {
+    id: 'run_review_weekly',
+    workspaceId: 'purpleorangehq',
+    taskId: 'task_review_weekly',
+    agentRole: 'analyst',
+    modelTier: 'ops',
+    status: 'succeeded',
+    estimatedCredits: 72,
+    actualCredits: 208,
+    startedAt: '2026-07-06T18:03:13.232Z',
+    finishedAt: '2026-07-06T18:03:31.446Z',
+    metadata: {
+      automationId: 'auto_weekly',
+      automationPlan: reviewPlan,
+      summary: 'Founder-ready draft is prepared and waiting for approval.',
+      stepExecutions: task.metadata.latestStepExecutions,
+    },
+  } satisfies TaskRunRecord;
+
+  const [mission] = buildMissionRecords({
+    workspaceId: 'purpleorangehq',
+    automations: [
+      {
+        id: 'auto_weekly',
+        name: 'Weekly founder update',
+        description: 'Create a source-linked weekly operating brief.',
+        schedule: 'every monday at 9am',
+        actions: ['Query Stripe revenue movement', 'Deliver latest result to #all-purple-orange'],
+        steps: reviewPlan.steps,
+        execution_policy: { mode: 'recommended', optimizationGoal: 'balanced', reviewPolicy: 'standard', maxElasticLanes: 2 },
+        notify: '#all-purple-orange',
+        status: 'paused',
+        workflow_prompt: 'Query Stripe revenue movement\nDeliver latest result to #all-purple-orange',
+        last_run_at: '2026-07-06T18:03:31.446Z',
+      },
+    ],
+    tasks: [task],
+    taskRuns: [run],
+  });
+
+  assert.equal(mission.status, 'waiting_review');
+  assert.equal(mission.activeTaskId, 'task_review_weekly');
+  assert.equal(mission.activeRunId, 'run_review_weekly');
+  assert.equal(mission.plan.steps.find((step) => step.id === 'step_deliver')?.currentStatus, 'waiting_review');
+});
