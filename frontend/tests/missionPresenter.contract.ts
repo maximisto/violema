@@ -130,6 +130,47 @@ assert(mission.steps[0]?.actualCredits === 18, 'reads actual credits from nested
 assert(mission.evidence.some((item) => item.label === 'Stripe MRR report'), 'extracts artifact source evidence');
 assert(mission.evidence.some((item) => item.label === 'Failed payment queue'), 'extracts step output source evidence');
 
+const slackReviewMission = buildMissionWorkspaceView({
+  id: 'weekly-founder-update-slack-review',
+  title: 'Weekly founder update',
+  status: 'blocked',
+  latestStepExecutions: [
+    {
+      stepId: 'step_founder_brief',
+      title: 'Draft founder brief',
+      objective: 'Prepare the founder-ready weekly update.',
+      kind: 'summarize',
+      assignedRole: 'writer',
+      status: 'failed',
+      error: 'Model route closed before the draft finished.',
+    },
+    {
+      stepId: 'step_slack_delivery',
+      title: 'Deliver to Slack',
+      objective: 'Send the reviewed weekly founder update to Slack after approval.',
+      kind: 'deliver',
+      assignedRole: 'messenger',
+      status: 'succeeded',
+      output: {
+        success: true,
+        channel: 'slack',
+        to: '#all-purple-orange',
+        status: 'waiting_review',
+        approval_required: true,
+      },
+    },
+  ],
+});
+
+assert(
+  slackReviewMission.steps.find((step) => step.id === 'step_slack_delivery')?.status === 'waiting_review',
+  'shows Slack delivery as waiting review when the run prepared an approval gate',
+);
+assert(
+  slackReviewMission.steps.find((step) => step.id === 'step_founder_brief')?.status === 'failed',
+  'keeps the actual failed draft step visible',
+);
+
 const emptyMission = buildMissionWorkspaceView(null);
 
 assert(emptyMission.artifact.title === 'No live artifact yet', 'empty state has artifact placeholder');

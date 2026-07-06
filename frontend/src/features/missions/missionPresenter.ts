@@ -146,6 +146,12 @@ function normalizeStepStatus(value?: string): MissionStatus {
   return 'planned';
 }
 
+function normalizeStepExecutionStatus(step: MissionSourceStep): MissionStatus {
+  const outputStatus = readStringValue(step.output?.status);
+  if (step.kind === 'deliver' && outputStatus === 'waiting_review') return 'waiting_review';
+  return normalizeStepStatus(step.status);
+}
+
 function roleLabel(role?: string) {
   if (!role) return 'Violema';
   return role
@@ -472,7 +478,7 @@ function buildSteps(task?: MissionSourceTask | null): MissionStepView[] {
         title: step.title || step.objective || `Step ${index + 1}`,
         objective: step.objective || step.summary || step.title || 'Complete this mission step.',
         kind: step.kind || 'note',
-        status: normalizeStepStatus(step.status),
+        status: normalizeStepExecutionStatus(step),
         agentLabel,
         toolLabel: step.toolName || step.modelSource || step.modelTier,
         estimatedCredits: step.estimatedCredits,
