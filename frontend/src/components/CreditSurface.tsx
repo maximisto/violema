@@ -201,6 +201,11 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
                         )}
                       </p>
                     )}
+                    {item.modelRoutes?.length ? (
+                      <p className="mt-0.5 truncate text-[10px] text-slate-600">
+                        {item.modelRoutes.slice(0, 2).join(' -> ')}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex-shrink-0 text-right">
                     <p

@@ -197,6 +197,8 @@ test('generateTextDetailed keeps walking backup route chain when the first fallb
 
     assert.equal(result.text, 'GLM fallback founder brief');
     assert.equal(result.usage?.totalTokens, 21);
+    assert.equal(result.usage?.provider, 'openrouter');
+    assert.equal(result.usage?.model, 'z-ai/glm-5.2');
     assert.equal(anthropicCalls, 2);
     assert.equal(openaiCalls, 2);
     assert.equal(openrouterCalls, 1);
@@ -225,6 +227,139 @@ test('generateTextDetailed keeps walking backup route chain when the first fallb
     else delete process.env.MODEL_FALLBACK_API_KEY_ENV;
     if (typeof originalEnv.fallbackOpenRouterModel === 'string') process.env.MODEL_FALLBACK_OPENROUTER_MODEL = originalEnv.fallbackOpenRouterModel;
     else delete process.env.MODEL_FALLBACK_OPENROUTER_MODEL;
+    delete require.cache[require.resolve('../src/models')];
+  }
+});
+
+test('generateTextDetailed supports Anthropic fallback after GLM primary and OpenAI fallback fail', async () => {
+  const originalLoad = moduleWithLoader._load;
+  const originalFetch = global.fetch;
+  const originalEnv = {
+    anthropic: process.env.ANTHROPIC_API_KEY,
+    defaultApiKeyEnv: process.env.MODEL_DEFAULT_API_KEY_ENV,
+    defaultBaseUrl: process.env.MODEL_DEFAULT_BASE_URL,
+    defaultModel: process.env.MODEL_DEFAULT_MODEL,
+    defaultProvider: process.env.MODEL_DEFAULT_PROVIDER,
+    fallback1ApiKeyEnv: process.env.MODEL_DEFAULT_FALLBACK_1_API_KEY_ENV,
+    fallback1Model: process.env.MODEL_DEFAULT_FALLBACK_1_MODEL,
+    fallback1Provider: process.env.MODEL_DEFAULT_FALLBACK_1_PROVIDER,
+    fallback2ApiKeyEnv: process.env.MODEL_DEFAULT_FALLBACK_2_API_KEY_ENV,
+    fallback2Model: process.env.MODEL_DEFAULT_FALLBACK_2_MODEL,
+    fallback2Provider: process.env.MODEL_DEFAULT_FALLBACK_2_PROVIDER,
+    modelRetryDelays: process.env.MODEL_RETRY_DELAYS_MS,
+    openai: process.env.OPENAI_API_KEY,
+    openrouter: process.env.OPENROUTER_API_KEY,
+  };
+  let anthropicCalls = 0;
+  let openaiCalls = 0;
+  let openrouterCalls = 0;
+
+  try {
+    process.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
+    process.env.OPENAI_API_KEY = 'test-openai-key';
+    process.env.OPENROUTER_API_KEY = 'test-openrouter-key';
+    process.env.MODEL_RETRY_DELAYS_MS = '0';
+    process.env.MODEL_DEFAULT_PROVIDER = 'openrouter';
+    process.env.MODEL_DEFAULT_MODEL = 'z-ai/glm-5.2';
+    process.env.MODEL_DEFAULT_API_KEY_ENV = 'OPENROUTER_API_KEY';
+    process.env.MODEL_DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
+    process.env.MODEL_DEFAULT_FALLBACK_1_PROVIDER = 'openai';
+    process.env.MODEL_DEFAULT_FALLBACK_1_MODEL = 'gpt-4.1-mini';
+    process.env.MODEL_DEFAULT_FALLBACK_1_API_KEY_ENV = 'OPENAI_API_KEY';
+    process.env.MODEL_DEFAULT_FALLBACK_2_PROVIDER = 'anthropic';
+    process.env.MODEL_DEFAULT_FALLBACK_2_MODEL = 'claude-sonnet-4-6';
+    process.env.MODEL_DEFAULT_FALLBACK_2_API_KEY_ENV = 'ANTHROPIC_API_KEY';
+
+    moduleWithLoader._load = function patchedLoad(request: string, parent: NodeModule | null, isMain: boolean) {
+      if (request === '@anthropic-ai/sdk') {
+        return {
+          default: class FakeAnthropic {
+            messages = {
+              create: async (body: { model?: string }) => {
+                anthropicCalls += 1;
+                assert.equal(body.model, 'claude-sonnet-4-6');
+                return {
+                  content: [{ type: 'text', text: 'Anthropic backup founder brief' }],
+                  usage: { input_tokens: 17, output_tokens: 9 },
+                };
+              },
+            };
+          },
+        };
+      }
+      return originalLoad.call(this, request, parent, isMain);
+    };
+
+    global.fetch = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const url = String(input);
+      const body = JSON.parse(String(init?.body || '{}')) as { model?: string };
+      if (url === 'https://openrouter.ai/api/v1/chat/completions') {
+        openrouterCalls += 1;
+        assert.equal(body.model, 'z-ai/glm-5.2');
+        return new Response(JSON.stringify({ error: { message: 'OpenRouter temporarily unavailable' } }), {
+          headers: { 'content-type': 'application/json' },
+          status: 503,
+        });
+      }
+      if (url === 'https://api.openai.com/v1/chat/completions') {
+        openaiCalls += 1;
+        assert.equal(body.model, 'gpt-4.1-mini');
+        return new Response(JSON.stringify({ error: { message: 'OpenAI temporarily unavailable' } }), {
+          headers: { 'content-type': 'application/json' },
+          status: 503,
+        });
+      }
+      throw new Error(`Unexpected fallback URL: ${url}`);
+    };
+
+    delete require.cache[require.resolve('../src/models')];
+    const { generateTextDetailed } = require('../src/models') as typeof import('../src/models');
+    const result = await generateTextDetailed(
+      'default',
+      'Write a concise founder brief.',
+      [{ role: 'user', content: 'Summarize the run.' }],
+      300,
+      'test-workspace',
+    );
+
+    assert.equal(result.text, 'Anthropic backup founder brief');
+    assert.equal(result.usage?.totalTokens, 26);
+    assert.equal(result.usage?.provider, 'anthropic');
+    assert.equal(result.usage?.model, 'claude-sonnet-4-6');
+    assert.equal(openrouterCalls, 2);
+    assert.equal(openaiCalls, 2);
+    assert.equal(anthropicCalls, 1);
+  } finally {
+    moduleWithLoader._load = originalLoad;
+    global.fetch = originalFetch;
+    if (typeof originalEnv.anthropic === 'string') process.env.ANTHROPIC_API_KEY = originalEnv.anthropic;
+    else delete process.env.ANTHROPIC_API_KEY;
+    if (typeof originalEnv.openai === 'string') process.env.OPENAI_API_KEY = originalEnv.openai;
+    else delete process.env.OPENAI_API_KEY;
+    if (typeof originalEnv.openrouter === 'string') process.env.OPENROUTER_API_KEY = originalEnv.openrouter;
+    else delete process.env.OPENROUTER_API_KEY;
+    if (typeof originalEnv.modelRetryDelays === 'string') process.env.MODEL_RETRY_DELAYS_MS = originalEnv.modelRetryDelays;
+    else delete process.env.MODEL_RETRY_DELAYS_MS;
+    if (typeof originalEnv.defaultProvider === 'string') process.env.MODEL_DEFAULT_PROVIDER = originalEnv.defaultProvider;
+    else delete process.env.MODEL_DEFAULT_PROVIDER;
+    if (typeof originalEnv.defaultModel === 'string') process.env.MODEL_DEFAULT_MODEL = originalEnv.defaultModel;
+    else delete process.env.MODEL_DEFAULT_MODEL;
+    if (typeof originalEnv.defaultApiKeyEnv === 'string') process.env.MODEL_DEFAULT_API_KEY_ENV = originalEnv.defaultApiKeyEnv;
+    else delete process.env.MODEL_DEFAULT_API_KEY_ENV;
+    if (typeof originalEnv.defaultBaseUrl === 'string') process.env.MODEL_DEFAULT_BASE_URL = originalEnv.defaultBaseUrl;
+    else delete process.env.MODEL_DEFAULT_BASE_URL;
+    if (typeof originalEnv.fallback1Provider === 'string') process.env.MODEL_DEFAULT_FALLBACK_1_PROVIDER = originalEnv.fallback1Provider;
+    else delete process.env.MODEL_DEFAULT_FALLBACK_1_PROVIDER;
+    if (typeof originalEnv.fallback1Model === 'string') process.env.MODEL_DEFAULT_FALLBACK_1_MODEL = originalEnv.fallback1Model;
+    else delete process.env.MODEL_DEFAULT_FALLBACK_1_MODEL;
+    if (typeof originalEnv.fallback1ApiKeyEnv === 'string') process.env.MODEL_DEFAULT_FALLBACK_1_API_KEY_ENV = originalEnv.fallback1ApiKeyEnv;
+    else delete process.env.MODEL_DEFAULT_FALLBACK_1_API_KEY_ENV;
+    if (typeof originalEnv.fallback2Provider === 'string') process.env.MODEL_DEFAULT_FALLBACK_2_PROVIDER = originalEnv.fallback2Provider;
+    else delete process.env.MODEL_DEFAULT_FALLBACK_2_PROVIDER;
+    if (typeof originalEnv.fallback2Model === 'string') process.env.MODEL_DEFAULT_FALLBACK_2_MODEL = originalEnv.fallback2Model;
+    else delete process.env.MODEL_DEFAULT_FALLBACK_2_MODEL;
+    if (typeof originalEnv.fallback2ApiKeyEnv === 'string') process.env.MODEL_DEFAULT_FALLBACK_2_API_KEY_ENV = originalEnv.fallback2ApiKeyEnv;
+    else delete process.env.MODEL_DEFAULT_FALLBACK_2_API_KEY_ENV;
     delete require.cache[require.resolve('../src/models')];
   }
 });

@@ -218,6 +218,9 @@ export interface AutomationStepExecution {
     inputTokens?: number;
     outputTokens?: number;
     totalTokens?: number;
+    provider?: string;
+    model?: string;
+    baseUrl?: string;
   };
   charge?: {
     actualCredits: number;

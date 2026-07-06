@@ -106,6 +106,7 @@ import {
   ensureWorkspaceCredits,
   estimateCreditCost,
   estimateProviderCostUsd,
+  estimateProviderCostUsdForUsage,
   CREDIT_VALUE_USD,
   finalizeTaskRun,
   getBillingStatus,
@@ -5897,12 +5898,30 @@ app.get('/api/billing/recent-usage', (req: Request, res: Response) => {
       let inputTokens = 0;
       let outputTokens = 0;
       let totalTokens = 0;
+      let providerCostUsd = 0;
+      let hasProviderCost = false;
+      const modelRoutes = new Set<string>();
       for (const step of stepCharges) {
-        const tu = step.tokenUsage as Record<string, number> | undefined;
+        const tu = step.tokenUsage as {
+          inputTokens?: number;
+          outputTokens?: number;
+          totalTokens?: number;
+          provider?: string;
+          model?: string;
+          baseUrl?: string;
+        } | undefined;
         if (tu && typeof tu === 'object') {
           inputTokens += typeof tu.inputTokens === 'number' ? tu.inputTokens : 0;
           outputTokens += typeof tu.outputTokens === 'number' ? tu.outputTokens : 0;
           totalTokens += typeof tu.totalTokens === 'number' ? tu.totalTokens : 0;
+          const stepProviderCostUsd = estimateProviderCostUsdForUsage(run.modelTier, tu);
+          if (stepProviderCostUsd !== null) {
+            providerCostUsd += stepProviderCostUsd;
+            hasProviderCost = true;
+          }
+          if (typeof tu.provider === 'string' || typeof tu.model === 'string') {
+            modelRoutes.add(`${tu.provider || 'unknown'}/${tu.model || 'unknown'}`);
+          }
         }
       }
       if (totalTokens === 0 && (inputTokens > 0 || outputTokens > 0)) {
@@ -5910,11 +5929,16 @@ app.get('/api/billing/recent-usage', (req: Request, res: Response) => {
       }
 
       const credits = run.actualCredits ?? run.estimatedCredits;
-      const providerCostUsd = totalTokens > 0 ? estimateProviderCostUsd(run.modelTier, totalTokens) : null;
+      const estimatedProviderCostUsd =
+        hasProviderCost
+          ? providerCostUsd
+          : totalTokens > 0
+            ? estimateProviderCostUsd(run.modelTier, totalTokens)
+            : null;
       const creditValueUsd = credits * CREDIT_VALUE_USD;
       const marginPct =
-        providerCostUsd !== null && creditValueUsd > 0
-          ? Math.round(((creditValueUsd - providerCostUsd) / creditValueUsd) * 100)
+        estimatedProviderCostUsd !== null && creditValueUsd > 0
+          ? Math.round(((creditValueUsd - estimatedProviderCostUsd) / creditValueUsd) * 100)
           : null;
 
       return {
@@ -5929,7 +5953,8 @@ app.get('/api/billing/recent-usage', (req: Request, res: Response) => {
         totalTokens: totalTokens > 0 ? totalTokens : null,
         inputTokens: inputTokens > 0 ? inputTokens : null,
         outputTokens: outputTokens > 0 ? outputTokens : null,
-        providerCostUsd,
+        providerCostUsd: estimatedProviderCostUsd,
+        modelRoutes: Array.from(modelRoutes),
         creditValueUsd,
         marginPct,
       };

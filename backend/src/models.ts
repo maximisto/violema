@@ -33,6 +33,9 @@ export interface TextGenerationUsage {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  provider?: Provider;
+  model?: string;
+  baseUrl?: string;
 }
 
 export interface TextGenerationResult {
@@ -90,6 +93,10 @@ function getProviderBaseUrl(provider: Provider): string | undefined {
 
 function isOpenAICompatibleTextProvider(provider: Provider) {
   return provider === 'openai' || provider === 'openrouter';
+}
+
+function isSupportedTextGenerationProvider(provider: string): provider is Provider {
+  return provider === 'anthropic' || provider === 'minimax' || provider === 'openai' || provider === 'openrouter';
 }
 
 function isRouteConfigured(route: ModelRoute, workspaceId?: string) {
@@ -312,6 +319,7 @@ function getTextFallbackEnv(profile: TextProfile, key: 'PROVIDER' | 'MODEL' | 'A
 function getDefaultFallbackModel(provider: Provider) {
   if (provider === 'openai') return env('MODEL_FALLBACK_OPENAI_MODEL') || 'gpt-4.1-mini';
   if (provider === 'openrouter') return env('MODEL_FALLBACK_OPENROUTER_MODEL') || 'z-ai/glm-5.2';
+  if (provider === 'anthropic') return env('MODEL_FALLBACK_ANTHROPIC_MODEL') || 'claude-sonnet-4-6';
   return undefined;
 }
 
@@ -335,8 +343,8 @@ function buildConfiguredTextFallbackRoute(profile: TextProfile, slot?: number): 
     return null;
   }
 
-  const provider = (fallbackProvider as Provider | undefined) || 'openai';
-  if (!isOpenAICompatibleTextProvider(provider)) return null;
+  const provider = fallbackProvider || 'openai';
+  if (!isSupportedTextGenerationProvider(provider)) return null;
 
   const apiKeyEnv = fallbackApiKeyEnv || getProviderApiKeyEnv(provider);
   const model = fallbackModel || getDefaultFallbackModel(provider);
@@ -355,7 +363,7 @@ function getTextFallbackRoutes(profile: TextProfile, primaryRoute: ModelRoute, w
   const seen = new Set([routeKey(primaryRoute)]);
   const routes: ModelRoute[] = [];
   const addRoute = (route: ModelRoute | null) => {
-    if (!route || !isOpenAICompatibleTextProvider(route.provider)) return;
+    if (!route || !isSupportedTextGenerationProvider(route.provider)) return;
     const key = routeKey(route);
     if (seen.has(key) || !isRouteConfigured(route, workspaceId)) return;
     seen.add(key);
@@ -378,6 +386,12 @@ function getTextFallbackRoutes(profile: TextProfile, primaryRoute: ModelRoute, w
     model: getDefaultFallbackModel('openrouter') || 'z-ai/glm-5.2',
     apiKeyEnv: 'OPENROUTER_API_KEY',
     baseUrl: getProviderBaseUrl('openrouter'),
+  });
+  addRoute({
+    provider: 'anthropic',
+    model: getDefaultFallbackModel('anthropic') || 'claude-sonnet-4-6',
+    apiKeyEnv: 'ANTHROPIC_API_KEY',
+    baseUrl: getProviderBaseUrl('anthropic'),
   });
   addRoute({
     provider: 'openai',
@@ -628,6 +642,9 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
           inputTokens: data.usage.prompt_tokens,
           outputTokens: data.usage.completion_tokens,
           totalTokens: data.usage.total_tokens,
+          provider: route.provider,
+          model: route.model,
+          baseUrl: route.baseUrl,
         }
       : undefined,
   };
@@ -654,6 +671,9 @@ async function generateWithAnthropicRoute(route: ModelRoute, system: string, mes
         totalTokens:
           (response.usage.input_tokens || 0) +
           (response.usage.output_tokens || 0),
+        provider: route.provider,
+        model: route.model,
+        baseUrl: route.baseUrl,
       }
     : undefined;
 

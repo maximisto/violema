@@ -34,6 +34,15 @@ export interface RuntimeCreditInput {
   totalTokens?: number;
 }
 
+export interface ProviderTokenUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+}
+
 export interface RuntimeCreditResult {
   actualCredits: number;
   breakdown: {
@@ -89,6 +98,14 @@ const MODEL_TIER_CREDITS_PER_1K_TOKENS: Record<ModelTier, number> = {
 function normalizeCount(value?: number): number {
   if (!value || !Number.isFinite(value)) return 0;
   return Math.max(0, Math.trunc(value));
+}
+
+function normalizeText(value?: string): string {
+  return (value || '').trim().toLowerCase();
+}
+
+function roundUsd(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
 }
 
 export function estimateCreditCost(input: CostEstimateInput): CostEstimate {
@@ -170,12 +187,52 @@ const PROVIDER_COST_USD_PER_1M_TOKENS: Record<ModelTier, number> = {
   ops: 0.20,
 };
 
+const PROVIDER_MODEL_COST_USD_PER_1M_TOKENS: Array<{
+  provider: string;
+  model: string;
+  input: number;
+  output: number;
+}> = [
+  {
+    provider: 'openrouter',
+    model: 'z-ai/glm-5.2',
+    input: 0.9086,
+    output: 2.856,
+  },
+];
+
 // Approximate USD value of one credit at Start-plan rates ($79 / 2000 credits).
 export const CREDIT_VALUE_USD = 0.0395;
 
 export function estimateProviderCostUsd(modelTier: ModelTier, totalTokens: number): number {
   const ratePerMillion = PROVIDER_COST_USD_PER_1M_TOKENS[modelTier] ?? 6.00;
-  return (totalTokens / 1_000_000) * ratePerMillion;
+  return roundUsd((totalTokens / 1_000_000) * ratePerMillion);
+}
+
+export function estimateProviderCostUsdForUsage(modelTier: ModelTier, usage: ProviderTokenUsage): number | null {
+  const inputTokens = normalizeCount(usage.inputTokens);
+  const outputTokens = normalizeCount(usage.outputTokens);
+  const totalTokens = normalizeCount(usage.totalTokens) || inputTokens + outputTokens;
+  if (totalTokens <= 0) return null;
+
+  const provider = normalizeText(usage.provider);
+  const model = normalizeText(usage.model);
+  const providerModelRate = PROVIDER_MODEL_COST_USD_PER_1M_TOKENS.find(
+    (rate) => rate.provider === provider && rate.model === model,
+  );
+
+  if (providerModelRate) {
+    if (inputTokens > 0 || outputTokens > 0) {
+      return roundUsd(
+        (inputTokens / 1_000_000) * providerModelRate.input +
+        (outputTokens / 1_000_000) * providerModelRate.output,
+      );
+    }
+    const inputHeavyBlend = (providerModelRate.input * 3 + providerModelRate.output) / 4;
+    return roundUsd((totalTokens / 1_000_000) * inputHeavyBlend);
+  }
+
+  return estimateProviderCostUsd(modelTier, totalTokens);
 }
 
 export function calculateRuntimeCredits(input: RuntimeCreditInput): RuntimeCreditResult {

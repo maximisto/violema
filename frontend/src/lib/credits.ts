@@ -32,6 +32,7 @@ export interface RecentCreditUsage {
   inputTokens?: number | null;
   outputTokens?: number | null;
   providerCostUsd?: number | null;
+  modelRoutes?: string[];
   creditValueUsd?: number;
   marginPct?: number | null;
 }
