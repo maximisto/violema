@@ -134,6 +134,27 @@ const slackReviewMission = buildMissionWorkspaceView({
   id: 'weekly-founder-update-slack-review',
   title: 'Weekly founder update',
   status: 'blocked',
+  notify: '#all-purple-orange',
+  latestArtifacts: [
+    {
+      id: 'stripe-result',
+      title: 'Check Stripe revenue',
+      kind: 'query_data',
+      payload: {
+        summary: 'Stripe returned zero MRR.',
+      },
+    },
+    {
+      id: 'review-gate',
+      title: 'Ready for review: Weekly founder update',
+      kind: 'review_gate',
+      payload: {
+        markdown: 'Slack-ready founder update markdown body.',
+        deliveryTarget: '#all-purple-orange',
+        approvalRequired: true,
+      },
+    },
+  ],
   latestStepExecutions: [
     {
       stepId: 'step_founder_brief',
@@ -169,6 +190,18 @@ assert(
 assert(
   slackReviewMission.steps.find((step) => step.id === 'step_founder_brief')?.status === 'failed',
   'keeps the actual failed draft step visible',
+);
+assert(
+  slackReviewMission.artifact.title === 'Ready for review: Weekly founder update',
+  'promotes the review gate over earlier data artifacts when approval is waiting',
+);
+assert(
+  slackReviewMission.artifact.reviewBody === 'Slack-ready founder update markdown body.',
+  'keeps the prepared delivery body available for human review',
+);
+assert(
+  slackReviewMission.artifact.reviewTarget === '#all-purple-orange',
+  'keeps the delivery target beside the reviewed draft',
 );
 
 const deliveredMission = buildMissionWorkspaceView({

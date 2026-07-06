@@ -114,6 +114,8 @@ export interface MissionArtifactView {
   sourceLabel: string;
   statusLabel: string;
   summary: string;
+  reviewBody?: string;
+  reviewTarget?: string;
   chart?: ChartArtifactSpec;
   lastUpdatedLabel: string;
   primaryActionLabel: string;

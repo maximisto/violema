@@ -237,7 +237,7 @@ function readArtifactDetail(artifact: MissionSourceArtifact) {
   return 'Generated during the latest run.';
 }
 
-function readArtifactPayloadText(payload?: Record<string, unknown>): string | undefined {
+function readArtifactPayloadText(payload?: Record<string, unknown>, maxLength = 420): string | undefined {
   if (!payload) return undefined;
 
   const directKeys = [
@@ -256,7 +256,7 @@ function readArtifactPayloadText(payload?: Record<string, unknown>): string | un
 
   for (const key of directKeys) {
     const value = payload[key];
-    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 420);
+    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, maxLength);
   }
 
   for (const key of ['artifact', 'document', 'draft']) {
@@ -268,6 +268,17 @@ function readArtifactPayloadText(payload?: Record<string, unknown>): string | un
   }
 
   return undefined;
+}
+
+function findReviewArtifact(artifacts?: MissionSourceTask['latestArtifacts']) {
+  return artifacts?.find((artifact) => {
+    const payload = artifact.payload || {};
+    return (
+      artifact.kind === 'review_gate' ||
+      readStringValue(payload.deliveryTarget) ||
+      payload.approvalRequired === true
+    );
+  });
 }
 
 function readRecordValue(value: unknown): Record<string, unknown> | undefined {
@@ -389,7 +400,9 @@ function buildArtifact(
   metrics: MissionMetricView[]
 ): MissionArtifactView {
   const artifactCount = task?.latestArtifacts?.length || 0;
-  const primaryArtifact = task?.latestArtifacts?.[0];
+  const deliveredReview = isDeliveredReview(task);
+  const reviewArtifact = findReviewArtifact(task?.latestArtifacts);
+  const primaryArtifact = reviewArtifact || task?.latestArtifacts?.[0];
   const chart = primaryArtifact
     ? readArtifactChart(primaryArtifact) || task?.latestArtifacts?.map(readArtifactChart).find(Boolean)
     : undefined;
@@ -397,8 +410,11 @@ function buildArtifact(
   const efficiencyMetric = metrics.find((metric) => metric.label === 'Efficiency');
   const skills = buildArtifactSkills(steps);
   const validationTone = evidence.length > 0 ? 'green' : status === 'failed' ? 'amber' : 'slate';
-  const deliveredReview = isDeliveredReview(task);
   const deliveryTarget = deliveredTargetLabel(task);
+  const reviewBody = reviewArtifact
+    ? readArtifactPayloadText(reviewArtifact.payload, 12000) || reviewArtifact.summary
+    : undefined;
+  const reviewTarget = readStringValue(reviewArtifact?.payload?.deliveryTarget) || deliveryTarget;
 
   if (!task) {
     return {
@@ -442,6 +458,8 @@ function buildArtifact(
     sourceLabel: primaryArtifact?.source || (artifactCount > 0 ? pluralize(artifactCount, 'stored output') : 'Run output'),
     statusLabel: artifactStatusLabel(status, artifactCount, deliveredReview),
     summary: chart?.insight || (primaryArtifact ? readArtifactDetail(primaryArtifact) : task.latestSummary || task.description || 'This mission has not produced a stored artifact yet.'),
+    reviewBody,
+    reviewTarget,
     chart,
     lastUpdatedLabel: task.lastRunAt ? formatMissionDateTime(task.lastRunAt, 'Latest run') : task.latestArtifacts?.length ? 'Latest run' : 'Not run yet',
     primaryActionLabel: deliveredReview ? 'Open receipt' : status === 'waiting_review' ? 'Open review' : status === 'running' ? 'Watch run' : 'Open artifact',

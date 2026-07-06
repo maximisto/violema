@@ -9,27 +9,34 @@ interface MissionReviewsProps {
     warnings?: Array<{ key: string; label: string; detail: string }>;
   };
   busyAction?: 'approve' | 'changes' | 'rerun' | null;
+  reviewAcknowledged?: boolean;
   onApproveDelivery?: () => void;
   onRequestChanges?: () => void;
   onRerunFailedStep?: () => void;
+  onMarkReviewed?: () => void;
 }
 
 export function MissionReviews({
   mission,
   preflight,
   busyAction = null,
+  reviewAcknowledged = false,
   onApproveDelivery,
   onRequestChanges,
   onRerunFailedStep,
+  onMarkReviewed,
 }: MissionReviewsProps) {
   const canAct = mission.status === 'waiting_review';
+  const reviewBody = mission.artifact.reviewBody?.trim();
+  const reviewTarget = mission.artifact.reviewTarget || mission.deliveryLabel || 'configured target';
+  const reviewRequired = Boolean(canAct && reviewBody);
   const deliveryComplete =
     mission.artifact.statusLabel === 'Delivered' ||
     mission.artifact.primaryActionLabel === 'Open receipt' ||
     /^Delivered to\b/i.test(mission.reviewSummary);
   const hasBlockers = Boolean(preflight && !preflight.ready && preflight.blockers.length > 0);
   const warnings = preflight?.warnings || [];
-  const canApprove = canAct && !deliveryComplete && !hasBlockers;
+  const canApprove = canAct && !deliveryComplete && !hasBlockers && (!reviewRequired || reviewAcknowledged);
   const deliveryTarget = mission.deliveryLabel || 'configured target';
 
   return (
@@ -83,6 +90,40 @@ export function MissionReviews({
         <p className="text-[10px] font-medium text-signal-300">Review gate</p>
         <h3 className="mt-1 text-base font-semibold leading-snug text-white">{mission.title}</h3>
         <p className="mt-2 text-sm leading-6 text-slate-300">{mission.reviewSummary}</p>
+        {reviewBody ? (
+          <div className="mt-4 rounded-lg border border-violet-300/20 bg-navy-950/55">
+            <div className="flex flex-col gap-3 border-b border-white/10 px-3 py-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-200/85">Prepared delivery</p>
+                <h4 className="mt-1 text-sm font-semibold text-white">{mission.artifact.title}</h4>
+                <p className="mt-1 text-[11px] leading-4 text-slate-500">Review this draft before approving delivery to {reviewTarget}.</p>
+              </div>
+              <span className={`w-fit rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                reviewAcknowledged
+                  ? 'border-green-300/25 bg-green-300/10 text-green-100'
+                  : 'border-amber-300/25 bg-amber-300/10 text-amber-100'
+              }`}>
+                {reviewAcknowledged ? 'Reviewed' : 'Review required'}
+              </span>
+            </div>
+            <div className="max-h-[340px] overflow-auto px-3 py-3">
+              <pre className="whitespace-pre-wrap break-words font-sans text-[12px] leading-5 text-slate-200">{reviewBody}</pre>
+            </div>
+            <div className="flex flex-col gap-2 border-t border-white/10 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[10px] leading-4 text-slate-500">
+                Approval sends exactly this prepared delivery body unless changes are requested first.
+              </p>
+              <button
+                type="button"
+                disabled={reviewAcknowledged || !onMarkReviewed || busyAction !== null}
+                onClick={onMarkReviewed}
+                className="rounded-lg border border-violet-300/25 bg-violet-300/10 px-3 py-2 text-[11px] font-semibold text-violet-50 transition hover:border-violet-200/40 hover:bg-violet-300/15 disabled:cursor-default disabled:border-green-300/20 disabled:bg-green-300/10 disabled:text-green-100"
+              >
+                {reviewAcknowledged ? 'Reviewed' : 'Mark reviewed'}
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
           {[
             { label: 'Run', value: canAct || deliveryComplete ? 'Complete' : mission.statusLabel, detail: mission.lastRunLabel },
@@ -119,7 +160,7 @@ export function MissionReviews({
               <button
                 type="button"
                 disabled={!canApprove || !onApproveDelivery || busyAction !== null}
-                title={hasBlockers ? 'Resolve preflight blockers before approving delivery.' : canAct ? 'Approve and deliver the prepared output.' : 'Approval is available when a mission is waiting for review.'}
+                title={hasBlockers ? 'Resolve preflight blockers before approving delivery.' : reviewRequired && !reviewAcknowledged ? 'Review and mark the prepared delivery before approving.' : canAct ? 'Approve and deliver the prepared output.' : 'Approval is available when a mission is waiting for review.'}
                 onClick={onApproveDelivery}
                 className="rounded-lg border border-green-400/25 bg-green-400/10 px-3 py-2 text-[11px] font-semibold text-green-100 transition hover:border-green-300/45 hover:bg-green-400/15 disabled:cursor-not-allowed disabled:text-green-200/45 disabled:opacity-60"
               >

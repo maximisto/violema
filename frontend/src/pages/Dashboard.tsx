@@ -2984,9 +2984,32 @@ export default function Dashboard() {
     setSelectedCalendarItemId(null);
   }, [selectedMission.id]);
   const reviewerLabel = backendAuthSession?.email || backendAuthSession?.name || 'Violema reviewer';
+  const selectedArtifactActionKind: MissionActionKind =
+    selectedMission.status === 'waiting_review' ? 'artifact_reviewed' : 'artifact_opened';
+  const selectedArtifactTargetId = useMemo(() => {
+    const artifacts = selectedTask?.latestArtifacts || [];
+    const artifact = selectedMission.status === 'waiting_review'
+      ? artifacts.find((item) => item.kind === 'review_gate') || artifacts[0]
+      : artifacts[0];
+    return String(artifact?.id || artifact?.title || selectedMission.id);
+  }, [selectedMission.id, selectedMission.status, selectedTask?.latestArtifacts]);
+  const selectedArtifactAction = useMemo(
+    () => findMissionAction(missionActions, {
+      workspaceId: workspace.workspaceId,
+      missionId: selectedMission.id,
+      kind: selectedArtifactActionKind,
+      targetId: selectedArtifactTargetId,
+    }),
+    [missionActions, selectedArtifactActionKind, selectedArtifactTargetId, selectedMission.id, workspace.workspaceId],
+  );
   const handleReviewApprove = useCallback(async () => {
     if (!selectedReviewTarget.automationId || !selectedReviewTarget.taskRunId) {
       showNotice('error', 'No reviewable run is selected.');
+      return;
+    }
+    if (selectedMission.status === 'waiting_review' && selectedMission.artifact.reviewBody && !selectedArtifactAction) {
+      openMissionInspector('reviews');
+      showNotice('error', 'Review the prepared draft and mark it reviewed before approving delivery.');
       return;
     }
     setActionBusy('review-approve');
@@ -3012,7 +3035,7 @@ export default function Dashboard() {
     } finally {
       setActionBusy(null);
     }
-  }, [refreshAutomations, reviewerLabel, selectedReviewTarget.automationId, selectedReviewTarget.taskRunId, showNotice, workspace.workspaceId, workspace.workspaceName]);
+  }, [openMissionInspector, refreshAutomations, reviewerLabel, selectedArtifactAction, selectedMission.artifact.reviewBody, selectedMission.status, selectedReviewTarget.automationId, selectedReviewTarget.taskRunId, showNotice, workspace.workspaceId, workspace.workspaceName]);
   const handleReviewRequestChanges = useCallback(async () => {
     if (!selectedReviewTarget.automationId || !selectedReviewTarget.taskRunId) {
       showNotice('error', 'No reviewable run is selected.');
@@ -3071,21 +3094,6 @@ export default function Dashboard() {
       setActionBusy(null);
     }
   }, [refreshAutomations, reviewerLabel, selectedReviewTarget.automationId, selectedReviewTarget.taskRunId, showNotice, workspace.workspaceId, workspace.workspaceName]);
-  const selectedArtifactActionKind: MissionActionKind =
-    selectedMission.status === 'waiting_review' ? 'artifact_reviewed' : 'artifact_opened';
-  const selectedArtifactTargetId = useMemo(() => {
-    const artifact = selectedTask?.latestArtifacts?.[0];
-    return String(artifact?.id || artifact?.title || selectedMission.id);
-  }, [selectedMission.id, selectedTask?.latestArtifacts]);
-  const selectedArtifactAction = useMemo(
-    () => findMissionAction(missionActions, {
-      workspaceId: workspace.workspaceId,
-      missionId: selectedMission.id,
-      kind: selectedArtifactActionKind,
-      targetId: selectedArtifactTargetId,
-    }),
-    [missionActions, selectedArtifactActionKind, selectedArtifactTargetId, selectedMission.id, workspace.workspaceId],
-  );
   const savedMissionLessonIds = useMemo(
     () => new Set(
       missionActions
@@ -3119,7 +3127,7 @@ export default function Dashboard() {
 
     if (selectedMission.status === 'waiting_review') {
       openMissionInspector('reviews');
-      showNotice('success', 'Review gate opened. Approve delivery there when ready.');
+      showNotice('success', 'Review gate opened. Mark the prepared draft reviewed before approval.');
       return;
     }
 
@@ -3141,6 +3149,10 @@ export default function Dashboard() {
     recordMissionAction('lesson_saved', lesson.id, lesson.title);
     showNotice('success', `${lesson.title} saved to mission memory.`);
   }, [recordMissionAction, showNotice]);
+  const handleReviewAcknowledged = useCallback(() => {
+    recordMissionAction('artifact_reviewed', selectedArtifactTargetId, 'Prepared delivery reviewed');
+    showNotice('success', 'Prepared delivery marked reviewed. Approval is now available.');
+  }, [recordMissionAction, selectedArtifactTargetId, showNotice]);
   const selectedMissionDelivered = Boolean(
     selectedTask?.latestDelivery?.status === 'delivered' ||
     selectedTask?.reviewReceipt?.status === 'delivered' ||
@@ -3640,9 +3652,11 @@ export default function Dashboard() {
                 ? 'rerun'
                 : null
         }
+        reviewAcknowledged={Boolean(selectedArtifactAction)}
         onApproveDelivery={handleReviewApprove}
         onRequestChanges={handleReviewRequestChanges}
         onRerunFailedStep={handleReviewRerun}
+        onMarkReviewed={handleReviewAcknowledged}
       />
       <RunLedgerPanel events={runLedgerEvents} />
     </div>
