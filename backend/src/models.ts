@@ -62,6 +62,33 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function getProviderApiKeyEnv(provider: Provider): string | undefined {
+  if (provider === 'anthropic') return 'ANTHROPIC_API_KEY';
+  if (provider === 'minimax') return 'MINIMAX_API_KEY';
+  if (provider === 'openai') return 'OPENAI_API_KEY';
+  if (provider === 'openrouter') return 'OPENROUTER_API_KEY';
+  if (provider === 'mistral') return 'MISTRAL_API_KEY';
+  return undefined;
+}
+
+function getProviderBaseUrl(provider: Provider): string | undefined {
+  if (provider === 'openai') return env('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
+  if (provider === 'openrouter') return env('OPENROUTER_BASE_URL') || 'https://openrouter.ai/api/v1';
+  if (provider === 'mistral') return env('MISTRAL_BASE_URL') || 'https://api.mistral.ai/v1';
+  return undefined;
+}
+
+function isOpenAICompatibleTextProvider(provider: Provider) {
+  return provider === 'openai' || provider === 'openrouter';
+}
+
+function isRouteConfigured(route: ModelRoute, workspaceId?: string) {
+  return Boolean(
+    (workspaceId && getWorkspaceProviderToken(workspaceId, route.provider)) ||
+    env(route.apiKeyEnv),
+  );
+}
+
 function getErrorStatus(error: unknown) {
   const candidate = error as { status?: unknown; statusCode?: unknown; code?: unknown };
   if (typeof candidate.status === 'number') return candidate.status;
@@ -256,6 +283,38 @@ function getTextRoute(profile: TextProfile, workspaceId?: string): ModelRoute {
     baseUrl: override?.baseUrl || route.baseUrl,
     reasoningEffort: override?.reasoningEffort || route.reasoningEffort,
   };
+}
+
+function getTextFallbackEnv(profile: TextProfile, key: 'PROVIDER' | 'MODEL' | 'API_KEY_ENV' | 'BASE_URL' | 'REASONING_EFFORT') {
+  const resolvedProfile = resolveTextProfile(profile);
+  return env(`MODEL_${resolvedProfile.toUpperCase()}_FALLBACK_${key}`) || env(`MODEL_FALLBACK_${key}`);
+}
+
+function getDefaultFallbackModel(provider: Provider) {
+  if (provider === 'openai') return env('MODEL_FALLBACK_OPENAI_MODEL') || 'gpt-4.1-mini';
+  if (provider === 'openrouter') return env('MODEL_FALLBACK_OPENROUTER_MODEL');
+  return undefined;
+}
+
+function getTextFallbackRoute(profile: TextProfile, primaryRoute: ModelRoute, workspaceId?: string): ModelRoute | null {
+  if (primaryRoute.provider !== 'anthropic' && primaryRoute.provider !== 'minimax') return null;
+
+  const provider = (getTextFallbackEnv(profile, 'PROVIDER') as Provider | undefined) || 'openai';
+  if (!isOpenAICompatibleTextProvider(provider)) return null;
+
+  const apiKeyEnv = getTextFallbackEnv(profile, 'API_KEY_ENV') || getProviderApiKeyEnv(provider);
+  const model = getTextFallbackEnv(profile, 'MODEL') || getDefaultFallbackModel(provider);
+  if (!apiKeyEnv || !model) return null;
+
+  const route: ModelRoute = {
+    provider,
+    model,
+    apiKeyEnv,
+    baseUrl: getTextFallbackEnv(profile, 'BASE_URL') || getProviderBaseUrl(provider),
+    reasoningEffort: getTextFallbackEnv(profile, 'REASONING_EFFORT') as ModelRoute['reasoningEffort'] | undefined,
+  };
+
+  return isRouteConfigured(route, workspaceId) ? route : null;
 }
 
 function getEmbeddingRoute(profile: EmbeddingProfile, workspaceId?: string): ModelRoute {
@@ -487,13 +546,11 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
   };
 }
 
-async function generateWithAnthropicLike(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string): Promise<TextGenerationResult> {
-  const resolvedProfile = resolveTextProfile(profile);
-  if (resolvedProfile !== 'default' && resolvedProfile !== 'critical' && resolvedProfile !== 'ops') {
-    throw new Error(`Unsupported Anthropic-compatible profile: ${profile}`);
-  }
-
-  const { client, route } = getAnthropicCompatibleClient(profile, workspaceId);
+async function generateWithAnthropicRoute(route: ModelRoute, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string): Promise<TextGenerationResult> {
+  const client = new (getAnthropicConstructor())({
+    apiKey: resolveProviderApiKey(route, workspaceId),
+    baseURL: route.baseUrl,
+  }) as AnthropicClient;
   const response = await withModelRetry('Anthropic text generation', () =>
     client.messages.create({
       model: route.model,
@@ -519,15 +576,34 @@ async function generateWithAnthropicLike(profile: TextProfile, system: string, m
   };
 }
 
+async function generateWithAnthropicLike(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string): Promise<TextGenerationResult> {
+  const resolvedProfile = resolveTextProfile(profile);
+  if (resolvedProfile !== 'default' && resolvedProfile !== 'critical' && resolvedProfile !== 'ops') {
+    throw new Error(`Unsupported Anthropic-compatible profile: ${profile}`);
+  }
+
+  const { route } = getAnthropicCompatibleClient(profile, workspaceId);
+  return generateWithAnthropicRoute(route, system, messages, maxTokens, workspaceId);
+}
+
 export async function generateTextDetailed(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string): Promise<TextGenerationResult> {
   const route = getTextRoute(profile, workspaceId);
 
-  if (route.provider === 'openai' || route.provider === 'openrouter') {
-    return generateWithOpenAI(route, system, messages, maxTokens, workspaceId);
-  }
+  try {
+    if (route.provider === 'openai' || route.provider === 'openrouter') {
+      return await generateWithOpenAI(route, system, messages, maxTokens, workspaceId);
+    }
 
-  if (route.provider === 'anthropic' || route.provider === 'minimax') {
-    return generateWithAnthropicLike(profile, system, messages, maxTokens, workspaceId);
+    if (route.provider === 'anthropic' || route.provider === 'minimax') {
+      return await generateWithAnthropicLike(profile, system, messages, maxTokens, workspaceId);
+    }
+  } catch (error) {
+    const fallbackRoute = getTextFallbackRoute(profile, route, workspaceId);
+    if (!fallbackRoute || !isRetryableModelError(error)) throw error;
+    console.warn(`[models] ${profile} text generation failed on ${route.provider}/${route.model}; falling back to ${fallbackRoute.provider}/${fallbackRoute.model}`, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return generateWithOpenAI(fallbackRoute, system, messages, maxTokens, workspaceId);
   }
 
   throw new Error(`Unsupported text provider for ${profile}: ${route.provider}`);
