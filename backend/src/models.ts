@@ -69,17 +69,21 @@ function getErrorStatus(error: unknown) {
   return undefined;
 }
 
-export function isRetryableModelError(error: unknown) {
+export function isRetryableModelError(error: unknown, depth = 0): boolean {
   const status = getErrorStatus(error);
   if (status === 429 || (typeof status === 'number' && status >= 500)) return true;
 
-  const candidate = error as { code?: unknown; name?: unknown; message?: unknown };
+  const candidate = error as { cause?: unknown; code?: unknown; name?: unknown; message?: unknown };
   const code = typeof candidate.code === 'string' ? candidate.code : '';
   if (['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EAI_AGAIN'].includes(code)) return true;
   const name = typeof candidate.name === 'string' ? candidate.name : '';
   if (/timeout|abort/i.test(name)) return true;
   const message = typeof candidate.message === 'string' ? candidate.message : '';
-  return /fetch failed|network|socket|timeout|temporar/i.test(message);
+  if (/fetch failed|network|socket|timeout|temporar|premature close|invalid response body|terminated|connection (closed|reset)|body timeout|UND_ERR/i.test(message)) {
+    return true;
+  }
+
+  return depth < 3 && candidate.cause ? isRetryableModelError(candidate.cause, depth + 1) : false;
 }
 
 async function sleep(ms: number) {

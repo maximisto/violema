@@ -28,6 +28,31 @@ test('withModelRetry retries transient model failures and returns the eventual r
   }
 });
 
+test('withModelRetry retries premature response closes from Anthropic fetch', async () => {
+  const originalDelays = process.env.MODEL_RETRY_DELAYS_MS;
+  const originalWarn = console.warn;
+  process.env.MODEL_RETRY_DELAYS_MS = '0,0,0';
+  let attempts = 0;
+
+  try {
+    console.warn = () => {};
+    const result = await withModelRetry('test Anthropic model call', async () => {
+      attempts += 1;
+      if (attempts < 2) {
+        throw new TypeError('Invalid response body while trying to fetch https://api.anthropic.com/v1/messages: Premature close');
+      }
+      return 'ok';
+    });
+
+    assert.equal(result, 'ok');
+    assert.equal(attempts, 2);
+    assert.equal(isRetryableModelError(new TypeError('Invalid response body while trying to fetch https://api.anthropic.com/v1/messages: Premature close')), true);
+  } finally {
+    console.warn = originalWarn;
+    process.env.MODEL_RETRY_DELAYS_MS = originalDelays;
+  }
+});
+
 test('withModelRetry does not retry non-transient model failures', async () => {
   const originalDelays = process.env.MODEL_RETRY_DELAYS_MS;
   process.env.MODEL_RETRY_DELAYS_MS = '0,0,0';
