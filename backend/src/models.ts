@@ -42,12 +42,22 @@ export interface TextGenerationResult {
 
 let cachedAnthropicConstructor: AnthropicConstructor | null = null;
 const DEFAULT_MODEL_RETRY_DELAYS_MS = [1000, 4000, 10000];
+const MODEL_FALLBACK_SLOT_COUNT = 3;
 
 class RetryableModelStatusError extends Error {
   status: number;
 
   constructor(response: Response) {
     super(`Retryable model request failed with ${response.status} ${response.statusText}`);
+    this.status = response.status;
+  }
+}
+
+class ModelRequestError extends Error {
+  status: number;
+
+  constructor(provider: Provider, response: Response, message: string) {
+    super(`${provider} request failed: ${message || response.statusText}`);
     this.status = response.status;
   }
 }
@@ -111,6 +121,12 @@ export function isRetryableModelError(error: unknown, depth = 0): boolean {
   }
 
   return depth < 3 && candidate.cause ? isRetryableModelError(candidate.cause, depth + 1) : false;
+}
+
+function isFallbackableModelError(error: unknown) {
+  if (isRetryableModelError(error)) return true;
+  const status = getErrorStatus(error);
+  return status === 401 || status === 402 || status === 403 || status === 404;
 }
 
 async function sleep(ms: number) {
@@ -285,36 +301,92 @@ function getTextRoute(profile: TextProfile, workspaceId?: string): ModelRoute {
   };
 }
 
-function getTextFallbackEnv(profile: TextProfile, key: 'PROVIDER' | 'MODEL' | 'API_KEY_ENV' | 'BASE_URL' | 'REASONING_EFFORT') {
+function getTextFallbackEnv(profile: TextProfile, key: 'PROVIDER' | 'MODEL' | 'API_KEY_ENV' | 'BASE_URL' | 'REASONING_EFFORT', slot?: number) {
   const resolvedProfile = resolveTextProfile(profile);
+  if (slot) {
+    return env(`MODEL_${resolvedProfile.toUpperCase()}_FALLBACK_${slot}_${key}`) || env(`MODEL_FALLBACK_${slot}_${key}`);
+  }
   return env(`MODEL_${resolvedProfile.toUpperCase()}_FALLBACK_${key}`) || env(`MODEL_FALLBACK_${key}`);
 }
 
 function getDefaultFallbackModel(provider: Provider) {
   if (provider === 'openai') return env('MODEL_FALLBACK_OPENAI_MODEL') || 'gpt-4.1-mini';
-  if (provider === 'openrouter') return env('MODEL_FALLBACK_OPENROUTER_MODEL');
+  if (provider === 'openrouter') return env('MODEL_FALLBACK_OPENROUTER_MODEL') || 'z-ai/glm-5.2';
   return undefined;
 }
 
-function getTextFallbackRoute(profile: TextProfile, primaryRoute: ModelRoute, workspaceId?: string): ModelRoute | null {
-  if (primaryRoute.provider !== 'anthropic' && primaryRoute.provider !== 'minimax') return null;
+function routeKey(route: ModelRoute) {
+  return [
+    route.provider,
+    route.model,
+    route.baseUrl || '',
+    route.apiKeyEnv,
+  ].join('|');
+}
 
-  const provider = (getTextFallbackEnv(profile, 'PROVIDER') as Provider | undefined) || 'openai';
+function buildConfiguredTextFallbackRoute(profile: TextProfile, slot?: number): ModelRoute | null {
+  const fallbackProvider = getTextFallbackEnv(profile, 'PROVIDER', slot);
+  const fallbackModel = getTextFallbackEnv(profile, 'MODEL', slot);
+  const fallbackApiKeyEnv = getTextFallbackEnv(profile, 'API_KEY_ENV', slot);
+  const fallbackBaseUrl = getTextFallbackEnv(profile, 'BASE_URL', slot);
+  const fallbackReasoningEffort = getTextFallbackEnv(profile, 'REASONING_EFFORT', slot);
+
+  if (!fallbackProvider && !fallbackModel && !fallbackApiKeyEnv && !fallbackBaseUrl && !fallbackReasoningEffort) {
+    return null;
+  }
+
+  const provider = (fallbackProvider as Provider | undefined) || 'openai';
   if (!isOpenAICompatibleTextProvider(provider)) return null;
 
-  const apiKeyEnv = getTextFallbackEnv(profile, 'API_KEY_ENV') || getProviderApiKeyEnv(provider);
-  const model = getTextFallbackEnv(profile, 'MODEL') || getDefaultFallbackModel(provider);
+  const apiKeyEnv = fallbackApiKeyEnv || getProviderApiKeyEnv(provider);
+  const model = fallbackModel || getDefaultFallbackModel(provider);
   if (!apiKeyEnv || !model) return null;
 
-  const route: ModelRoute = {
+  return {
     provider,
     model,
     apiKeyEnv,
-    baseUrl: getTextFallbackEnv(profile, 'BASE_URL') || getProviderBaseUrl(provider),
-    reasoningEffort: getTextFallbackEnv(profile, 'REASONING_EFFORT') as ModelRoute['reasoningEffort'] | undefined,
+    baseUrl: fallbackBaseUrl || getProviderBaseUrl(provider),
+    reasoningEffort: fallbackReasoningEffort as ModelRoute['reasoningEffort'] | undefined,
+  };
+}
+
+function getTextFallbackRoutes(profile: TextProfile, primaryRoute: ModelRoute, workspaceId?: string): ModelRoute[] {
+  const seen = new Set([routeKey(primaryRoute)]);
+  const routes: ModelRoute[] = [];
+  const addRoute = (route: ModelRoute | null) => {
+    if (!route || !isOpenAICompatibleTextProvider(route.provider)) return;
+    const key = routeKey(route);
+    if (seen.has(key) || !isRouteConfigured(route, workspaceId)) return;
+    seen.add(key);
+    routes.push(route);
   };
 
-  return isRouteConfigured(route, workspaceId) ? route : null;
+  addRoute(buildConfiguredTextFallbackRoute(profile));
+  for (let slot = 1; slot <= MODEL_FALLBACK_SLOT_COUNT; slot += 1) {
+    addRoute(buildConfiguredTextFallbackRoute(profile, slot));
+  }
+
+  addRoute({
+    provider: 'openai',
+    model: getDefaultFallbackModel('openai') || 'gpt-4.1-mini',
+    apiKeyEnv: 'OPENAI_API_KEY',
+    baseUrl: getProviderBaseUrl('openai'),
+  });
+  addRoute({
+    provider: 'openrouter',
+    model: getDefaultFallbackModel('openrouter') || 'z-ai/glm-5.2',
+    apiKeyEnv: 'OPENROUTER_API_KEY',
+    baseUrl: getProviderBaseUrl('openrouter'),
+  });
+  addRoute({
+    provider: 'openai',
+    model: env('MODEL_FALLBACK_ZAI_MODEL') || 'glm-5.2',
+    apiKeyEnv: 'ZAI_API_KEY',
+    baseUrl: env('ZAI_BASE_URL') || 'https://api.z.ai/api/paas/v4',
+  });
+
+  return routes;
 }
 
 function getEmbeddingRoute(profile: EmbeddingProfile, workspaceId?: string): ModelRoute {
@@ -468,13 +540,28 @@ export function getModelRoutingStatus(workspaceId?: string) {
     base_url: route.baseUrl,
     reasoning_effort: route.reasoningEffort,
   });
+  const buildTextStatus = (
+    profile: CanonicalTextProfile,
+    route: ModelRoute,
+    toolLoopCompatible: boolean,
+    source: ModelSource,
+  ) => ({
+    ...buildStatus(profile, route, toolLoopCompatible, source),
+    fallbacks: getTextFallbackRoutes(profile, route, workspaceId).map((fallbackRoute) => ({
+      provider: fallbackRoute.provider,
+      model: fallbackRoute.model,
+      configured: isRouteConfigured(fallbackRoute, workspaceId),
+      base_url: fallbackRoute.baseUrl,
+      reasoning_effort: fallbackRoute.reasoningEffort,
+    })),
+  });
 
   return {
-    micro: buildStatus('micro', micro, isToolLoopCompatible(micro.provider), getModelSource('micro', workspaceId)),
-    default: buildStatus('default', defaultRoute, isToolLoopCompatible(defaultRoute.provider), getModelSource('default', workspaceId)),
-    hard: buildStatus('hard', hard, isToolLoopCompatible(hard.provider), getModelSource('hard', workspaceId)),
-    critical: buildStatus('critical', critical, isToolLoopCompatible(critical.provider), getModelSource('critical', workspaceId)),
-    ops: buildStatus('ops', ops, isToolLoopCompatible(ops.provider), getModelSource('ops', workspaceId)),
+    micro: buildTextStatus('micro', micro, isToolLoopCompatible(micro.provider), getModelSource('micro', workspaceId)),
+    default: buildTextStatus('default', defaultRoute, isToolLoopCompatible(defaultRoute.provider), getModelSource('default', workspaceId)),
+    hard: buildTextStatus('hard', hard, isToolLoopCompatible(hard.provider), getModelSource('hard', workspaceId)),
+    critical: buildTextStatus('critical', critical, isToolLoopCompatible(critical.provider), getModelSource('critical', workspaceId)),
+    ops: buildTextStatus('ops', ops, isToolLoopCompatible(ops.provider), getModelSource('ops', workspaceId)),
     memory_text: buildStatus('memory_text', memoryText, false, getEmbeddingSource('memory_text', workspaceId)),
     memory_code: buildStatus('memory_code', memoryCode, false, getEmbeddingSource('memory_code', workspaceId)),
   };
@@ -531,7 +618,7 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
   };
 
   if (!response.ok) {
-    throw new Error(`OpenAI request failed: ${data.error?.message || response.statusText}`);
+    throw new ModelRequestError(route.provider, response, data.error?.message || response.statusText);
   }
 
   return {
@@ -586,27 +673,36 @@ async function generateWithAnthropicLike(profile: TextProfile, system: string, m
   return generateWithAnthropicRoute(route, system, messages, maxTokens, workspaceId);
 }
 
-export async function generateTextDetailed(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string): Promise<TextGenerationResult> {
-  const route = getTextRoute(profile, workspaceId);
-
-  try {
-    if (route.provider === 'openai' || route.provider === 'openrouter') {
-      return await generateWithOpenAI(route, system, messages, maxTokens, workspaceId);
-    }
-
-    if (route.provider === 'anthropic' || route.provider === 'minimax') {
-      return await generateWithAnthropicLike(profile, system, messages, maxTokens, workspaceId);
-    }
-  } catch (error) {
-    const fallbackRoute = getTextFallbackRoute(profile, route, workspaceId);
-    if (!fallbackRoute || !isRetryableModelError(error)) throw error;
-    console.warn(`[models] ${profile} text generation failed on ${route.provider}/${route.model}; falling back to ${fallbackRoute.provider}/${fallbackRoute.model}`, {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return generateWithOpenAI(fallbackRoute, system, messages, maxTokens, workspaceId);
+async function generateWithTextRoute(route: ModelRoute, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string): Promise<TextGenerationResult> {
+  if (route.provider === 'openai' || route.provider === 'openrouter') {
+    return generateWithOpenAI(route, system, messages, maxTokens, workspaceId);
   }
 
-  throw new Error(`Unsupported text provider for ${profile}: ${route.provider}`);
+  if (route.provider === 'anthropic' || route.provider === 'minimax') {
+    return generateWithAnthropicRoute(route, system, messages, maxTokens, workspaceId);
+  }
+
+  throw new Error(`Unsupported text provider: ${route.provider}`);
+}
+
+export async function generateTextDetailed(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string): Promise<TextGenerationResult> {
+  const primaryRoute = getTextRoute(profile, workspaceId);
+  const routes = [primaryRoute, ...getTextFallbackRoutes(profile, primaryRoute, workspaceId)];
+
+  for (let index = 0; index < routes.length; index += 1) {
+    const route = routes[index];
+    try {
+      return await generateWithTextRoute(route, system, messages, maxTokens, workspaceId);
+    } catch (error) {
+      const fallbackRoute = routes[index + 1];
+      if (!fallbackRoute || !isFallbackableModelError(error)) throw error;
+      console.warn(`[models] ${profile} text generation failed on ${route.provider}/${route.model}; falling back to ${fallbackRoute.provider}/${fallbackRoute.model}`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  throw new Error(`Unsupported text provider for ${profile}: ${primaryRoute.provider}`);
 }
 
 export async function generateText(profile: TextProfile, system: string, messages: MessageParam[], maxTokens: number, workspaceId?: string) {
