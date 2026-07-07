@@ -20,6 +20,42 @@ type HeroCtaAction = 'book_workflow_audit' | 'start_free_preview';
 
 const proofIcons = [CalendarDays, ShieldCheck, Link2, DollarSign];
 
+function MobileHeroVisual() {
+  return (
+    <div data-mobile-hero-visual="true" className="relative mt-7 lg:hidden">
+      <div aria-hidden className="absolute -inset-x-7 -inset-y-8 -z-10">
+        <div className="absolute inset-x-4 top-0 h-48 rounded-[44%] bg-violet-600/20 blur-[76px]" />
+        <div className="absolute -bottom-8 right-2 h-28 w-28 rounded-full bg-signal-500/12 blur-[60px]" />
+      </div>
+
+      <div className="relative pb-8">
+        <div className="relative overflow-hidden rounded-[1.45rem] border border-white/[0.08] bg-black shadow-[0_34px_80px_-30px_rgba(0,0,0,0.9)]">
+          <img
+            src={heroImageSrc('P1')}
+            alt="Violema desktop workspace with chat, mission context, and founder workflow controls."
+            width={1800}
+            height={1010}
+            className="block w-full"
+            decoding="async"
+          />
+          <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[1.45rem] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-ink-900/95 to-transparent" />
+        </div>
+
+        <img
+          src="/brand/dima/dima-action.png?v=20260707"
+          alt=""
+          aria-hidden="true"
+          data-mobile-hero-dima="true"
+          className="pointer-events-none absolute -bottom-1 right-2 z-10 w-[42%] max-w-[13rem] select-none object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.62)]"
+          decoding="async"
+          loading="eager"
+        />
+      </div>
+    </div>
+  );
+}
+
 function trackHeroCta(action: HeroCtaAction, placement: 'hero' | 'mobile_sticky') {
   if (typeof window === 'undefined') return;
   (window as Window & { dataLayer?: unknown[] }).dataLayer?.push({
@@ -75,31 +111,14 @@ function HeroCopy() {
         <span className="text-telemetry text-[0.62rem] text-copy-muted">{heroCopy.eyebrow}</span>
       </div>
 
-      <h1 className="mt-6 font-display text-[3.05rem] font-semibold leading-[1.02] tracking-[-0.012em] text-white sm:text-[4.1rem] sm:leading-[0.98] sm:tracking-[-0.016em] xl:text-[4.5rem] xl:tracking-[-0.018em]">
+      <h1 className="mt-6 font-display text-[3.2rem] font-semibold leading-[1.02] tracking-[-0.012em] text-white min-[420px]:text-[3.55rem] sm:text-[4.1rem] sm:leading-[0.98] sm:tracking-[-0.016em] xl:text-[4.5rem] xl:tracking-[-0.018em]">
         <span className="block">AI agents for</span>
         <span className="block bg-gradient-to-br from-white via-[#e7e0ff] to-violet-300 bg-clip-text text-transparent">
           founder work.
         </span>
       </h1>
 
-      <div className="relative mt-7 lg:hidden">
-        <div aria-hidden className="absolute -inset-x-5 -inset-y-6 -z-10">
-          <div className="absolute inset-x-4 top-2 h-40 rounded-[44%] bg-violet-600/20 blur-[72px]" />
-          <div className="absolute -bottom-3 right-8 h-24 w-24 rounded-full bg-signal-500/12 blur-[58px]" />
-        </div>
-        <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-[0_34px_80px_-30px_rgba(0,0,0,0.9)]">
-          <img
-            src={heroImageSrc('P1')}
-            alt="Violema desktop workspace with chat, mission context, and founder workflow controls."
-            width={1800}
-            height={1010}
-            className="block w-full"
-            decoding="async"
-          />
-          <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
-          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-ink-900/95 to-transparent" />
-        </div>
-      </div>
+      <MobileHeroVisual />
 
       <p className="mt-7 max-w-[34rem] text-lg leading-7 text-copy-muted">{heroCopy.subhead}</p>
 
