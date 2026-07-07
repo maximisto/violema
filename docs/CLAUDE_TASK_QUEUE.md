@@ -103,7 +103,7 @@ Slack is one of the most believable surfaces for this product.
 - `/Users/maximisto/Documents/New project/backend/src/server.ts`
 - `/Users/maximisto/Documents/New project/backend/src/integrations.ts`
 - `/Users/maximisto/Documents/New project/frontend/src/pages/SlackSetup.tsx`
-- `/Users/maximisto/Documents/New project/docs/SLACK_NEXUS_SETUP.md`
+- `/Users/maximisto/Documents/New project/docs/SLACK_VIOLEMA_SETUP.md`
 
 ### What to do
 

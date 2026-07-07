@@ -262,7 +262,7 @@ Slack work is centered in:
 
 - `/Users/maximisto/Documents/New project/backend/src/integrations.ts`
 - `/Users/maximisto/Documents/New project/backend/src/server.ts`
-- `/Users/maximisto/Documents/New project/docs/SLACK_NEXUS_SETUP.md`
+- `/Users/maximisto/Documents/New project/docs/SLACK_VIOLEMA_SETUP.md`
 
 Current reality:
 
