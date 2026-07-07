@@ -50,8 +50,34 @@ const TypingBubble = () => (
   </div>
 );
 
-export default function SlackPhone({ className = '' }: { className?: string }) {
-  const [index, setIndex] = useState(0);
+type SlackPhoneVariant = 'standard' | 'hero';
+
+function HeroDimaStage() {
+  return (
+    <div className="relative shrink-0 border-b border-white/[0.07] bg-[#080b13] px-3.5 pb-3 pt-2.5">
+      <div className="relative h-[16.25rem] overflow-hidden rounded-[1.35rem] bg-[radial-gradient(circle_at_50%_24%,rgba(124,58,237,0.28),transparent_42%),linear-gradient(180deg,rgba(9,12,23,0.96),rgba(4,6,13,0.98))]">
+        <div aria-hidden className="absolute inset-x-4 top-4 h-28 rounded-full bg-cyan-400/12 blur-[44px]" />
+        <img
+          src="/brand/dima/dima-action.png"
+          alt=""
+          className="absolute left-1/2 top-4 h-[14.5rem] w-[15.25rem] -translate-x-1/2 object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.55)]"
+          decoding="async"
+          loading="eager"
+        />
+      </div>
+    </div>
+  );
+}
+
+export default function SlackPhone({
+  className = '',
+  variant = 'standard',
+}: {
+  className?: string;
+  variant?: SlackPhoneVariant;
+}) {
+  const isHero = variant === 'hero';
+  const [index, setIndex] = useState(() => (isHero ? at('guard') : 0));
   const [active, setActive] = useState(false);
   const reduced = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,11 +104,14 @@ export default function SlackPhone({ className = '' }: { className?: string }) {
       setIndex(ORDER.length - 1);
       return;
     }
-    timer.current = setTimeout(() => setIndex((i) => (i + 1) % ORDER.length), DURATIONS[ORDER[index]]);
+    timer.current = setTimeout(
+      () => setIndex((i) => (isHero && i >= ORDER.length - 1 ? at('card') : (i + 1) % ORDER.length)),
+      DURATIONS[ORDER[index]],
+    );
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [active, index]);
+  }, [active, index, isHero]);
 
   const phase = ORDER[index];
   const showSources = index >= at('sources');
@@ -139,8 +168,16 @@ export default function SlackPhone({ className = '' }: { className?: string }) {
               <Search className="h-3.5 w-3.5 flex-none text-[#7c8aa3]" />
             </div>
 
-            {/* thread (bottom-anchored, like a real chat) */}
-            <div className="flex flex-1 flex-col justify-end gap-2.5 overflow-hidden px-3.5 pb-3 pt-3">
+            {isHero ? <HeroDimaStage /> : null}
+
+            {/* thread (bottom-anchored by default; scrollable under the hero Dima stage) */}
+            <div
+              className={`flex flex-1 flex-col gap-2.5 px-3.5 pb-3 pt-3 ${
+                isHero
+                  ? 'justify-start overflow-y-auto overscroll-contain [scrollbar-color:rgba(167,139,250,0.42)_transparent] [scrollbar-width:thin]'
+                  : 'justify-end overflow-hidden'
+              }`}
+            >
               <div className="flex items-center gap-2">
                 <span className="h-px flex-1 bg-white/8" />
                 <span className="text-[0.5rem] font-bold uppercase tracking-[0.12em] text-[#7c8aa3]">Today</span>

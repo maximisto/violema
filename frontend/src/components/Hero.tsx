@@ -184,8 +184,8 @@ function DeviceCluster() {
           <HeroTourImages index={index} />
         </div>
 
-        <div className="absolute -bottom-24 -right-5 w-[19.5rem] origin-bottom-right scale-[0.46] sm:-bottom-28 sm:-right-14 sm:scale-[0.52] lg:-bottom-16 lg:-right-12 lg:scale-[0.56]">
-          <SlackPhone />
+        <div className="absolute -bottom-20 -right-16 w-[20.5rem] origin-bottom-right scale-[0.64] xl:-right-12 xl:scale-[0.68]">
+          <SlackPhone variant="hero" />
         </div>
 
         <div className="absolute -left-6 bottom-[-4.5%] hidden sm:block lg:-left-10">
@@ -299,8 +299,15 @@ export default function Hero() {
       <div className="founder-hero-bg absolute inset-0 -z-20" />
       <div className="founder-hero-grid absolute inset-0 -z-10" />
       <div className="founder-hero-noise absolute inset-0 -z-10" />
+      <img
+        src="/brand/purple-orange-hero-mark.png"
+        alt=""
+        aria-hidden="true"
+        className="hero-side-mark pointer-events-none absolute left-0 top-[15.5rem] z-0 hidden h-44 w-44 select-none object-contain opacity-90 drop-shadow-[0_0_30px_rgba(168,85,247,0.28)] lg:block xl:top-[17rem] xl:h-56 xl:w-56"
+        decoding="async"
+      />
 
-      <div className="mx-auto max-w-[88rem] px-4 pb-16 pt-28 sm:px-6 lg:px-8 xl:pb-24 xl:pt-36">
+      <div className="relative z-10 mx-auto max-w-[88rem] px-4 pb-16 pt-28 sm:px-6 lg:px-8 xl:pb-24 xl:pt-36">
         <div className="grid items-center gap-x-12 gap-y-14 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]">
           <Reveal className="min-w-0">
             <HeroCopy />
