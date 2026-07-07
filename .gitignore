@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 OpenRouter.env.md
+violema_auth.env.rtf
 .vercel/
 *.log
 .DS_Store
