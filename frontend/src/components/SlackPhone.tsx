@@ -58,7 +58,7 @@ function HeroDimaStage() {
       <div className="relative h-[16.25rem] overflow-hidden rounded-[1.35rem] bg-[radial-gradient(circle_at_50%_24%,rgba(124,58,237,0.28),transparent_42%),linear-gradient(180deg,rgba(9,12,23,0.96),rgba(4,6,13,0.98))]">
         <div aria-hidden className="absolute inset-x-4 top-4 h-28 rounded-full bg-cyan-400/12 blur-[44px]" />
         <img
-          src="/brand/dima/dima-action.png"
+          src="/brand/dima/dima-action.png?v=20260707"
           alt=""
           className="absolute left-1/2 top-4 h-[14.5rem] w-[15.25rem] -translate-x-1/2 object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.55)]"
           decoding="async"

@@ -607,19 +607,7 @@
   }
 
   .hero-side-mark {
-    transform: translateX(-82%);
-  }
-
-  @media (min-width: 1536px) {
-    .hero-side-mark {
-      transform: translateX(-64%);
-    }
-  }
-
-  @media (min-width: 1680px) {
-    .hero-side-mark {
-      transform: translateX(-50%);
-    }
+    transform: translateX(-50%);
   }
 
   .founder-product-stage {
