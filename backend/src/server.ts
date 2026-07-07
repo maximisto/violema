@@ -160,6 +160,10 @@ import {
   readPositiveIntegerEnv,
 } from './toolLoopSafety';
 import {
+  buildSlackIncomingReply,
+  stripSlackMentions,
+} from './slackIncoming';
+import {
   getIntegrationCredential,
   getWorkspaceProviderToken,
   getWorkspaceSettingsView,
@@ -1067,55 +1071,6 @@ function markSlackEventHandled(eventId: string) {
   return true;
 }
 
-function stripSlackMentions(text: string) {
-  return text.replace(/<@[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function needsSlackWebSearch(text: string) {
-  return /(latest|current|today|news|search|look up|find|what happened|recent)/i.test(text);
-}
-
-function formatSlackReply(text: string) {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return 'I did not get enough signal from that prompt. Try asking more directly.';
-  }
-
-  const withoutPlanning = trimmed
-    .replace(/^I(?:'|')ll [^.]+?\.\s*/i, '')
-    .replace(/^Let me [^.]+?\.\s*/i, '');
-
-  const normalized = withoutPlanning
-    .replace(/^###\s+(.+)$/gm, '*$1*')
-    .replace(/^##\s+(.+)$/gm, '*$1*')
-    .replace(/^#\s+(.+)$/gm, '*$1*')
-    .replace(/```[\s\S]*?```/g, (block) => block)
-    .replace(/\n{3,}/g, '\n\n');
-
-  if (normalized.length <= 3500) return normalized;
-  const cutAt = normalized.lastIndexOf('\n\n', 3450);
-  const truncated = cutAt > 800 ? normalized.slice(0, cutAt) : normalized.slice(0, 3450).trim();
-  return `${truncated}\n\n_(truncated — ask me to continue if needed)_`;
-}
-
-function buildSlackTaskPrompt(prompt: string, context: { isDm: boolean }) {
-  const cleaned = prompt.trim() || 'Help me get started.';
-  const deliveryContext = context.isDm
-    ? 'This request came from a direct message in Slack.'
-    : 'This request came from an @mention in a Slack channel. Reply in-thread, not for the whole app.';
-
-  return [
-    deliveryContext,
-    'Reply in Slack format: concise, useful, action-oriented.',
-    'Lead directly with the answer. Use plain text paragraphs or short bullet lists.',
-    'Do NOT use # headers or --- dividers. Use *bold* sparingly for key terms only.',
-    'Keep it under 3 short paragraphs or 6 bullets total.',
-    'If citing current information, include source URLs inline.',
-    '',
-    `User request: ${cleaned}`,
-  ].join('\n');
-}
-
 async function handleSlackIncomingEvent(payload: {
   eventId: string;
   event: Record<string, unknown>;
@@ -1154,18 +1109,17 @@ async function handleSlackIncomingEvent(payload: {
   }
 
   try {
-    const profile: TextProfile | 'auto' = needsSlackWebSearch(prompt) ? 'auto' : 'default';
-    const execution = await executeConversationTask({
-      messages: [{ role: 'user', content: buildSlackTaskPrompt(prompt, { isDm }) }],
-      autonomyMode: 'autonomous',
-      modelProfile: profile,
+    const reply = await buildSlackIncomingReply({
+      prompt,
+      isDm,
       workspaceId: payload.workspaceId,
+      generateTextDetailed,
     });
     await sendMessage({
       to: channel,
       channel: 'slack',
       threadTs,
-      body: formatSlackReply(execution.outputText),
+      body: reply.body,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown Slack processing error';
