@@ -27,6 +27,17 @@ const DURATIONS: Record<Phase, number> = {
   typing2: 1100,
   delivered: 4600,
 };
+const HERO_DURATIONS: Record<Phase, number> = {
+  ask: 900,
+  typing1: 650,
+  sources: 950,
+  chart: 1100,
+  card: 1400,
+  guard: 1200,
+  approved: 950,
+  typing2: 650,
+  delivered: 2600,
+};
 const at = (phase: Phase) => ORDER.indexOf(phase);
 const SOURCE_LOGOS = ['stripe', 'github', 'posthog', 'gmail'];
 
@@ -77,11 +88,12 @@ export default function SlackPhone({
   variant?: SlackPhoneVariant;
 }) {
   const isHero = variant === 'hero';
-  const [index, setIndex] = useState(() => (isHero ? at('guard') : 0));
+  const [index, setIndex] = useState(0);
   const [active, setActive] = useState(false);
   const reduced = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const threadRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     reduced.current = prefersReducedMotion();
@@ -104,10 +116,8 @@ export default function SlackPhone({
       setIndex(ORDER.length - 1);
       return;
     }
-    timer.current = setTimeout(
-      () => setIndex((i) => (isHero && i >= ORDER.length - 1 ? at('card') : (i + 1) % ORDER.length)),
-      DURATIONS[ORDER[index]],
-    );
+    const duration = isHero ? HERO_DURATIONS[ORDER[index]] : DURATIONS[ORDER[index]];
+    timer.current = setTimeout(() => setIndex((i) => (i + 1) % ORDER.length), duration);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
@@ -120,6 +130,22 @@ export default function SlackPhone({
   const showGuard = index >= at('guard');
   const approvedState = index >= at('approved');
   const showDelivered = index >= at('delivered');
+
+  useEffect(() => {
+    if (!isHero) return;
+    const node = threadRef.current;
+    if (!node) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const isStartingOver = phase === 'ask' || phase === 'typing1';
+      node.scrollTo({
+        top: isStartingOver ? 0 : node.scrollHeight,
+        behavior: reduced.current || isStartingOver ? 'auto' : 'smooth',
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [index, isHero, phase]);
 
   const approve = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -172,6 +198,8 @@ export default function SlackPhone({
 
             {/* thread (bottom-anchored by default; scrollable under the hero Dima stage) */}
             <div
+              ref={threadRef}
+              data-hero-phone-thread={isHero ? 'true' : undefined}
               className={`flex flex-1 flex-col gap-2.5 px-3.5 pb-3 pt-3 ${
                 isHero
                   ? 'justify-start overflow-y-auto overscroll-contain [scrollbar-color:rgba(167,139,250,0.42)_transparent] [scrollbar-width:thin]'
