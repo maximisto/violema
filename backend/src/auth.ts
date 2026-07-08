@@ -444,27 +444,41 @@ function normalizeSlackLookupValue(value: string | undefined) {
 export function resolveSlackEventWorkspace(input: {
   teamId?: string;
   channelId?: string;
-}): { workspaceId: string; userId: string; match: 'team_channel' | 'channel' } | null {
+  allowTeamFallback?: boolean;
+}): { workspaceId: string; userId: string; match: 'team_channel' | 'channel' | 'team' } | null {
   const channelId = normalizeSlackLookupValue(input.channelId);
   if (!channelId) return null;
 
   const teamId = normalizeSlackLookupValue(input.teamId);
   let channelMatch: AuthUserRecord | null = null;
+  let teamMatch: AuthUserRecord | null = null;
 
   for (const user of listAuthUsers()) {
-    if (normalizeSlackLookupValue(user.slackChannelId) !== channelId) continue;
     const workspaceId = getAuthUserDefaultWorkspaceId(user);
-    if (teamId && normalizeSlackLookupValue(user.slackWorkspace) === teamId) {
+    const userSlackWorkspace = normalizeSlackLookupValue(user.slackWorkspace);
+    if (input.allowTeamFallback && teamId && userSlackWorkspace === teamId && !teamMatch) {
+      teamMatch = user;
+    }
+    if (normalizeSlackLookupValue(user.slackChannelId) !== channelId) continue;
+    if (teamId && userSlackWorkspace === teamId) {
       return { workspaceId, userId: user.id, match: 'team_channel' };
     }
     if (!channelMatch) channelMatch = user;
   }
 
-  return channelMatch
+  if (channelMatch) {
+    return {
+      workspaceId: getAuthUserDefaultWorkspaceId(channelMatch),
+      userId: channelMatch.id,
+      match: 'channel',
+    };
+  }
+
+  return teamMatch
     ? {
-        workspaceId: getAuthUserDefaultWorkspaceId(channelMatch),
-        userId: channelMatch.id,
-        match: 'channel',
+        workspaceId: getAuthUserDefaultWorkspaceId(teamMatch),
+        userId: teamMatch.id,
+        match: 'team',
       }
     : null;
 }

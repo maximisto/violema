@@ -95,6 +95,15 @@ test('auth users get server-owned workspaces and non-admins cannot select other 
       teamId: 'T123WORKSPACE',
       channelId: 'C000UNKNOWN',
     }), null);
+    assert.deepEqual(auth.resolveSlackEventWorkspace({
+      teamId: 'T123WORKSPACE',
+      channelId: 'D123DMCHANNEL',
+      allowTeamFallback: true,
+    }), {
+      workspaceId: slackOwner.defaultWorkspaceId,
+      userId: slackOwner.id,
+      match: 'team',
+    });
   } finally {
     process.chdir(originalCwd);
     fs.rmSync(tempDir, { recursive: true, force: true });

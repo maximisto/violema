@@ -5199,9 +5199,11 @@ app.post('/api/slack/events', async (req: Request, res: Response) => {
 
   res.json({ ok: true });
 
+  const isSlackDirectMessage = body.event.type === 'message' && body.event.channel_type === 'im';
   const slackWorkspace = resolveSlackEventWorkspace({
     teamId: body.team_id,
     channelId: typeof body.event.channel === 'string' ? body.event.channel : undefined,
+    allowTeamFallback: isSlackDirectMessage,
   });
   if (!slackWorkspace) {
     console.warn('[slack] dropped unmapped event', {
