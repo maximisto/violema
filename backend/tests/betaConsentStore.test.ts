@@ -68,6 +68,39 @@ test('beta consent receipts are append-only and current-version aware', () => wi
   );
 }));
 
+test('current consent rejects the current version with a different valid digest', () => withTempConsentStore(() => {
+  const wrongValidDigest = '0'.repeat(64);
+  assert.notEqual(wrongValidDigest, CURRENT_BETA_TERMS_DIGEST);
+
+  recordBetaConsent({
+    email: 'current-version-wrong-digest@example.com',
+    participantType: 'founder_operator',
+    authMethod: 'google',
+    acceptanceSource: 'oauth_callback',
+    termsVersion: CURRENT_BETA_TERMS_VERSION,
+    termsDigest: wrongValidDigest,
+    acceptedAt: '2026-07-11T12:00:00.000Z',
+  });
+
+  assert.equal(hasCurrentBetaConsent('current-version-wrong-digest@example.com'), false);
+  assert.equal(getCurrentBetaConsent('current-version-wrong-digest@example.com'), null);
+}));
+
+test('current consent rejects a prior version with the current digest', () => withTempConsentStore(() => {
+  recordBetaConsent({
+    email: 'prior-version-current-digest@example.com',
+    participantType: 'partner',
+    authMethod: 'microsoft',
+    acceptanceSource: 'reauthorization',
+    termsVersion: '2026-07-10-beta-confidentiality-v0',
+    termsDigest: CURRENT_BETA_TERMS_DIGEST,
+    acceptedAt: '2026-07-11T12:00:00.000Z',
+  });
+
+  assert.equal(hasCurrentBetaConsent('prior-version-current-digest@example.com'), false);
+  assert.equal(getCurrentBetaConsent('prior-version-current-digest@example.com'), null);
+}));
+
 test('beta consent rejects invalid receipt evidence', () => withTempConsentStore(() => {
   const validInput = {
     email: 'partner@example.com',
