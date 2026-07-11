@@ -149,7 +149,7 @@ test('invalid admin access row fails closed for default and env allowlists', () 
   }
 }));
 
-test('production blocks unverified email session minting unless explicitly enabled', () => {
+test('production always blocks unverified email session minting', () => {
   assert.equal(isUnverifiedEmailSessionAllowed({ NODE_ENV: 'development' }), true);
   assert.equal(isUnverifiedEmailSessionAllowed({ NODE_ENV: 'test' }), true);
   assert.equal(isUnverifiedEmailSessionAllowed({ NODE_ENV: 'production' }), false);
@@ -158,7 +158,7 @@ test('production blocks unverified email session minting unless explicitly enabl
       NODE_ENV: 'production',
       VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS: 'true',
     }),
-    true,
+    false,
   );
 });
 
@@ -170,6 +170,13 @@ test('production direct email login is restricted to admins', () => withTempAdmi
   try {
     assert.equal(
       isDirectAdminEmailLoginAllowed('max@purpleorange.io', { NODE_ENV: 'production' }),
+      true,
+    );
+    assert.equal(
+      isDirectAdminEmailLoginAllowed('max@purpleorange.io', {
+        NODE_ENV: 'production',
+        VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS: 'true',
+      }),
       true,
     );
     assert.equal(

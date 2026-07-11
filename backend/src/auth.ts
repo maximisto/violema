@@ -177,8 +177,7 @@ export function isEmailAdminForAccess(email: string) {
 }
 
 export function isUnverifiedEmailSessionAllowed(env: Record<string, string | undefined> = process.env) {
-  if (env.NODE_ENV !== 'production') return true;
-  return env.VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS === 'true' || env.VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS === '1';
+  return env.NODE_ENV !== 'production';
 }
 
 export function isDirectAdminEmailLoginAllowed(
