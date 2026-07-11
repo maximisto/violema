@@ -113,7 +113,7 @@ export default function BetaAccess() {
               <p className="font-display text-xl font-semibold tracking-[-0.02em] text-white">How pricing works now</p>
             </div>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[#aeb7cd]">
-              Start is $79 per month for the first reliable mission. Pro is $249 for recurring operating cadence. Enterprise is custom.
+              Approved participants receive 500 trial credits. Paid access starts at $79 per month; Pro is $249 per month. Identity verification, beta confidentiality terms, and manual approval are required.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">

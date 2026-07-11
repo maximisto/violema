@@ -32,8 +32,7 @@ const PLANS = [
     description: 'The first real plan for a founder who wants one reliable reviewed workflow.',
     credits: 2000,
     automations: 20,
-    missions: '1-3 live missions',
-    stripeMapping: 'Uses the existing $79 Stripe price.',
+    missions: 'Best for 1–3 active missions',
     features: ['First hero integration', 'Run review pages', 'Slack/email delivery', 'Budget caps', 'Analytics dashboard'],
     proofRunId: 'pricing-proof-founder-brief',
     featured: true,
@@ -45,9 +44,7 @@ const PLANS = [
     description: 'The production tier for recurring missions, approvals, and real operating cadence.',
     credits: 7500,
     automations: 100,
-    missions: '5-10 live missions',
-    stripeMapping: 'Uses the existing $249 Stripe price.',
-    seats: 5,
+    missions: 'Best for 5–10 active missions',
     features: ['Approval gates', 'More integrations', 'Slack operating surface', 'Admin visibility', 'Priority setup support'],
     proofRunId: 'pricing-proof-operating-cadence',
   },
@@ -150,9 +147,6 @@ export default function Billing() {
               <div className="mt-5 space-y-1.5">
                 <p className="text-sm text-slate-300">
                   Credits map to actual agent work. The public ladder starts at $79 because Violema is selling reviewed operating loops, not cheap task volume.
-                </p>
-                <p className="text-sm text-slate-500">
-                  Existing Stripe prices are reused: Start checks out through the current $79 plan, Pro through the current $249 plan, and Enterprise is custom.
                 </p>
               </div>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -500,23 +494,9 @@ export default function Billing() {
                     <p className="mt-2 text-lg font-semibold text-white">{plan.automations}</p>
                   </div>
 
-                  <div className={`mt-3 rounded-2xl border px-4 py-3 ${
-                    plan.id === 'team'
-                      ? 'border-cyan-500/20 bg-cyan-500/8'
-                      : 'border-violet-500/20 bg-violet-500/8'
-                  }`}>
-                    <p className={`text-[10px] uppercase tracking-[0.18em] ${
-                      plan.id === 'team' ? 'text-cyan-300/80' : 'text-violet-300/80'
-                    }`}>Stripe mapping</p>
-                    <p className="mt-2 text-sm text-slate-300">{plan.stripeMapping}</p>
-                  </div>
-
-                  {plan.seats && (
-                    <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Included seats</p>
-                      <p className="mt-2 text-lg font-semibold text-white">{plan.seats} seats + $29 per extra seat</p>
-                    </div>
-                  )}
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    Actual run volume depends on mission complexity and credit usage.
+                  </p>
 
                   <div className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/8 px-4 py-3">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/80">Sample monthly pressure</p>
