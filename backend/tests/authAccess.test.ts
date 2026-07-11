@@ -306,6 +306,54 @@ test('requested access records dedupe audit events and bound user text', () => w
   }
 }));
 
+test('access records normalize legacy participant types without changing roles', () => withTempAdminStore(() => {
+  const timestamp = '2026-07-11T12:00:00.000Z';
+  fs.writeFileSync(path.join(process.cwd(), 'admin-access.json'), JSON.stringify([
+    {
+      email: 'legacy@example.com',
+      method: 'google',
+      status: 'approved',
+      role: 'admin',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+  ]));
+
+  const legacy = getAccessRecord('legacy@example.com');
+  assert.equal(legacy?.participantType, 'founder_operator');
+  assert.equal(legacy?.role, 'admin');
+}));
+
+test('duplicate access requests preserve stronger identity and terms evidence', () => withTempAdminStore(() => {
+  clearAdminAccessRecords();
+
+  try {
+    const verified = recordAccessRequest({
+      email: 'partner@example.com',
+      participantType: 'partner',
+      method: 'google',
+      identityVerifiedAt: '2026-07-11T12:00:00.000Z',
+      acceptedTermsVersion: '2026-07-11-beta-confidentiality-v1',
+      acceptedTermsAt: '2026-07-11T12:01:00.000Z',
+    });
+    assert.equal(verified.role, 'user');
+
+    const duplicate = recordAccessRequest({
+      email: 'PARTNER@example.com',
+      method: 'email',
+    });
+
+    assert.equal(duplicate.participantType, 'partner');
+    assert.equal(duplicate.method, 'google');
+    assert.equal(duplicate.identityVerifiedAt, '2026-07-11T12:00:00.000Z');
+    assert.equal(duplicate.acceptedTermsVersion, '2026-07-11-beta-confidentiality-v1');
+    assert.equal(duplicate.acceptedTermsAt, '2026-07-11T12:01:00.000Z');
+    assert.equal(duplicate.role, 'user');
+  } finally {
+    clearAdminAccessRecords();
+  }
+}));
+
 test('persistent approved role overrides default role resolution', () => withTempAdminStore(() => {
   clearAdminAccessRecords();
 

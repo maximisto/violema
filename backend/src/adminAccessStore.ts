@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { ParticipantType, defaultParticipantType, normalizeParticipantType } from './betaProgram';
 import { writeJsonFile } from './platform/jsonStore';
 
 export type AdminAccessStatus = 'requested' | 'approved' | 'revoked';
@@ -16,6 +17,10 @@ export interface AdminAccessRecord {
   email: string;
   name?: string;
   method?: 'email' | 'google' | 'microsoft';
+  participantType: ParticipantType;
+  identityVerifiedAt?: string;
+  acceptedTermsVersion?: string;
+  acceptedTermsAt?: string;
   status: AdminAccessStatus;
   role: AdminAccessRole;
   note?: string;
@@ -113,9 +118,16 @@ function readAccessRecords() {
     if (row.method !== undefined && !AUTH_METHODS.has(row.method as NonNullable<AdminAccessRecord['method']>)) {
       throw new Error(`row ${index} has invalid method`);
     }
+    const participantType = row.participantType === undefined
+      ? defaultParticipantType()
+      : normalizeParticipantType(row.participantType);
+    if (!participantType) throw new Error(`row ${index} has invalid participantType`);
+    if (!optionalString(row.identityVerifiedAt)) throw new Error(`row ${index} has invalid identityVerifiedAt`);
+    if (!optionalString(row.acceptedTermsVersion)) throw new Error(`row ${index} has invalid acceptedTermsVersion`);
+    if (!optionalString(row.acceptedTermsAt)) throw new Error(`row ${index} has invalid acceptedTermsAt`);
     if (!optionalString(row.note)) throw new Error(`row ${index} has invalid note`);
     if (!optionalString(row.updatedBy)) throw new Error(`row ${index} has invalid updatedBy`);
-    return row as unknown as AdminAccessRecord;
+    return { ...row, participantType } as unknown as AdminAccessRecord;
   });
 }
 
@@ -171,6 +183,10 @@ export function recordAccessRequest(input: {
   email: string;
   name?: string;
   method?: 'email' | 'google' | 'microsoft';
+  participantType?: ParticipantType;
+  identityVerifiedAt?: string;
+  acceptedTermsVersion?: string;
+  acceptedTermsAt?: string;
   note?: string;
 }) {
   const email = normalizeEmail(input.email);
@@ -184,10 +200,24 @@ export function recordAccessRequest(input: {
     return existing;
   }
 
+  const participantType = input.participantType === undefined
+    ? existing?.participantType || defaultParticipantType()
+    : normalizeParticipantType(input.participantType);
+  if (!participantType) throw new Error('invalid participantType');
+
+  const existingMethod = existing?.method;
+  const method = existingMethod && existingMethod !== 'email'
+    ? existingMethod
+    : input.method || existingMethod || 'email';
+
   const next: AdminAccessRecord = {
     email,
     name: trimBounded(input.name, MAX_NAME_LENGTH) || existing?.name,
-    method: input.method || existing?.method || 'email',
+    method,
+    participantType,
+    identityVerifiedAt: existing?.identityVerifiedAt || input.identityVerifiedAt,
+    acceptedTermsVersion: existing?.acceptedTermsVersion || input.acceptedTermsVersion,
+    acceptedTermsAt: existing?.acceptedTermsAt || input.acceptedTermsAt,
     status: 'requested',
     role: existing?.role || 'user',
     note: trimBounded(input.note, MAX_NOTE_LENGTH) || existing?.note,
@@ -227,6 +257,10 @@ export function setAccessStatus(input: {
     email,
     name: existing?.name,
     method: existing?.method || 'email',
+    participantType: existing?.participantType || defaultParticipantType(),
+    identityVerifiedAt: existing?.identityVerifiedAt,
+    acceptedTermsVersion: existing?.acceptedTermsVersion,
+    acceptedTermsAt: existing?.acceptedTermsAt,
     status: input.status,
     role: input.role || existing?.role || 'user',
     note: trimBounded(input.note, MAX_NOTE_LENGTH),
