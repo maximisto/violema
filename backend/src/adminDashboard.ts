@@ -3,7 +3,7 @@ import {
   listAdminAccessRecords,
   listAdminAuditEvents,
 } from './adminAccessStore';
-import { isEmailApprovedForAccess, listAuthSessions, listAuthUsers } from './auth';
+import { getAuthUserDefaultWorkspaceId, isEmailApprovedForAccess, listAuthSessions, listAuthUsers } from './auth';
 import { hasCurrentBetaConsent } from './betaConsentStore';
 import { CURRENT_BETA_TERMS_VERSION, type ParticipantType } from './betaProgram';
 import { listAutomations } from './scheduler';
@@ -49,6 +49,9 @@ export function buildAdminUsers() {
     const userParticipantType = (user as (typeof user & { participantType?: ParticipantType }) | null)?.participantType;
     const approvedAccess = access?.status === 'approved' || isEmailApprovedForAccess(email);
     const accessStatus = access?.status || (approvedAccess ? 'approved' : 'requested');
+    const trialEntry = user
+      ? listLedgerEntries(getAuthUserDefaultWorkspaceId(user)).find((entry) => entry.source === 'trial_grant') || null
+      : null;
     return {
       email,
       name: user?.name || access?.name || email.split('@')[0],
@@ -63,6 +66,9 @@ export function buildAdminUsers() {
         && hasCurrentBetaConsentForAdmin(email),
       termsVersion: access?.acceptedTermsVersion || null,
       approvalReady: access ? isAccessRecordApprovalReadyForAdmin(access) : false,
+      trialStatus: trialEntry ? 'granted' : approvedAccess ? 'pending' : 'not_applicable',
+      trialCredits: trialEntry?.deltaCredits || 0,
+      trialGrantedAt: trialEntry?.createdAt || null,
       slackConnected: Boolean(user?.slackWorkspace && user?.slackChannelId),
       slackDisplayTarget: user?.slackDisplayTarget || null,
       activeSessionCount: user ? sessions.filter((session) => session.userId === user.id).length : 0,

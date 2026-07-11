@@ -19,7 +19,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import ViolemaLogo from '../components/ViolemaLogo';
-import { fetchBackendAuthSession, isAdminSession } from '../lib/auth';
+import { fetchBackendAuthSession, isAdminSession, type ParticipantType } from '../lib/auth';
 
 type AdminTab = 'overview' | 'users' | 'clients' | 'audit';
 type AccessStatus = 'requested' | 'approved' | 'revoked';
@@ -56,6 +56,14 @@ interface AdminUserRow {
   accessStatus: AccessStatus;
   approvedAccess?: boolean;
   hasAccessRecord?: boolean;
+  participantType: ParticipantType;
+  identityVerified: boolean;
+  termsCurrent: boolean;
+  termsVersion?: string | null;
+  approvalReady: boolean;
+  trialStatus: 'granted' | 'pending' | 'not_applicable';
+  trialCredits: number;
+  trialGrantedAt?: string | null;
   slackConnected?: boolean;
   slackDisplayTarget?: string;
   activeSessionCount?: number;
@@ -424,12 +432,16 @@ function UserActions({
   const roleActionTitle = user.hasAccessRecord === false
     ? 'Role changes require a persistent access record. Approve or record access first.'
     : isAdmin ? 'Demote to user' : 'Promote to admin';
+  const approvalActionTitle = !user.approvalReady
+    ? 'Verified OAuth identity and current beta confidentiality acceptance are required before approval.'
+    : isApproved ? 'Access is already approved.' : 'Approve beta access';
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button
         type="button"
-        disabled={busy || isApproved}
+        disabled={busy || isApproved || !user.approvalReady}
+        title={approvalActionTitle}
         onClick={() => onAccessChange(user, 'approved')}
         className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-100 transition-colors hover:bg-emerald-500/16 disabled:cursor-not-allowed disabled:opacity-40"
       >
@@ -462,16 +474,76 @@ function UserActions({
   );
 }
 
+function ParticipantSelect({
+  user,
+  disabled,
+  onChange,
+}: {
+  user: AdminUserRow;
+  disabled: boolean;
+  onChange: (user: AdminUserRow, participantType: ParticipantType) => void;
+}) {
+  return (
+    <div>
+      <select
+        aria-label={`Participant type for ${user.email}`}
+        value={user.participantType}
+        disabled={disabled || effectiveAccessStatus(user) === 'approved'}
+        onChange={(event) => onChange(user, event.target.value as ParticipantType)}
+        className="w-full rounded-lg border border-navy-700 bg-navy-950 px-2 py-1.5 text-xs text-slate-200 outline-none transition-colors focus:border-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <option value="founder_operator">Founder / operator</option>
+        <option value="investor">Investor</option>
+        <option value="partner">Partner</option>
+      </select>
+      {effectiveAccessStatus(user) !== 'approved' ? (
+        <p className="mt-1 text-[11px] text-slate-600">Applied with approval</p>
+      ) : null}
+    </div>
+  );
+}
+
+function TermsEvidence({ user }: { user: AdminUserRow }) {
+  return (
+    <div className="space-y-1 text-xs">
+      <p className={user.identityVerified ? 'text-emerald-200' : 'text-amber-200'}>
+        {user.identityVerified ? 'Identity verified' : 'Identity unverified'}
+      </p>
+      <p className={user.termsCurrent ? 'text-emerald-200' : 'text-amber-200'}>
+        {user.termsCurrent ? 'Terms current' : 'Terms required'}
+      </p>
+      {user.termsVersion ? <p className="max-w-[160px] truncate text-slate-600">{user.termsVersion}</p> : null}
+    </div>
+  );
+}
+
+function TrialEvidence({ user }: { user: AdminUserRow }) {
+  if (user.trialStatus === 'granted') {
+    return (
+      <div className="text-xs">
+        <p className="font-medium text-emerald-200">Granted · {formatCredits(user.trialCredits)} credits</p>
+        <p className="mt-1 text-slate-500">{formatDate(user.trialGrantedAt || undefined)}</p>
+      </div>
+    );
+  }
+  if (user.trialStatus === 'pending') {
+    return <p className="text-xs font-medium text-amber-200">Pending grant</p>;
+  }
+  return <p className="text-xs text-slate-500">Not applicable</p>;
+}
+
 function UsersPanel({
   users,
   actionKey,
   onAccessChange,
   onRoleChange,
+  onParticipantChange,
 }: {
   users: AdminUserRow[];
   actionKey: string | null;
   onAccessChange: (user: AdminUserRow, status: Extract<AccessStatus, 'approved' | 'revoked'>) => void;
   onRoleChange: (user: AdminUserRow, role: AdminRole) => void;
+  onParticipantChange: (user: AdminUserRow, participantType: ParticipantType) => void;
 }) {
   if (!users.length) {
     return <EmptyState title="No users found" detail="User requests and approved accounts will appear here." />;
@@ -480,11 +552,14 @@ function UsersPanel({
   return (
     <div className="space-y-4">
       <div className="hidden overflow-x-auto rounded-2xl border border-navy-800 bg-navy-900/70 md:block">
-        <table className="min-w-[980px] w-full text-left text-sm">
+        <table className="min-w-[1280px] w-full text-left text-sm">
           <thead className="border-b border-navy-800 bg-navy-950/60 text-xs uppercase tracking-[0.14em] text-slate-500">
             <tr>
               <th className="px-4 py-3 font-semibold">User</th>
               <th className="px-4 py-3 font-semibold">Access</th>
+              <th className="px-4 py-3 font-semibold">Participant</th>
+              <th className="px-4 py-3 font-semibold">Terms</th>
+              <th className="px-4 py-3 font-semibold">Trial</th>
               <th className="px-4 py-3 font-semibold">Role</th>
               <th className="px-4 py-3 font-semibold">Slack</th>
               <th className="px-4 py-3 font-semibold">Sessions</th>
@@ -504,6 +579,11 @@ function UsersPanel({
                     {user.method ? <p className="mt-1 text-xs text-slate-600">{user.method}</p> : null}
                   </td>
                   <td className="px-4 py-4"><Badge value={accessStatus} /></td>
+                  <td className="px-4 py-4">
+                    <ParticipantSelect user={user} disabled={busy} onChange={onParticipantChange} />
+                  </td>
+                  <td className="px-4 py-4"><TermsEvidence user={user} /></td>
+                  <td className="px-4 py-4"><TrialEvidence user={user} /></td>
                   <td className="px-4 py-4"><Badge value={user.role} /></td>
                   <td className="px-4 py-4">
                     <p className={user.slackConnected ? 'text-emerald-200' : 'text-slate-500'}>
@@ -537,6 +617,20 @@ function UsersPanel({
                 <Badge value={accessStatus} />
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                <div className="col-span-2">
+                  <p className="text-slate-500">Participant</p>
+                  <div className="mt-1">
+                    <ParticipantSelect user={user} disabled={busy} onChange={onParticipantChange} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-slate-500">Terms</p>
+                  <div className="mt-1"><TermsEvidence user={user} /></div>
+                </div>
+                <div>
+                  <p className="text-slate-500">Trial</p>
+                  <div className="mt-1"><TrialEvidence user={user} /></div>
+                </div>
                 <div>
                   <p className="text-slate-500">Role</p>
                   <p className="mt-1 text-slate-200">{user.role}</p>
@@ -768,6 +862,7 @@ export default function AdminDashboard() {
     try {
       await patchAdminJson(`/api/admin/users/${encodeURIComponent(user.email)}/access`, {
         status,
+        participantType: user.participantType,
         note: status === 'approved' ? 'Approved from admin dashboard' : 'Revoked from admin dashboard',
       });
       setNotice({ tone: 'success', message: `${status === 'approved' ? 'Approved' : 'Revoked'} ${user.email}.` });
@@ -778,6 +873,12 @@ export default function AdminDashboard() {
       setActionKey(null);
     }
   }, [loadDashboard]);
+
+  const handleParticipantChange = useCallback((user: AdminUserRow, participantType: ParticipantType) => {
+    setUsers((currentUsers) => currentUsers.map((currentUser) => (
+      currentUser.email === user.email ? { ...currentUser, participantType } : currentUser
+    )));
+  }, []);
 
   const handleRoleChange = useCallback(async (user: AdminUserRow, role: AdminRole) => {
     setActionKey(user.email);
@@ -923,7 +1024,13 @@ export default function AdminDashboard() {
             {activeTab === 'users' ? (
               <section className="space-y-4">
                 <SectionHeader title="Users" detail="Approve access, revoke access, and manage admin role separately." />
-                <UsersPanel users={users} actionKey={actionKey} onAccessChange={handleAccessChange} onRoleChange={handleRoleChange} />
+                <UsersPanel
+                  users={users}
+                  actionKey={actionKey}
+                  onAccessChange={handleAccessChange}
+                  onRoleChange={handleRoleChange}
+                  onParticipantChange={handleParticipantChange}
+                />
               </section>
             ) : null}
 
