@@ -463,6 +463,9 @@ test('beta auth policy gates Terms and trials before tenant routes', async () =>
   assert.ok(approvedInvestor);
   const approvedInvestorWorkspaceLedger = store.getWorkspaceLedgerSummary(approvedInvestor.defaultWorkspaceId);
   assert.equal(approvedInvestorWorkspaceLedger.balanceCredits, 500);
+  const approvedInvestorTrial = store.listLedgerEntries(approvedInvestor.defaultWorkspaceId)
+    .find((entry) => entry.source === 'trial_grant');
+  assert.equal(approvedInvestorTrial?.metadata?.approvalActor, 'max@violema.com');
 
   const stale = auth.upsertAuthUser({
     email: 'stale@example.com',
@@ -730,6 +733,7 @@ test('beta auth policy gates Terms and trials before tenant routes', async () =>
   assert.equal((aliceCreatedPayload.item as { owner_user_id?: string }).owner_user_id, alice.id);
 
   fs.writeFileSync(path.join(process.cwd(), 'beta-consent-receipts.json'), '{malformed');
+  fs.writeFileSync(path.join(process.cwd(), 'admin-access.json'), '{malformed');
   const adminMagicToken = auth.createAdminMagicLoginToken({
     email: 'max@violema.com',
     name: 'Max',

@@ -104,3 +104,43 @@ test('a beta grant preserves existing ledger entries and adds to their balance',
   assert.ok(entries.some((entry) => entry.id === existing.id));
   assert.equal(store.getWorkspaceLedgerSummary(workspaceId).balanceCredits, 507);
 }));
+
+test('beta grant metadata includes an available approval actor', () => withTempPlatformStore(({ trialCredits }) => {
+  const ensureWithActor = trialCredits.ensureBetaTrialCredits as (
+    input: Parameters<typeof trialCredits.ensureBetaTrialCredits>[0] & { approvalActor?: string },
+  ) => ReturnType<typeof trialCredits.ensureBetaTrialCredits>;
+  const result = ensureWithActor({
+    workspaceId: 'workspace_with_approval_actor',
+    participantType: 'partner',
+    termsVersion: CURRENT_BETA_TERMS_VERSION,
+    approvalActor: 'max@violema.com',
+  });
+
+  assert.deepEqual(result.entry.metadata, {
+    participantType: 'partner',
+    termsVersion: CURRENT_BETA_TERMS_VERSION,
+    approvalActor: 'max@violema.com',
+    oneTime: true,
+  });
+}));
+
+test('an existing beta grant is unchanged when a later call supplies an approval actor', () => withTempPlatformStore(({ trialCredits }) => {
+  const ensureWithActor = trialCredits.ensureBetaTrialCredits as (
+    input: Parameters<typeof trialCredits.ensureBetaTrialCredits>[0] & { approvalActor?: string },
+  ) => ReturnType<typeof trialCredits.ensureBetaTrialCredits>;
+  const first = trialCredits.ensureBetaTrialCredits({
+    workspaceId: 'workspace_actor_idempotency',
+    participantType: 'founder_operator',
+    termsVersion: CURRENT_BETA_TERMS_VERSION,
+  });
+  const second = ensureWithActor({
+    workspaceId: 'workspace_actor_idempotency',
+    participantType: 'founder_operator',
+    termsVersion: CURRENT_BETA_TERMS_VERSION,
+    approvalActor: 'max@violema.com',
+  });
+
+  assert.equal(second.created, false);
+  assert.deepEqual(second.entry, first.entry);
+  assert.equal(second.entry.metadata?.approvalActor, undefined);
+}));

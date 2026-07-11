@@ -202,6 +202,35 @@ export function recordAdminAuditEvent(input: Omit<AdminAuditEvent, 'id' | 'creat
   return event;
 }
 
+function selectRequestTermsEvidence(
+  existing: Pick<AdminAccessRecord, 'acceptedTermsVersion' | 'acceptedTermsAt'> | null,
+  input: { acceptedTermsVersion?: string; acceptedTermsAt?: string },
+) {
+  const existingEvidence = existing?.acceptedTermsVersion && existing.acceptedTermsAt
+    ? { version: existing.acceptedTermsVersion, acceptedAt: existing.acceptedTermsAt }
+    : null;
+  const inputEvidence = input.acceptedTermsVersion && input.acceptedTermsAt
+    ? { version: input.acceptedTermsVersion, acceptedAt: input.acceptedTermsAt }
+    : null;
+  const existingIsCurrent = existingEvidence?.version === CURRENT_BETA_TERMS_VERSION;
+  const inputIsCurrent = inputEvidence?.version === CURRENT_BETA_TERMS_VERSION;
+
+  if (inputEvidence && inputIsCurrent) {
+    if (!existingEvidence || !existingIsCurrent) return inputEvidence;
+    const existingTime = Date.parse(existingEvidence.acceptedAt);
+    const inputTime = Date.parse(inputEvidence.acceptedAt);
+    if (!Number.isFinite(existingTime) || (Number.isFinite(inputTime) && inputTime > existingTime)) {
+      return inputEvidence;
+    }
+  }
+  if (existingEvidence) return existingEvidence;
+  if (inputEvidence) return inputEvidence;
+  return {
+    version: existing?.acceptedTermsVersion || input.acceptedTermsVersion,
+    acceptedAt: existing?.acceptedTermsAt || input.acceptedTermsAt,
+  };
+}
+
 export function recordAccessRequest(input: {
   email: string;
   name?: string;
@@ -232,6 +261,7 @@ export function recordAccessRequest(input: {
   const method = existingMethod && existingMethod !== 'email'
     ? existingMethod
     : input.method || existingMethod || 'email';
+  const termsEvidence = selectRequestTermsEvidence(existing, input);
 
   const next: AdminAccessRecord = {
     email,
@@ -239,8 +269,8 @@ export function recordAccessRequest(input: {
     method,
     participantType,
     identityVerifiedAt: existing?.identityVerifiedAt || input.identityVerifiedAt,
-    acceptedTermsVersion: existing?.acceptedTermsVersion || input.acceptedTermsVersion,
-    acceptedTermsAt: existing?.acceptedTermsAt || input.acceptedTermsAt,
+    acceptedTermsVersion: termsEvidence.version,
+    acceptedTermsAt: termsEvidence.acceptedAt,
     status: 'requested',
     role: existing?.role || 'user',
     note: trimBounded(input.note, MAX_NOTE_LENGTH) || existing?.note,

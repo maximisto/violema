@@ -15,6 +15,8 @@ for (const field of [
   'approvalReady',
   'trialStatus',
   'trialCredits',
+  'trialSpentCredits',
+  'trialRemainingCredits',
   'trialGrantedAt',
 ]) {
   assertSource(adminDashboard.includes(field), `admin user contract includes ${field}`);
@@ -44,6 +46,13 @@ assert.equal('role' in participantPatch, false, 'participant save must not mutat
 assert.equal(adminModule.isAdminApprovalDisabled({ busy: false, isApproved: false, approvalReady: false, participantDirty: false }), true);
 assert.equal(adminModule.isAdminApprovalDisabled({ busy: false, isApproved: false, approvalReady: true, participantDirty: true }), true);
 assert.equal(adminModule.isAdminApprovalDisabled({ busy: false, isApproved: false, approvalReady: true, participantDirty: false }), false);
+assert.equal(adminModule.formatTrialCreditUsage(125, 375), 'Spent 125 · 375 remaining');
+assert.equal(adminModule.formatTrialCreditUsage(500, 0), 'Spent 500 · 0 remaining');
+
+assertSource(
+  (adminDashboard.match(/<TrialEvidence\s+user=/g) || []).length === 2,
+  'desktop and mobile user surfaces both render trial spent and remaining',
+);
 
 assertSource(adminDashboard.includes('Save participant'), 'participant control exposes an explicit save action');
 assertSource(

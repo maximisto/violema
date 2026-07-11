@@ -63,6 +63,8 @@ interface AdminUserRow {
   approvalReady: boolean;
   trialStatus: 'granted' | 'pending' | 'not_applicable';
   trialCredits: number;
+  trialSpentCredits: number;
+  trialRemainingCredits: number;
   trialGrantedAt?: string | null;
   slackConnected?: boolean;
   slackDisplayTarget?: string;
@@ -198,6 +200,10 @@ function formatNumber(value: number | undefined) {
 
 function formatCredits(value: number | undefined) {
   return formatNumber(Math.round(value || 0));
+}
+
+export function formatTrialCreditUsage(spentCredits: number, remainingCredits: number) {
+  return `Spent ${formatCredits(spentCredits)} · ${formatCredits(remainingCredits)} remaining`;
 }
 
 function formatRate(value: number | undefined) {
@@ -564,6 +570,9 @@ function TrialEvidence({ user }: { user: AdminUserRow }) {
     return (
       <div className="text-xs">
         <p className="font-medium text-emerald-200">Granted · {formatCredits(user.trialCredits)} credits</p>
+        <p className="mt-1 text-slate-400">
+          {formatTrialCreditUsage(user.trialSpentCredits, user.trialRemainingCredits)}
+        </p>
         <p className="mt-1 text-slate-500">{formatDate(user.trialGrantedAt || undefined)}</p>
       </div>
     );

@@ -1073,7 +1073,12 @@ function recordDeniedBetaAccessRequest(input: {
 }
 
 function resolveAuthParticipantType(email: string, fallback?: ParticipantType) {
-  const access = getAccessRecord(email);
+  let access: ReturnType<typeof getAccessRecord> = null;
+  try {
+    access = getAccessRecord(email);
+  } catch {
+    // Trusted admin recovery must remain available when participant access state is unreadable.
+  }
   if (access?.participantType) return access.participantType;
   const existing = listAuthUsers().find((user) => user.email === email.trim().toLowerCase());
   return existing?.participantType || fallback || defaultParticipantType();
@@ -1097,10 +1102,12 @@ function serializeAuthSessionUser(user: AuthUserRecord) {
 
 function fulfillApprovedBetaTrial(user: AuthUserRecord) {
   if (user.role === 'admin' || !authUserHasCurrentTerms(user)) return;
+  const accessRecord = getAccessRecord(user.email);
   ensureBetaTrialCredits({
     workspaceId: getAuthUserDefaultWorkspaceId(user),
     participantType: user.participantType,
     termsVersion: CURRENT_BETA_TERMS_VERSION,
+    approvalActor: accessRecord?.status === 'approved' ? accessRecord.updatedBy : undefined,
   });
 }
 

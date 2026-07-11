@@ -103,6 +103,8 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     type AdminUserWithTrial = ReturnType<typeof dashboard.buildAdminUsers>[number] & {
       trialStatus: 'granted' | 'pending' | 'not_applicable';
       trialCredits: number;
+      trialSpentCredits: number;
+      trialRemainingCredits: number;
       trialGrantedAt: string | null;
     };
     const users = dashboard.buildAdminUsers() as AdminUserWithTrial[];
@@ -118,7 +120,72 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(investor?.approvalReady, true);
     assert.equal(investor?.trialStatus, 'granted');
     assert.equal(investor?.trialCredits, 500);
+    assert.equal(investor?.trialSpentCredits, 0);
+    assert.equal(investor?.trialRemainingCredits, 500);
     assert.equal(investor?.trialGrantedAt, trialEntry.createdAt);
+
+    const attributedLedger = [
+      {
+        id: 'pre_trial_debit',
+        workspaceId: investorAuthUser.defaultWorkspaceId,
+        direction: 'debit',
+        source: 'task_run',
+        deltaCredits: -200,
+        balanceAfterCredits: -200,
+        referenceType: 'task',
+        referenceId: 'pre-trial-task',
+        createdAt: '2026-07-11T10:00:00.000Z',
+      },
+      {
+        ...trialEntry,
+        balanceAfterCredits: 300,
+        createdAt: '2026-07-11T11:00:00.000Z',
+      },
+      {
+        id: 'later_subscription_grant',
+        workspaceId: investorAuthUser.defaultWorkspaceId,
+        direction: 'grant',
+        source: 'subscription',
+        deltaCredits: 1000,
+        balanceAfterCredits: 1300,
+        referenceType: 'subscription',
+        referenceId: 'subscription-after-trial',
+        createdAt: '2026-07-11T11:30:00.000Z',
+      },
+      {
+        id: 'partial_trial_spend',
+        workspaceId: investorAuthUser.defaultWorkspaceId,
+        direction: 'debit',
+        source: 'task_run',
+        deltaCredits: -125,
+        balanceAfterCredits: 1175,
+        referenceType: 'task',
+        referenceId: 'post-trial-task',
+        createdAt: '2026-07-11T12:00:00.000Z',
+      },
+    ];
+    writeFileSync(path.join(tempDir, 'platform-credit-ledger.json'), JSON.stringify(attributedLedger, null, 2));
+    const partiallySpent = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'client@example.com');
+    assert.equal(partiallySpent?.trialSpentCredits, 125);
+    assert.equal(partiallySpent?.trialRemainingCredits, 375);
+
+    attributedLedger.push({
+      id: 'fully_spends_trial',
+      workspaceId: investorAuthUser.defaultWorkspaceId,
+      direction: 'debit',
+      source: 'task_run',
+      deltaCredits: -600,
+      balanceAfterCredits: 575,
+      referenceType: 'task',
+      referenceId: 'post-trial-overage',
+      createdAt: '2026-07-11T13:00:00.000Z',
+    });
+    writeFileSync(path.join(tempDir, 'platform-credit-ledger.json'), JSON.stringify(attributedLedger, null, 2));
+    const fullySpent = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'client@example.com');
+    assert.equal(fullySpent?.trialSpentCredits, 500);
+    assert.equal(fullySpent?.trialRemainingCredits, 0);
 
     const workspaces = dashboard.buildAdminWorkspaces();
     assert.equal(workspaces[0].workspaceId, 'client-acme');
@@ -150,6 +217,8 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(allowlistedUser?.approvalReady, false);
     assert.equal(allowlistedUser?.trialStatus, 'pending');
     assert.equal(allowlistedUser?.trialCredits, 0);
+    assert.equal(allowlistedUser?.trialSpentCredits, 0);
+    assert.equal(allowlistedUser?.trialRemainingCredits, 0);
     assert.equal(allowlistedUser?.trialGrantedAt, null);
     assert.equal(dashboard.buildAdminOverview().metrics.pendingUsers, 0);
 
@@ -173,6 +242,8 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(authOnlyUser?.approvalReady, false);
     assert.equal(authOnlyUser?.trialStatus, 'not_applicable');
     assert.equal(authOnlyUser?.trialCredits, 0);
+    assert.equal(authOnlyUser?.trialSpentCredits, 0);
+    assert.equal(authOnlyUser?.trialRemainingCredits, 0);
     assert.equal(authOnlyUser?.trialGrantedAt, null);
 
     const adminAuthUser = auth.upsertAuthUser({
@@ -195,6 +266,8 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(adminWithoutTrial?.approvedAccess, true);
     assert.equal(adminWithoutTrial?.trialStatus, 'not_applicable');
     assert.equal(adminWithoutTrial?.trialCredits, 0);
+    assert.equal(adminWithoutTrial?.trialSpentCredits, 0);
+    assert.equal(adminWithoutTrial?.trialRemainingCredits, 0);
     assert.equal(adminWithoutTrial?.trialGrantedAt, null);
 
     const historicalAdminTrial = store.addLedgerEntry({

@@ -111,24 +111,46 @@ test('auth access accepts explicit beta allowlist entries', () => withTempAdminS
   }
 }));
 
-test('malformed admin access store fails closed for default and env allowlists', () => withTempAdminStore(() => {
+test('malformed admin access store preserves only configured admin recovery', () => withTempAdminStore(() => {
   const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
+  const originalAdminEmails = process.env.ADMIN_EMAILS;
+  const originalCreditAdminEmails = process.env.TEST_CREDIT_ADMIN_EMAILS;
   process.env.VIOLEMA_APPROVED_EMAILS = 'founder@example.com';
+  delete process.env.ADMIN_EMAILS;
+  delete process.env.TEST_CREDIT_ADMIN_EMAILS;
 
   try {
     fs.writeFileSync(path.join(process.cwd(), 'admin-access.json'), '{malformed');
 
-    assert.equal(isEmailApprovedForAccess('max@violema.com'), false);
+    assert.equal(isEmailApprovedForAccess('max@violema.com'), true);
+    assert.equal(resolveAuthRole('max@violema.com'), 'admin');
+    assert.equal(isEmailAdminForAccess('max@violema.com'), true);
     assert.equal(isEmailApprovedForAccess('founder@example.com'), false);
+    assert.equal(resolveAuthRole('founder@example.com'), 'user');
+    assert.equal(isEmailAdminForAccess('founder@example.com'), false);
+
+    process.env.ADMIN_EMAILS = 'recovery@example.com';
+    assert.equal(isEmailApprovedForAccess('recovery@example.com'), true);
+    assert.equal(resolveAuthRole('recovery@example.com'), 'admin');
+    assert.equal(isEmailAdminForAccess('recovery@example.com'), true);
+    assert.equal(isEmailAdminForAccess('max@violema.com'), false);
   } finally {
     if (originalApproved === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
     else process.env.VIOLEMA_APPROVED_EMAILS = originalApproved;
+    if (originalAdminEmails === undefined) delete process.env.ADMIN_EMAILS;
+    else process.env.ADMIN_EMAILS = originalAdminEmails;
+    if (originalCreditAdminEmails === undefined) delete process.env.TEST_CREDIT_ADMIN_EMAILS;
+    else process.env.TEST_CREDIT_ADMIN_EMAILS = originalCreditAdminEmails;
   }
 }));
 
-test('invalid admin access row fails closed for default and env allowlists', () => withTempAdminStore(() => {
+test('invalid admin access row preserves default admin recovery and fails closed for ordinary allowlists', () => withTempAdminStore(() => {
   const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
+  const originalAdminEmails = process.env.ADMIN_EMAILS;
+  const originalCreditAdminEmails = process.env.TEST_CREDIT_ADMIN_EMAILS;
   process.env.VIOLEMA_APPROVED_EMAILS = 'founder@example.com';
+  delete process.env.ADMIN_EMAILS;
+  delete process.env.TEST_CREDIT_ADMIN_EMAILS;
 
   try {
     fs.writeFileSync(path.join(process.cwd(), 'admin-access.json'), JSON.stringify([
@@ -141,11 +163,19 @@ test('invalid admin access row fails closed for default and env allowlists', () 
       },
     ]));
 
-    assert.equal(isEmailApprovedForAccess('max@violema.com'), false);
+    assert.equal(isEmailApprovedForAccess('max@violema.com'), true);
+    assert.equal(resolveAuthRole('max@violema.com'), 'admin');
+    assert.equal(isEmailAdminForAccess('max@violema.com'), true);
     assert.equal(isEmailApprovedForAccess('founder@example.com'), false);
+    assert.equal(resolveAuthRole('founder@example.com'), 'user');
+    assert.equal(isEmailAdminForAccess('founder@example.com'), false);
   } finally {
     if (originalApproved === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
     else process.env.VIOLEMA_APPROVED_EMAILS = originalApproved;
+    if (originalAdminEmails === undefined) delete process.env.ADMIN_EMAILS;
+    else process.env.ADMIN_EMAILS = originalAdminEmails;
+    if (originalCreditAdminEmails === undefined) delete process.env.TEST_CREDIT_ADMIN_EMAILS;
+    else process.env.TEST_CREDIT_ADMIN_EMAILS = originalCreditAdminEmails;
   }
 }));
 
@@ -402,6 +432,79 @@ test('duplicate access requests preserve stronger identity and terms evidence', 
   }
 }));
 
+test('fresh current request evidence repairs stale requested terms evidence', () => withTempAdminStore(() => {
+  const email = 'reapplicant@example.com';
+  const currentAcceptedAt = '2026-07-11T12:05:00.000Z';
+  recordAccessRequest({
+    email,
+    participantType: 'partner',
+    method: 'google',
+    identityVerifiedAt: '2026-07-11T12:00:00.000Z',
+    acceptedTermsVersion: 'old-v1',
+    acceptedTermsAt: '2026-07-10T12:00:00.000Z',
+  });
+  recordBetaConsent({
+    email,
+    participantType: 'partner',
+    authMethod: 'google',
+    acceptanceSource: 'signup',
+    termsVersion: CURRENT_BETA_TERMS_VERSION,
+    termsDigest: CURRENT_BETA_TERMS_DIGEST,
+    acceptedAt: currentAcceptedAt,
+  });
+
+  const repaired = recordAccessRequest({
+    email,
+    participantType: 'partner',
+    method: 'google',
+    identityVerifiedAt: '2026-07-11T12:04:00.000Z',
+    acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: currentAcceptedAt,
+  });
+
+  assert.equal(repaired.acceptedTermsVersion, CURRENT_BETA_TERMS_VERSION);
+  assert.equal(repaired.acceptedTermsAt, currentAcceptedAt);
+  assert.equal(isAccessRecordApprovalReady(repaired), true);
+
+  const preserved = recordAccessRequest({
+    email,
+    acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: '2026-07-11T12:03:00.000Z',
+  });
+  assert.equal(preserved.acceptedTermsVersion, CURRENT_BETA_TERMS_VERSION);
+  assert.equal(preserved.acceptedTermsAt, currentAcceptedAt);
+}));
+
+test('approved and revoked access records remain immutable when requests are re-recorded', () => withTempAdminStore(() => {
+  for (const status of ['approved', 'revoked'] as const) {
+    const email = `${status}@example.com`;
+    const ready = recordCurrentApprovalEvidence({ email, method: 'google' });
+    const persisted = setAccessStatus({
+      email,
+      status,
+      role: 'user',
+      updatedBy: 'max@violema.com',
+    });
+
+    const rerecorded = recordAccessRequest({
+      email,
+      name: 'Replacement Name',
+      participantType: 'partner',
+      acceptedTermsVersion: 'old-v1',
+      acceptedTermsAt: '2026-07-10T12:00:00.000Z',
+    });
+
+    assert.equal(rerecorded.status, persisted.status);
+    assert.equal(rerecorded.name, persisted.name);
+    assert.equal(rerecorded.participantType, persisted.participantType);
+    assert.equal(rerecorded.acceptedTermsVersion, persisted.acceptedTermsVersion);
+    assert.equal(rerecorded.acceptedTermsAt, persisted.acceptedTermsAt);
+    assert.equal(rerecorded.updatedAt, persisted.updatedAt);
+    assert.deepEqual(getAccessRecord(email), rerecorded);
+    assert.equal(rerecorded.acceptedTermsAt, ready.acceptedTermsAt);
+  }
+}));
+
 test('approval requires verified identity and current beta consent evidence', () => withTempAdminStore(() => {
   clearAdminAccessRecords();
 
@@ -490,6 +593,15 @@ test('persistent approved role overrides default role resolution', () => withTem
       role: 'user',
       updatedBy: 'max@violema.com',
     });
+    assert.equal(resolveAuthRole('max@violema.com'), 'user');
+    assert.equal(isEmailAdminForAccess('max@violema.com'), false);
+
+    setAccessStatus({
+      email: 'max@violema.com',
+      status: 'revoked',
+      updatedBy: 'max@violema.com',
+    });
+    assert.equal(isEmailApprovedForAccess('max@violema.com'), false);
     assert.equal(resolveAuthRole('max@violema.com'), 'user');
     assert.equal(isEmailAdminForAccess('max@violema.com'), false);
 

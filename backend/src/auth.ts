@@ -151,7 +151,7 @@ export function isEmailApprovedForAccess(email: string) {
   try {
     persistent = getAccessRecord(normalized);
   } catch {
-    return false;
+    return getAdminAccessEmails().has(normalized);
   }
   if (persistent?.status === 'revoked') return false;
   if (persistent?.status === 'approved') return true;
@@ -166,7 +166,7 @@ export function resolveAuthRole(email: string): AccessRole {
     if (persistent?.status === 'approved') return persistent.role;
     if (persistent?.status === 'revoked') return 'user';
   } catch {
-    return 'user';
+    return getAdminAccessEmails().has(normalized) ? 'admin' : 'user';
   }
 
   return getAdminAccessEmails().has(normalized) ? 'admin' : 'user';

@@ -8,6 +8,7 @@ export function ensureBetaTrialCredits(input: {
   workspaceId: string;
   participantType: ParticipantType;
   termsVersion: string;
+  approvalActor?: string;
 }) {
   const referenceId = `${BETA_TRIAL_CAMPAIGN}:${input.workspaceId}`;
   const existing = listLedgerEntries(input.workspaceId).find(
@@ -15,6 +16,7 @@ export function ensureBetaTrialCredits(input: {
   );
   if (existing) return { entry: existing, created: false };
 
+  const approvalActor = input.approvalActor?.trim();
   const entry = addLedgerEntry({
     workspaceId: input.workspaceId,
     source: 'trial_grant',
@@ -25,6 +27,7 @@ export function ensureBetaTrialCredits(input: {
     metadata: {
       participantType: input.participantType,
       termsVersion: input.termsVersion,
+      ...(approvalActor ? { approvalActor } : {}),
       oneTime: true,
     },
   });
