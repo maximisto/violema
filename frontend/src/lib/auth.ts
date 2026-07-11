@@ -132,7 +132,7 @@ export type PersistAuthSessionResult =
 
 export type AuthSessionRequest = Pick<AuthSession, 'email' | 'name' | 'role' | 'method' | 'createdAt'>
   & Partial<Pick<AuthSession, 'participantType' | 'acceptedTerms' | 'acceptedEducation' | 'slackWorkspace' | 'slackChannelId' | 'slackDisplayTarget' | 'slackConnectedAt'>>
-  & { termsVersion?: string };
+  & { intent: 'signup' | 'login'; termsVersion?: string };
 
 export async function persistAuthSessionToBackend(
   session: AuthSessionRequest,
@@ -145,6 +145,7 @@ export async function persistAuthSessionToBackend(
     },
     credentials: 'same-origin',
     body: JSON.stringify({
+      intent: session.intent,
       email: session.email,
       name: session.name,
       method: session.method,

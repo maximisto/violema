@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { sanitizeLocalNextPath } from '../src/pages/AccessTerms';
 
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
@@ -22,9 +23,16 @@ assert(signup.includes('partner'), 'signup captures partner');
 assert(signup.includes('Beta Confidentiality and Evaluation Terms'), 'signup names confidentiality terms');
 assert(terms.includes("id: 'beta-confidentiality'"), 'terms expose a confidentiality anchor');
 assert(accessTerms.includes('/api/auth/terms/accept'), 'reacceptance posts to the backend');
+assert(
+  /<pre[^>]*>[\s\S]*\{terms\.canonicalText\}[\s\S]*<\/pre>/.test(accessTerms),
+  'reacceptance visibly renders the exact backend canonical text',
+);
 assert(app.includes('path="/access-terms"'), 'app registers reacceptance route');
 assert(protectedRoute.includes('requiresTermsAcceptance'), 'protected route uses server-owned current Terms state');
 assert(!login.includes('acceptedTerms: true'), 'login does not synthesize acceptance');
+assert(/const session = \{[\s\S]*intent: 'signup'/.test(signup), 'direct signup identifies its bounded intent');
+assert(/const session = \{[\s\S]*intent: 'login'/.test(login), 'direct login identifies its bounded intent');
+assert(auth.includes('intent: session.intent'), 'direct-session request sends its bounded intent');
 
 for (const heading of [
   'Beta information',
@@ -48,5 +56,20 @@ assert(auth.includes('termsVersion'), 'signup OAuth flow carries the current Ter
 assert(accessTerms.includes("startsWith('//')"), 'reacceptance rejects protocol-relative next paths');
 assert(accessTerms.includes("startsWith('/')"), 'reacceptance requires a leading slash for next paths');
 assert(protectedRoute.includes("role === 'admin'"), 'admin reacceptance remains non-blocking');
+
+const origin = 'https://violema.com';
+assert(sanitizeLocalNextPath('/settings?tab=profile#security', origin) === '/settings?tab=profile#security', 'sanitizer preserves safe local next paths');
+for (const unsafeNext of [
+  'https://evil.example/path',
+  '//evil.example/path',
+  'dashboard',
+  '/access-terms',
+  '/access-terms/',
+  '/access-terms/repeat',
+  '/access-terms?next=%2Faccess-terms',
+  '/access-terms#review',
+]) {
+  assert(sanitizeLocalNextPath(unsafeNext, origin) === '/dashboard', `sanitizer rejects unsafe next path: ${unsafeNext}`);
+}
 
 console.log('betaAccess.contract: participant application and reacceptance verified');

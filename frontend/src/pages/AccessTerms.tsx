@@ -20,6 +20,8 @@ export function sanitizeLocalNextPath(value: string | null, origin = window.loca
   try {
     const resolved = new URL(value, origin);
     if (resolved.origin !== origin) return '/dashboard';
+    const resolvedPath = decodeURIComponent(resolved.pathname);
+    if (resolvedPath === '/access-terms' || resolvedPath.startsWith('/access-terms/')) return '/dashboard';
   } catch {
     return '/dashboard';
   }
@@ -131,6 +133,10 @@ export default function AccessTerms() {
               </div>
             </div>
           </div>
+
+          {terms ? (
+            <pre className="mt-6 max-h-96 overflow-y-auto whitespace-pre-wrap rounded-2xl border border-navy-700/80 bg-navy-950/65 p-5 font-sans text-sm leading-relaxed text-slate-300">{terms.canonicalText}</pre>
+          ) : null}
 
           <div className="mt-6 space-y-3 rounded-2xl border border-navy-700/80 bg-navy-950/45 p-4">
             <label className="flex items-start gap-3 text-sm leading-relaxed text-slate-300">

@@ -123,6 +123,7 @@ export default function Signup() {
     setSuccessMessage(null);
     persistWorkspaceContext();
     const session = {
+      intent: 'signup',
       email: email.trim(),
       name: name.trim(),
       role: 'user',

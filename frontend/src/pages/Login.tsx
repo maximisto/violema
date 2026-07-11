@@ -44,6 +44,7 @@ export default function Login() {
     setSuccessMessage(null);
     persistWorkspaceContext();
     const session = {
+      intent: 'login',
       email: email.trim(),
       name: name.trim(),
       role: 'user',

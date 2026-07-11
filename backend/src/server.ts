@@ -1062,6 +1062,7 @@ function recordDeniedBetaAccessRequest(input: {
   email: string;
   name: string;
   method: PersistedAuthMethod;
+  participantType?: ParticipantType;
   note: string;
 }) {
   try {
@@ -5032,6 +5033,7 @@ app.get('/api/auth/session', (req: Request, res: Response) => {
 
 app.post('/api/auth/session', async (req: Request, res: Response) => {
   const body = (req.body || {}) as Record<string, unknown>;
+  const intent = body.intent === 'signup' || body.intent === 'login' ? body.intent : null;
   const email = typeof body.email === 'string' ? body.email.trim() : '';
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const next = sanitizeNextPath(typeof body.next === 'string' ? body.next : undefined, '/dashboard');
@@ -5049,6 +5051,25 @@ app.post('/api/auth/session', async (req: Request, res: Response) => {
     return;
   }
 
+  if (!intent) {
+    res.status(400).json({ error: 'Intent must be signup or login' });
+    return;
+  }
+
+  const requestedParticipantType = intent === 'signup'
+    ? normalizeParticipantType(body.participantType)
+    : null;
+  if (intent === 'signup' && !requestedParticipantType) {
+    res.status(400).json({ error: 'Participant type must be founder_operator, investor, or partner' });
+    return;
+  }
+  const acceptsCurrentSignupTerms = intent === 'signup'
+    && acceptedTerms
+    && body.termsVersion === CURRENT_BETA_TERMS_VERSION;
+  const signupParticipantType = acceptsCurrentSignupTerms
+    ? requestedParticipantType as ParticipantType
+    : undefined;
+
   try {
     assertEmailApprovedForAccess(email);
   } catch (error) {
@@ -5056,6 +5077,7 @@ app.post('/api/auth/session', async (req: Request, res: Response) => {
       email,
       name,
       method,
+      participantType: signupParticipantType,
       note: 'Email session request',
     });
     res.status(isAuthAccessDenied(error) ? error.statusCode : 403).json({
@@ -5091,8 +5113,8 @@ app.post('/api/auth/session', async (req: Request, res: Response) => {
   }
 
   const role = resolveAuthRole(email);
-  const participantType = resolveAuthParticipantType(email);
-  if (acceptedTerms && body.termsVersion === CURRENT_BETA_TERMS_VERSION) {
+  const participantType = resolveAuthParticipantType(email, signupParticipantType);
+  if (acceptsCurrentSignupTerms) {
     const acceptedAt = new Date().toISOString();
     recordBetaConsent({
       email,

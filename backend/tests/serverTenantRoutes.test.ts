@@ -33,6 +33,8 @@ async function withTempServer(run: (context: TestServerContext) => Promise<void>
     'bob@example.com',
     'stale@example.com',
     'email-flow@example.com',
+    'email-investor@example.com',
+    'email-invalid@example.com',
     'email-string@example.com',
     'login-fallback@example.com',
   ].join(',');
@@ -134,6 +136,7 @@ test('beta auth policy gates Terms and trials before tenant routes', async () =>
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      intent: 'signup',
       email: 'email-flow@example.com',
       name: 'Email Flow',
       method: 'google',
@@ -146,17 +149,99 @@ test('beta auth policy gates Terms and trials before tenant routes', async () =>
   assert.equal(emailSessionResponse.status, 200);
   const emailSession = await readJson(emailSessionResponse) as { user: Record<string, unknown> };
   assert.equal(emailSession.user.method, 'email');
-  assert.equal(emailSession.user.participantType, 'founder_operator');
+  assert.equal(emailSession.user.participantType, 'partner');
   assert.equal(emailSession.user.requiresTermsAcceptance, false);
   const emailFlowUser = auth.listAuthUsers().find((user) => user.email === 'email-flow@example.com');
   assert.ok(emailFlowUser);
   assert.equal(store.getWorkspaceLedgerSummary(emailFlowUser.defaultWorkspaceId).balanceCredits, 500);
 
+  const emailInvestorResponse = await fetch(`${baseUrl}/api/auth/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      intent: 'signup',
+      email: 'email-investor@example.com',
+      name: 'Email Investor',
+      participantType: 'investor',
+      acceptedTerms: true,
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      acceptedEducation: true,
+    }),
+  });
+  assert.equal(emailInvestorResponse.status, 200);
+  const emailInvestorSession = await readJson(emailInvestorResponse) as { user: Record<string, unknown> };
+  assert.equal(emailInvestorSession.user.participantType, 'investor');
+  assert.equal(consent.getCurrentBetaConsent('email-investor@example.com')?.participantType, 'investor');
+
+  const emailLoginResponse = await fetch(`${baseUrl}/api/auth/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      intent: 'login',
+      email: 'email-flow@example.com',
+      name: 'Email Flow',
+      participantType: 'investor',
+      acceptedTerms: true,
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      acceptedEducation: true,
+    }),
+  });
+  assert.equal(emailLoginResponse.status, 200);
+  const emailLoginSession = await readJson(emailLoginResponse) as { user: Record<string, unknown> };
+  assert.equal(emailLoginSession.user.participantType, 'partner');
+  assert.equal(consent.listBetaConsentReceipts('email-flow@example.com').length, 1);
+
+  for (const participantType of [null, 'tester']) {
+    const invalidParticipantResponse = await fetch(`${baseUrl}/api/auth/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        intent: 'signup',
+        email: 'email-invalid@example.com',
+        name: 'Invalid Participant',
+        participantType,
+        acceptedTerms: true,
+        termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+        acceptedEducation: true,
+      }),
+    });
+    assert.equal(invalidParticipantResponse.status, 400);
+  }
+
+  const invalidIntentResponse = await fetch(`${baseUrl}/api/auth/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      intent: 'resume',
+      email: 'email-invalid@example.com',
+      name: 'Invalid Intent',
+    }),
+  });
+  assert.equal(invalidIntentResponse.status, 400);
+
+  const deniedSignupResponse = await fetch(`${baseUrl}/api/auth/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      intent: 'signup',
+      email: 'pending-email-partner@example.com',
+      name: 'Pending Email Partner',
+      participantType: 'partner',
+      acceptedTerms: true,
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      acceptedEducation: true,
+    }),
+  });
+  assert.equal(deniedSignupResponse.status, 403);
+  assert.equal(adminAccess.getAccessRecord('pending-email-partner@example.com')?.participantType, 'partner');
+
   const stringAcceptanceResponse = await fetch(`${baseUrl}/api/auth/session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      intent: 'signup',
       email: 'email-string@example.com',
+      participantType: 'founder_operator',
       name: 'String Acceptance',
       acceptedTerms: 'false',
       termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
