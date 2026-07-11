@@ -307,10 +307,12 @@ test('admin route input validation rejects invalid access mutations', async () =
 
   assert.equal(routes.parseParticipantType(undefined), undefined);
   assert.equal(routes.parseParticipantType('partner'), 'partner');
-  assert.throws(
-    () => routes.parseParticipantType('tester'),
-    /participant type must be founder_operator, investor, or partner/i,
-  );
+  for (const invalidParticipantType of [null, '', 42, 'tester']) {
+    assert.throws(
+      () => routes.parseParticipantType(invalidParticipantType),
+      /participant type must be founder_operator, investor, or partner/i,
+    );
+  }
 
   assert.throws(
     () => routes.parseAdminEmail('not-an-email'),

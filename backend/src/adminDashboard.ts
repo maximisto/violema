@@ -21,6 +21,22 @@ function lastActivity(values: Array<string | undefined>) {
   return sorted.length > 0 ? sorted[sorted.length - 1] : null;
 }
 
+function hasCurrentBetaConsentForAdmin(email: string) {
+  try {
+    return hasCurrentBetaConsent(email);
+  } catch {
+    return false;
+  }
+}
+
+function isAccessRecordApprovalReadyForAdmin(record: Parameters<typeof isAccessRecordApprovalReady>[0]) {
+  try {
+    return isAccessRecordApprovalReady(record);
+  } catch {
+    return false;
+  }
+}
+
 export function buildAdminUsers() {
   const users = listAuthUsers();
   const sessions = listAuthSessions();
@@ -43,9 +59,10 @@ export function buildAdminUsers() {
       hasAccessRecord: Boolean(access),
       participantType: access?.participantType || userParticipantType || 'founder_operator',
       identityVerified: Boolean(access?.identityVerifiedAt),
-      termsCurrent: access?.acceptedTermsVersion === CURRENT_BETA_TERMS_VERSION && hasCurrentBetaConsent(email),
+      termsCurrent: access?.acceptedTermsVersion === CURRENT_BETA_TERMS_VERSION
+        && hasCurrentBetaConsentForAdmin(email),
       termsVersion: access?.acceptedTermsVersion || null,
-      approvalReady: access ? isAccessRecordApprovalReady(access) : false,
+      approvalReady: access ? isAccessRecordApprovalReadyForAdmin(access) : false,
       slackConnected: Boolean(user?.slackWorkspace && user?.slackChannelId),
       slackDisplayTarget: user?.slackDisplayTarget || null,
       activeSessionCount: user ? sessions.filter((session) => session.userId === user.id).length : 0,

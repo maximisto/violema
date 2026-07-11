@@ -279,6 +279,7 @@ export function setAccessStatus(input: {
     ? existing?.participantType || defaultParticipantType()
     : normalizeParticipantType(input.participantType);
   if (!participantType) throw new Error('invalid participantType');
+  const note = trimBounded(input.note, MAX_NOTE_LENGTH);
   const next: AdminAccessRecord = {
     email,
     name: existing?.name,
@@ -289,7 +290,7 @@ export function setAccessStatus(input: {
     acceptedTermsAt: existing?.acceptedTermsAt,
     status: input.status,
     role: input.role || existing?.role || 'user',
-    note: trimBounded(input.note, MAX_NOTE_LENGTH),
+    note,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     updatedBy: input.updatedBy,
@@ -297,6 +298,16 @@ export function setAccessStatus(input: {
 
   if (input.status === 'approved') {
     assertAccessRecordApprovalReady(next);
+  }
+
+  if (
+    existing
+    && existing.status === next.status
+    && existing.role === next.role
+    && existing.participantType === next.participantType
+    && existing.note === next.note
+  ) {
+    return existing;
   }
 
   recordAdminAuditEvent({

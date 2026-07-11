@@ -183,6 +183,65 @@ test('admin routes require backend admin sessions and revoke target user session
   assert.equal(approvedUser?.termsVersion, betaProgram.CURRENT_BETA_TERMS_VERSION);
   assert.equal(approvedUser?.approvalReady, true);
 
+  fs.writeFileSync(path.join(process.cwd(), 'beta-consent-receipts.json'), '{malformed');
+  const revokeApprovedUser = async () => fetch(`${baseUrl}/api/admin/users/user@example.com/access`, {
+    method: 'PATCH',
+    headers: {
+      ...adminHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      status: 'revoked',
+      note: 'Consent evidence became unavailable',
+    }),
+  });
+
+  const revokeApprovedUserResponse = await revokeApprovedUser();
+  assert.equal(revokeApprovedUserResponse.status, 200);
+  const revokedApprovedUserPayload = await readJson(revokeApprovedUserResponse);
+  const revokedApprovedUser = (revokedApprovedUserPayload.users as Array<{
+    email: string;
+    termsCurrent?: boolean;
+    approvalReady?: boolean;
+  }>).find((item) => item.email === 'user@example.com');
+  assert.equal((revokedApprovedUserPayload.record as { status?: string }).status, 'revoked');
+  assert.equal(revokedApprovedUser?.termsCurrent, false);
+  assert.equal(revokedApprovedUser?.approvalReady, false);
+  assert.equal(access.getAccessRecord('user@example.com')?.status, 'revoked');
+  assert.equal(auth.listAuthSessions().some((session) => session.userId === user.id), false);
+
+  const firstRevokedRecord = access.getAccessRecord('user@example.com');
+  const firstRevocationEvents = access.listAdminAuditEvents().filter(
+    (event) => event.action === 'access.revoked' && event.targetEmail === 'user@example.com',
+  );
+  assert.equal(firstRevocationEvents.length, 1);
+
+  const retryRevocationResponse = await revokeApprovedUser();
+  assert.equal(retryRevocationResponse.status, 200);
+  assert.equal(access.getAccessRecord('user@example.com')?.updatedAt, firstRevokedRecord?.updatedAt);
+  assert.equal(
+    access.listAdminAuditEvents().filter(
+      (event) => event.action === 'access.revoked' && event.targetEmail === 'user@example.com',
+    ).length,
+    1,
+  );
+
+  for (const invalidParticipantType of [null, '']) {
+    const invalidOmittedParticipant = await fetch(`${baseUrl}/api/admin/users/invalid-participant@example.com/access`, {
+      method: 'PATCH',
+      headers: {
+        ...adminHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: 'revoked',
+        participantType: invalidParticipantType,
+      }),
+    });
+    assert.equal(invalidOmittedParticipant.status, 400);
+    assert.match(String((await readJson(invalidOmittedParticipant)).error), /participant type must/i);
+  }
+
   const revokeTarget = await fetch(`${baseUrl}/api/admin/users/target@example.com/access`, {
     method: 'PATCH',
     headers: {

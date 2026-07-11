@@ -41,7 +41,7 @@ export function parseRequiredAdminAccessRole(value: unknown): AdminAccessRole {
 }
 
 export function parseParticipantType(value: unknown): ParticipantType | undefined {
-  if (value === undefined || value === null || value === '') return undefined;
+  if (value === undefined) return undefined;
   const participantType = normalizeParticipantType(value);
   if (!participantType) {
     throw new Error('participant type must be founder_operator, investor, or partner');
