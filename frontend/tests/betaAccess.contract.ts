@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { sanitizeLocalNextPath } from '../src/pages/AccessTerms';
+import { fetchBackendAuthSession } from '../src/lib/auth';
 
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
@@ -33,6 +34,30 @@ assert(!login.includes('acceptedTerms: true'), 'login does not synthesize accept
 assert(/const session = \{[\s\S]*intent: 'signup'/.test(signup), 'direct signup identifies its bounded intent');
 assert(/const session = \{[\s\S]*intent: 'login'/.test(login), 'direct login identifies its bounded intent');
 assert(auth.includes('intent: session.intent'), 'direct-session request sends its bounded intent');
+assert(auth.includes('clearAuthSession();\n    return null;'), 'failed backend session refresh clears stale local readiness');
+
+const storage = new Map<string, string>([['violema_auth_session', JSON.stringify({ acceptedTerms: true })]]);
+const originalLocalStorage = globalThis.localStorage;
+const originalFetch = globalThis.fetch;
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: {
+    getItem: (key: string) => storage.get(key) || null,
+    setItem: (key: string, value: string) => { storage.set(key, value); },
+    removeItem: (key: string) => { storage.delete(key); },
+  },
+});
+globalThis.fetch = async () => new Response(JSON.stringify({ code: 'access_not_approved' }), {
+  status: 403,
+  headers: { 'Content-Type': 'application/json' },
+});
+try {
+  assert(await fetchBackendAuthSession() === null, 'revoked backend refresh returns no usable session');
+  assert(!storage.has('violema_auth_session'), 'revoked backend refresh removes stale cached readiness');
+} finally {
+  globalThis.fetch = originalFetch;
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: originalLocalStorage });
+}
 
 for (const heading of [
   'Beta information',

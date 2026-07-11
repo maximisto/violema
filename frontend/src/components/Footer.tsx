@@ -28,7 +28,7 @@ const footerLinks = {
   Support: [
     { label: 'FAQ', path: '/faq' },
     { label: 'Sign in', path: '/login' },
-    { label: 'Start free preview', path: '/signup?next=%2Fdashboard' },
+    { label: 'Apply for beta', path: '/signup?next=%2Fdashboard' },
   ],
   Legal: [
     { label: 'Privacy', path: '/privacy' },
@@ -124,21 +124,21 @@ export default function Footer() {
               </div>
 
               <div className="relative mt-8 flex flex-col gap-3 sm:flex-row lg:mt-0 lg:flex-col xl:flex-row">
-                <button
-                  type="button"
-                  onClick={(event) => { void openCalendlyConsultation(event, 'footer-cta-workflow-audit'); }}
+                <a
+                  href="/signup?next=%2Fdashboard"
                   className="group inline-flex min-h-[3.25rem] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] px-6 text-sm font-bold text-white shadow-[0_22px_60px_-18px_rgba(124,58,237,0.8)] transition duration-200 hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
                 >
                   <Sparkles className="h-4 w-4" />
-                  Book workflow audit
+                  Apply for beta
                   <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-                </button>
+                </a>
                 <a
-                  href="/signup?next=%2Fdashboard"
+                  href={consultationUrl}
+                  onClick={(event) => { void openCalendlyConsultation(event, 'footer-cta-workflow-audit'); }}
                   className="inline-flex min-h-[3.25rem] items-center justify-center gap-2 rounded-2xl border border-white/14 bg-white/[0.04] px-6 text-sm font-bold text-white transition duration-200 hover:border-signal-500/40 hover:bg-signal-500/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
                 >
                   <ArrowRight className="h-4 w-4" />
-                  Start free preview
+                  Book workflow audit
                 </a>
               </div>
             </div>

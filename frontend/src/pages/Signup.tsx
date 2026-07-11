@@ -185,7 +185,7 @@ export default function Signup() {
               <span className="gradient-text"> you enter the workspace.</span>
             </h1>
             <p className="mt-4 max-w-xl text-lg leading-relaxed text-slate-400">
-              Violema gets recurring work ready for review, delivery, and cost tracking. The free preview starts safely before production missions connect to your stack.
+              Apply for Violema’s controlled beta to scope recurring work for review, delivery, and cost tracking before production missions connect to your stack.
             </p>
 
             <div className="mt-8 grid gap-4">
@@ -229,7 +229,7 @@ export default function Signup() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Registration</p>
-                <h2 className="mt-2 text-2xl font-semibold text-white">Start free preview</h2>
+                <h2 className="mt-2 text-2xl font-semibold text-white">Apply for beta</h2>
               </div>
               <Link to="/login" className="text-sm font-medium text-slate-400 transition-colors hover:text-white">
                 Already have access?

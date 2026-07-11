@@ -364,6 +364,17 @@ export function getSuggestedUpgradePlanId(planName: string): 'pro' | 'team' | nu
   return null;
 }
 
+export class BillingCheckoutError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code?: string,
+  ) {
+    super(message);
+    this.name = 'BillingCheckoutError';
+  }
+}
+
 export async function createBillingCheckout(input: {
   kind: 'subscription' | 'top-up';
   planId?: 'starter' | 'pro' | 'team';
@@ -398,14 +409,24 @@ export async function createBillingCheckout(input: {
     ),
   });
 
-  if (!response.ok) {
-    throw new Error(`Checkout failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<{
+  const result = await response.json().catch(() => null) as {
     ok: boolean;
+    error?: string;
+    code?: string;
     session?: { checkoutUrl: string; provider: 'stripe' | 'mock'; status: 'ready' | 'mocked' };
-  }>;
+  } | null;
+
+  if (!response.ok) {
+    throw new BillingCheckoutError(
+      result?.error || `Checkout failed with status ${response.status}.`,
+      response.status,
+      result?.code,
+    );
+  }
+  if (!result) {
+    throw new BillingCheckoutError('Checkout returned an invalid response.', response.status);
+  }
+  return result;
 }
 
 export async function openBillingCheckout(input: {

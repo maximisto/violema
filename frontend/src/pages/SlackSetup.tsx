@@ -62,7 +62,7 @@ export default function SlackSetup() {
   return (
     <div className="min-h-screen bg-hero-gradient">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
-      <PublicHeader backHref="/signup" backLabel="Back to access" actionHref={session ? nextPath : '/signup'} actionLabel={session ? 'Skip for now' : 'Start free'} />
+      <PublicHeader backHref="/signup" backLabel="Back to access" actionHref={session ? nextPath : '/signup'} actionLabel={session ? 'Skip for now' : 'Apply for beta'} />
       <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
           <div className="pt-2">

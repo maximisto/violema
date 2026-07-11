@@ -203,7 +203,7 @@ function formatCredits(value: number | undefined) {
 }
 
 export function formatTrialCreditUsage(spentCredits: number, remainingCredits: number) {
-  return `Spent ${formatCredits(spentCredits)} · ${formatCredits(remainingCredits)} remaining`;
+  return `Trial-first · Spent ${formatCredits(spentCredits)} · ${formatCredits(remainingCredits)} remaining`;
 }
 
 function formatRate(value: number | undefined) {
@@ -572,6 +572,9 @@ function TrialEvidence({ user }: { user: AdminUserRow }) {
         <p className="font-medium text-emerald-200">Granted · {formatCredits(user.trialCredits)} credits</p>
         <p className="mt-1 text-slate-400">
           {formatTrialCreditUsage(user.trialSpentCredits, user.trialRemainingCredits)}
+        </p>
+        <p className="mt-1 max-w-[220px] text-slate-600">
+          Post-grant debits are attributed to trial credits before later paid or manual grants.
         </p>
         <p className="mt-1 text-slate-500">{formatDate(user.trialGrantedAt || undefined)}</p>
       </div>

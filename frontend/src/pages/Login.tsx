@@ -79,7 +79,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-hero-gradient">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
-      <PublicHeader backHref="/" backLabel="Home" actionHref="/signup?next=%2Fdashboard" actionLabel="Start free" />
+      <PublicHeader backHref="/" backLabel="Home" actionHref="/signup?next=%2Fdashboard" actionLabel="Apply for beta" />
       <div className="relative mx-auto flex max-w-7xl items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="ui-panel-strong w-full max-w-xl p-6 sm:p-8">
           <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-4 py-1.5 text-sm font-medium text-violet-300">
@@ -156,7 +156,7 @@ export default function Login() {
           ) : null}
 
           <p className="mt-4 text-center text-sm text-slate-500">
-            New here? <Link to="/signup" className="text-violet-300 hover:text-violet-200">Start free preview first</Link>
+            New here? <Link to="/signup" className="text-violet-300 hover:text-violet-200">Apply for the controlled beta</Link>
           </p>
         </div>
       </div>

@@ -49,7 +49,7 @@ export default function BetaAccess() {
                   <Sparkles className="h-3 w-3 text-signal-300" />
                   <span className="text-telemetry text-[0.5rem] text-signal-200">Call first</span>
                 </span>
-                <span className="text-telemetry text-[0.54rem] text-[#8793ad]">Start free preview available</span>
+                <span className="text-telemetry text-[0.54rem] text-[#8793ad]">Application and approval required</span>
               </div>
 
               <h3 className="mt-5 max-w-2xl font-display text-3xl font-semibold leading-tight tracking-[-0.03em] text-white sm:text-4xl">
@@ -61,18 +61,18 @@ export default function BetaAccess() {
 
               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
                 <a
-                  href={consultationUrl}
-                  onClick={(event) => { void openCalendlyConsultation(event, 'workflow-audit-primary'); }}
+                  href="/signup?next=%2Fdashboard"
                   className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-bold text-[#070b16] transition duration-200 hover:bg-[#eef2ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
                 >
-                  <span>Book workflow audit</span>
+                  <span>Apply for beta</span>
                   <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
                 </a>
                 <a
-                  href="/signup?next=%2Fdashboard"
+                  href={consultationUrl}
+                  onClick={(event) => { void openCalendlyConsultation(event, 'workflow-audit-secondary'); }}
                   className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] px-5 text-sm font-semibold text-white transition duration-200 hover:border-signal-500/40 hover:bg-signal-500/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
                 >
-                  Start free preview
+                  Book workflow audit
                 </a>
               </div>
 

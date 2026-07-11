@@ -197,9 +197,15 @@ export async function fetchBackendAuthSession() {
     return null;
   }
   const payload = await response.json().catch(() => null) as { user?: Partial<AuthSession> } | null;
-  if (!response.ok || !payload?.user) return null;
+  if (!response.ok || !payload?.user) {
+    clearAuthSession();
+    return null;
+  }
   const session = hydrateSession(payload.user);
-  if (!session) return null;
+  if (!session) {
+    clearAuthSession();
+    return null;
+  }
   saveAuthSession(session);
   return session;
 }

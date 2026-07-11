@@ -99,8 +99,8 @@ export const heroCopy = {
   headline: 'AI agents for founder work.',
   subhead:
     'Violema turns recurring founder workflows into source-linked missions with review gates, delivery, run history, and visible costs.',
-  primaryCta: 'Book workflow audit',
-  secondaryCta: 'Start free preview',
+  primaryCta: 'Apply for beta',
+  secondaryCta: 'Book workflow audit',
   surfaceNote: 'Slack ready today. Discord, Telegram, and iMessage coming soon.',
 };
 

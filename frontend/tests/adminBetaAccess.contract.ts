@@ -46,8 +46,12 @@ assert.equal('role' in participantPatch, false, 'participant save must not mutat
 assert.equal(adminModule.isAdminApprovalDisabled({ busy: false, isApproved: false, approvalReady: false, participantDirty: false }), true);
 assert.equal(adminModule.isAdminApprovalDisabled({ busy: false, isApproved: false, approvalReady: true, participantDirty: true }), true);
 assert.equal(adminModule.isAdminApprovalDisabled({ busy: false, isApproved: false, approvalReady: true, participantDirty: false }), false);
-assert.equal(adminModule.formatTrialCreditUsage(125, 375), 'Spent 125 · 375 remaining');
-assert.equal(adminModule.formatTrialCreditUsage(500, 0), 'Spent 500 · 0 remaining');
+assert.equal(adminModule.formatTrialCreditUsage(125, 375), 'Trial-first · Spent 125 · 375 remaining');
+assert.equal(adminModule.formatTrialCreditUsage(500, 0), 'Trial-first · Spent 500 · 0 remaining');
+assertSource(
+  adminDashboard.includes('Post-grant debits are attributed to trial credits before later paid or manual grants.'),
+  'admin UI explains deterministic trial-first debit attribution',
+);
 
 assertSource(
   (adminDashboard.match(/<TrialEvidence\s+user=/g) || []).length === 2,

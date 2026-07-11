@@ -16,7 +16,7 @@ import HeroActivityFeed from './HeroActivityFeed';
 import { HeroTourImages, HERO_TOUR_MS, heroImageSrc, useHeroTour } from './HeroProductTour';
 import { openCalendlyConsultation } from '../lib/calendly';
 
-type HeroCtaAction = 'book_workflow_audit' | 'start_free_preview';
+type HeroCtaAction = 'apply_for_beta' | 'book_workflow_audit';
 
 const proofIcons = [CalendarDays, ShieldCheck, Link2, DollarSign];
 
@@ -73,23 +73,22 @@ function HeroActions({ placement = 'hero' }: { placement?: 'hero' | 'mobile_stic
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
       <button
         type="button"
-        onClick={(event) => {
-          trackHeroCta('book_workflow_audit', placement);
-          void openCalendlyConsultation(event, `${placement}-workflow-audit`);
+        onClick={() => {
+          trackHeroCta('apply_for_beta', placement);
+          navigate('/signup?next=%2Fdashboard');
         }}
         className="group relative inline-flex min-h-[3.5rem] items-center justify-center gap-2.5 overflow-hidden rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] px-6 text-base font-bold tracking-[-0.01em] text-white shadow-[0_22px_60px_-18px_rgba(124,58,237,0.85)] transition duration-200 hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 sm:min-h-[3.25rem]"
       >
         <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-        <Sparkles className="h-5 w-5" />
         {heroCopy.primaryCta}
         <ArrowRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5" />
       </button>
 
       <button
         type="button"
-        onClick={() => {
-          trackHeroCta('start_free_preview', placement);
-          navigate('/signup?next=%2Fdashboard');
+        onClick={(event) => {
+          trackHeroCta('book_workflow_audit', placement);
+          void openCalendlyConsultation(event, `${placement}-workflow-audit`);
         }}
         className="group inline-flex min-h-[3.5rem] items-center justify-center gap-2.5 rounded-2xl border border-white/14 bg-white/[0.04] px-6 text-base font-semibold tracking-[-0.01em] text-copy-hi transition duration-200 hover:border-violet-200/40 hover:bg-white/[0.07] active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200 sm:min-h-[3.25rem]"
       >
@@ -258,21 +257,24 @@ function MobileStickyCta() {
       <div className="flex items-center gap-2.5">
         <button
           type="button"
-          onClick={(event) => {
-            trackHeroCta('book_workflow_audit', 'mobile_sticky');
-            void openCalendlyConsultation(event, 'mobile-sticky-workflow-audit');
+          onClick={() => {
+            trackHeroCta('apply_for_beta', 'mobile_sticky');
+            navigate('/signup?next=%2Fdashboard');
           }}
           className="group flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] py-4 text-base font-bold text-white shadow-[0_14px_40px_-10px_rgba(124,58,237,0.7)] transition active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
         >
-          Book audit
+          Apply for beta
           <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </button>
         <button
           type="button"
-          onClick={() => navigate('/signup?next=%2Fdashboard')}
+          onClick={(event) => {
+            trackHeroCta('book_workflow_audit', 'mobile_sticky');
+            void openCalendlyConsultation(event, 'mobile-sticky-workflow-audit');
+          }}
           className="rounded-2xl border border-white/14 bg-white/[0.05] px-5 py-4 text-base font-semibold text-copy-hi focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200"
         >
-          Start free
+          Book audit
         </button>
       </div>
     </div>
