@@ -1,6 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import { ParticipantType, defaultParticipantType, normalizeParticipantType } from './betaProgram';
+import { hasCurrentBetaConsent } from './betaConsentStore';
+import {
+  CURRENT_BETA_TERMS_VERSION,
+  ParticipantType,
+  defaultParticipantType,
+  normalizeParticipantType,
+} from './betaProgram';
 import { writeJsonFile } from './platform/jsonStore';
 
 export type AdminAccessStatus = 'requested' | 'approved' | 'revoked';
@@ -162,6 +168,21 @@ export function getAccessRecord(email: string) {
   return readAccessRecords().find((record) => record.email === normalized) || null;
 }
 
+export function isAccessRecordApprovalReady(record: AdminAccessRecord) {
+  return Boolean(
+    record.identityVerifiedAt
+    && record.acceptedTermsVersion === CURRENT_BETA_TERMS_VERSION
+    && record.acceptedTermsAt
+    && hasCurrentBetaConsent(record.email),
+  );
+}
+
+export function assertAccessRecordApprovalReady(record: AdminAccessRecord) {
+  if (!isAccessRecordApprovalReady(record)) {
+    throw new Error('Verified identity and current beta terms are required before approval.');
+  }
+}
+
 export function listAdminAuditEvents(limit = 100) {
   return readAuditEvents()
     .slice()
@@ -245,6 +266,7 @@ export function setAccessStatus(input: {
   email: string;
   status: AdminAccessStatus;
   role?: AdminAccessRole;
+  participantType?: ParticipantType;
   note?: string;
   updatedBy: string;
 }) {
@@ -253,11 +275,15 @@ export function setAccessStatus(input: {
   const records = readAccessRecords();
   const index = records.findIndex((record) => record.email === email);
   const existing = index >= 0 ? records[index] : null;
+  const participantType = input.participantType === undefined
+    ? existing?.participantType || defaultParticipantType()
+    : normalizeParticipantType(input.participantType);
+  if (!participantType) throw new Error('invalid participantType');
   const next: AdminAccessRecord = {
     email,
     name: existing?.name,
     method: existing?.method || 'email',
-    participantType: existing?.participantType || defaultParticipantType(),
+    participantType,
     identityVerifiedAt: existing?.identityVerifiedAt,
     acceptedTermsVersion: existing?.acceptedTermsVersion,
     acceptedTermsAt: existing?.acceptedTermsAt,
@@ -268,6 +294,10 @@ export function setAccessStatus(input: {
     updatedAt: now,
     updatedBy: input.updatedBy,
   };
+
+  if (input.status === 'approved') {
+    assertAccessRecordApprovalReady(next);
+  }
 
   recordAdminAuditEvent({
     actorEmail: input.updatedBy,

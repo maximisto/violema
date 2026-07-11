@@ -8,6 +8,7 @@ import {
 } from './adminDashboard';
 import { setAccessRole, setAccessStatus, type AdminAccessRole, type AdminAccessStatus } from './adminAccessStore';
 import { clearAuthSessionsForEmail } from './auth';
+import { normalizeParticipantType, type ParticipantType } from './betaProgram';
 
 export interface AdminActor {
   email: string;
@@ -37,6 +38,15 @@ export function parseAdminAccessRole(value: unknown): AdminAccessRole | undefine
 export function parseRequiredAdminAccessRole(value: unknown): AdminAccessRole {
   if (value === 'admin' || value === 'user') return value;
   throw new Error('role must be admin or user');
+}
+
+export function parseParticipantType(value: unknown): ParticipantType | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const participantType = normalizeParticipantType(value);
+  if (!participantType) {
+    throw new Error('participant type must be founder_operator, investor, or partner');
+  }
+  return participantType;
 }
 
 export function parseAdminEmail(value: unknown): string {
@@ -84,10 +94,12 @@ export function registerAdminRoutes(
       const email = parseAdminEmail(req.params.email);
       const status = parseAdminAccessStatus(req.body?.status);
       const role = parseAdminAccessRole(req.body?.role);
+      const participantType = parseParticipantType(req.body?.participantType);
       const record = setAccessStatus({
         email,
         status,
         role,
+        participantType,
         note: typeof req.body?.note === 'string' ? req.body.note : undefined,
         updatedBy: actorEmail,
       });

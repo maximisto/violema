@@ -63,6 +63,9 @@ async function readJson(response: Response) {
 
 test('admin routes require backend admin sessions and revoke target user sessions', async () => withTempServer(async ({ baseUrl }) => {
   const auth = await import('../src/auth');
+  const access = await import('../src/adminAccessStore');
+  const consent = await import('../src/betaConsentStore');
+  const betaProgram = await import('../src/betaProgram');
 
   const admin = auth.upsertAuthUser({
     email: 'admin@example.com',
@@ -107,6 +110,79 @@ test('admin routes require backend admin sessions and revoke target user session
   assert.equal(adminUsers.status, 200);
   assert.ok(((await readJson(adminUsers)).items as Array<{ email: string }>).some((item) => item.email === 'target@example.com'));
 
+  const incompleteApproval = await fetch(`${baseUrl}/api/admin/users/user@example.com/access`, {
+    method: 'PATCH',
+    headers: {
+      ...adminHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      status: 'approved',
+      participantType: 'partner',
+    }),
+  });
+  assert.equal(incompleteApproval.status, 400);
+  assert.match(String((await readJson(incompleteApproval)).error), /verified identity and current beta terms/i);
+
+  const invalidParticipant = await fetch(`${baseUrl}/api/admin/users/target@example.com/access`, {
+    method: 'PATCH',
+    headers: {
+      ...adminHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      status: 'revoked',
+      participantType: 'tester',
+    }),
+  });
+  assert.equal(invalidParticipant.status, 400);
+  assert.match(String((await readJson(invalidParticipant)).error), /participant type must/i);
+
+  const acceptedAt = '2026-07-11T12:01:00.000Z';
+  consent.recordBetaConsent({
+    email: 'user@example.com',
+    participantType: 'partner',
+    authMethod: 'email',
+    acceptanceSource: 'signup',
+    termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+    termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+    acceptedAt,
+  });
+  access.recordAccessRequest({
+    email: 'user@example.com',
+    method: 'email',
+    identityVerifiedAt: '2026-07-11T12:00:00.000Z',
+    acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: acceptedAt,
+  });
+  const approveUser = await fetch(`${baseUrl}/api/admin/users/user@example.com/access`, {
+    method: 'PATCH',
+    headers: {
+      ...adminHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      status: 'approved',
+      participantType: 'partner',
+    }),
+  });
+  assert.equal(approveUser.status, 200);
+  const approvePayload = await readJson(approveUser);
+  assert.equal((approvePayload.record as { participantType?: string }).participantType, 'partner');
+  const approvedUser = (approvePayload.users as Array<{
+    email: string;
+    participantType?: string;
+    identityVerified?: boolean;
+    termsCurrent?: boolean;
+    termsVersion?: string | null;
+    approvalReady?: boolean;
+  }>).find((item) => item.email === 'user@example.com');
+  assert.equal(approvedUser?.participantType, 'partner');
+  assert.equal(approvedUser?.identityVerified, true);
+  assert.equal(approvedUser?.termsCurrent, true);
+  assert.equal(approvedUser?.termsVersion, betaProgram.CURRENT_BETA_TERMS_VERSION);
+  assert.equal(approvedUser?.approvalReady, true);
+
   const revokeTarget = await fetch(`${baseUrl}/api/admin/users/target@example.com/access`, {
     method: 'PATCH',
     headers: {
@@ -115,12 +191,14 @@ test('admin routes require backend admin sessions and revoke target user session
     },
     body: JSON.stringify({
       status: 'revoked',
+      participantType: 'investor',
       note: 'Route-level revocation smoke test',
     }),
   });
   assert.equal(revokeTarget.status, 200);
   const revokePayload = await readJson(revokeTarget);
   assert.equal((revokePayload.record as { status?: string }).status, 'revoked');
+  assert.equal((revokePayload.record as { participantType?: string }).participantType, 'investor');
 
   const revokedTargetWorkspace = await fetch(`${baseUrl}/api/workspace`, { headers: targetHeaders });
   assert.equal(revokedTargetWorkspace.status, 401);

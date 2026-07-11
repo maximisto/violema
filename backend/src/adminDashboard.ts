@@ -1,5 +1,11 @@
-import { listAdminAccessRecords, listAdminAuditEvents } from './adminAccessStore';
+import {
+  isAccessRecordApprovalReady,
+  listAdminAccessRecords,
+  listAdminAuditEvents,
+} from './adminAccessStore';
 import { isEmailApprovedForAccess, listAuthSessions, listAuthUsers } from './auth';
+import { hasCurrentBetaConsent } from './betaConsentStore';
+import { CURRENT_BETA_TERMS_VERSION, type ParticipantType } from './betaProgram';
 import { listAutomations } from './scheduler';
 import { getBillingStatusSnapshot } from './platform/billing';
 import { listLedgerEntries, listTaskRuns, listTasks } from './platform/store';
@@ -24,6 +30,7 @@ export function buildAdminUsers() {
   return Array.from(emails).sort().map((email) => {
     const user = users.find((item) => item.email === email) || null;
     const access = accessRecords.find((item) => item.email === email) || null;
+    const userParticipantType = (user as (typeof user & { participantType?: ParticipantType }) | null)?.participantType;
     const approvedAccess = access?.status === 'approved' || isEmailApprovedForAccess(email);
     const accessStatus = access?.status || (approvedAccess ? 'approved' : 'requested');
     return {
@@ -34,6 +41,11 @@ export function buildAdminUsers() {
       accessStatus,
       approvedAccess,
       hasAccessRecord: Boolean(access),
+      participantType: access?.participantType || userParticipantType || 'founder_operator',
+      identityVerified: Boolean(access?.identityVerifiedAt),
+      termsCurrent: access?.acceptedTermsVersion === CURRENT_BETA_TERMS_VERSION && hasCurrentBetaConsent(email),
+      termsVersion: access?.acceptedTermsVersion || null,
+      approvalReady: access ? isAccessRecordApprovalReady(access) : false,
       slackConnected: Boolean(user?.slackWorkspace && user?.slackChannelId),
       slackDisplayTarget: user?.slackDisplayTarget || null,
       activeSessionCount: user ? sessions.filter((session) => session.userId === user.id).length : 0,

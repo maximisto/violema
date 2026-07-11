@@ -14,13 +14,21 @@ import {
   verifyAdminMagicLoginToken,
 } from '../src/auth';
 import {
+  assertAccessRecordApprovalReady,
   clearAdminAccessRecords,
   getAccessRecord,
+  isAccessRecordApprovalReady,
   listAdminAuditEvents,
   recordAccessRequest,
   setAccessStatus,
 } from '../src/adminAccessStore';
 import { isPublicBetaApiPath } from '../src/betaAccess';
+import { recordBetaConsent } from '../src/betaConsentStore';
+import {
+  CURRENT_BETA_TERMS_DIGEST,
+  CURRENT_BETA_TERMS_VERSION,
+  type ParticipantType,
+} from '../src/betaProgram';
 
 function withTempAdminStore(run: () => void) {
   const originalCwd = process.cwd();
@@ -33,6 +41,34 @@ function withTempAdminStore(run: () => void) {
     process.chdir(originalCwd);
     fs.rmSync(tempDirectory, { recursive: true, force: true });
   }
+}
+
+function recordCurrentApprovalEvidence(input: {
+  email: string;
+  participantType?: ParticipantType;
+  method?: 'email' | 'google' | 'microsoft';
+}) {
+  const participantType = input.participantType || 'founder_operator';
+  const method = input.method || 'email';
+  const identityVerifiedAt = '2026-07-11T12:00:00.000Z';
+  const acceptedTermsAt = '2026-07-11T12:01:00.000Z';
+  recordBetaConsent({
+    email: input.email,
+    participantType,
+    authMethod: method,
+    acceptanceSource: 'signup',
+    termsVersion: CURRENT_BETA_TERMS_VERSION,
+    termsDigest: CURRENT_BETA_TERMS_DIGEST,
+    acceptedAt: acceptedTermsAt,
+  });
+  return recordAccessRequest({
+    email: input.email,
+    participantType,
+    method,
+    identityVerifiedAt,
+    acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt,
+  });
 }
 
 test('auth access defaults to manual approval', () => withTempAdminStore(() => {
@@ -190,6 +226,8 @@ test('persistent admin access records requests, approvals, revokes, and audit ev
     assert.equal(requested.status, 'requested');
     assert.equal(isEmailApprovedForAccess('founder@example.com'), false);
 
+    recordCurrentApprovalEvidence({ email: 'founder@example.com' });
+
     const approved = setAccessStatus({
       email: 'founder@example.com',
       status: 'approved',
@@ -230,6 +268,7 @@ test('malformed audit store prevents access status mutation', () => withTempAdmi
       method: 'email',
       note: 'Signup request',
     });
+    recordCurrentApprovalEvidence({ email: 'founder@example.com' });
     fs.writeFileSync(path.join(process.cwd(), 'admin-audit-events.json'), '{malformed');
 
     assert.throws(
@@ -294,6 +333,8 @@ test('requested access records dedupe audit events and bound user text', () => w
     );
     assert.equal(requestedEvents.length, 1);
 
+    recordCurrentApprovalEvidence({ email: 'waiter@example.com' });
+
     const approved = setAccessStatus({
       email: 'waiter@example.com',
       status: 'approved',
@@ -354,6 +395,66 @@ test('duplicate access requests preserve stronger identity and terms evidence', 
   }
 }));
 
+test('approval requires verified identity and current beta consent evidence', () => withTempAdminStore(() => {
+  clearAdminAccessRecords();
+
+  try {
+    const incomplete = recordAccessRequest({
+      email: 'partner@example.com',
+      participantType: 'partner',
+      method: 'google',
+    });
+    assert.equal(isAccessRecordApprovalReady(incomplete), false);
+    assert.throws(
+      () => assertAccessRecordApprovalReady(incomplete),
+      /verified identity and current beta terms/i,
+    );
+    assert.throws(
+      () => setAccessStatus({
+        email: incomplete.email,
+        status: 'approved',
+        updatedBy: 'max@violema.com',
+      }),
+      /verified identity and current beta terms/i,
+    );
+
+    const ready = recordCurrentApprovalEvidence({
+      email: incomplete.email,
+      participantType: 'partner',
+      method: 'google',
+    });
+    assert.equal(isAccessRecordApprovalReady(ready), true);
+    assert.doesNotThrow(() => assertAccessRecordApprovalReady(ready));
+
+    const approved = setAccessStatus({
+      email: ready.email,
+      status: 'approved',
+      updatedBy: 'max@violema.com',
+    });
+    assert.equal(approved.status, 'approved');
+  } finally {
+    clearAdminAccessRecords();
+  }
+}));
+
+test('revocation remains available when beta consent evidence is malformed', () => withTempAdminStore(() => {
+  const requested = recordAccessRequest({
+    email: 'revoked@example.com',
+    participantType: 'investor',
+    method: 'microsoft',
+  });
+  fs.writeFileSync(path.join(process.cwd(), 'beta-consent-receipts.json'), '{malformed');
+
+  const revoked = setAccessStatus({
+    email: requested.email,
+    status: 'revoked',
+    updatedBy: 'max@violema.com',
+  });
+
+  assert.equal(revoked.status, 'revoked');
+  assert.equal(revoked.participantType, 'investor');
+}));
+
 test('persistent approved role overrides default role resolution', () => withTempAdminStore(() => {
   clearAdminAccessRecords();
 
@@ -363,6 +464,8 @@ test('persistent approved role overrides default role resolution', () => withTem
     assert.equal(resolveAuthRole('founder@example.com'), 'user');
     assert.equal(isEmailAdminForAccess('founder@example.com'), false);
 
+    recordCurrentApprovalEvidence({ email: 'founder@example.com' });
+
     setAccessStatus({
       email: 'founder@example.com',
       status: 'approved',
@@ -371,6 +474,8 @@ test('persistent approved role overrides default role resolution', () => withTem
     });
     assert.equal(resolveAuthRole('founder@example.com'), 'admin');
     assert.equal(isEmailAdminForAccess('founder@example.com'), true);
+
+    recordCurrentApprovalEvidence({ email: 'max@violema.com' });
 
     setAccessStatus({
       email: 'max@violema.com',

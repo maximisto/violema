@@ -13,11 +13,31 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     process.chdir(tempDir);
     const auth = await import('../src/auth');
     const access = await import('../src/adminAccessStore');
+    const consent = await import('../src/betaConsentStore');
+    const betaProgram = await import('../src/betaProgram');
     const workspace = await import('../src/platform/workspace');
     const billing = await import('../src/platform/billing');
     const store = await import('../src/platform/store');
     const dashboard = await import('../src/adminDashboard');
 
+    const acceptedAt = '2026-07-11T12:01:00.000Z';
+    consent.recordBetaConsent({
+      email: 'client@example.com',
+      participantType: 'partner',
+      authMethod: 'email',
+      acceptanceSource: 'signup',
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt,
+    });
+    access.recordAccessRequest({
+      email: 'client@example.com',
+      participantType: 'partner',
+      method: 'email',
+      identityVerifiedAt: '2026-07-11T12:00:00.000Z',
+      acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: acceptedAt,
+    });
     access.setAccessStatus({
       email: 'client@example.com',
       status: 'approved',
@@ -77,6 +97,11 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(users[0].activeSessionCount, 1);
     assert.equal(users[0].approvedAccess, true);
     assert.equal(users[0].hasAccessRecord, true);
+    assert.equal(users[0].participantType, 'partner');
+    assert.equal(users[0].identityVerified, true);
+    assert.equal(users[0].termsCurrent, true);
+    assert.equal(users[0].termsVersion, betaProgram.CURRENT_BETA_TERMS_VERSION);
+    assert.equal(users[0].approvalReady, true);
 
     const workspaces = dashboard.buildAdminWorkspaces();
     assert.equal(workspaces[0].workspaceId, 'client-acme');
@@ -101,6 +126,11 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(allowlistedUser?.accessStatus, 'requested');
     assert.equal(allowlistedUser?.approvedAccess, true);
     assert.equal(allowlistedUser?.hasAccessRecord, true);
+    assert.equal(allowlistedUser?.participantType, 'founder_operator');
+    assert.equal(allowlistedUser?.identityVerified, false);
+    assert.equal(allowlistedUser?.termsCurrent, false);
+    assert.equal(allowlistedUser?.termsVersion, null);
+    assert.equal(allowlistedUser?.approvalReady, false);
     assert.equal(dashboard.buildAdminOverview().metrics.pendingUsers, 0);
 
     auth.upsertAuthUser({
@@ -116,6 +146,11 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(authOnlyUser?.accessStatus, 'requested');
     assert.equal(authOnlyUser?.approvedAccess, false);
     assert.equal(authOnlyUser?.hasAccessRecord, false);
+    assert.equal(authOnlyUser?.participantType, 'founder_operator');
+    assert.equal(authOnlyUser?.identityVerified, false);
+    assert.equal(authOnlyUser?.termsCurrent, false);
+    assert.equal(authOnlyUser?.termsVersion, null);
+    assert.equal(authOnlyUser?.approvalReady, false);
 
     const ledgerEntries = Array.from({ length: 105 }, (_, index) => ({
       id: `ledger_${String(index).padStart(3, '0')}`,
@@ -270,6 +305,13 @@ test('admin route input validation rejects invalid access mutations', async () =
   );
   assert.equal(routes.parseRequiredAdminAccessRole('user'), 'user');
 
+  assert.equal(routes.parseParticipantType(undefined), undefined);
+  assert.equal(routes.parseParticipantType('partner'), 'partner');
+  assert.throws(
+    () => routes.parseParticipantType('tester'),
+    /participant type must be founder_operator, investor, or partner/i,
+  );
+
   assert.throws(
     () => routes.parseAdminEmail('not-an-email'),
     /valid email is required/,
@@ -348,8 +390,26 @@ test('admin access status updates preserve existing role when role is omitted', 
   try {
     process.chdir(tempDir);
     const access = await import('../src/adminAccessStore');
+    const consent = await import('../src/betaConsentStore');
+    const betaProgram = await import('../src/betaProgram');
     const routes = await import('../src/adminRoutes');
 
+    consent.recordBetaConsent({
+      email: 'admin@example.com',
+      participantType: 'founder_operator',
+      authMethod: 'email',
+      acceptanceSource: 'signup',
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt: '2026-07-11T12:01:00.000Z',
+    });
+    access.recordAccessRequest({
+      email: 'admin@example.com',
+      method: 'email',
+      identityVerifiedAt: '2026-07-11T12:00:00.000Z',
+      acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: '2026-07-11T12:01:00.000Z',
+    });
     access.setAccessStatus({
       email: 'admin@example.com',
       status: 'approved',
