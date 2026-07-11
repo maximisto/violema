@@ -31,7 +31,7 @@ const visibleLaunchCopy = [
 ].join(' ');
 
 const betaAccessComponent = readFileSync(new URL('../src/components/BetaAccess.tsx', import.meta.url), 'utf8');
-const controlledBetaCopy = [...visibleLaunchCopy, betaAccessComponent].join(' ');
+const controlledBetaCopy = [visibleLaunchCopy, betaAccessComponent].join(' ');
 
 assert(controlledBetaCopy.includes('$79'), 'homepage anchors Start at $79');
 assert(controlledBetaCopy.includes('$249'), 'homepage anchors Pro at $249');
