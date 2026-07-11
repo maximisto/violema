@@ -17,6 +17,7 @@ function makeUser(role: AuthUserRecord['role'], email = `${role}@example.com`): 
     method: 'email',
     workspaceIds: [`workspace_${role}`],
     defaultWorkspaceId: `workspace_${role}`,
+    participantType: 'founder_operator',
     acceptedTerms: true,
     acceptedEducation: true,
     createdAt: '2026-07-04T00:00:00.000Z',

@@ -66,12 +66,25 @@ test('admin routes require backend admin sessions and revoke target user session
   const access = await import('../src/adminAccessStore');
   const consent = await import('../src/betaConsentStore');
   const betaProgram = await import('../src/betaProgram');
+  const fixtureAcceptedAt = '2026-07-11T12:01:00.000Z';
+  for (const email of ['user@example.com', 'target@example.com']) {
+    consent.recordBetaConsent({
+      email,
+      participantType: 'founder_operator',
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt: fixtureAcceptedAt,
+      authMethod: 'email',
+      acceptanceSource: 'signup',
+    });
+  }
 
   const admin = auth.upsertAuthUser({
     email: 'admin@example.com',
     name: 'Admin',
     role: 'admin',
     method: 'email',
+    participantType: 'founder_operator',
     acceptedTerms: true,
     acceptedEducation: true,
   });
@@ -80,7 +93,10 @@ test('admin routes require backend admin sessions and revoke target user session
     name: 'Normal User',
     role: 'user',
     method: 'email',
+    participantType: 'founder_operator',
     acceptedTerms: true,
+    acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: fixtureAcceptedAt,
     acceptedEducation: true,
   });
   const target = auth.upsertAuthUser({
@@ -88,7 +104,10 @@ test('admin routes require backend admin sessions and revoke target user session
     name: 'Target User',
     role: 'user',
     method: 'email',
+    participantType: 'founder_operator',
     acceptedTerms: true,
+    acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: fixtureAcceptedAt,
     acceptedEducation: true,
   });
 

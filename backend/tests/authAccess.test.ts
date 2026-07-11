@@ -502,10 +502,13 @@ test('beta API protection only leaves auth and signed webhook surfaces public', 
   assert.equal(isPublicBetaApiPath('POST', '/api/waitlist'), true);
   assert.equal(isPublicBetaApiPath('GET', '/api/auth/session'), true);
   assert.equal(isPublicBetaApiPath('POST', '/api/auth/session'), true);
+  assert.equal(isPublicBetaApiPath('GET', '/api/auth/terms'), true);
+  assert.equal(isPublicBetaApiPath('POST', '/api/auth/terms/accept'), true);
   assert.equal(isPublicBetaApiPath('POST', '/api/billing/stripe/webhook'), true);
   assert.equal(isPublicBetaApiPath('POST', '/api/slack/events'), true);
   assert.equal(isPublicBetaApiPath('OPTIONS', '/api/chat'), true);
 
+  assert.equal(isPublicBetaApiPath('GET', '/api/auth/internal'), false);
   assert.equal(isPublicBetaApiPath('POST', '/api/chat'), false);
   assert.equal(isPublicBetaApiPath('GET', '/api/integrations/catalog'), false);
   assert.equal(isPublicBetaApiPath('GET', '/api/generated-screenshots/test.png'), false);

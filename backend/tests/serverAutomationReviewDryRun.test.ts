@@ -40,15 +40,30 @@ async function withReviewServer(run: (context: TestServerContext) => Promise<voi
   try {
     const { default: app } = await import('../src/server');
     const auth = await import('../src/auth');
+    const consent = await import('../src/betaConsentStore');
+    const betaProgram = await import('../src/betaProgram');
     const scheduler = await import('../src/scheduler');
     const store = await import('../src/platform/store');
+    const acceptedAt = '2026-07-11T12:01:00.000Z';
+    consent.recordBetaConsent({
+      email: 'qa@example.com',
+      participantType: 'founder_operator',
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt,
+      authMethod: 'email',
+      acceptanceSource: 'signup',
+    });
 
     const user = auth.upsertAuthUser({
       email: 'qa@example.com',
       name: 'QA Operator',
       role: 'admin',
       method: 'email',
+      participantType: 'founder_operator',
       acceptedTerms: true,
+      acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: acceptedAt,
       acceptedEducation: true,
     });
     const session = auth.createAuthSession(user.id);

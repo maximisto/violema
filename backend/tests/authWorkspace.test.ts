@@ -3,6 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { recordBetaConsent } from '../src/betaConsentStore';
+import {
+  CURRENT_BETA_TERMS_DIGEST,
+  CURRENT_BETA_TERMS_VERSION,
+} from '../src/betaProgram';
 
 test('auth users get server-owned workspaces and non-admins cannot select other workspaces', async () => {
   const originalCwd = process.cwd();
@@ -32,6 +37,19 @@ test('auth users get server-owned workspaces and non-admins cannot select other 
       JSON.parse(fs.readFileSync(path.join(tempDir, 'auth-users.json'), 'utf-8'))[0].workspaceIds,
       [migratedLegacy.defaultWorkspaceId],
     );
+    assert.equal(migratedLegacy.participantType, 'founder_operator');
+    assert.equal(auth.authUserHasCurrentTerms(migratedLegacy), false);
+
+    const acceptedAt = '2026-07-11T12:01:00.000Z';
+    recordBetaConsent({
+      email: 'alice@example.com',
+      participantType: 'founder_operator',
+      termsVersion: CURRENT_BETA_TERMS_VERSION,
+      termsDigest: CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt,
+      authMethod: 'email',
+      acceptanceSource: 'signup',
+    });
 
     const alice = auth.upsertAuthUser({
       email: 'alice@example.com',
@@ -39,6 +57,9 @@ test('auth users get server-owned workspaces and non-admins cannot select other 
       role: 'user',
       method: 'email',
       acceptedTerms: true,
+      participantType: 'founder_operator',
+      acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: acceptedAt,
       acceptedEducation: true,
     });
     const bob = auth.upsertAuthUser({
@@ -47,10 +68,13 @@ test('auth users get server-owned workspaces and non-admins cannot select other 
       role: 'user',
       method: 'email',
       acceptedTerms: true,
+      participantType: 'partner',
       acceptedEducation: true,
     });
 
     assert.notEqual(alice.defaultWorkspaceId, bob.defaultWorkspaceId);
+    assert.equal(auth.authUserHasCurrentTerms(alice), true);
+    assert.equal(auth.authUserHasCurrentTerms(bob), false);
     assert.equal(auth.canAuthUserAccessWorkspace(alice, alice.defaultWorkspaceId), true);
     assert.equal(auth.canAuthUserAccessWorkspace(alice, bob.defaultWorkspaceId), false);
     assert.throws(
@@ -64,6 +88,7 @@ test('auth users get server-owned workspaces and non-admins cannot select other 
       role: 'admin',
       method: 'email',
       acceptedTerms: true,
+      participantType: 'founder_operator',
       acceptedEducation: true,
     });
 
@@ -76,6 +101,7 @@ test('auth users get server-owned workspaces and non-admins cannot select other 
       role: 'user',
       method: 'email',
       acceptedTerms: true,
+      participantType: 'founder_operator',
       acceptedEducation: true,
       slackWorkspace: 'T123WORKSPACE',
       slackChannelId: 'C123CHANNEL',

@@ -102,12 +102,27 @@ async function withTempChatServer(run: (context: TestServerContext) => Promise<v
   try {
     const { default: app } = await import('../src/server');
     const auth = await import('../src/auth');
+    const consent = await import('../src/betaConsentStore');
+    const betaProgram = await import('../src/betaProgram');
+    const acceptedAt = '2026-07-11T12:01:00.000Z';
+    consent.recordBetaConsent({
+      email: 'chat-user@example.com',
+      participantType: 'founder_operator',
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt,
+      authMethod: 'email',
+      acceptanceSource: 'signup',
+    });
     const user = auth.upsertAuthUser({
       email: 'chat-user@example.com',
       name: 'Chat User',
       role: 'user',
       method: 'email',
+      participantType: 'founder_operator',
       acceptedTerms: true,
+      acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: acceptedAt,
       acceptedEducation: true,
     });
     const session = auth.createAuthSession(user.id);
