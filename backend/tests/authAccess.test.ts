@@ -585,39 +585,134 @@ test('verified evidence sync preserves access state and immutable approval prove
     role: 'user',
   });
   assert.equal(revokedSync.status, 'revoked');
+  assert.equal(revokedSync.role, 'admin');
   assert.equal(revokedSync.approvedBy, revoked.approvedBy);
   assert.equal(revokedSync.approvedAt, revoked.approvedAt);
 }));
 
-test('verified current allowlist evidence creates an approved projection without invented actor provenance', () => withTempAdminStore(() => {
+test('missing configured admin evidence projects approved admin without invented actor provenance', () => withTempAdminStore(() => {
   const email = 'migrated@example.com';
-  recordBetaConsent({
-    email,
-    participantType: 'investor',
-    authMethod: 'microsoft',
-    acceptanceSource: 'oauth_callback',
-    termsVersion: CURRENT_BETA_TERMS_VERSION,
-    termsDigest: CURRENT_BETA_TERMS_DIGEST,
-    acceptedAt: '2026-07-11T12:01:00.000Z',
-  });
+  const originalAdminEmails = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = email;
+  try {
+    recordBetaConsent({
+      email,
+      participantType: 'investor',
+      authMethod: 'microsoft',
+      acceptanceSource: 'oauth_callback',
+      termsVersion: CURRENT_BETA_TERMS_VERSION,
+      termsDigest: CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt: '2026-07-11T12:01:00.000Z',
+    });
 
-  const projected = syncVerifiedAccessEvidence({
-    email,
-    name: 'Migrated User',
-    method: 'microsoft',
-    participantType: 'investor',
-    identityVerifiedAt: '2026-07-11T12:00:00.000Z',
-    acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
-    acceptedTermsAt: '2026-07-11T12:01:00.000Z',
-    approvedIfMissing: true,
-    role: 'admin',
-  });
+    const projected = syncVerifiedAccessEvidence({
+      email,
+      name: 'Migrated User',
+      method: 'microsoft',
+      participantType: 'investor',
+      identityVerifiedAt: '2026-07-11T12:00:00.000Z',
+      acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: '2026-07-11T12:01:00.000Z',
+      approvedIfMissing: true,
+      role: resolveAuthRole(email),
+    });
 
-  assert.equal(projected.status, 'approved');
-  assert.equal(projected.role, 'admin');
-  assert.equal(projected.approvedBy, undefined);
-  assert.equal(projected.approvedAt, undefined);
-  assert.equal(isAccessRecordApprovalReady(projected), true);
+    assert.equal(projected.status, 'approved');
+    assert.equal(projected.role, 'admin');
+    assert.equal(projected.approvedBy, undefined);
+    assert.equal(projected.approvedAt, undefined);
+    assert.equal(isAccessRecordApprovalReady(projected), true);
+    assert.equal(resolveAuthRole(email), 'admin');
+    assert.equal(isEmailAdminForAccess(email), true);
+  } finally {
+    if (originalAdminEmails === undefined) delete process.env.ADMIN_EMAILS;
+    else process.env.ADMIN_EMAILS = originalAdminEmails;
+  }
+}));
+
+test('requested configured admin evidence promotes with the server-resolved admin role', () => withTempAdminStore(() => {
+  const email = 'requested-admin@example.com';
+  const originalAdminEmails = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = email;
+  try {
+    const acceptedAt = '2026-07-11T15:01:00.000Z';
+    recordBetaConsent({
+      email,
+      participantType: 'founder_operator',
+      authMethod: 'google',
+      acceptanceSource: 'oauth_callback',
+      termsVersion: CURRENT_BETA_TERMS_VERSION,
+      termsDigest: CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt,
+    });
+    const requested = recordAccessRequest({
+      email,
+      method: 'google',
+      participantType: 'founder_operator',
+      identityVerifiedAt: '2026-07-11T15:00:00.000Z',
+      acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: acceptedAt,
+    });
+    assert.equal(requested.status, 'requested');
+    assert.equal(requested.role, 'user');
+    assert.equal(resolveAuthRole(email), 'admin');
+    assert.equal(isEmailAdminForAccess(email), true);
+
+    const synced = syncVerifiedAccessEvidence({
+      email,
+      method: 'google',
+      participantType: 'founder_operator',
+      identityVerifiedAt: '2026-07-11T15:00:00.000Z',
+      acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: acceptedAt,
+      approvedIfMissing: true,
+      role: resolveAuthRole(email),
+    });
+
+    assert.equal(synced.status, 'approved');
+    assert.equal(synced.role, 'admin');
+    assert.equal(resolveAuthRole(email), 'admin');
+    assert.equal(isEmailAdminForAccess(email), true);
+    assert.equal(isDirectAdminEmailLoginAllowed(email, { NODE_ENV: 'production' }), true);
+  } finally {
+    if (originalAdminEmails === undefined) delete process.env.ADMIN_EMAILS;
+    else process.env.ADMIN_EMAILS = originalAdminEmails;
+  }
+}));
+
+test('missing ordinary allowlist evidence projects approved user', () => withTempAdminStore(() => {
+  const email = 'ordinary-allowlist@example.com';
+  const originalApprovedEmails = process.env.VIOLEMA_APPROVED_EMAILS;
+  process.env.VIOLEMA_APPROVED_EMAILS = email;
+  try {
+    const acceptedAt = '2026-07-11T16:01:00.000Z';
+    recordBetaConsent({
+      email,
+      participantType: 'partner',
+      authMethod: 'microsoft',
+      acceptanceSource: 'oauth_callback',
+      termsVersion: CURRENT_BETA_TERMS_VERSION,
+      termsDigest: CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt,
+    });
+    const synced = syncVerifiedAccessEvidence({
+      email,
+      method: 'microsoft',
+      participantType: 'partner',
+      identityVerifiedAt: '2026-07-11T16:00:00.000Z',
+      acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: acceptedAt,
+      approvedIfMissing: true,
+      role: resolveAuthRole(email),
+    });
+    assert.equal(synced.status, 'approved');
+    assert.equal(synced.role, 'user');
+    assert.equal(resolveAuthRole(email), 'user');
+    assert.equal(isEmailAdminForAccess(email), false);
+  } finally {
+    if (originalApprovedEmails === undefined) delete process.env.VIOLEMA_APPROVED_EMAILS;
+    else process.env.VIOLEMA_APPROVED_EMAILS = originalApprovedEmails;
+  }
 }));
 
 test('approval requires verified identity and current beta consent evidence', () => withTempAdminStore(() => {
@@ -700,7 +795,7 @@ test('persistent approved role overrides default role resolution', () => withTem
     assert.equal(resolveAuthRole('founder@example.com'), 'admin');
     assert.equal(isEmailAdminForAccess('founder@example.com'), true);
 
-    recordCurrentApprovalEvidence({ email: 'max@violema.com' });
+    const demotedAdminEvidence = recordCurrentApprovalEvidence({ email: 'max@violema.com', method: 'google' });
 
     setAccessStatus({
       email: 'max@violema.com',
@@ -708,6 +803,21 @@ test('persistent approved role overrides default role resolution', () => withTem
       role: 'user',
       updatedBy: 'max@violema.com',
     });
+    assert.equal(resolveAuthRole('max@violema.com'), 'user');
+    assert.equal(isEmailAdminForAccess('max@violema.com'), false);
+
+    const demotedAdminSync = syncVerifiedAccessEvidence({
+      email: 'max@violema.com',
+      method: 'google',
+      participantType: 'founder_operator',
+      identityVerifiedAt: demotedAdminEvidence.identityVerifiedAt || '2026-07-11T12:00:00.000Z',
+      acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: demotedAdminEvidence.acceptedTermsAt || '2026-07-11T12:01:00.000Z',
+      approvedIfMissing: true,
+      role: 'admin',
+    });
+    assert.equal(demotedAdminSync.status, 'approved');
+    assert.equal(demotedAdminSync.role, 'user');
     assert.equal(resolveAuthRole('max@violema.com'), 'user');
     assert.equal(isEmailAdminForAccess('max@violema.com'), false);
 

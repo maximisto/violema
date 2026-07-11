@@ -396,6 +396,8 @@ export function syncVerifiedAccessEvidence(input: {
   }
 
   const now = new Date().toISOString();
+  const preservesAccessDecision = existing?.status === 'approved' || existing?.status === 'revoked';
+  const projectsConfiguredApproval = input.approvedIfMissing && !preservesAccessDecision;
   const next: AdminAccessRecord = {
     email,
     name: trimBounded(input.name, MAX_NAME_LENGTH) || existing?.name,
@@ -406,10 +408,12 @@ export function syncVerifiedAccessEvidence(input: {
     acceptedTermsAt: consent.acceptedAt,
     approvedBy: existing?.approvedBy,
     approvedAt: existing?.approvedAt,
-    status: existing?.status === 'approved' || existing?.status === 'revoked'
+    status: preservesAccessDecision
       ? existing.status
-      : input.approvedIfMissing ? 'approved' : 'requested',
-    role: existing?.role || input.role,
+      : projectsConfiguredApproval ? 'approved' : 'requested',
+    role: preservesAccessDecision
+      ? existing.role
+      : projectsConfiguredApproval ? input.role : existing?.role || input.role,
     note: existing?.note,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
