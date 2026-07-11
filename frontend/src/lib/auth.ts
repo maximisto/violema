@@ -1,13 +1,18 @@
-export type AccessRole = 'user' | 'tester' | 'investor' | 'admin';
+export type AccessRole = 'user' | 'admin';
 export type AuthMethod = 'email' | 'google' | 'microsoft';
+export type ParticipantType = 'founder_operator' | 'investor' | 'partner';
 
 export interface AuthSession {
   email: string;
   name: string;
   role: AccessRole;
   method: AuthMethod;
+  participantType: ParticipantType;
   acceptedTerms: boolean;
+  acceptedTermsVersion?: string;
+  acceptedTermsAt?: string;
   acceptedEducation: boolean;
+  requiresTermsAcceptance: boolean;
   createdAt: string;
   slackWorkspace?: string;
   slackChannelId?: string;
@@ -34,8 +39,12 @@ export function saveAuthSession(session: AuthSession) {
     email: session.email,
     name: session.name,
     method: session.method,
+    participantType: session.participantType,
     acceptedTerms: session.acceptedTerms,
+    acceptedTermsVersion: session.acceptedTermsVersion,
+    acceptedTermsAt: session.acceptedTermsAt,
     acceptedEducation: session.acceptedEducation,
+    requiresTermsAcceptance: session.requiresTermsAcceptance,
     createdAt: session.createdAt,
     slackWorkspace: session.slackWorkspace,
     slackChannelId: session.slackChannelId,
@@ -66,25 +75,41 @@ export function isAdminSession(session: AuthSession | null | undefined): boolean
   return session.role === 'admin';
 }
 
-function normalizeSessionRole(_email: string, role?: string): AccessRole {
+function normalizeSessionRole(role?: string): AccessRole {
   if (role === 'admin') return 'admin';
-  if (role === 'tester') return 'tester';
-  if (role === 'investor') return 'investor';
   return 'user';
 }
 
+function normalizeParticipantType(value?: string): ParticipantType | null {
+  if (value === 'founder_operator' || value === 'investor' || value === 'partner') return value;
+  return null;
+}
+
 function hydrateSession(value: Partial<AuthSession>): AuthSession | null {
-  if (!value.email || !value.name || !value.method || typeof value.acceptedTerms !== 'boolean' || typeof value.acceptedEducation !== 'boolean') {
+  const participantType = normalizeParticipantType(value.participantType);
+  if (
+    !value.email
+    || !value.name
+    || !value.method
+    || !participantType
+    || typeof value.acceptedTerms !== 'boolean'
+    || typeof value.acceptedEducation !== 'boolean'
+    || typeof value.requiresTermsAcceptance !== 'boolean'
+  ) {
     return null;
   }
 
   return {
     email: value.email,
     name: value.name,
-    role: normalizeSessionRole(value.email, value.role),
+    role: normalizeSessionRole(value.role),
     method: value.method,
+    participantType,
     acceptedTerms: value.acceptedTerms,
+    acceptedTermsVersion: value.acceptedTermsVersion,
+    acceptedTermsAt: value.acceptedTermsAt,
     acceptedEducation: value.acceptedEducation,
+    requiresTermsAcceptance: value.requiresTermsAcceptance,
     createdAt: value.createdAt || new Date().toISOString(),
     slackWorkspace: value.slackWorkspace,
     slackChannelId: value.slackChannelId,
@@ -105,8 +130,12 @@ export type PersistAuthSessionResult =
   | { status: 'authenticated'; session: AuthSession }
   | { status: 'verification_sent'; message: string };
 
+export type AuthSessionRequest = Pick<AuthSession, 'email' | 'name' | 'role' | 'method' | 'createdAt'>
+  & Partial<Pick<AuthSession, 'participantType' | 'acceptedTerms' | 'acceptedEducation' | 'slackWorkspace' | 'slackChannelId' | 'slackDisplayTarget' | 'slackConnectedAt'>>
+  & { termsVersion?: string };
+
 export async function persistAuthSessionToBackend(
-  session: AuthSession,
+  session: AuthSessionRequest,
   options: { next?: string } = {},
 ): Promise<PersistAuthSessionResult> {
   const response = await fetch('/api/auth/session', {
@@ -119,7 +148,9 @@ export async function persistAuthSessionToBackend(
       email: session.email,
       name: session.name,
       method: session.method,
+      participantType: session.participantType,
       acceptedTerms: session.acceptedTerms,
+      termsVersion: session.termsVersion,
       acceptedEducation: session.acceptedEducation,
       slackWorkspace: session.slackWorkspace,
       slackChannelId: session.slackChannelId,
@@ -215,21 +246,26 @@ export async function logoutBackendAuthSession() {
 export function beginOAuthFlow(
   provider: Exclude<AuthMethod, 'email'>,
   options: {
-    intent: 'signup' | 'login';
+    intent: 'signup';
     next: string;
-    acceptedTerms?: boolean;
-    acceptedEducation?: boolean;
+    acceptedTerms: boolean;
+    acceptedEducation: boolean;
+    participantType: ParticipantType;
+    termsVersion: string;
+  } | {
+    intent: 'login';
+    next: string;
   },
 ) {
   const params = new URLSearchParams({
     intent: options.intent,
     next: options.next,
   });
-  if (typeof options.acceptedTerms === 'boolean') {
+  if (options.intent === 'signup') {
     params.set('acceptedTerms', options.acceptedTerms ? '1' : '0');
-  }
-  if (typeof options.acceptedEducation === 'boolean') {
     params.set('acceptedEducation', options.acceptedEducation ? '1' : '0');
+    params.set('participantType', options.participantType);
+    params.set('termsVersion', options.termsVersion);
   }
   window.location.assign(`/api/auth/${provider}/start?${params.toString()}`);
 }

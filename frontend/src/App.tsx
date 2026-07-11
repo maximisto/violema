@@ -10,6 +10,7 @@ const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('./pages/TermsOfService'));
 const Signup = lazy(() => import('./pages/Signup'));
 const Login = lazy(() => import('./pages/Login'));
+const AccessTerms = lazy(() => import('./pages/AccessTerms'));
 const Billing = lazy(() => import('./pages/Billing'));
 const RunProof = lazy(() => import('./pages/RunProof'));
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'));
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/access-terms" element={<AccessTerms />} />
           <Route path="/plans" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
           <Route path="/pricing" element={<Billing />} />
           <Route path="/runs/:runId" element={<RunProof />} />

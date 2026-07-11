@@ -48,8 +48,6 @@ export default function Login() {
       name: name.trim(),
       role: 'user',
       method: existing?.method || 'email',
-      acceptedTerms: true,
-      acceptedEducation: true,
       createdAt: existing?.createdAt || new Date().toISOString(),
     } as const;
 

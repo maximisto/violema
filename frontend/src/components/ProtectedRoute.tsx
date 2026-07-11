@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { fetchBackendAuthSession, isAdminSession } from '../lib/auth';
 
 interface ProtectedRouteProps {
@@ -10,7 +10,8 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ children, blockedRedirectPath = '/signup', requireAdmin = false }: ProtectedRouteProps) {
   const location = useLocation();
-  const [status, setStatus] = useState<'checking' | 'allowed' | 'blocked' | 'denied'>('checking');
+  const [status, setStatus] = useState<'checking' | 'allowed' | 'blocked' | 'denied' | 'requires-terms'>('checking');
+  const [showAdminTermsPrompt, setShowAdminTermsPrompt] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -19,16 +20,26 @@ export default function ProtectedRoute({ children, blockedRedirectPath = '/signu
       const backendSession = await fetchBackendAuthSession().catch(() => null);
       if (!active) return;
 
-      if (backendSession?.acceptedTerms && backendSession.acceptedEducation) {
-        if (requireAdmin && !isAdminSession(backendSession)) {
-          setStatus('denied');
-          return;
-        }
-        setStatus('allowed');
+      if (!backendSession) {
+        setShowAdminTermsPrompt(false);
+        setStatus('blocked');
         return;
       }
 
-      setStatus('blocked');
+      if (requireAdmin && !isAdminSession(backendSession)) {
+        setShowAdminTermsPrompt(false);
+        setStatus('denied');
+        return;
+      }
+
+      if (backendSession.requiresTermsAcceptance && backendSession.role !== 'admin') {
+        setShowAdminTermsPrompt(false);
+        setStatus('requires-terms');
+        return;
+      }
+
+      setShowAdminTermsPrompt(backendSession.requiresTermsAcceptance && backendSession.role === 'admin');
+      setStatus('allowed');
     };
 
     void check();
@@ -50,9 +61,26 @@ export default function ProtectedRoute({ children, blockedRedirectPath = '/signu
     if (status === 'denied') {
       return <Navigate to="/dashboard" replace />;
     }
+    if (status === 'requires-terms') {
+      return <Navigate to={`/access-terms?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+    }
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
     return <Navigate to={`${blockedRedirectPath}?next=${next}`} replace />;
   }
 
-  return children;
+  const adminTermsPath = `/access-terms?next=${encodeURIComponent(location.pathname + location.search)}`;
+
+  return (
+    <>
+      {showAdminTermsPrompt ? (
+        <div className="relative z-[70] border-b border-amber-400/20 bg-amber-400/10 px-4 py-2 text-center text-sm text-amber-100">
+          The current beta terms are ready for review. Admin access remains available.{' '}
+          <Link to={adminTermsPath} className="font-semibold underline underline-offset-2 hover:text-white">
+            Review and accept
+          </Link>
+        </div>
+      ) : null}
+      {children}
+    </>
+  );
 }
