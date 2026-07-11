@@ -20,7 +20,7 @@ export function sanitizeLocalNextPath(value: string | null, origin = window.loca
   try {
     const resolved = new URL(value, origin);
     if (resolved.origin !== origin) return '/dashboard';
-    const resolvedPath = decodeURIComponent(resolved.pathname);
+    const resolvedPath = decodeURIComponent(resolved.pathname).toLowerCase();
     if (resolvedPath === '/access-terms' || resolvedPath.startsWith('/access-terms/')) return '/dashboard';
   } catch {
     return '/dashboard';

@@ -68,6 +68,9 @@ for (const unsafeNext of [
   '/access-terms/repeat',
   '/access-terms?next=%2Faccess-terms',
   '/access-terms#review',
+  '/ACCESS-TERMS',
+  '/Access-Terms?next=%2Fdashboard',
+  '/aCcEsS-tErMs/repeat#review',
 ]) {
   assert(sanitizeLocalNextPath(unsafeNext, origin) === '/dashboard', `sanitizer rejects unsafe next path: ${unsafeNext}`);
 }
