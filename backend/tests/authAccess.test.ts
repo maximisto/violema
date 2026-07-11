@@ -20,7 +20,10 @@ import {
   isAccessRecordApprovalReady,
   listAdminAuditEvents,
   recordAccessRequest,
+  setAccessParticipantType,
+  setAccessRole,
   setAccessStatus,
+  syncVerifiedAccessEvidence,
 } from '../src/adminAccessStore';
 import { isPublicBetaApiPath } from '../src/betaAccess';
 import { recordBetaConsent } from '../src/betaConsentStore';
@@ -503,6 +506,118 @@ test('approved and revoked access records remain immutable when requests are re-
     assert.deepEqual(getAccessRecord(email), rerecorded);
     assert.equal(rerecorded.acceptedTermsAt, ready.acceptedTermsAt);
   }
+}));
+
+test('verified evidence sync preserves access state and immutable approval provenance', () => withTempAdminStore(() => {
+  const email = 'provenance@example.com';
+  const ready = recordCurrentApprovalEvidence({ email, method: 'google' });
+  const approved = setAccessStatus({
+    email,
+    status: 'approved',
+    role: 'user',
+    updatedBy: 'approver-a@example.com',
+  });
+  assert.equal(approved.approvedBy, 'approver-a@example.com');
+  assert.ok(approved.approvedAt);
+
+  setAccessParticipantType({
+    email,
+    participantType: 'partner',
+    updatedBy: 'editor-b@example.com',
+  });
+  setAccessRole({
+    email,
+    role: 'admin',
+    updatedBy: 'editor-b@example.com',
+  });
+  recordBetaConsent({
+    email,
+    participantType: 'partner',
+    authMethod: 'google',
+    acceptanceSource: 'reauthorization',
+    termsVersion: CURRENT_BETA_TERMS_VERSION,
+    termsDigest: CURRENT_BETA_TERMS_DIGEST,
+    acceptedAt: '2026-07-11T13:01:00.000Z',
+  });
+  const synced = syncVerifiedAccessEvidence({
+    email,
+    name: 'Corrected Name',
+    method: 'google',
+    participantType: 'partner',
+    identityVerifiedAt: '2026-07-11T13:00:00.000Z',
+    acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: '2026-07-11T13:01:00.000Z',
+    approvedIfMissing: false,
+    role: 'user',
+  });
+
+  assert.equal(synced.status, 'approved');
+  assert.equal(synced.role, 'admin');
+  assert.equal(synced.approvedBy, 'approver-a@example.com');
+  assert.equal(synced.approvedAt, approved.approvedAt);
+  assert.equal(synced.updatedBy, 'editor-b@example.com');
+  assert.equal(synced.identityVerifiedAt, ready.identityVerifiedAt);
+  assert.equal(synced.acceptedTermsAt, '2026-07-11T13:01:00.000Z');
+  assert.notEqual(synced.acceptedTermsAt, ready.acceptedTermsAt);
+
+  const revoked = setAccessStatus({
+    email,
+    status: 'revoked',
+    updatedBy: 'revoker@example.com',
+  });
+  recordBetaConsent({
+    email,
+    participantType: 'partner',
+    authMethod: 'google',
+    acceptanceSource: 'reauthorization',
+    termsVersion: CURRENT_BETA_TERMS_VERSION,
+    termsDigest: CURRENT_BETA_TERMS_DIGEST,
+    acceptedAt: '2026-07-11T14:01:00.000Z',
+  });
+  const revokedSync = syncVerifiedAccessEvidence({
+    email,
+    method: 'google',
+    participantType: 'partner',
+    identityVerifiedAt: '2026-07-11T14:00:00.000Z',
+    acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: '2026-07-11T14:01:00.000Z',
+    approvedIfMissing: true,
+    role: 'user',
+  });
+  assert.equal(revokedSync.status, 'revoked');
+  assert.equal(revokedSync.approvedBy, revoked.approvedBy);
+  assert.equal(revokedSync.approvedAt, revoked.approvedAt);
+}));
+
+test('verified current allowlist evidence creates an approved projection without invented actor provenance', () => withTempAdminStore(() => {
+  const email = 'migrated@example.com';
+  recordBetaConsent({
+    email,
+    participantType: 'investor',
+    authMethod: 'microsoft',
+    acceptanceSource: 'oauth_callback',
+    termsVersion: CURRENT_BETA_TERMS_VERSION,
+    termsDigest: CURRENT_BETA_TERMS_DIGEST,
+    acceptedAt: '2026-07-11T12:01:00.000Z',
+  });
+
+  const projected = syncVerifiedAccessEvidence({
+    email,
+    name: 'Migrated User',
+    method: 'microsoft',
+    participantType: 'investor',
+    identityVerifiedAt: '2026-07-11T12:00:00.000Z',
+    acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: '2026-07-11T12:01:00.000Z',
+    approvedIfMissing: true,
+    role: 'admin',
+  });
+
+  assert.equal(projected.status, 'approved');
+  assert.equal(projected.role, 'admin');
+  assert.equal(projected.approvedBy, undefined);
+  assert.equal(projected.approvedAt, undefined);
+  assert.equal(isAccessRecordApprovalReady(projected), true);
 }));
 
 test('approval requires verified identity and current beta consent evidence', () => withTempAdminStore(() => {

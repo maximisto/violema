@@ -37,6 +37,7 @@ async function withTempServer(run: (context: TestServerContext) => Promise<void>
     'email-invalid@example.com',
     'email-string@example.com',
     'login-fallback@example.com',
+    'allowlisted-oauth@example.com',
   ].join(',');
   process.env.VIOLEMA_DISABLE_AUTOMATION_SCHEDULER = '1';
   process.env.GOOGLE_CLIENT_ID = 'test-google-client';
@@ -306,6 +307,17 @@ test('beta auth policy gates Terms and trials before tenant routes', async () =>
       createdAt: legacyApprovedAt,
       updatedAt: legacyApprovedAt,
     },
+    {
+      email: 'legacy-current@example.com',
+      name: 'Legacy Current',
+      method: 'google',
+      participantType: 'partner',
+      status: 'approved',
+      role: 'user',
+      createdAt: legacyApprovedAt,
+      updatedAt: legacyApprovedAt,
+      updatedBy: 'mutable-editor@example.com',
+    },
   ], null, 2));
 
   const approvedInvestorAcceptedAt = '2026-07-11T12:03:00.000Z';
@@ -332,6 +344,16 @@ test('beta auth policy gates Terms and trials before tenant routes', async () =>
     status: 'approved',
     role: 'user',
     updatedBy: 'max@violema.com',
+  });
+  adminAccess.setAccessParticipantType({
+    email: 'approved-investor@example.com',
+    participantType: 'partner',
+    updatedBy: 'editor-b@example.com',
+  });
+  adminAccess.setAccessParticipantType({
+    email: 'approved-investor@example.com',
+    participantType: 'investor',
+    updatedBy: 'editor-b@example.com',
   });
 
   const localFetch = globalThis.fetch;
@@ -398,6 +420,58 @@ test('beta auth policy gates Terms and trials before tenant routes', async () =>
   const legacyInvestor = auth.listAuthUsers().find((user) => user.email === 'legacy-investor@example.com');
   assert.ok(legacyInvestor);
   assert.equal(store.getWorkspaceLedgerSummary(legacyInvestor.defaultWorkspaceId).balanceCredits, 0);
+
+  const legacyCurrentAcceptedAt = '2026-07-11T12:03:30.000Z';
+  consent.recordBetaConsent({
+    email: 'legacy-current@example.com',
+    participantType: 'partner',
+    termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+    termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+    acceptedAt: legacyCurrentAcceptedAt,
+    authMethod: 'google',
+    acceptanceSource: 'oauth_callback',
+  });
+  const legacyCurrentLogin = await completeGoogleOAuth(
+    { intent: 'login', next: '/dashboard' },
+    { email: 'legacy-current@example.com', name: 'Legacy Current', email_verified: true },
+  );
+  assert.ok(legacyCurrentLogin.callbackResponse.headers.get('set-cookie'));
+  const legacyCurrentRecord = adminAccess.getAccessRecord('legacy-current@example.com');
+  assert.equal(legacyCurrentRecord?.status, 'approved');
+  assert.equal(legacyCurrentRecord?.identityVerifiedAt !== undefined, true);
+  assert.equal(legacyCurrentRecord?.acceptedTermsVersion, betaProgram.CURRENT_BETA_TERMS_VERSION);
+  assert.equal(legacyCurrentRecord?.acceptedTermsAt, legacyCurrentAcceptedAt);
+  assert.equal(legacyCurrentRecord?.approvedBy, undefined);
+  assert.equal(legacyCurrentRecord?.approvedAt, undefined);
+  const legacyCurrentUser = auth.listAuthUsers().find((user) => user.email === 'legacy-current@example.com');
+  assert.ok(legacyCurrentUser);
+  const legacyCurrentTrial = store.listLedgerEntries(legacyCurrentUser.defaultWorkspaceId)
+    .find((entry) => entry.source === 'trial_grant');
+  assert.equal(legacyCurrentTrial?.metadata?.approvalActor, undefined);
+
+  const allowlistedAcceptedAt = '2026-07-11T12:04:00.000Z';
+  consent.recordBetaConsent({
+    email: 'allowlisted-oauth@example.com',
+    participantType: 'partner',
+    termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+    termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+    acceptedAt: allowlistedAcceptedAt,
+    authMethod: 'google',
+    acceptanceSource: 'oauth_callback',
+  });
+  const allowlistedLogin = await completeGoogleOAuth(
+    { intent: 'login', next: '/dashboard' },
+    { email: 'allowlisted-oauth@example.com', name: 'Allowlisted OAuth', email_verified: true },
+  );
+  assert.ok(allowlistedLogin.callbackResponse.headers.get('set-cookie'));
+  const allowlistedRecord = adminAccess.getAccessRecord('allowlisted-oauth@example.com');
+  assert.equal(allowlistedRecord?.status, 'approved');
+  assert.equal(allowlistedRecord?.participantType, 'partner');
+  assert.ok(allowlistedRecord?.identityVerifiedAt);
+  assert.equal(allowlistedRecord?.acceptedTermsVersion, betaProgram.CURRENT_BETA_TERMS_VERSION);
+  assert.equal(allowlistedRecord?.acceptedTermsAt, allowlistedAcceptedAt);
+  assert.equal(allowlistedRecord?.approvedBy, undefined);
+  assert.equal(allowlistedRecord?.approvedAt, undefined);
 
   const loginFallback = await completeGoogleOAuth(
     { intent: 'login', next: '/dashboard', participantType: 'partner' },

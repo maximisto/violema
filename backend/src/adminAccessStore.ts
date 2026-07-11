@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { hasCurrentBetaConsent } from './betaConsentStore';
+import { getCurrentBetaConsent, hasCurrentBetaConsent } from './betaConsentStore';
 import {
   CURRENT_BETA_TERMS_VERSION,
   ParticipantType,
@@ -28,6 +28,8 @@ export interface AdminAccessRecord {
   identityVerifiedAt?: string;
   acceptedTermsVersion?: string;
   acceptedTermsAt?: string;
+  approvedBy?: string;
+  approvedAt?: string;
   status: AdminAccessStatus;
   role: AdminAccessRole;
   note?: string;
@@ -133,6 +135,8 @@ function readAccessRecords() {
     if (!optionalString(row.identityVerifiedAt)) throw new Error(`row ${index} has invalid identityVerifiedAt`);
     if (!optionalString(row.acceptedTermsVersion)) throw new Error(`row ${index} has invalid acceptedTermsVersion`);
     if (!optionalString(row.acceptedTermsAt)) throw new Error(`row ${index} has invalid acceptedTermsAt`);
+    if (!optionalString(row.approvedBy)) throw new Error(`row ${index} has invalid approvedBy`);
+    if (!optionalString(row.approvedAt)) throw new Error(`row ${index} has invalid approvedAt`);
     if (!optionalString(row.note)) throw new Error(`row ${index} has invalid note`);
     if (!optionalString(row.updatedBy)) throw new Error(`row ${index} has invalid updatedBy`);
     return { ...row, participantType } as unknown as AdminAccessRecord;
@@ -271,6 +275,8 @@ export function recordAccessRequest(input: {
     identityVerifiedAt: existing?.identityVerifiedAt || input.identityVerifiedAt,
     acceptedTermsVersion: termsEvidence.version,
     acceptedTermsAt: termsEvidence.acceptedAt,
+    approvedBy: existing?.approvedBy,
+    approvedAt: existing?.approvedAt,
     status: 'requested',
     role: existing?.role || 'user',
     note: trimBounded(input.note, MAX_NOTE_LENGTH) || existing?.note,
@@ -312,6 +318,7 @@ export function setAccessStatus(input: {
     : normalizeParticipantType(input.participantType);
   if (!participantType) throw new Error('invalid participantType');
   const note = trimBounded(input.note, MAX_NOTE_LENGTH);
+  const isApprovalTransition = input.status === 'approved' && existing?.status !== 'approved';
   const next: AdminAccessRecord = {
     email,
     name: existing?.name,
@@ -320,6 +327,8 @@ export function setAccessStatus(input: {
     identityVerifiedAt: existing?.identityVerifiedAt,
     acceptedTermsVersion: existing?.acceptedTermsVersion,
     acceptedTermsAt: existing?.acceptedTermsAt,
+    approvedBy: isApprovalTransition ? normalizeEmail(input.updatedBy) : existing?.approvedBy,
+    approvedAt: isApprovalTransition ? now : existing?.approvedAt,
     status: input.status,
     role: input.role || existing?.role || 'user',
     note,
@@ -348,6 +357,64 @@ export function setAccessStatus(input: {
     targetEmail: email,
     metadata: { note: next.note, role: next.role },
   });
+
+  if (index >= 0) records[index] = next;
+  else records.unshift(next);
+  writeAccessRecords(records);
+  return next;
+}
+
+export function syncVerifiedAccessEvidence(input: {
+  email: string;
+  name?: string;
+  method: 'google' | 'microsoft';
+  participantType: ParticipantType;
+  identityVerifiedAt: string;
+  acceptedTermsVersion: string;
+  acceptedTermsAt: string;
+  approvedIfMissing: boolean;
+  role: AdminAccessRole;
+}) {
+  const email = normalizeEmail(input.email);
+  const participantType = normalizeParticipantType(input.participantType);
+  if (!participantType) throw new Error('invalid participantType');
+  const consent = getCurrentBetaConsent(email);
+  if (
+    !consent
+    || input.acceptedTermsVersion !== CURRENT_BETA_TERMS_VERSION
+    || consent.termsVersion !== CURRENT_BETA_TERMS_VERSION
+    || consent.acceptedAt !== input.acceptedTermsAt
+  ) {
+    throw new Error('Current server-owned beta consent evidence is required.');
+  }
+
+  const records = readAccessRecords();
+  const index = records.findIndex((record) => record.email === email);
+  const existing = index >= 0 ? records[index] : null;
+  if (!existing && !input.approvedIfMissing) {
+    throw new Error('existing access record required');
+  }
+
+  const now = new Date().toISOString();
+  const next: AdminAccessRecord = {
+    email,
+    name: trimBounded(input.name, MAX_NAME_LENGTH) || existing?.name,
+    method: input.method,
+    participantType,
+    identityVerifiedAt: existing?.identityVerifiedAt || input.identityVerifiedAt,
+    acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: consent.acceptedAt,
+    approvedBy: existing?.approvedBy,
+    approvedAt: existing?.approvedAt,
+    status: existing?.status === 'approved' || existing?.status === 'revoked'
+      ? existing.status
+      : input.approvedIfMissing ? 'approved' : 'requested',
+    role: existing?.role || input.role,
+    note: existing?.note,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    updatedBy: existing?.updatedBy,
+  };
 
   if (index >= 0) records[index] = next;
   else records.unshift(next);

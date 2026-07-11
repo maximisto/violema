@@ -20,6 +20,17 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     const store = await import('../src/platform/store');
     const dashboard = await import('../src/adminDashboard');
 
+    assert.deepEqual(
+      dashboard.attributeTrialFirstUsage([
+        { deltaCredits: -200, createdAt: '2026-07-11T10:00:00.000Z' },
+        { deltaCredits: 500, createdAt: '2026-07-11T11:00:00.000Z' },
+        { deltaCredits: 1000, createdAt: '2026-07-11T11:30:00.000Z' },
+        { deltaCredits: -125, createdAt: '2026-07-11T12:00:00.000Z' },
+      ], { deltaCredits: 500, createdAt: '2026-07-11T11:00:00.000Z' }),
+      { trialCredits: 500, spentCredits: 125, remainingCredits: 375 },
+      'post-grant debits are attributed to trial credits before later grants',
+    );
+
     const acceptedAt = '2026-07-11T12:01:00.000Z';
     consent.recordBetaConsent({
       email: 'client@example.com',
@@ -221,6 +232,37 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(allowlistedUser?.trialRemainingCredits, 0);
     assert.equal(allowlistedUser?.trialGrantedAt, null);
     assert.equal(dashboard.buildAdminOverview().metrics.pendingUsers, 0);
+
+    const allowlistedAcceptedAt = '2026-07-11T14:01:00.000Z';
+    consent.recordBetaConsent({
+      email: 'allowlisted@example.com',
+      participantType: 'partner',
+      authMethod: 'google',
+      acceptanceSource: 'oauth_callback',
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt: allowlistedAcceptedAt,
+    });
+    access.syncVerifiedAccessEvidence({
+      email: 'allowlisted@example.com',
+      name: 'Allowlisted Migrated User',
+      method: 'google',
+      participantType: 'partner',
+      identityVerifiedAt: '2026-07-11T14:00:00.000Z',
+      acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: allowlistedAcceptedAt,
+      approvedIfMissing: true,
+      role: 'user',
+    });
+    const migratedAllowlistedUser = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'allowlisted@example.com');
+    assert.equal(migratedAllowlistedUser?.accessStatus, 'approved');
+    assert.equal(migratedAllowlistedUser?.approvedAccess, true);
+    assert.equal(migratedAllowlistedUser?.participantType, 'partner');
+    assert.equal(migratedAllowlistedUser?.identityVerified, true);
+    assert.equal(migratedAllowlistedUser?.termsCurrent, true);
+    assert.equal(migratedAllowlistedUser?.termsVersion, betaProgram.CURRENT_BETA_TERMS_VERSION);
+    assert.equal(migratedAllowlistedUser?.approvalReady, true);
 
     auth.upsertAuthUser({
       email: 'auth-only@example.com',

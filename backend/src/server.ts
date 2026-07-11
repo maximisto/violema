@@ -35,7 +35,7 @@ import {
   upsertAuthUser,
   verifyAdminMagicLoginToken,
 } from './auth';
-import { getAccessRecord } from './adminAccessStore';
+import { getAccessRecord, syncVerifiedAccessEvidence } from './adminAccessStore';
 import { registerAdminRoutes } from './adminRoutes';
 import {
   assertAuthenticatedAdminAccess,
@@ -1107,7 +1107,7 @@ function fulfillApprovedBetaTrial(user: AuthUserRecord) {
     workspaceId: getAuthUserDefaultWorkspaceId(user),
     participantType: user.participantType,
     termsVersion: CURRENT_BETA_TERMS_VERSION,
-    approvalActor: accessRecord?.status === 'approved' ? accessRecord.updatedBy : undefined,
+    approvalActor: accessRecord?.status === 'approved' ? accessRecord.approvedBy : undefined,
   });
 }
 
@@ -4656,6 +4656,23 @@ app.post('/api/auth/terms/accept', (req: Request, res: Response) => {
       authMethod: record.user.method,
       acceptanceSource: 'reauthorization',
     });
+    if (record.user.method === 'google' || record.user.method === 'microsoft') {
+      try {
+        syncVerifiedAccessEvidence({
+          email: record.user.email,
+          name: record.user.name,
+          method: record.user.method,
+          participantType,
+          identityVerifiedAt: acceptedAt,
+          acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+          acceptedTermsAt: acceptedAt,
+          approvedIfMissing: true,
+          role,
+        });
+      } catch (error) {
+        if (role !== 'admin') throw error;
+      }
+    }
     const user = upsertAuthUser({
       email: record.user.email,
       name: record.user.name,
@@ -4962,15 +4979,32 @@ app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
     assertEmailApprovedForAccess(email);
 
     const role = resolveAuthRole(email);
-    const participantType = resolveAuthParticipantType(
-      email,
-      state.intent === 'signup' ? state.participantType : undefined,
-    );
     let currentConsent: ReturnType<typeof getCurrentBetaConsent> = null;
     try {
       currentConsent = getCurrentBetaConsent(email);
     } catch (error) {
       if (role !== 'admin') throw error;
+    }
+    const participantType = resolveAuthParticipantType(
+      email,
+      state.intent === 'signup' ? state.participantType : currentConsent?.participantType,
+    );
+    if (currentConsent) {
+      try {
+        syncVerifiedAccessEvidence({
+          email,
+          name,
+          method: provider,
+          participantType,
+          identityVerifiedAt: new Date().toISOString(),
+          acceptedTermsVersion: currentConsent.termsVersion,
+          acceptedTermsAt: currentConsent.acceptedAt,
+          approvedIfMissing: true,
+          role,
+        });
+      } catch (error) {
+        if (role !== 'admin') throw error;
+      }
     }
     const sessionEducationAccepted = state.intent === 'login' || state.acceptedEducation;
     const user = upsertAuthUser({

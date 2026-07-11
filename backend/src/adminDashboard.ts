@@ -37,6 +37,28 @@ function isAccessRecordApprovalReadyForAdmin(record: Parameters<typeof isAccessR
   }
 }
 
+type TrialAttributionEntry = Pick<ReturnType<typeof listLedgerEntries>[number], 'deltaCredits' | 'createdAt'>;
+
+export function attributeTrialFirstUsage(
+  entries: TrialAttributionEntry[],
+  trialEntry: TrialAttributionEntry,
+) {
+  const trialCredits = Math.max(0, trialEntry.deltaCredits);
+  const trialGrantedAtMs = Date.parse(trialEntry.createdAt);
+  const spentCredits = Math.min(
+    trialCredits,
+    entries.reduce((spent, entry) => {
+      if (entry.deltaCredits >= 0 || Date.parse(entry.createdAt) < trialGrantedAtMs) return spent;
+      return spent + Math.abs(entry.deltaCredits);
+    }, 0),
+  );
+  return {
+    trialCredits,
+    spentCredits,
+    remainingCredits: Math.max(0, trialCredits - spentCredits),
+  };
+}
+
 export function buildAdminUsers() {
   const users = listAuthUsers();
   const sessions = listAuthSessions();
@@ -54,17 +76,9 @@ export function buildAdminUsers() {
     const accessStatus = access?.status || (approvedAccess ? 'approved' : 'requested');
     const ledgerEntries = user ? listLedgerEntries(getAuthUserDefaultWorkspaceId(user)) : [];
     const trialEntry = ledgerEntries.find((entry) => entry.source === 'trial_grant' && entry.deltaCredits > 0) || null;
-    const trialCredits = Math.max(0, trialEntry?.deltaCredits || 0);
-    const trialGrantedAtMs = trialEntry ? Date.parse(trialEntry.createdAt) : Number.NaN;
-    const trialSpentCredits = trialEntry
-      ? Math.min(
-          trialCredits,
-          ledgerEntries.reduce((spent, entry) => {
-            if (entry.deltaCredits >= 0 || Date.parse(entry.createdAt) < trialGrantedAtMs) return spent;
-            return spent + Math.abs(entry.deltaCredits);
-          }, 0),
-        )
-      : 0;
+    const trialUsage = trialEntry
+      ? attributeTrialFirstUsage(ledgerEntries, trialEntry)
+      : { trialCredits: 0, spentCredits: 0, remainingCredits: 0 };
     return {
       email,
       name: user?.name || access?.name || email.split('@')[0],
@@ -80,9 +94,9 @@ export function buildAdminUsers() {
       termsVersion: access?.acceptedTermsVersion || null,
       approvalReady: access ? isAccessRecordApprovalReadyForAdmin(access) : false,
       trialStatus: trialEntry ? 'granted' : role === 'admin' ? 'not_applicable' : approvedAccess ? 'pending' : 'not_applicable',
-      trialCredits,
-      trialSpentCredits,
-      trialRemainingCredits: Math.max(0, trialCredits - trialSpentCredits),
+      trialCredits: trialUsage.trialCredits,
+      trialSpentCredits: trialUsage.spentCredits,
+      trialRemainingCredits: trialUsage.remainingCredits,
       trialGrantedAt: trialEntry?.createdAt || null,
       slackConnected: Boolean(user?.slackWorkspace && user?.slackChannelId),
       slackDisplayTarget: user?.slackDisplayTarget || null,
