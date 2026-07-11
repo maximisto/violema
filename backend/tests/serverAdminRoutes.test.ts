@@ -129,6 +129,47 @@ test('admin routes require backend admin sessions and revoke target user session
   assert.equal(adminUsers.status, 200);
   assert.ok(((await readJson(adminUsers)).items as Array<{ email: string }>).some((item) => item.email === 'target@example.com'));
 
+  access.recordAccessRequest({
+    email: 'pending@example.com',
+    method: 'email',
+    participantType: 'founder_operator',
+  });
+  const saveRequestedParticipant = await fetch(`${baseUrl}/api/admin/users/pending@example.com/access`, {
+    method: 'PATCH',
+    headers: {
+      ...adminHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ participantType: 'investor' }),
+  });
+  assert.equal(saveRequestedParticipant.status, 200);
+  const saveRequestedParticipantPayload = await readJson(saveRequestedParticipant);
+  const savedRequestedRecord = saveRequestedParticipantPayload.record as {
+    participantType?: string;
+    status?: string;
+    role?: string;
+  };
+  assert.equal(savedRequestedRecord.participantType, 'investor');
+  assert.equal(savedRequestedRecord.status, 'requested');
+  assert.equal(savedRequestedRecord.role, 'user');
+  assert.equal(access.getAccessRecord('pending@example.com')?.participantType, 'investor');
+  assert.equal(access.getAccessRecord('pending@example.com')?.status, 'requested');
+  const savedRequestedUser = (saveRequestedParticipantPayload.users as Array<{
+    email?: string;
+    accessStatus?: string;
+    approvedAccess?: boolean;
+    approvalReady?: boolean;
+  }>).find((item) => item.email === 'pending@example.com');
+  assert.equal(savedRequestedUser?.accessStatus, 'requested');
+  assert.equal(savedRequestedUser?.approvedAccess, false);
+  assert.equal(savedRequestedUser?.approvalReady, false);
+  assert.equal(
+    access.listAdminAuditEvents().some(
+      (event) => event.targetEmail === 'pending@example.com' && event.action === 'access.approved',
+    ),
+    false,
+  );
+
   const incompleteApproval = await fetch(`${baseUrl}/api/admin/users/user@example.com/access`, {
     method: 'PATCH',
     headers: {

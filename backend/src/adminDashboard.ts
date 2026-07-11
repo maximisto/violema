@@ -47,6 +47,7 @@ export function buildAdminUsers() {
     const user = users.find((item) => item.email === email) || null;
     const access = accessRecords.find((item) => item.email === email) || null;
     const userParticipantType = (user as (typeof user & { participantType?: ParticipantType }) | null)?.participantType;
+    const role = access?.role || user?.role || 'user';
     const approvedAccess = access?.status === 'approved' || isEmailApprovedForAccess(email);
     const accessStatus = access?.status || (approvedAccess ? 'approved' : 'requested');
     const trialEntry = user
@@ -55,7 +56,7 @@ export function buildAdminUsers() {
     return {
       email,
       name: user?.name || access?.name || email.split('@')[0],
-      role: access?.role || user?.role || 'user',
+      role,
       method: user?.method || access?.method || 'email',
       accessStatus,
       approvedAccess,
@@ -66,7 +67,7 @@ export function buildAdminUsers() {
         && hasCurrentBetaConsentForAdmin(email),
       termsVersion: access?.acceptedTermsVersion || null,
       approvalReady: access ? isAccessRecordApprovalReadyForAdmin(access) : false,
-      trialStatus: trialEntry ? 'granted' : approvedAccess ? 'pending' : 'not_applicable',
+      trialStatus: trialEntry ? 'granted' : role === 'admin' ? 'not_applicable' : approvedAccess ? 'pending' : 'not_applicable',
       trialCredits: trialEntry?.deltaCredits || 0,
       trialGrantedAt: trialEntry?.createdAt || null,
       slackConnected: Boolean(user?.slackWorkspace && user?.slackChannelId),

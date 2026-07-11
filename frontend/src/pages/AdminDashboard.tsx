@@ -120,6 +120,10 @@ interface AdminListResponse<T> {
   items: T[];
 }
 
+interface AdminAccessMutationResponse {
+  users: AdminUserRow[];
+}
+
 interface Notice {
   tone: NoticeTone;
   message: string;
@@ -165,6 +169,19 @@ function patchAdminJson<T>(path: string, body: Record<string, unknown>): Promise
     },
     body: JSON.stringify(body),
   });
+}
+
+export function buildParticipantAccessPatch(participantType: ParticipantType) {
+  return { participantType };
+}
+
+export function isAdminApprovalDisabled(input: {
+  busy: boolean;
+  isApproved: boolean;
+  approvalReady: boolean;
+  participantDirty: boolean;
+}) {
+  return input.busy || input.isApproved || !input.approvalReady || input.participantDirty;
 }
 
 function firstMetric(metrics: AdminOverviewMetrics | undefined, keys: string[]) {
@@ -418,11 +435,13 @@ function OverviewPanel({
 function UserActions({
   user,
   busy,
+  participantDirty,
   onAccessChange,
   onRoleChange,
 }: {
   user: AdminUserRow;
   busy: boolean;
+  participantDirty: boolean;
   onAccessChange: (user: AdminUserRow, status: Extract<AccessStatus, 'approved' | 'revoked'>) => void;
   onRoleChange: (user: AdminUserRow, role: AdminRole) => void;
 }) {
@@ -434,13 +453,20 @@ function UserActions({
     : isAdmin ? 'Demote to user' : 'Promote to admin';
   const approvalActionTitle = !user.approvalReady
     ? 'Verified OAuth identity and current beta confidentiality acceptance are required before approval.'
+    : participantDirty ? 'Save participant type before approval.'
     : isApproved ? 'Access is already approved.' : 'Approve beta access';
+  const approvalDisabled = isAdminApprovalDisabled({
+    busy,
+    isApproved,
+    approvalReady: user.approvalReady,
+    participantDirty,
+  });
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button
         type="button"
-        disabled={busy || isApproved || !user.approvalReady}
+        disabled={approvalDisabled}
         title={approvalActionTitle}
         onClick={() => onAccessChange(user, 'approved')}
         className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-100 transition-colors hover:bg-emerald-500/16 disabled:cursor-not-allowed disabled:opacity-40"
@@ -474,31 +500,47 @@ function UserActions({
   );
 }
 
-function ParticipantSelect({
+function ParticipantControl({
   user,
+  draftParticipantType,
   disabled,
   onChange,
+  onSave,
 }: {
   user: AdminUserRow;
+  draftParticipantType: ParticipantType;
   disabled: boolean;
-  onChange: (user: AdminUserRow, participantType: ParticipantType) => void;
+  onChange: (participantType: ParticipantType) => void;
+  onSave: () => void;
 }) {
+  const dirty = draftParticipantType !== user.participantType;
+  const persistenceDisabled = disabled || user.hasAccessRecord === false;
+  const persistenceTitle = user.hasAccessRecord === false
+    ? 'Participant changes require a persistent access record.'
+    : dirty ? 'Save participant type independently from access approval.' : 'Participant type is saved.';
+
   return (
     <div>
       <select
         aria-label={`Participant type for ${user.email}`}
-        value={user.participantType}
-        disabled={disabled || effectiveAccessStatus(user) === 'approved'}
-        onChange={(event) => onChange(user, event.target.value as ParticipantType)}
+        value={draftParticipantType}
+        disabled={persistenceDisabled}
+        onChange={(event) => onChange(event.target.value as ParticipantType)}
         className="w-full rounded-lg border border-navy-700 bg-navy-950 px-2 py-1.5 text-xs text-slate-200 outline-none transition-colors focus:border-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <option value="founder_operator">Founder / operator</option>
         <option value="investor">Investor</option>
         <option value="partner">Partner</option>
       </select>
-      {effectiveAccessStatus(user) !== 'approved' ? (
-        <p className="mt-1 text-[11px] text-slate-600">Applied with approval</p>
-      ) : null}
+      <button
+        type="button"
+        disabled={persistenceDisabled || !dirty}
+        title={persistenceTitle}
+        onClick={onSave}
+        className="mt-1.5 rounded-md border border-violet-500/20 bg-violet-500/10 px-2 py-1 text-[11px] font-medium text-violet-100 transition-colors hover:bg-violet-500/16 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Save participant
+      </button>
     </div>
   );
 }
@@ -537,13 +579,17 @@ function UsersPanel({
   actionKey,
   onAccessChange,
   onRoleChange,
+  participantDrafts,
   onParticipantChange,
+  onParticipantSave,
 }: {
   users: AdminUserRow[];
   actionKey: string | null;
   onAccessChange: (user: AdminUserRow, status: Extract<AccessStatus, 'approved' | 'revoked'>) => void;
   onRoleChange: (user: AdminUserRow, role: AdminRole) => void;
-  onParticipantChange: (user: AdminUserRow, participantType: ParticipantType) => void;
+  participantDrafts: Record<string, ParticipantType>;
+  onParticipantChange: (email: string, participantType: ParticipantType) => void;
+  onParticipantSave: (user: AdminUserRow, participantType: ParticipantType) => void;
 }) {
   if (!users.length) {
     return <EmptyState title="No users found" detail="User requests and approved accounts will appear here." />;
@@ -571,6 +617,8 @@ function UsersPanel({
             {users.map((user) => {
               const busy = actionKey === user.email;
               const accessStatus = effectiveAccessStatus(user);
+              const draftParticipantType = participantDrafts[user.email] || user.participantType;
+              const participantDirty = draftParticipantType !== user.participantType;
               return (
                 <tr key={user.email} className="align-top">
                   <td className="px-4 py-4">
@@ -580,7 +628,13 @@ function UsersPanel({
                   </td>
                   <td className="px-4 py-4"><Badge value={accessStatus} /></td>
                   <td className="px-4 py-4">
-                    <ParticipantSelect user={user} disabled={busy} onChange={onParticipantChange} />
+                    <ParticipantControl
+                      user={user}
+                      draftParticipantType={draftParticipantType}
+                      disabled={busy}
+                      onChange={(participantType) => onParticipantChange(user.email, participantType)}
+                      onSave={() => onParticipantSave(user, draftParticipantType)}
+                    />
                   </td>
                   <td className="px-4 py-4"><TermsEvidence user={user} /></td>
                   <td className="px-4 py-4"><TrialEvidence user={user} /></td>
@@ -594,7 +648,7 @@ function UsersPanel({
                   <td className="px-4 py-4 text-slate-300">{formatNumber(user.activeSessionCount)}</td>
                   <td className="px-4 py-4 text-slate-500">{formatDate(user.updatedAt || user.createdAt)}</td>
                   <td className="px-4 py-4">
-                    <UserActions user={user} busy={busy} onAccessChange={onAccessChange} onRoleChange={onRoleChange} />
+                    <UserActions user={user} busy={busy} participantDirty={participantDirty} onAccessChange={onAccessChange} onRoleChange={onRoleChange} />
                   </td>
                 </tr>
               );
@@ -607,6 +661,8 @@ function UsersPanel({
         {users.map((user) => {
           const busy = actionKey === user.email;
           const accessStatus = effectiveAccessStatus(user);
+          const draftParticipantType = participantDrafts[user.email] || user.participantType;
+          const participantDirty = draftParticipantType !== user.participantType;
           return (
             <div key={user.email} className="rounded-2xl border border-navy-800 bg-navy-900/72 p-4">
               <div className="flex items-start justify-between gap-3">
@@ -620,7 +676,13 @@ function UsersPanel({
                 <div className="col-span-2">
                   <p className="text-slate-500">Participant</p>
                   <div className="mt-1">
-                    <ParticipantSelect user={user} disabled={busy} onChange={onParticipantChange} />
+                    <ParticipantControl
+                      user={user}
+                      draftParticipantType={draftParticipantType}
+                      disabled={busy}
+                      onChange={(participantType) => onParticipantChange(user.email, participantType)}
+                      onSave={() => onParticipantSave(user, draftParticipantType)}
+                    />
                   </div>
                 </div>
                 <div>
@@ -645,7 +707,7 @@ function UsersPanel({
                 </div>
               </div>
               <div className="mt-4">
-                <UserActions user={user} busy={busy} onAccessChange={onAccessChange} onRoleChange={onRoleChange} />
+                <UserActions user={user} busy={busy} participantDirty={participantDirty} onAccessChange={onAccessChange} onRoleChange={onRoleChange} />
               </div>
             </div>
           );
@@ -794,6 +856,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [actionKey, setActionKey] = useState<string | null>(null);
+  const [participantDrafts, setParticipantDrafts] = useState<Record<string, ParticipantType>>({});
 
   const loadDashboard = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -857,12 +920,15 @@ export default function AdminDashboard() {
     revoked: users.filter((user) => effectiveAccessStatus(user) === 'revoked').length,
   }), [users]);
 
+  const handleParticipantChange = useCallback((email: string, participantType: ParticipantType) => {
+    setParticipantDrafts((currentDrafts) => ({ ...currentDrafts, [email]: participantType }));
+  }, []);
+
   const handleAccessChange = useCallback(async (user: AdminUserRow, status: Extract<AccessStatus, 'approved' | 'revoked'>) => {
     setActionKey(user.email);
     try {
       await patchAdminJson(`/api/admin/users/${encodeURIComponent(user.email)}/access`, {
         status,
-        participantType: user.participantType,
         note: status === 'approved' ? 'Approved from admin dashboard' : 'Revoked from admin dashboard',
       });
       setNotice({ tone: 'success', message: `${status === 'approved' ? 'Approved' : 'Revoked'} ${user.email}.` });
@@ -874,10 +940,25 @@ export default function AdminDashboard() {
     }
   }, [loadDashboard]);
 
-  const handleParticipantChange = useCallback((user: AdminUserRow, participantType: ParticipantType) => {
-    setUsers((currentUsers) => currentUsers.map((currentUser) => (
-      currentUser.email === user.email ? { ...currentUser, participantType } : currentUser
-    )));
+  const handleParticipantSave = useCallback(async (user: AdminUserRow, participantType: ParticipantType) => {
+    setActionKey(user.email);
+    try {
+      const payload = await patchAdminJson<AdminAccessMutationResponse>(
+        `/api/admin/users/${encodeURIComponent(user.email)}/access`,
+        buildParticipantAccessPatch(participantType),
+      );
+      setUsers(payload.users || []);
+      setParticipantDrafts((currentDrafts) => {
+        const nextDrafts = { ...currentDrafts };
+        delete nextDrafts[user.email];
+        return nextDrafts;
+      });
+      setNotice({ tone: 'success', message: `Saved participant type for ${user.email}.` });
+    } catch (actionError) {
+      setNotice({ tone: 'error', message: actionError instanceof Error ? actionError.message : 'Could not save participant type.' });
+    } finally {
+      setActionKey(null);
+    }
   }, []);
 
   const handleRoleChange = useCallback(async (user: AdminUserRow, role: AdminRole) => {
@@ -1029,7 +1110,9 @@ export default function AdminDashboard() {
                   actionKey={actionKey}
                   onAccessChange={handleAccessChange}
                   onRoleChange={handleRoleChange}
+                  participantDrafts={participantDrafts}
                   onParticipantChange={handleParticipantChange}
+                  onParticipantSave={handleParticipantSave}
                 />
               </section>
             ) : null}

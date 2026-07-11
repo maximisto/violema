@@ -6,7 +6,13 @@ import {
   buildAdminWorkspaces,
   buildWorkspaceAdminDetail,
 } from './adminDashboard';
-import { setAccessRole, setAccessStatus, type AdminAccessRole, type AdminAccessStatus } from './adminAccessStore';
+import {
+  setAccessParticipantType,
+  setAccessRole,
+  setAccessStatus,
+  type AdminAccessRole,
+  type AdminAccessStatus,
+} from './adminAccessStore';
 import { clearAuthSessionsForEmail } from './auth';
 import { normalizeParticipantType, type ParticipantType } from './betaProgram';
 
@@ -92,17 +98,24 @@ export function registerAdminRoutes(
     try {
       const actorEmail = assertAdminActor(options.getAdminActor(req));
       const email = parseAdminEmail(req.params.email);
-      const status = parseAdminAccessStatus(req.body?.status);
+      const status = req.body?.status === undefined ? undefined : parseAdminAccessStatus(req.body.status);
       const role = parseAdminAccessRole(req.body?.role);
       const participantType = parseParticipantType(req.body?.participantType);
-      const record = setAccessStatus({
-        email,
-        status,
-        role,
-        participantType,
-        note: typeof req.body?.note === 'string' ? req.body.note : undefined,
-        updatedBy: actorEmail,
-      });
+      const record = status === undefined
+        ? (() => {
+            if (role !== undefined || participantType === undefined) {
+              throw new Error('status or participant type is required');
+            }
+            return setAccessParticipantType({ email, participantType, updatedBy: actorEmail });
+          })()
+        : setAccessStatus({
+            email,
+            status,
+            role,
+            participantType,
+            note: typeof req.body?.note === 'string' ? req.body.note : undefined,
+            updatedBy: actorEmail,
+          });
       if (status === 'revoked') clearAuthSessionsForEmail(email);
       res.json({ ok: true, record, users: buildAdminUsers() });
     } catch (error) {

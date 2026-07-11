@@ -15,6 +15,7 @@ export type AdminAuditAction =
   | 'access.requested'
   | 'access.approved'
   | 'access.revoked'
+  | 'participant.updated'
   | 'role.promoted'
   | 'role.demoted'
   | 'credits.adjusted';
@@ -54,6 +55,7 @@ const AUDIT_ACTIONS = new Set<AdminAuditAction>([
   'access.requested',
   'access.approved',
   'access.revoked',
+  'participant.updated',
   'role.promoted',
   'role.demoted',
   'credits.adjusted',
@@ -360,6 +362,46 @@ export function setAccessRole(input: {
     });
   }
 
+  records[index] = next;
+  writeAccessRecords(records);
+  return next;
+}
+
+export function setAccessParticipantType(input: {
+  email: string;
+  participantType: ParticipantType;
+  updatedBy: string;
+}) {
+  const email = normalizeEmail(input.email);
+  const records = readAccessRecords();
+  const index = records.findIndex((record) => record.email === email);
+  if (index < 0) {
+    throw new Error('existing access record required');
+  }
+
+  const participantType = normalizeParticipantType(input.participantType);
+  if (!participantType) throw new Error('invalid participantType');
+
+  const existing = records[index];
+  if (existing.participantType === participantType) return existing;
+
+  const next: AdminAccessRecord = {
+    ...existing,
+    participantType,
+    updatedAt: new Date().toISOString(),
+    updatedBy: input.updatedBy,
+  };
+  recordAdminAuditEvent({
+    actorEmail: input.updatedBy,
+    action: 'participant.updated',
+    targetEmail: email,
+    metadata: {
+      previousParticipantType: existing.participantType,
+      participantType,
+      status: existing.status,
+      role: existing.role,
+    },
+  });
   records[index] = next;
   writeAccessRecords(records);
   return next;

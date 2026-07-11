@@ -175,6 +175,35 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(authOnlyUser?.trialCredits, 0);
     assert.equal(authOnlyUser?.trialGrantedAt, null);
 
+    const adminAuthUser = auth.upsertAuthUser({
+      email: 'max@violema.com',
+      name: 'Admin Without Trial',
+      role: 'admin',
+      method: 'email',
+      acceptedTerms: true,
+      acceptedEducation: true,
+    });
+    const adminWithoutTrial = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'max@violema.com');
+    assert.equal(adminWithoutTrial?.role, 'admin');
+    assert.equal(adminWithoutTrial?.approvedAccess, true);
+    assert.equal(adminWithoutTrial?.trialStatus, 'not_applicable');
+    assert.equal(adminWithoutTrial?.trialCredits, 0);
+    assert.equal(adminWithoutTrial?.trialGrantedAt, null);
+
+    const historicalAdminTrial = store.addLedgerEntry({
+      workspaceId: adminAuthUser.defaultWorkspaceId,
+      source: 'trial_grant',
+      deltaCredits: 500,
+      referenceType: 'beta_trial',
+      referenceId: `historical-admin-trial:${adminAuthUser.defaultWorkspaceId}`,
+    });
+    const adminWithHistoricalTrial = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'max@violema.com');
+    assert.equal(adminWithHistoricalTrial?.trialStatus, 'granted');
+    assert.equal(adminWithHistoricalTrial?.trialCredits, 500);
+    assert.equal(adminWithHistoricalTrial?.trialGrantedAt, historicalAdminTrial.createdAt);
+
     const ledgerEntries = Array.from({ length: 105 }, (_, index) => ({
       id: `ledger_${String(index).padStart(3, '0')}`,
       workspaceId: 'client-acme',
