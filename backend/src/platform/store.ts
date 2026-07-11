@@ -104,33 +104,10 @@ function assertCreditHoldOpen(entries: CreditLedgerEntry[], holdId: string) {
   }
 }
 
-export function ensureWorkspaceCredits(
-  workspaceId: string,
-  planName = 'Legacy Starter',
-  monthlyCredits = 500
-) {
-  let workspaceEntries: CreditLedgerEntry[] = [];
-
-  updateJsonFile<CreditLedgerEntry[]>(LEDGER_FILE, [], (entries) => {
-    workspaceEntries = entries.filter((entry) => entry.workspaceId === workspaceId);
-    if (workspaceEntries.length > 0) return entries;
-
-    const initialEntry = createCreditLedgerEntry({
-      workspaceId,
-      direction: 'grant',
-      source: 'monthly_subscription',
-      deltaCredits: monthlyCredits,
-      balanceAfterCredits: monthlyCredits,
-      referenceType: 'subscription',
-      referenceId: `plan_${planName.toLowerCase()}`,
-      note: `${planName} monthly credit grant`,
-    });
-
-    workspaceEntries = [initialEntry];
-    return [...entries, initialEntry];
-  });
-
-  return summarizeCreditLedger(workspaceEntries);
+export function ensureWorkspaceCredits(workspaceId: string) {
+  const entries = getPlatformState().ledger.filter((entry) => entry.workspaceId === workspaceId);
+  const summary = summarizeCreditLedger(entries);
+  return { ...summary, workspaceId };
 }
 
 export function createTask(input: {
@@ -275,31 +252,14 @@ export function addLedgerEntry(input: {
   referenceId?: string;
   note?: string;
   metadata?: Record<string, unknown>;
-}) {
-  let createdEntry: CreditLedgerEntry | null = null;
+}): CreditLedgerEntry {
+  const createdEntryRef: { value?: CreditLedgerEntry } = {};
 
   updateJsonFile<CreditLedgerEntry[]>(LEDGER_FILE, [], (entries) => {
-    let nextEntries = entries;
-    let workspaceEntries = entries.filter((entry) => entry.workspaceId === input.workspaceId);
-
-    if (workspaceEntries.length === 0) {
-      const initialEntry = createCreditLedgerEntry({
-        workspaceId: input.workspaceId,
-        direction: 'grant',
-        source: 'monthly_subscription',
-        deltaCredits: 500,
-        balanceAfterCredits: 500,
-        referenceType: 'subscription',
-        referenceId: 'plan_legacy starter',
-        note: 'Legacy Starter monthly credit grant',
-      });
-      nextEntries = [...entries, initialEntry];
-      workspaceEntries = [initialEntry];
-    }
-
+    const workspaceEntries = entries.filter((entry) => entry.workspaceId === input.workspaceId);
     const summary = summarizeCreditLedger(workspaceEntries);
     const balanceAfterCredits = summary.balanceCredits + Math.trunc(input.deltaCredits);
-    createdEntry = createCreditLedgerEntry({
+    createdEntryRef.value = createCreditLedgerEntry({
       workspaceId: input.workspaceId,
       direction: input.deltaCredits >= 0 ? 'grant' : 'debit',
       source: input.source,
@@ -311,11 +271,11 @@ export function addLedgerEntry(input: {
       metadata: input.metadata,
     });
 
-    return [...nextEntries, createdEntry];
+    return [...entries, createdEntryRef.value];
   });
 
-  if (!createdEntry) throw new Error('Could not add ledger entry.');
-  return createdEntry;
+  if (!createdEntryRef.value) throw new Error('Could not add ledger entry.');
+  return createdEntryRef.value;
 }
 
 export function getWorkspaceCreditReserve(workspaceId: string, now = new Date()) {
@@ -357,24 +317,7 @@ export function acquireCreditHold(input: {
   const resultRef: { value?: CreditHoldResult } = {};
 
   updateJsonFile<CreditLedgerEntry[]>(LEDGER_FILE, [], (entries) => {
-    let nextEntries = entries;
-    let workspaceEntries = entries.filter((entry) => entry.workspaceId === input.workspaceId);
-
-    if (workspaceEntries.length === 0) {
-      const initialEntry = createCreditLedgerEntry({
-        workspaceId: input.workspaceId,
-        direction: 'grant',
-        source: 'monthly_subscription',
-        deltaCredits: 500,
-        balanceAfterCredits: 500,
-        referenceType: 'subscription',
-        referenceId: 'plan_legacy starter',
-        note: 'Legacy Starter monthly credit grant',
-      });
-      nextEntries = [...entries, initialEntry];
-      workspaceEntries = [initialEntry];
-    }
-
+    const workspaceEntries = entries.filter((entry) => entry.workspaceId === input.workspaceId);
     const summary = summarizeCreditLedger(workspaceEntries);
     const reservedCredits = listActiveHoldEntries(workspaceEntries, now)
       .reduce((total, entry) => total + readCreditHoldCredits(entry), 0);
@@ -412,7 +355,7 @@ export function acquireCreditHold(input: {
       entry,
     };
 
-    return [...nextEntries, entry];
+    return [...entries, entry];
   });
 
   if (!resultRef.value) throw new Error('Could not acquire credit hold.');

@@ -7,7 +7,8 @@ export type CreditSource =
   | 'credit_hold'
   | 'manual_adjustment'
   | 'refund'
-  | 'promo';
+  | 'promo'
+  | 'trial_grant';
 
 export type CreditDirection = 'grant' | 'debit';
 export type ModelTier = 'micro' | 'default' | 'hard' | 'critical' | 'ops';
@@ -59,7 +60,7 @@ export interface CreditLedgerEntry {
   source: CreditSource;
   deltaCredits: number;
   balanceAfterCredits: number;
-  referenceType?: 'subscription' | 'task' | 'automation' | 'referral' | 'manual' | 'promotion';
+  referenceType?: 'subscription' | 'task' | 'automation' | 'referral' | 'manual' | 'promotion' | 'beta_trial';
   referenceId?: string;
   note?: string;
   metadata?: Record<string, unknown>;

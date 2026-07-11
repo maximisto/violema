@@ -165,6 +165,13 @@ test('chat route caps concurrent always-tool-calling OpenAI loops and settles cr
   const auth = await import('../src/auth');
   const store = await import('../src/platform/store');
   const session = auth.createAuthSession(auth.listAuthUsers()[0].id);
+  store.addLedgerEntry({
+    workspaceId,
+    source: 'manual_adjustment',
+    deltaCredits: 500,
+    referenceType: 'manual',
+    referenceId: 'chat_route_test_balance',
+  });
 
   const postChat = (suffix: string) => fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
