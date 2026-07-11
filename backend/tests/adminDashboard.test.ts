@@ -183,6 +183,12 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
       acceptedTerms: true,
       acceptedEducation: true,
     });
+    const requestedAdminAccess = access.recordAccessRequest({
+      email: 'max@violema.com',
+      method: 'email',
+    });
+    assert.equal(requestedAdminAccess.status, 'requested');
+    assert.equal(requestedAdminAccess.role, 'user');
     const adminWithoutTrial = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
       .find((user) => user.email === 'max@violema.com');
     assert.equal(adminWithoutTrial?.role, 'admin');
@@ -203,6 +209,21 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(adminWithHistoricalTrial?.trialStatus, 'granted');
     assert.equal(adminWithHistoricalTrial?.trialCredits, 500);
     assert.equal(adminWithHistoricalTrial?.trialGrantedAt, historicalAdminTrial.createdAt);
+
+    access.recordAccessRequest({
+      email: 'access-only-admin@example.com',
+      method: 'email',
+    });
+    access.setAccessRole({
+      email: 'access-only-admin@example.com',
+      role: 'admin',
+      updatedBy: 'max@violema.com',
+    });
+    const accessOnlyAdmin = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'access-only-admin@example.com');
+    assert.equal(accessOnlyAdmin?.hasAccessRecord, true);
+    assert.equal(accessOnlyAdmin?.role, 'admin');
+    assert.equal(accessOnlyAdmin?.trialStatus, 'not_applicable');
 
     const ledgerEntries = Array.from({ length: 105 }, (_, index) => ({
       id: `ledger_${String(index).padStart(3, '0')}`,

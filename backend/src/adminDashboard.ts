@@ -47,7 +47,9 @@ export function buildAdminUsers() {
     const user = users.find((item) => item.email === email) || null;
     const access = accessRecords.find((item) => item.email === email) || null;
     const userParticipantType = (user as (typeof user & { participantType?: ParticipantType }) | null)?.participantType;
-    const role = access?.role || user?.role || 'user';
+    const role = access?.status === 'requested' && user?.role === 'admin'
+      ? 'admin'
+      : access?.role || user?.role || 'user';
     const approvedAccess = access?.status === 'approved' || isEmailApprovedForAccess(email);
     const accessStatus = access?.status || (approvedAccess ? 'approved' : 'requested');
     const trialEntry = user
