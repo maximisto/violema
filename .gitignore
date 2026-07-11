@@ -13,6 +13,7 @@ Slack.env.rtf
 /backend/admin-audit-events.json
 .superpowers/
 .codex/
+.worktrees/
 backend/auth-sessions.json
 backend/auth-users.json
 backend/automations.json
