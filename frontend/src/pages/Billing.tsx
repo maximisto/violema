@@ -33,7 +33,6 @@ const PLANS = [
     credits: 2000,
     automations: 20,
     missions: '1-3 live missions',
-    stripeMapping: 'Uses the existing $79 Stripe price.',
     features: ['First hero integration', 'Run review pages', 'Slack/email delivery', 'Budget caps', 'Analytics dashboard'],
     proofRunId: 'pricing-proof-founder-brief',
     featured: true,
@@ -46,8 +45,6 @@ const PLANS = [
     credits: 7500,
     automations: 100,
     missions: '5-10 live missions',
-    stripeMapping: 'Uses the existing $249 Stripe price.',
-    seats: 5,
     features: ['Approval gates', 'More integrations', 'Slack operating surface', 'Admin visibility', 'Priority setup support'],
     proofRunId: 'pricing-proof-operating-cadence',
   },
@@ -499,24 +496,6 @@ export default function Billing() {
                     <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Active automations</p>
                     <p className="mt-2 text-lg font-semibold text-white">{plan.automations}</p>
                   </div>
-
-                  <div className={`mt-3 rounded-2xl border px-4 py-3 ${
-                    plan.id === 'team'
-                      ? 'border-cyan-500/20 bg-cyan-500/8'
-                      : 'border-violet-500/20 bg-violet-500/8'
-                  }`}>
-                    <p className={`text-[10px] uppercase tracking-[0.18em] ${
-                      plan.id === 'team' ? 'text-cyan-300/80' : 'text-violet-300/80'
-                    }`}>Stripe mapping</p>
-                    <p className="mt-2 text-sm text-slate-300">{plan.stripeMapping}</p>
-                  </div>
-
-                  {plan.seats && (
-                    <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Included seats</p>
-                      <p className="mt-2 text-lg font-semibold text-white">{plan.seats} seats + $29 per extra seat</p>
-                    </div>
-                  )}
 
                   <div className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/8 px-4 py-3">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/80">Sample monthly pressure</p>
