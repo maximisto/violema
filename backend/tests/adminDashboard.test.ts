@@ -13,11 +13,42 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     process.chdir(tempDir);
     const auth = await import('../src/auth');
     const access = await import('../src/adminAccessStore');
+    const consent = await import('../src/betaConsentStore');
+    const betaProgram = await import('../src/betaProgram');
     const workspace = await import('../src/platform/workspace');
     const billing = await import('../src/platform/billing');
     const store = await import('../src/platform/store');
     const dashboard = await import('../src/adminDashboard');
 
+    assert.deepEqual(
+      dashboard.attributeTrialFirstUsage([
+        { deltaCredits: -200, createdAt: '2026-07-11T10:00:00.000Z' },
+        { deltaCredits: 500, createdAt: '2026-07-11T11:00:00.000Z' },
+        { deltaCredits: 1000, createdAt: '2026-07-11T11:30:00.000Z' },
+        { deltaCredits: -125, createdAt: '2026-07-11T12:00:00.000Z' },
+      ], { deltaCredits: 500, createdAt: '2026-07-11T11:00:00.000Z' }),
+      { trialCredits: 500, spentCredits: 125, remainingCredits: 375 },
+      'post-grant debits are attributed to trial credits before later grants',
+    );
+
+    const acceptedAt = '2026-07-11T12:01:00.000Z';
+    consent.recordBetaConsent({
+      email: 'client@example.com',
+      participantType: 'investor',
+      authMethod: 'email',
+      acceptanceSource: 'signup',
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt,
+    });
+    access.recordAccessRequest({
+      email: 'client@example.com',
+      participantType: 'investor',
+      method: 'email',
+      identityVerifiedAt: '2026-07-11T12:00:00.000Z',
+      acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: acceptedAt,
+    });
     access.setAccessStatus({
       email: 'client@example.com',
       status: 'approved',
@@ -25,7 +56,7 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
       note: 'Client beta',
       updatedBy: 'max@violema.com',
     });
-    auth.upsertAuthUser({
+    const investorAuthUser = auth.upsertAuthUser({
       email: 'client@example.com',
       name: 'Client User',
       role: 'user',
@@ -34,6 +65,14 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
       acceptedEducation: true,
     });
     auth.createAuthSession(auth.listAuthUsers()[0].id);
+    const trialEntry = store.addLedgerEntry({
+      workspaceId: investorAuthUser.defaultWorkspaceId,
+      source: 'trial_grant',
+      deltaCredits: 500,
+      referenceType: 'beta_trial',
+      referenceId: `beta_trial:${investorAuthUser.defaultWorkspaceId}`,
+      note: 'Controlled beta trial grant',
+    });
     workspace.upsertWorkspaceProfile('client-acme', {
       name: 'Acme',
       ownerEmail: 'client@example.com',
@@ -72,11 +111,92 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(overview.metrics.totalRuns, 1);
     assert.equal(overview.metrics.runSuccessRate, 100);
 
-    const users = dashboard.buildAdminUsers();
-    assert.equal(users[0].email, 'client@example.com');
-    assert.equal(users[0].activeSessionCount, 1);
-    assert.equal(users[0].approvedAccess, true);
-    assert.equal(users[0].hasAccessRecord, true);
+    type AdminUserWithTrial = ReturnType<typeof dashboard.buildAdminUsers>[number] & {
+      trialStatus: 'granted' | 'pending' | 'not_applicable';
+      trialCredits: number;
+      trialSpentCredits: number;
+      trialRemainingCredits: number;
+      trialGrantedAt: string | null;
+    };
+    const users = dashboard.buildAdminUsers() as AdminUserWithTrial[];
+    const investor = users.find((user) => user.email === 'client@example.com');
+    assert.equal(investor?.email, 'client@example.com');
+    assert.equal(investor?.activeSessionCount, 1);
+    assert.equal(investor?.approvedAccess, true);
+    assert.equal(investor?.hasAccessRecord, true);
+    assert.equal(investor?.participantType, 'investor');
+    assert.equal(investor?.identityVerified, true);
+    assert.equal(investor?.termsCurrent, true);
+    assert.equal(investor?.termsVersion, betaProgram.CURRENT_BETA_TERMS_VERSION);
+    assert.equal(investor?.approvalReady, true);
+    assert.equal(investor?.trialStatus, 'granted');
+    assert.equal(investor?.trialCredits, 500);
+    assert.equal(investor?.trialSpentCredits, 0);
+    assert.equal(investor?.trialRemainingCredits, 500);
+    assert.equal(investor?.trialGrantedAt, trialEntry.createdAt);
+
+    const attributedLedger = [
+      {
+        id: 'pre_trial_debit',
+        workspaceId: investorAuthUser.defaultWorkspaceId,
+        direction: 'debit',
+        source: 'task_run',
+        deltaCredits: -200,
+        balanceAfterCredits: -200,
+        referenceType: 'task',
+        referenceId: 'pre-trial-task',
+        createdAt: '2026-07-11T10:00:00.000Z',
+      },
+      {
+        ...trialEntry,
+        balanceAfterCredits: 300,
+        createdAt: '2026-07-11T11:00:00.000Z',
+      },
+      {
+        id: 'later_subscription_grant',
+        workspaceId: investorAuthUser.defaultWorkspaceId,
+        direction: 'grant',
+        source: 'subscription',
+        deltaCredits: 1000,
+        balanceAfterCredits: 1300,
+        referenceType: 'subscription',
+        referenceId: 'subscription-after-trial',
+        createdAt: '2026-07-11T11:30:00.000Z',
+      },
+      {
+        id: 'partial_trial_spend',
+        workspaceId: investorAuthUser.defaultWorkspaceId,
+        direction: 'debit',
+        source: 'task_run',
+        deltaCredits: -125,
+        balanceAfterCredits: 1175,
+        referenceType: 'task',
+        referenceId: 'post-trial-task',
+        createdAt: '2026-07-11T12:00:00.000Z',
+      },
+    ];
+    writeFileSync(path.join(tempDir, 'platform-credit-ledger.json'), JSON.stringify(attributedLedger, null, 2));
+    const partiallySpent = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'client@example.com');
+    assert.equal(partiallySpent?.trialSpentCredits, 125);
+    assert.equal(partiallySpent?.trialRemainingCredits, 375);
+
+    attributedLedger.push({
+      id: 'fully_spends_trial',
+      workspaceId: investorAuthUser.defaultWorkspaceId,
+      direction: 'debit',
+      source: 'task_run',
+      deltaCredits: -600,
+      balanceAfterCredits: 575,
+      referenceType: 'task',
+      referenceId: 'post-trial-overage',
+      createdAt: '2026-07-11T13:00:00.000Z',
+    });
+    writeFileSync(path.join(tempDir, 'platform-credit-ledger.json'), JSON.stringify(attributedLedger, null, 2));
+    const fullySpent = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'client@example.com');
+    assert.equal(fullySpent?.trialSpentCredits, 500);
+    assert.equal(fullySpent?.trialRemainingCredits, 0);
 
     const workspaces = dashboard.buildAdminWorkspaces();
     assert.equal(workspaces[0].workspaceId, 'client-acme');
@@ -96,12 +216,53 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
       method: 'email',
       note: 'Allowlisted beta',
     });
-    const allowlistedUsers = dashboard.buildAdminUsers();
+    const allowlistedUsers = dashboard.buildAdminUsers() as AdminUserWithTrial[];
     const allowlistedUser = allowlistedUsers.find((user) => user.email === 'allowlisted@example.com');
     assert.equal(allowlistedUser?.accessStatus, 'requested');
     assert.equal(allowlistedUser?.approvedAccess, true);
     assert.equal(allowlistedUser?.hasAccessRecord, true);
+    assert.equal(allowlistedUser?.participantType, 'founder_operator');
+    assert.equal(allowlistedUser?.identityVerified, false);
+    assert.equal(allowlistedUser?.termsCurrent, false);
+    assert.equal(allowlistedUser?.termsVersion, null);
+    assert.equal(allowlistedUser?.approvalReady, false);
+    assert.equal(allowlistedUser?.trialStatus, 'pending');
+    assert.equal(allowlistedUser?.trialCredits, 0);
+    assert.equal(allowlistedUser?.trialSpentCredits, 0);
+    assert.equal(allowlistedUser?.trialRemainingCredits, 0);
+    assert.equal(allowlistedUser?.trialGrantedAt, null);
     assert.equal(dashboard.buildAdminOverview().metrics.pendingUsers, 0);
+
+    const allowlistedAcceptedAt = '2026-07-11T14:01:00.000Z';
+    consent.recordBetaConsent({
+      email: 'allowlisted@example.com',
+      participantType: 'partner',
+      authMethod: 'google',
+      acceptanceSource: 'oauth_callback',
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt: allowlistedAcceptedAt,
+    });
+    access.syncVerifiedAccessEvidence({
+      email: 'allowlisted@example.com',
+      name: 'Allowlisted Migrated User',
+      method: 'google',
+      participantType: 'partner',
+      identityVerifiedAt: '2026-07-11T14:00:00.000Z',
+      acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: allowlistedAcceptedAt,
+      approvedIfMissing: true,
+      role: 'user',
+    });
+    const migratedAllowlistedUser = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'allowlisted@example.com');
+    assert.equal(migratedAllowlistedUser?.accessStatus, 'approved');
+    assert.equal(migratedAllowlistedUser?.approvedAccess, true);
+    assert.equal(migratedAllowlistedUser?.participantType, 'partner');
+    assert.equal(migratedAllowlistedUser?.identityVerified, true);
+    assert.equal(migratedAllowlistedUser?.termsCurrent, true);
+    assert.equal(migratedAllowlistedUser?.termsVersion, betaProgram.CURRENT_BETA_TERMS_VERSION);
+    assert.equal(migratedAllowlistedUser?.approvalReady, true);
 
     auth.upsertAuthUser({
       email: 'auth-only@example.com',
@@ -111,11 +272,73 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
       acceptedTerms: true,
       acceptedEducation: true,
     });
-    const authOnlyUsers = dashboard.buildAdminUsers();
+    const authOnlyUsers = dashboard.buildAdminUsers() as AdminUserWithTrial[];
     const authOnlyUser = authOnlyUsers.find((user) => user.email === 'auth-only@example.com');
     assert.equal(authOnlyUser?.accessStatus, 'requested');
     assert.equal(authOnlyUser?.approvedAccess, false);
     assert.equal(authOnlyUser?.hasAccessRecord, false);
+    assert.equal(authOnlyUser?.participantType, 'founder_operator');
+    assert.equal(authOnlyUser?.identityVerified, false);
+    assert.equal(authOnlyUser?.termsCurrent, false);
+    assert.equal(authOnlyUser?.termsVersion, null);
+    assert.equal(authOnlyUser?.approvalReady, false);
+    assert.equal(authOnlyUser?.trialStatus, 'not_applicable');
+    assert.equal(authOnlyUser?.trialCredits, 0);
+    assert.equal(authOnlyUser?.trialSpentCredits, 0);
+    assert.equal(authOnlyUser?.trialRemainingCredits, 0);
+    assert.equal(authOnlyUser?.trialGrantedAt, null);
+
+    const adminAuthUser = auth.upsertAuthUser({
+      email: 'max@violema.com',
+      name: 'Admin Without Trial',
+      role: 'admin',
+      method: 'email',
+      acceptedTerms: true,
+      acceptedEducation: true,
+    });
+    const requestedAdminAccess = access.recordAccessRequest({
+      email: 'max@violema.com',
+      method: 'email',
+    });
+    assert.equal(requestedAdminAccess.status, 'requested');
+    assert.equal(requestedAdminAccess.role, 'user');
+    const adminWithoutTrial = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'max@violema.com');
+    assert.equal(adminWithoutTrial?.role, 'admin');
+    assert.equal(adminWithoutTrial?.approvedAccess, true);
+    assert.equal(adminWithoutTrial?.trialStatus, 'not_applicable');
+    assert.equal(adminWithoutTrial?.trialCredits, 0);
+    assert.equal(adminWithoutTrial?.trialSpentCredits, 0);
+    assert.equal(adminWithoutTrial?.trialRemainingCredits, 0);
+    assert.equal(adminWithoutTrial?.trialGrantedAt, null);
+
+    const historicalAdminTrial = store.addLedgerEntry({
+      workspaceId: adminAuthUser.defaultWorkspaceId,
+      source: 'trial_grant',
+      deltaCredits: 500,
+      referenceType: 'beta_trial',
+      referenceId: `historical-admin-trial:${adminAuthUser.defaultWorkspaceId}`,
+    });
+    const adminWithHistoricalTrial = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'max@violema.com');
+    assert.equal(adminWithHistoricalTrial?.trialStatus, 'granted');
+    assert.equal(adminWithHistoricalTrial?.trialCredits, 500);
+    assert.equal(adminWithHistoricalTrial?.trialGrantedAt, historicalAdminTrial.createdAt);
+
+    access.recordAccessRequest({
+      email: 'access-only-admin@example.com',
+      method: 'email',
+    });
+    access.setAccessRole({
+      email: 'access-only-admin@example.com',
+      role: 'admin',
+      updatedBy: 'max@violema.com',
+    });
+    const accessOnlyAdmin = (dashboard.buildAdminUsers() as AdminUserWithTrial[])
+      .find((user) => user.email === 'access-only-admin@example.com');
+    assert.equal(accessOnlyAdmin?.hasAccessRecord, true);
+    assert.equal(accessOnlyAdmin?.role, 'admin');
+    assert.equal(accessOnlyAdmin?.trialStatus, 'not_applicable');
 
     const ledgerEntries = Array.from({ length: 105 }, (_, index) => ({
       id: `ledger_${String(index).padStart(3, '0')}`,
@@ -270,6 +493,15 @@ test('admin route input validation rejects invalid access mutations', async () =
   );
   assert.equal(routes.parseRequiredAdminAccessRole('user'), 'user');
 
+  assert.equal(routes.parseParticipantType(undefined), undefined);
+  assert.equal(routes.parseParticipantType('partner'), 'partner');
+  for (const invalidParticipantType of [null, '', 42, 'tester']) {
+    assert.throws(
+      () => routes.parseParticipantType(invalidParticipantType),
+      /participant type must be founder_operator, investor, or partner/i,
+    );
+  }
+
   assert.throws(
     () => routes.parseAdminEmail('not-an-email'),
     /valid email is required/,
@@ -348,8 +580,26 @@ test('admin access status updates preserve existing role when role is omitted', 
   try {
     process.chdir(tempDir);
     const access = await import('../src/adminAccessStore');
+    const consent = await import('../src/betaConsentStore');
+    const betaProgram = await import('../src/betaProgram');
     const routes = await import('../src/adminRoutes');
 
+    consent.recordBetaConsent({
+      email: 'admin@example.com',
+      participantType: 'founder_operator',
+      authMethod: 'email',
+      acceptanceSource: 'signup',
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt: '2026-07-11T12:01:00.000Z',
+    });
+    access.recordAccessRequest({
+      email: 'admin@example.com',
+      method: 'email',
+      identityVerifiedAt: '2026-07-11T12:00:00.000Z',
+      acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: '2026-07-11T12:01:00.000Z',
+    });
     access.setAccessStatus({
       email: 'admin@example.com',
       status: 'approved',

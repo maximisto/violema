@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
 import Eye from 'lucide-react/dist/esm/icons/eye.js';
 import Lock from 'lucide-react/dist/esm/icons/lock.js';
 import Mail from 'lucide-react/dist/esm/icons/mail.js';
 import MonitorSmartphone from 'lucide-react/dist/esm/icons/monitor-smartphone.js';
-import { beginOAuthFlow, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
+import { beginOAuthFlow, persistAuthSessionToBackend, type AuthMethod, type ParticipantType } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import BrandIcon from '../components/BrandIcon';
 import PublicHeader from '../components/PublicHeader';
@@ -54,6 +54,24 @@ const EDUCATION_CARDS: EducationCard[] = [
   },
 ];
 
+const PARTICIPANT_OPTIONS: Array<{ id: ParticipantType; title: string; body: string }> = [
+  {
+    id: 'founder_operator',
+    title: 'Founder / operator',
+    body: 'I run a company or operating team and want to evaluate recurring workflow execution.',
+  },
+  {
+    id: 'investor',
+    title: 'Investor',
+    body: 'I evaluate companies, operating systems, or portfolio workflows.',
+  },
+  {
+    id: 'partner',
+    title: 'Partner',
+    body: 'I may integrate, distribute, advise, or collaborate with Violema.',
+  },
+];
+
 function useNextPath() {
   const location = useLocation();
   return useMemo(() => new URLSearchParams(location.search).get('next') || '/dashboard', [location.search]);
@@ -66,13 +84,35 @@ export default function Signup() {
   const errorFromQuery = useMemo(() => new URLSearchParams(location.search).get('error'), [location.search]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [participantType, setParticipantType] = useState<ParticipantType>('founder_operator');
+  const [termsVersion, setTermsVersion] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedEducation, setAcceptedEducation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(errorFromQuery);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const canContinue = name.trim().length > 1 && /\S+@\S+\.\S+/.test(email) && acceptedTerms && acceptedEducation;
+  useEffect(() => {
+    let active = true;
+
+    void fetch('/api/auth/terms', { credentials: 'same-origin' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null) as { version?: string; error?: string } | null;
+        if (!response.ok || !payload?.version) {
+          throw new Error(payload?.error || 'Could not load the current beta terms.');
+        }
+        if (active) setTermsVersion(payload.version);
+      })
+      .catch((error) => {
+        if (active) setErrorMessage(error instanceof Error ? error.message : 'Could not load the current beta terms.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const canContinue = name.trim().length > 1 && /\S+@\S+\.\S+/.test(email) && acceptedTerms && acceptedEducation && Boolean(termsVersion);
   const oauthNext = `/connect/slack?next=${encodeURIComponent(nextPath)}`;
 
   async function handleContinue() {
@@ -83,12 +123,15 @@ export default function Signup() {
     setSuccessMessage(null);
     persistWorkspaceContext();
     const session = {
+      intent: 'signup',
       email: email.trim(),
       name: name.trim(),
       role: 'user',
       method: 'email' as const,
+      participantType,
       acceptedTerms,
       acceptedEducation,
+      termsVersion,
       createdAt: new Date().toISOString(),
     } as const;
 
@@ -109,7 +152,7 @@ export default function Signup() {
   }
 
   function handleProviderAuth(provider: Exclude<AuthMethod, 'email'>) {
-    if (!acceptedTerms || !acceptedEducation) {
+    if (!acceptedTerms || !acceptedEducation || !termsVersion) {
       setErrorMessage('Accept the terms and access notice before continuing with Google or Microsoft.');
       return;
     }
@@ -121,6 +164,8 @@ export default function Signup() {
       next: oauthNext,
       acceptedTerms,
       acceptedEducation,
+      participantType,
+      termsVersion,
     });
   }
 
@@ -140,7 +185,7 @@ export default function Signup() {
               <span className="gradient-text"> you enter the workspace.</span>
             </h1>
             <p className="mt-4 max-w-xl text-lg leading-relaxed text-slate-400">
-              Violema gets recurring work ready for review, delivery, and cost tracking. The free preview starts safely before production missions connect to your stack.
+              Apply for Violema’s controlled beta to scope recurring work for review, delivery, and cost tracking before production missions connect to your stack.
             </p>
 
             <div className="mt-8 grid gap-4">
@@ -184,11 +229,34 @@ export default function Signup() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Registration</p>
-                <h2 className="mt-2 text-2xl font-semibold text-white">Start free preview</h2>
+                <h2 className="mt-2 text-2xl font-semibold text-white">Apply for beta</h2>
               </div>
               <Link to="/login" className="text-sm font-medium text-slate-400 transition-colors hover:text-white">
                 Already have access?
               </Link>
+            </div>
+
+            <div className="mt-6">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">I am joining as</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {PARTICIPANT_OPTIONS.map((option) => (
+                  <label
+                    key={option.id}
+                    className={`cursor-pointer rounded-2xl border p-3 transition-colors ${participantType === option.id ? 'border-violet-500/50 bg-violet-500/10' : 'border-navy-700/80 bg-navy-950/45 hover:border-navy-600'}`}
+                  >
+                    <input
+                      type="radio"
+                      name="participantType"
+                      value={option.id}
+                      checked={participantType === option.id}
+                      onChange={() => setParticipantType(option.id)}
+                      className="sr-only"
+                    />
+                    <span className="block text-sm font-semibold text-white">{option.title}</span>
+                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">{option.body}</span>
+                  </label>
+                ))}
+              </div>
             </div>
 
             <div className="mt-6">
@@ -247,7 +315,7 @@ export default function Signup() {
                   className="mt-1 h-4 w-4 rounded border-navy-700 bg-navy-950 text-violet-500"
                 />
                 <span>
-                  I agree to the <Link to="/terms" className="text-violet-300 hover:text-violet-200">Terms of Service</Link> and <Link to="/privacy" className="text-violet-300 hover:text-violet-200">Privacy Policy</Link>.
+                  I agree to the <Link to="/terms" className="text-violet-300 hover:text-violet-200">Terms of Service</Link>, including the <Link to="/terms#beta-confidentiality" className="text-violet-300 hover:text-violet-200">Beta Confidentiality and Evaluation Terms</Link>, and the <Link to="/privacy" className="text-violet-300 hover:text-violet-200">Privacy Policy</Link>.
                 </span>
               </label>
               <label className="flex items-start gap-3 text-sm text-slate-300">
@@ -279,6 +347,7 @@ export default function Signup() {
               <p className="mt-3 text-center text-sm text-emerald-300">{successMessage}</p>
             ) : null}
             <p className="mt-3 text-center text-xs text-slate-500">
+              {termsVersion ? `Current beta terms: ${termsVersion}. ` : 'Loading current beta terms… '}
               Access is manually approved. Approved beta users continue into setup; everyone else stays outside the workspace.
             </p>
           </div>

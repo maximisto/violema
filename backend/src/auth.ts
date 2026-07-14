@@ -7,6 +7,13 @@ import {
   listAdminAccessRecords,
   recordAccessRequest,
 } from './adminAccessStore';
+import { hasCurrentBetaConsent } from './betaConsentStore';
+import {
+  CURRENT_BETA_TERMS_VERSION,
+  defaultParticipantType,
+  normalizeParticipantType,
+  type ParticipantType,
+} from './betaProgram';
 
 export type AuthMethod = 'email' | 'google' | 'microsoft';
 export type AccessRole = 'user' | 'admin';
@@ -19,7 +26,10 @@ export interface AuthUserRecord {
   method: AuthMethod;
   workspaceIds: string[];
   defaultWorkspaceId: string;
+  participantType: ParticipantType;
   acceptedTerms: boolean;
+  acceptedTermsVersion?: string;
+  acceptedTermsAt?: string;
   acceptedEducation: boolean;
   slackWorkspace?: string;
   slackChannelId?: string;
@@ -91,11 +101,21 @@ function normalizeAuthUserRecord(user: AuthUserRecord): AuthUserRecord {
   const nextWorkspaceIds = workspaceIds.includes(defaultWorkspaceId)
     ? workspaceIds
     : [defaultWorkspaceId, ...workspaceIds];
+  let accessParticipantType: ParticipantType | null = null;
+  try {
+    accessParticipantType = getAccessRecord(user.email)?.participantType || null;
+  } catch {
+    // Legacy user migration must remain available if the access store is unavailable.
+  }
+  const participantType = normalizeParticipantType(user.participantType)
+    || accessParticipantType
+    || defaultParticipantType();
 
   return {
     ...user,
     workspaceIds: nextWorkspaceIds,
     defaultWorkspaceId,
+    participantType,
   };
 }
 
@@ -131,7 +151,7 @@ export function isEmailApprovedForAccess(email: string) {
   try {
     persistent = getAccessRecord(normalized);
   } catch {
-    return false;
+    return getAdminAccessEmails().has(normalized);
   }
   if (persistent?.status === 'revoked') return false;
   if (persistent?.status === 'approved') return true;
@@ -146,7 +166,7 @@ export function resolveAuthRole(email: string): AccessRole {
     if (persistent?.status === 'approved') return persistent.role;
     if (persistent?.status === 'revoked') return 'user';
   } catch {
-    return 'user';
+    return getAdminAccessEmails().has(normalized) ? 'admin' : 'user';
   }
 
   return getAdminAccessEmails().has(normalized) ? 'admin' : 'user';
@@ -157,8 +177,7 @@ export function isEmailAdminForAccess(email: string) {
 }
 
 export function isUnverifiedEmailSessionAllowed(env: Record<string, string | undefined> = process.env) {
-  if (env.NODE_ENV !== 'production') return true;
-  return env.VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS === 'true' || env.VIOLEMA_ALLOW_UNVERIFIED_EMAIL_SESSIONS === '1';
+  return env.NODE_ENV !== 'production';
 }
 
 export function isDirectAdminEmailLoginAllowed(
@@ -324,6 +343,10 @@ export function requestBetaAccess(input: {
   email: string;
   name?: string;
   method?: AuthMethod;
+  participantType?: ParticipantType;
+  identityVerifiedAt?: string;
+  acceptedTermsVersion?: string;
+  acceptedTermsAt?: string;
   note?: string;
 }) {
   return recordAccessRequest(input);
@@ -355,7 +378,10 @@ export function upsertAuthUser(input: {
   name: string;
   role: AccessRole;
   method: AuthMethod;
+  participantType?: ParticipantType;
   acceptedTerms: boolean;
+  acceptedTermsVersion?: string;
+  acceptedTermsAt?: string;
   acceptedEducation: boolean;
   slackWorkspace?: string;
   slackChannelId?: string;
@@ -367,6 +393,16 @@ export function upsertAuthUser(input: {
   const now = new Date().toISOString();
   const existingIndex = users.findIndex((item) => item.email === email);
   const existing = existingIndex >= 0 ? users[existingIndex] : null;
+  let accessParticipantType: ParticipantType | null = null;
+  try {
+    accessParticipantType = getAccessRecord(email)?.participantType || null;
+  } catch {
+    // Preserve admin recovery and legacy user updates when the access store is unavailable.
+  }
+  const participantType = normalizeParticipantType(input.participantType)
+    || accessParticipantType
+    || existing?.participantType
+    || defaultParticipantType();
   const nextName = input.name.trim() || existing?.name || email.split('@')[0];
   const id = existing?.id || `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const fallbackWorkspaceId = input.role === 'admin' ? DEFAULT_WORKSPACE_ID : deriveUserWorkspaceId(id);
@@ -383,7 +419,10 @@ export function upsertAuthUser(input: {
         method: input.method,
         workspaceIds,
         defaultWorkspaceId,
-        acceptedTerms: input.acceptedTerms || Boolean(existing?.acceptedTerms),
+        participantType,
+        acceptedTerms: input.acceptedTerms,
+        acceptedTermsVersion: input.acceptedTermsVersion ?? existing?.acceptedTermsVersion,
+        acceptedTermsAt: input.acceptedTermsAt ?? existing?.acceptedTermsAt,
         acceptedEducation: input.acceptedEducation || Boolean(existing?.acceptedEducation),
         slackWorkspace: input.slackWorkspace ?? existing?.slackWorkspace,
         slackChannelId: input.slackChannelId ?? existing?.slackChannelId,
@@ -399,7 +438,10 @@ export function upsertAuthUser(input: {
         method: input.method,
         workspaceIds,
         defaultWorkspaceId,
+        participantType,
         acceptedTerms: input.acceptedTerms,
+        acceptedTermsVersion: input.acceptedTermsVersion,
+        acceptedTermsAt: input.acceptedTermsAt,
         acceptedEducation: input.acceptedEducation,
         slackWorkspace: input.slackWorkspace,
         slackChannelId: input.slackChannelId,
@@ -416,6 +458,11 @@ export function upsertAuthUser(input: {
   }
   writeUsers(users);
   return next;
+}
+
+export function authUserHasCurrentTerms(user: AuthUserRecord) {
+  return user.acceptedTermsVersion === CURRENT_BETA_TERMS_VERSION
+    && hasCurrentBetaConsent(user.email);
 }
 
 export function getAuthUserDefaultWorkspaceId(user: AuthUserRecord) {

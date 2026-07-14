@@ -33,7 +33,7 @@ function RunNotFound() {
   return (
     <div className={`min-h-screen bg-hero-gradient ${scopeClass}`}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
-      <PublicHeader backHref="/pricing" backLabel="Pricing" actionHref="/signup?next=%2Fdashboard" actionLabel="Start free" />
+      <PublicHeader backHref="/pricing" backLabel="Pricing" actionHref="/signup?next=%2Fdashboard" actionLabel="Apply for beta" />
       <main className="relative mx-auto flex min-h-[calc(100dvh-4.85rem)] max-w-3xl items-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="rounded-[1.9rem] border border-navy-700/70 bg-navy-900/50 p-6 sm:p-8">
           <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Run not found</p>
@@ -68,7 +68,7 @@ export default function RunProof() {
   return (
     <div className={`min-h-screen bg-hero-gradient ${scopeClass}`}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
-      <PublicHeader backHref="/pricing" backLabel="Pricing" actionHref="/signup?next=%2Fdashboard" actionLabel="Start free" />
+      <PublicHeader backHref="/pricing" backLabel="Pricing" actionHref="/signup?next=%2Fdashboard" actionLabel="Apply for beta" />
 
       <main className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <section className="rounded-[2rem] border border-navy-700/70 bg-navy-950/42 p-5 shadow-[0_24px_80px_rgba(3,8,24,0.32)] sm:p-7 lg:p-8">
@@ -112,7 +112,7 @@ export default function RunProof() {
                   to="/signup?next=%2Fdashboard"
                   className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/[0.04] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/[0.07]"
                 >
-                  Start free preview
+                  Apply for beta
                 </Link>
               </div>
             </aside>

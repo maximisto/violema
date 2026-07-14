@@ -22,7 +22,13 @@ test('active credit holds reduce available balance until released or expired', a
   const workspaceId = 'workspace_holds';
   const now = new Date('2099-07-04T18:00:00.000Z');
 
-  store.ensureWorkspaceCredits(workspaceId, 'Starter', 20);
+  store.addLedgerEntry({
+    workspaceId,
+    source: 'manual_adjustment',
+    deltaCredits: 20,
+    referenceType: 'manual',
+    referenceId: 'test_hold_balance',
+  });
 
   const firstHold = store.acquireCreditHold({
     workspaceId,
@@ -71,7 +77,13 @@ test('settling a credit hold debits once and releases the held balance', async (
   const workspaceId = 'workspace_settle_hold';
   const now = new Date('2099-07-04T19:00:00.000Z');
 
-  store.ensureWorkspaceCredits(workspaceId, 'Starter', 20);
+  store.addLedgerEntry({
+    workspaceId,
+    source: 'manual_adjustment',
+    deltaCredits: 20,
+    referenceType: 'manual',
+    referenceId: 'test_settle_balance',
+  });
   const hold = store.acquireCreditHold({
     workspaceId,
     amountCredits: 12,
@@ -113,7 +125,13 @@ test('billing spend checks fail against active held credits', async () => withTe
   const workspaceId = 'workspace_billing_holds';
   const now = new Date('2099-07-04T20:00:00.000Z');
 
-  store.ensureWorkspaceCredits(workspaceId, 'Starter', 20);
+  store.addLedgerEntry({
+    workspaceId,
+    source: 'manual_adjustment',
+    deltaCredits: 20,
+    referenceType: 'manual',
+    referenceId: 'test_billing_balance',
+  });
   store.acquireCreditHold({
     workspaceId,
     amountCredits: 18,
@@ -128,4 +146,21 @@ test('billing spend checks fail against active held credits', async () => withTe
     /2 available/,
   );
   assert.doesNotThrow(() => billing.assertCanSpendCredits(workspaceId, 2, now));
+}));
+
+test('credit holds cannot be acquired from an empty workspace', async () => withTempPlatformStore(async () => {
+  const store = await import('../src/platform/store');
+  const workspaceId = 'workspace_empty_hold';
+
+  assert.throws(
+    () => store.acquireCreditHold({
+      workspaceId,
+      amountCredits: 1,
+      referenceType: 'task',
+      referenceId: 'task_without_credits',
+      now: new Date('2099-07-04T21:00:00.000Z'),
+    }),
+    /Insufficient credits\. 0 available, 1 required\./,
+  );
+  assert.deepEqual(store.listLedgerEntries(workspaceId), []);
 }));

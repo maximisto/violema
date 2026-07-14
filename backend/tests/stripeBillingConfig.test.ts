@@ -34,8 +34,10 @@ test('Stripe billing config maps the public pricing ladder and return URLs', asy
     assert.equal(config.subscriptionPriceIds.team, 'price_pro_249');
     assert.equal(start?.name, 'Start');
     assert.equal(start?.monthlyPriceUsd, 79);
+    assert.equal(start?.includedCredits, 2000);
     assert.equal(pro?.name, 'Pro');
     assert.equal(pro?.monthlyPriceUsd, 249);
+    assert.equal(pro?.includedCredits, 7500);
   } finally {
     for (const [key, value] of Object.entries(previousEnv)) {
       if (typeof value === 'string') {

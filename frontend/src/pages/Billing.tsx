@@ -9,8 +9,9 @@ import MessageSquare from 'lucide-react/dist/esm/icons/message-square.js';
 import Shield from 'lucide-react/dist/esm/icons/shield.js';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import Users from 'lucide-react/dist/esm/icons/users.js';
-import { TOP_UP_OPTIONS, createBillingCheckout, formatCredits, useCreditSnapshot } from '../lib/credits';
-import { fetchBackendAuthSession, getAuthSession } from '../lib/auth';
+import { BillingCheckoutError, TOP_UP_OPTIONS, createBillingCheckout, formatCredits, useCreditSnapshot } from '../lib/credits';
+import { clearAuthSession, fetchBackendAuthSession } from '../lib/auth';
+import { checkoutErrorDecision, decidePricingAccess, type PricingAccessDecision } from '../lib/pricingAccess';
 import PublicHeader from '../components/PublicHeader';
 import { persistWorkspaceContext } from '../lib/workspace';
 import { useTheme } from '../lib/useTheme';
@@ -32,7 +33,7 @@ const PLANS = [
     description: 'The first real plan for a founder who wants one reliable reviewed workflow.',
     credits: 2000,
     automations: 20,
-    missions: '1-3 live missions',
+    missions: 'Best for 1–3 active missions',
     features: ['First hero integration', 'Run review pages', 'Slack/email delivery', 'Budget caps', 'Analytics dashboard'],
     proofRunId: 'pricing-proof-founder-brief',
     featured: true,
@@ -44,7 +45,7 @@ const PLANS = [
     description: 'The production tier for recurring missions, approvals, and real operating cadence.',
     credits: 7500,
     automations: 100,
-    missions: '5-10 live missions',
+    missions: 'Best for 5–10 active missions',
     features: ['Approval gates', 'More integrations', 'Slack operating surface', 'Admin visibility', 'Priority setup support'],
     proofRunId: 'pricing-proof-operating-cadence',
   },
@@ -58,25 +59,59 @@ export default function Billing() {
   const location = useLocation();
   const navigate = useNavigate();
   const { scopeClass } = useTheme();
-  const [session, setSession] = useState(() => getAuthSession());
+  const [session, setSession] = useState<Awaited<ReturnType<typeof fetchBackendAuthSession>>>(null);
+  const [sessionResolved, setSessionResolved] = useState(false);
   const { snapshot, refresh } = useCreditSnapshot();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
+  const [checkoutIssue, setCheckoutIssue] = useState<{
+    message: string;
+    action?: { label: string; href: string };
+  } | null>(null);
   const [hoveredPlanId, setHoveredPlanId] = useState<'pro' | 'team' | null>(null);
   const search = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const section = search.get('section') === 'topups' ? 'topups' : 'plans';
   const requestedPlan = search.get('plan');
   const checkoutState = search.get('checkout');
   const sessionId = search.get('session_id');
-  const hasAccess = Boolean(session?.acceptedTerms && session?.acceptedEducation);
   const slackReady = Boolean(session?.slackWorkspace && session?.slackChannelId);
   const billingBasePath = location.pathname.startsWith('/pricing') ? '/pricing' : '/plans';
+  const currentReturnPath = section === 'topups'
+    ? `${billingBasePath}?section=topups`
+    : requestedPlan === 'pro' || requestedPlan === 'team'
+      ? `${billingBasePath}?plan=${requestedPlan}`
+      : billingBasePath;
+  const accessDecision = decidePricingAccess({ sessionResolved, session, returnPath: currentReturnPath });
+  const hasAccess = accessDecision.kind === 'checkout';
+  const primaryAccessCta = accessDecision.kind === 'checkout'
+    ? { href: '/dashboard', label: 'Open workspace' }
+    : accessDecision.kind === 'accept_terms'
+      ? { href: accessDecision.href, label: 'Review beta terms' }
+      : accessDecision.kind === 'apply'
+        ? { href: accessDecision.href, label: 'Apply for beta' }
+        : { href: currentReturnPath, label: 'Checking access…' };
 
   useEffect(() => {
     persistWorkspaceContext();
-    void fetchBackendAuthSession().then((next) => {
-      if (next) setSession(next);
-    }).catch(() => undefined);
+    let active = true;
+    void fetchBackendAuthSession()
+      .then((next) => {
+        if (!active) return;
+        setSession(next);
+      })
+      .catch(() => {
+        clearAuthSession();
+        if (!active) return;
+        setSession(null);
+        setCheckoutIssue({
+          message: 'Could not verify your approved session. Refresh pricing before attempting checkout.',
+          action: { label: 'Refresh pricing', href: currentReturnPath },
+        });
+      })
+      .finally(() => {
+        if (active) setSessionResolved(true);
+      });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -85,10 +120,13 @@ export default function Billing() {
   }, [checkoutState, refresh]);
 
   async function handleSubscription(planId: 'pro' | 'team') {
-    if (!hasAccess) {
-      navigate(`/signup?next=${encodeURIComponent(`${billingBasePath}?plan=${planId}`)}`);
+    const returnPath = `${billingBasePath}?plan=${planId}`;
+    const decision = decidePricingAccess({ sessionResolved, session, returnPath });
+    if (decision.kind !== 'checkout') {
+      routePricingDecision(decision);
       return;
     }
+    setCheckoutIssue(null);
     setBusyId(planId);
     try {
       const result = await createBillingCheckout({ kind: 'subscription', planId });
@@ -97,16 +135,30 @@ export default function Billing() {
         window.location.assign(result.session.checkoutUrl);
         return;
       }
+      setCheckoutIssue(checkoutErrorDecision({}, returnPath));
+    } catch (error) {
+      const billingError = error instanceof BillingCheckoutError ? error : null;
+      if (billingError?.status === 401 || billingError?.status === 403) {
+        clearAuthSession();
+        setSession(null);
+      }
+      setCheckoutIssue(checkoutErrorDecision({
+        status: billingError?.status,
+        code: billingError?.code,
+      }, returnPath));
     } finally {
       setBusyId(null);
     }
   }
 
   async function handleTopUp(offerId: 'topup_500' | 'topup_1500' | 'topup_5000') {
-    if (!hasAccess) {
-      navigate(`/signup?next=${encodeURIComponent(`${billingBasePath}?section=topups`)}`);
+    const returnPath = `${billingBasePath}?section=topups`;
+    const decision = decidePricingAccess({ sessionResolved, session, returnPath });
+    if (decision.kind !== 'checkout') {
+      routePricingDecision(decision);
       return;
     }
+    setCheckoutIssue(null);
     setBusyId(offerId);
     try {
       const result = await createBillingCheckout({ kind: 'top-up', offerId });
@@ -115,9 +167,37 @@ export default function Billing() {
         window.location.assign(result.session.checkoutUrl);
         return;
       }
+      setCheckoutIssue(checkoutErrorDecision({}, returnPath));
+    } catch (error) {
+      const billingError = error instanceof BillingCheckoutError ? error : null;
+      if (billingError?.status === 401 || billingError?.status === 403) {
+        clearAuthSession();
+        setSession(null);
+      }
+      setCheckoutIssue(checkoutErrorDecision({
+        status: billingError?.status,
+        code: billingError?.code,
+      }, returnPath));
     } finally {
       setBusyId(null);
     }
+  }
+
+  function routePricingDecision(decision: PricingAccessDecision) {
+    if (decision.kind === 'pending') {
+      setCheckoutIssue({ message: 'Checking your approved beta session before checkout.' });
+      return;
+    }
+    if (decision.kind === 'apply' || decision.kind === 'accept_terms') {
+      navigate(decision.href);
+    }
+  }
+
+  function actionLabel(decision: PricingAccessDecision, checkoutLabel: string) {
+    if (decision.kind === 'pending') return 'Checking access…';
+    if (decision.kind === 'accept_terms') return 'Review beta terms';
+    if (decision.kind === 'apply') return 'Apply for beta';
+    return checkoutLabel;
   }
 
   return (
@@ -126,8 +206,8 @@ export default function Billing() {
         <PublicHeader
         backHref="/"
         backLabel="Home"
-        actionHref={hasAccess ? '/dashboard' : '/signup?next=%2Fdashboard'}
-        actionLabel={hasAccess ? 'Open workspace' : 'Start free'}
+        actionHref={primaryAccessCta.href}
+        actionLabel={primaryAccessCta.label}
       />
       <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="rounded-[2rem] border border-navy-700/60 bg-navy-950/40 px-5 py-6 shadow-[0_24px_80px_rgba(3,8,24,0.3)] sm:px-7 lg:px-8">
@@ -148,26 +228,23 @@ export default function Billing() {
                 <p className="text-sm text-slate-300">
                   Credits map to actual agent work. The public ladder starts at $79 because Violema is selling reviewed operating loops, not cheap task volume.
                 </p>
-                <p className="text-sm text-slate-500">
-                  Existing Stripe prices are reused: Start checks out through the current $79 plan, Pro through the current $249 plan, and Enterprise is custom.
-                </p>
               </div>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <Link
+                  to={primaryAccessCta.href}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-glow-violet transition-colors hover:bg-violet-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                >
+                  {primaryAccessCta.label}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
                 <button
                   type="button"
                   onClick={(event) => { void openCalendlyConsultation(event, 'pricing-hero-workflow-audit'); }}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-glow-violet transition-colors hover:bg-violet-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-navy-700/80 bg-navy-900/55 px-5 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-violet-500/35 hover:text-white"
                 >
                   <CalendarCheck className="h-4 w-4" />
                   Book workflow audit
                 </button>
-                <Link
-                  to={hasAccess ? '/dashboard' : '/signup?next=%2Fdashboard'}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-navy-700/80 bg-navy-900/55 px-5 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-violet-500/35 hover:text-white"
-                >
-                  {hasAccess ? 'Open workspace' : 'Start free preview'}
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
               </div>
             </div>
 
@@ -179,7 +256,7 @@ export default function Billing() {
                   <p className="mt-1 text-sm text-slate-500">{session?.email || 'Finish access setup to unlock checkout'}</p>
                 </div>
                 <div className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
-                  {hasAccess ? 'Ready' : 'Setup required'}
+                  {!sessionResolved ? 'Checking' : hasAccess ? 'Ready' : 'Application required'}
                 </div>
               </div>
 
@@ -224,7 +301,17 @@ export default function Billing() {
           </div>
         </div>
 
-        {redirecting ? (
+        {checkoutIssue ? (
+          <div className="mt-6 rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-rose-100" role="alert">
+            <p className="text-sm font-medium">{checkoutIssue.message}</p>
+            {checkoutIssue.action ? (
+              <Link to={checkoutIssue.action.href} className="mt-3 inline-flex items-center gap-2 rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-100">
+                {checkoutIssue.action.label}
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            ) : null}
+          </div>
+        ) : redirecting ? (
           <div className="mt-6 rounded-2xl border border-violet-500/25 bg-violet-500/10 px-4 py-3 text-violet-100">
             <div className="flex items-center gap-3">
               <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-violet-500/15">
@@ -438,6 +525,11 @@ export default function Billing() {
             <div className="mt-7 grid gap-5 xl:grid-cols-2 items-stretch">
               {PLANS.map((plan) => {
                 const proofRun = getProofRunById(plan.proofRunId);
+                const planDecision = decidePricingAccess({
+                  sessionResolved,
+                  session,
+                  returnPath: `${billingBasePath}?plan=${plan.id}`,
+                });
                 return (
                   <div
                     key={plan.id}
@@ -497,6 +589,10 @@ export default function Billing() {
                     <p className="mt-2 text-lg font-semibold text-white">{plan.automations}</p>
                   </div>
 
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    Actual run volume depends on mission complexity and credit usage.
+                  </p>
+
                   <div className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/8 px-4 py-3">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/80">Sample monthly pressure</p>
                     <p className="mt-2 text-sm font-semibold text-white">{proofRun.title}</p>
@@ -531,7 +627,7 @@ export default function Billing() {
                         : 'bg-navy-700 hover:bg-navy-600'
                     }`}
                   >
-                    {busyId === plan.id ? 'Opening Stripe…' : `Choose ${plan.name}`}
+                    {busyId === plan.id ? 'Opening Stripe…' : actionLabel(planDecision, `Choose ${plan.name}`)}
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </div>
@@ -602,7 +698,12 @@ export default function Billing() {
                     disabled={busyId !== null}
                     className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-violet-500 disabled:cursor-wait disabled:opacity-60"
                   >
-                    {busyId === option.id ? 'Opening Stripe…' : 'Buy top-up'}
+                    {busyId === option.id
+                      ? 'Opening Stripe…'
+                      : actionLabel(
+                          decidePricingAccess({ sessionResolved, session, returnPath: `${billingBasePath}?section=topups` }),
+                          'Buy top-up',
+                        )}
                     <ArrowRight className="h-4 w-4" />
                     </button>
                   </div>

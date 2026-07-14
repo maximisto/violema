@@ -15,6 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import {
   AuthAccessDeniedError,
+  authUserHasCurrentTerms,
   assertEmailApprovedForAccess,
   clearAuthSession as clearPersistedAuthSession,
   createAdminMagicLoginToken,
@@ -22,6 +23,7 @@ import {
   assertAuthUserCanAccessWorkspace,
   getAuthUserDefaultWorkspaceId,
   getAuthUserByToken,
+  listAuthUsers,
   isEmailAdminForAccess,
   isDirectAdminEmailLoginAllowed,
   isUnverifiedEmailSessionAllowed,
@@ -33,6 +35,7 @@ import {
   upsertAuthUser,
   verifyAdminMagicLoginToken,
 } from './auth';
+import { getAccessRecord, syncVerifiedAccessEvidence } from './adminAccessStore';
 import { registerAdminRoutes } from './adminRoutes';
 import {
   assertAuthenticatedAdminAccess,
@@ -41,6 +44,18 @@ import {
   type AuthenticatedRequest,
 } from './authRequest';
 import { isPublicBetaApiPath } from './betaAccess';
+import { getCurrentBetaConsent, recordBetaConsent } from './betaConsentStore';
+import {
+  BETA_TERMS_PATH,
+  CURRENT_BETA_TERMS_CANONICAL_TEXT,
+  CURRENT_BETA_TERMS_DIGEST,
+  CURRENT_BETA_TERMS_VERSION,
+  PARTICIPANT_TYPES,
+  defaultParticipantType,
+  normalizeParticipantType,
+  type ParticipantType,
+} from './betaProgram';
+import { ensureBetaTrialCredits } from './betaTrialCredits';
 import {
   GENERAL_RATE_LIMIT_MAX,
   RATE_LIMIT_WINDOW_MS,
@@ -358,10 +373,28 @@ app.use((req: Request, res: Response, next: () => void) => {
     return;
   }
 
-  (req as AuthenticatedRequest).authUser = {
+  const authenticatedUser: AuthUserRecord = {
     ...record.user,
     role: resolveAuthRole(record.user.email),
   };
+  if (authenticatedUser.role !== 'admin') {
+    let hasCurrentTerms = false;
+    try {
+      hasCurrentTerms = authUserHasCurrentTerms(authenticatedUser);
+    } catch {
+      // Malformed consent evidence fails closed for participant workspace access.
+    }
+    if (!hasCurrentTerms) {
+      res.status(403).json({
+        error: 'Current beta terms must be accepted before workspace access.',
+        code: 'terms_reacceptance_required',
+        termsVersion: CURRENT_BETA_TERMS_VERSION,
+      });
+      return;
+    }
+  }
+
+  (req as AuthenticatedRequest).authUser = authenticatedUser;
 
   next();
 });
@@ -517,6 +550,8 @@ interface OAuthStatePayload {
   next: string;
   acceptedTerms: boolean;
   acceptedEducation: boolean;
+  participantType: ParticipantType;
+  termsVersion: string;
   issuedAt: number;
 }
 
@@ -923,11 +958,16 @@ function decodeOAuthState(state: string | undefined): OAuthStatePayload | null {
       typeof payload.next !== 'string' ||
       typeof payload.acceptedTerms !== 'boolean' ||
       typeof payload.acceptedEducation !== 'boolean' ||
+      !normalizeParticipantType(payload.participantType) ||
+      typeof payload.termsVersion !== 'string' ||
       typeof payload.issuedAt !== 'number'
     ) {
       return null;
     }
     if (Date.now() - payload.issuedAt > 1000 * 60 * 15) {
+      return null;
+    }
+    if (payload.intent === 'signup' && payload.termsVersion !== CURRENT_BETA_TERMS_VERSION) {
       return null;
     }
     return {
@@ -936,6 +976,8 @@ function decodeOAuthState(state: string | undefined): OAuthStatePayload | null {
       next: sanitizeNextPath(payload.next),
       acceptedTerms: payload.acceptedTerms,
       acceptedEducation: payload.acceptedEducation,
+      participantType: normalizeParticipantType(payload.participantType) as ParticipantType,
+      termsVersion: payload.termsVersion,
       issuedAt: payload.issuedAt,
     };
   } catch {
@@ -1020,6 +1062,7 @@ function recordDeniedBetaAccessRequest(input: {
   email: string;
   name: string;
   method: PersistedAuthMethod;
+  participantType?: ParticipantType;
   note: string;
 }) {
   try {
@@ -1027,6 +1070,45 @@ function recordDeniedBetaAccessRequest(input: {
   } catch {
     console.warn('Failed to record denied beta access request.');
   }
+}
+
+function resolveAuthParticipantType(email: string, fallback?: ParticipantType) {
+  let access: ReturnType<typeof getAccessRecord> = null;
+  try {
+    access = getAccessRecord(email);
+  } catch {
+    // Trusted admin recovery must remain available when participant access state is unreadable.
+  }
+  if (access?.participantType) return access.participantType;
+  const existing = listAuthUsers().find((user) => user.email === email.trim().toLowerCase());
+  return existing?.participantType || fallback || defaultParticipantType();
+}
+
+function safeAuthUserRequiresTermsAcceptance(user: AuthUserRecord) {
+  try {
+    return !authUserHasCurrentTerms(user);
+  } catch {
+    return true;
+  }
+}
+
+function serializeAuthSessionUser(user: AuthUserRecord) {
+  return {
+    ...user,
+    role: resolveAuthRole(user.email),
+    requiresTermsAcceptance: safeAuthUserRequiresTermsAcceptance(user),
+  };
+}
+
+function fulfillApprovedBetaTrial(user: AuthUserRecord) {
+  if (user.role === 'admin' || !authUserHasCurrentTerms(user)) return;
+  const accessRecord = getAccessRecord(user.email);
+  ensureBetaTrialCredits({
+    workspaceId: getAuthUserDefaultWorkspaceId(user),
+    participantType: user.participantType,
+    termsVersion: CURRENT_BETA_TERMS_VERSION,
+    approvalActor: accessRecord?.status === 'approved' ? accessRecord.approvedBy : undefined,
+  });
 }
 
 function assertAdminAccess(req: Request) {
@@ -4526,6 +4608,96 @@ app.post('/api/waitlist', (req: Request, res: Response) => {
   res.json({ ok: true, duplicate: false, position: list.length });
 });
 
+app.get('/api/auth/terms', (_req: Request, res: Response) => {
+  res.json({
+    version: CURRENT_BETA_TERMS_VERSION,
+    digest: CURRENT_BETA_TERMS_DIGEST,
+    path: BETA_TERMS_PATH,
+    canonicalText: CURRENT_BETA_TERMS_CANONICAL_TEXT,
+    participantTypes: PARTICIPANT_TYPES,
+  });
+});
+
+app.post('/api/auth/terms/accept', (req: Request, res: Response) => {
+  const token = parseCookieValue(req, AUTH_COOKIE_NAME);
+  if (!token) {
+    res.status(401).json({ error: 'No active session' });
+    return;
+  }
+
+  const record = getAuthUserByToken(token);
+  if (!record) {
+    res.setHeader('Set-Cookie', getAuthCookieOptions());
+    res.status(401).json({ error: 'Session expired' });
+    return;
+  }
+
+  const body = (req.body || {}) as Record<string, unknown>;
+  if (body.acceptedTerms !== true || body.termsVersion !== CURRENT_BETA_TERMS_VERSION) {
+    res.status(400).json({
+      error: 'The current beta terms must be explicitly accepted.',
+      code: 'invalid_terms_acceptance',
+      termsVersion: CURRENT_BETA_TERMS_VERSION,
+    });
+    return;
+  }
+
+  try {
+    assertEmailApprovedForAccess(record.user.email);
+    const role = resolveAuthRole(record.user.email);
+    const participantType = resolveAuthParticipantType(record.user.email, record.user.participantType);
+    const acceptedAt = new Date().toISOString();
+    recordBetaConsent({
+      email: record.user.email,
+      participantType,
+      termsVersion: CURRENT_BETA_TERMS_VERSION,
+      termsDigest: CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt,
+      authMethod: record.user.method,
+      acceptanceSource: 'reauthorization',
+    });
+    if (record.user.method === 'google' || record.user.method === 'microsoft') {
+      try {
+        syncVerifiedAccessEvidence({
+          email: record.user.email,
+          name: record.user.name,
+          method: record.user.method,
+          participantType,
+          identityVerifiedAt: acceptedAt,
+          acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+          acceptedTermsAt: acceptedAt,
+          approvedIfMissing: true,
+          role,
+        });
+      } catch (error) {
+        if (role !== 'admin') throw error;
+      }
+    }
+    const user = upsertAuthUser({
+      email: record.user.email,
+      name: record.user.name,
+      role,
+      method: record.user.method,
+      participantType,
+      acceptedTerms: true,
+      acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+      acceptedTermsAt: acceptedAt,
+      acceptedEducation: record.user.acceptedEducation,
+      slackWorkspace: record.user.slackWorkspace,
+      slackChannelId: record.user.slackChannelId,
+      slackDisplayTarget: record.user.slackDisplayTarget,
+      slackConnectedAt: record.user.slackConnectedAt,
+    });
+    fulfillApprovedBetaTrial(user);
+    res.json({ ok: true, user: serializeAuthSessionUser(user) });
+  } catch (error) {
+    res.status(isAuthAccessDenied(error) ? error.statusCode : 500).json({
+      error: error instanceof Error ? error.message : 'Could not record beta terms acceptance.',
+      code: isAuthAccessDenied(error) ? error.code : 'terms_acceptance_failed',
+    });
+  }
+});
+
 app.get('/api/auth/admin/magic', (req: Request, res: Response) => {
   const origin = getAuthPublicOrigin(req);
   const fallbackNext = sanitizeNextPath(typeof req.query.next === 'string' ? req.query.next : undefined, '/admin');
@@ -4548,7 +4720,8 @@ app.get('/api/auth/admin/magic', (req: Request, res: Response) => {
       name: payload.name,
       role: 'admin',
       method: 'email',
-      acceptedTerms: true,
+      participantType: resolveAuthParticipantType(payload.email),
+      acceptedTerms: false,
       acceptedEducation: true,
     });
     const { token: sessionToken } = createAuthSession(user.id);
@@ -4576,14 +4749,24 @@ app.get('/api/auth/:provider/start', (req: Request, res: Response) => {
         : '/dashboard',
     intent === 'signup' ? '/connect/slack?next=%2Fplans' : '/dashboard',
   );
-  const acceptedTerms = req.query.acceptedTerms === '1' || req.query.acceptedTerms === 'true';
+  const requestedTermsAcceptance = req.query.acceptedTerms === '1' || req.query.acceptedTerms === 'true';
   const acceptedEducation = req.query.acceptedEducation === '1' || req.query.acceptedEducation === 'true';
+  const requestedParticipantType = normalizeParticipantType(req.query.participantType);
+  const termsVersion = typeof req.query.termsVersion === 'string' ? req.query.termsVersion : '';
   const origin = getAuthPublicOrigin(req);
 
-  if (intent === 'signup' && (!acceptedTerms || !acceptedEducation)) {
+  if (intent === 'signup' && (!requestedTermsAcceptance || !acceptedEducation)) {
     redirectToAuthError(res, origin, intent, next, 'Please accept the access terms before continuing.');
     return;
   }
+  if (intent === 'signup' && (!requestedParticipantType || termsVersion !== CURRENT_BETA_TERMS_VERSION)) {
+    redirectToAuthError(res, origin, intent, next, 'Choose a valid participant type and accept the current beta terms.');
+    return;
+  }
+
+  const participantType = intent === 'signup'
+    ? requestedParticipantType as ParticipantType
+    : defaultParticipantType();
 
   let state: string;
   try {
@@ -4591,8 +4774,10 @@ app.get('/api/auth/:provider/start', (req: Request, res: Response) => {
       provider,
       intent,
       next,
-      acceptedTerms,
+      acceptedTerms: intent === 'signup' && requestedTermsAcceptance,
       acceptedEducation,
+      participantType,
+      termsVersion: intent === 'signup' ? termsVersion : CURRENT_BETA_TERMS_VERSION,
       issuedAt: Date.now(),
     });
   } catch (err) {
@@ -4711,7 +4896,11 @@ app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
         },
       });
       const userPayload = await userResponse.json().catch(() => null) as Record<string, unknown> | null;
-      if (!userResponse.ok || typeof userPayload?.email !== 'string') {
+      if (
+        !userResponse.ok
+        || typeof userPayload?.email !== 'string'
+        || userPayload.email_verified !== true
+      ) {
         throw new Error('Google profile lookup failed.');
       }
 
@@ -4764,24 +4953,77 @@ app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
       return;
     }
 
+    if (state.intent === 'signup' && state.acceptedTerms) {
+      const acceptedAt = new Date().toISOString();
+      recordBetaConsent({
+        email,
+        participantType: state.participantType,
+        termsVersion: CURRENT_BETA_TERMS_VERSION,
+        termsDigest: CURRENT_BETA_TERMS_DIGEST,
+        acceptedAt,
+        authMethod: provider,
+        acceptanceSource: 'oauth_callback',
+      });
+      requestBetaAccess({
+        email,
+        name,
+        method: provider,
+        participantType: state.participantType,
+        identityVerifiedAt: acceptedAt,
+        acceptedTermsVersion: CURRENT_BETA_TERMS_VERSION,
+        acceptedTermsAt: acceptedAt,
+        note: 'Verified OAuth beta application',
+      });
+    }
+
     assertEmailApprovedForAccess(email);
 
     const role = resolveAuthRole(email);
-    const sessionTermsAccepted = state.intent === 'login' || state.acceptedTerms;
+    let currentConsent: ReturnType<typeof getCurrentBetaConsent> = null;
+    try {
+      currentConsent = getCurrentBetaConsent(email);
+    } catch (error) {
+      if (role !== 'admin') throw error;
+    }
+    const participantType = resolveAuthParticipantType(
+      email,
+      state.intent === 'signup' ? state.participantType : currentConsent?.participantType,
+    );
+    if (currentConsent) {
+      try {
+        syncVerifiedAccessEvidence({
+          email,
+          name,
+          method: provider,
+          participantType,
+          identityVerifiedAt: new Date().toISOString(),
+          acceptedTermsVersion: currentConsent.termsVersion,
+          acceptedTermsAt: currentConsent.acceptedAt,
+          approvedIfMissing: true,
+          role,
+        });
+      } catch (error) {
+        if (role !== 'admin') throw error;
+      }
+    }
     const sessionEducationAccepted = state.intent === 'login' || state.acceptedEducation;
     const user = upsertAuthUser({
       email,
       name,
       role,
       method: provider,
-      acceptedTerms: sessionTermsAccepted,
+      participantType,
+      acceptedTerms: Boolean(currentConsent),
+      acceptedTermsVersion: currentConsent?.termsVersion,
+      acceptedTermsAt: currentConsent?.acceptedAt,
       acceptedEducation: sessionEducationAccepted,
     });
+    fulfillApprovedBetaTrial(user);
     const { token } = createAuthSession(user.id);
     res.setHeader('Set-Cookie', buildAuthCookie(token));
     res.redirect(`${origin}${state.next}`);
   } catch (error) {
-    if (isAuthAccessDenied(error) && email) {
+    if (isAuthAccessDenied(error) && email && state.intent === 'login') {
       recordDeniedBetaAccessRequest({
         email,
         name,
@@ -4826,24 +5068,18 @@ app.get('/api/auth/session', (req: Request, res: Response) => {
 
   res.json({
     ok: true,
-    user: {
-      ...record.user,
-      role: resolveAuthRole(record.user.email),
-    },
+    user: serializeAuthSessionUser(record.user),
   });
 });
 
 app.post('/api/auth/session', async (req: Request, res: Response) => {
   const body = (req.body || {}) as Record<string, unknown>;
+  const intent = body.intent === 'signup' || body.intent === 'login' ? body.intent : null;
   const email = typeof body.email === 'string' ? body.email.trim() : '';
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const next = sanitizeNextPath(typeof body.next === 'string' ? body.next : undefined, '/dashboard');
-  const method = (
-    typeof body.method === 'string' && ['email', 'google', 'microsoft'].includes(body.method)
-      ? body.method
-      : 'email'
-  ) as PersistedAuthMethod;
-  const acceptedTerms = Boolean(body.acceptedTerms);
+  const method: PersistedAuthMethod = 'email';
+  const acceptedTerms = body.acceptedTerms === true;
   const acceptedEducation = Boolean(body.acceptedEducation);
 
   if (!email || !/\S+@\S+\.\S+/.test(email)) {
@@ -4856,6 +5092,25 @@ app.post('/api/auth/session', async (req: Request, res: Response) => {
     return;
   }
 
+  if (!intent) {
+    res.status(400).json({ error: 'Intent must be signup or login' });
+    return;
+  }
+
+  const requestedParticipantType = intent === 'signup'
+    ? normalizeParticipantType(body.participantType)
+    : null;
+  if (intent === 'signup' && !requestedParticipantType) {
+    res.status(400).json({ error: 'Participant type must be founder_operator, investor, or partner' });
+    return;
+  }
+  const acceptsCurrentSignupTerms = intent === 'signup'
+    && acceptedTerms
+    && body.termsVersion === CURRENT_BETA_TERMS_VERSION;
+  const signupParticipantType = acceptsCurrentSignupTerms
+    ? requestedParticipantType as ParticipantType
+    : undefined;
+
   try {
     assertEmailApprovedForAccess(email);
   } catch (error) {
@@ -4863,6 +5118,7 @@ app.post('/api/auth/session', async (req: Request, res: Response) => {
       email,
       name,
       method,
+      participantType: signupParticipantType,
       note: 'Email session request',
     });
     res.status(isAuthAccessDenied(error) ? error.statusCode : 403).json({
@@ -4898,23 +5154,41 @@ app.post('/api/auth/session', async (req: Request, res: Response) => {
   }
 
   const role = resolveAuthRole(email);
+  const participantType = resolveAuthParticipantType(email, signupParticipantType);
+  if (acceptsCurrentSignupTerms) {
+    const acceptedAt = new Date().toISOString();
+    recordBetaConsent({
+      email,
+      participantType,
+      termsVersion: CURRENT_BETA_TERMS_VERSION,
+      termsDigest: CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt,
+      authMethod: method,
+      acceptanceSource: 'signup',
+    });
+  }
+  const currentConsent = getCurrentBetaConsent(email);
   const user = upsertAuthUser({
     email,
     name,
     role,
     method,
-    acceptedTerms,
+    participantType,
+    acceptedTerms: Boolean(currentConsent),
+    acceptedTermsVersion: currentConsent?.termsVersion,
+    acceptedTermsAt: currentConsent?.acceptedAt,
     acceptedEducation,
     slackWorkspace: typeof body.slackWorkspace === 'string' ? body.slackWorkspace.trim() || undefined : undefined,
     slackChannelId: typeof body.slackChannelId === 'string' ? body.slackChannelId.trim() || undefined : undefined,
     slackDisplayTarget: typeof body.slackDisplayTarget === 'string' ? body.slackDisplayTarget.trim() || undefined : undefined,
     slackConnectedAt: typeof body.slackConnectedAt === 'string' ? body.slackConnectedAt : undefined,
   });
+  fulfillApprovedBetaTrial(user);
   const { token } = createAuthSession(user.id);
   res.setHeader('Set-Cookie', buildAuthCookie(token));
   res.json({
     ok: true,
-    user,
+    user: serializeAuthSessionUser(user),
   });
 });
 
@@ -4950,7 +5224,10 @@ app.patch('/api/auth/session', (req: Request, res: Response) => {
     name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : record.user.name,
     role,
     method: record.user.method,
-    acceptedTerms: typeof body.acceptedTerms === 'boolean' ? body.acceptedTerms : record.user.acceptedTerms,
+    participantType: record.user.participantType,
+    acceptedTerms: record.user.acceptedTerms,
+    acceptedTermsVersion: record.user.acceptedTermsVersion,
+    acceptedTermsAt: record.user.acceptedTermsAt,
     acceptedEducation: typeof body.acceptedEducation === 'boolean' ? body.acceptedEducation : record.user.acceptedEducation,
     slackWorkspace: typeof body.slackWorkspace === 'string' ? body.slackWorkspace.trim() || undefined : record.user.slackWorkspace,
     slackChannelId: typeof body.slackChannelId === 'string' ? body.slackChannelId.trim() || undefined : record.user.slackChannelId,
@@ -4960,7 +5237,7 @@ app.patch('/api/auth/session', (req: Request, res: Response) => {
 
   res.json({
     ok: true,
-    user,
+    user: serializeAuthSessionUser(user),
   });
 });
 

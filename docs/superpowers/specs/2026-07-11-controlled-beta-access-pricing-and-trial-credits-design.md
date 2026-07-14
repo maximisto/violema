@@ -1,7 +1,7 @@
 # Violema Controlled Beta Access, Pricing, and Trial Credits Design
 
 Date: 2026-07-11
-Status: approved design, pending implementation
+Status: implemented and verified at application head `d09a095`
 Owner: Max Markovtsev
 
 ## Objective

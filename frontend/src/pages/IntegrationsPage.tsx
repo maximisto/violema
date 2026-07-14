@@ -392,7 +392,7 @@ export default function IntegrationsPage() {
                 to="/signup?next=%2Fdashboard"
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-violet-500"
               >
-                Start free preview
+                Apply for beta
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a

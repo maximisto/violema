@@ -1,5 +1,11 @@
-import { listAdminAccessRecords, listAdminAuditEvents } from './adminAccessStore';
-import { isEmailApprovedForAccess, listAuthSessions, listAuthUsers } from './auth';
+import {
+  isAccessRecordApprovalReady,
+  listAdminAccessRecords,
+  listAdminAuditEvents,
+} from './adminAccessStore';
+import { getAuthUserDefaultWorkspaceId, isEmailApprovedForAccess, listAuthSessions, listAuthUsers } from './auth';
+import { hasCurrentBetaConsent } from './betaConsentStore';
+import { CURRENT_BETA_TERMS_VERSION, type ParticipantType } from './betaProgram';
 import { listAutomations } from './scheduler';
 import { getBillingStatusSnapshot } from './platform/billing';
 import { listLedgerEntries, listTaskRuns, listTasks } from './platform/store';
@@ -15,6 +21,44 @@ function lastActivity(values: Array<string | undefined>) {
   return sorted.length > 0 ? sorted[sorted.length - 1] : null;
 }
 
+function hasCurrentBetaConsentForAdmin(email: string) {
+  try {
+    return hasCurrentBetaConsent(email);
+  } catch {
+    return false;
+  }
+}
+
+function isAccessRecordApprovalReadyForAdmin(record: Parameters<typeof isAccessRecordApprovalReady>[0]) {
+  try {
+    return isAccessRecordApprovalReady(record);
+  } catch {
+    return false;
+  }
+}
+
+type TrialAttributionEntry = Pick<ReturnType<typeof listLedgerEntries>[number], 'deltaCredits' | 'createdAt'>;
+
+export function attributeTrialFirstUsage(
+  entries: TrialAttributionEntry[],
+  trialEntry: TrialAttributionEntry,
+) {
+  const trialCredits = Math.max(0, trialEntry.deltaCredits);
+  const trialGrantedAtMs = Date.parse(trialEntry.createdAt);
+  const spentCredits = Math.min(
+    trialCredits,
+    entries.reduce((spent, entry) => {
+      if (entry.deltaCredits >= 0 || Date.parse(entry.createdAt) < trialGrantedAtMs) return spent;
+      return spent + Math.abs(entry.deltaCredits);
+    }, 0),
+  );
+  return {
+    trialCredits,
+    spentCredits,
+    remainingCredits: Math.max(0, trialCredits - spentCredits),
+  };
+}
+
 export function buildAdminUsers() {
   const users = listAuthUsers();
   const sessions = listAuthSessions();
@@ -24,16 +68,36 @@ export function buildAdminUsers() {
   return Array.from(emails).sort().map((email) => {
     const user = users.find((item) => item.email === email) || null;
     const access = accessRecords.find((item) => item.email === email) || null;
+    const userParticipantType = (user as (typeof user & { participantType?: ParticipantType }) | null)?.participantType;
+    const role = access?.status === 'requested' && user?.role === 'admin'
+      ? 'admin'
+      : access?.role || user?.role || 'user';
     const approvedAccess = access?.status === 'approved' || isEmailApprovedForAccess(email);
     const accessStatus = access?.status || (approvedAccess ? 'approved' : 'requested');
+    const ledgerEntries = user ? listLedgerEntries(getAuthUserDefaultWorkspaceId(user)) : [];
+    const trialEntry = ledgerEntries.find((entry) => entry.source === 'trial_grant' && entry.deltaCredits > 0) || null;
+    const trialUsage = trialEntry
+      ? attributeTrialFirstUsage(ledgerEntries, trialEntry)
+      : { trialCredits: 0, spentCredits: 0, remainingCredits: 0 };
     return {
       email,
       name: user?.name || access?.name || email.split('@')[0],
-      role: access?.role || user?.role || 'user',
+      role,
       method: user?.method || access?.method || 'email',
       accessStatus,
       approvedAccess,
       hasAccessRecord: Boolean(access),
+      participantType: access?.participantType || userParticipantType || 'founder_operator',
+      identityVerified: Boolean(access?.identityVerifiedAt),
+      termsCurrent: access?.acceptedTermsVersion === CURRENT_BETA_TERMS_VERSION
+        && hasCurrentBetaConsentForAdmin(email),
+      termsVersion: access?.acceptedTermsVersion || null,
+      approvalReady: access ? isAccessRecordApprovalReadyForAdmin(access) : false,
+      trialStatus: trialEntry ? 'granted' : role === 'admin' ? 'not_applicable' : approvedAccess ? 'pending' : 'not_applicable',
+      trialCredits: trialUsage.trialCredits,
+      trialSpentCredits: trialUsage.spentCredits,
+      trialRemainingCredits: trialUsage.remainingCredits,
+      trialGrantedAt: trialEntry?.createdAt || null,
       slackConnected: Boolean(user?.slackWorkspace && user?.slackChannelId),
       slackDisplayTarget: user?.slackDisplayTarget || null,
       activeSessionCount: user ? sessions.filter((session) => session.userId === user.id).length : 0,

@@ -63,12 +63,28 @@ async function readJson(response: Response) {
 
 test('admin routes require backend admin sessions and revoke target user sessions', async () => withTempServer(async ({ baseUrl }) => {
   const auth = await import('../src/auth');
+  const access = await import('../src/adminAccessStore');
+  const consent = await import('../src/betaConsentStore');
+  const betaProgram = await import('../src/betaProgram');
+  const fixtureAcceptedAt = '2026-07-11T12:01:00.000Z';
+  for (const email of ['user@example.com', 'target@example.com']) {
+    consent.recordBetaConsent({
+      email,
+      participantType: 'founder_operator',
+      termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+      termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+      acceptedAt: fixtureAcceptedAt,
+      authMethod: 'email',
+      acceptanceSource: 'signup',
+    });
+  }
 
   const admin = auth.upsertAuthUser({
     email: 'admin@example.com',
     name: 'Admin',
     role: 'admin',
     method: 'email',
+    participantType: 'founder_operator',
     acceptedTerms: true,
     acceptedEducation: true,
   });
@@ -77,7 +93,10 @@ test('admin routes require backend admin sessions and revoke target user session
     name: 'Normal User',
     role: 'user',
     method: 'email',
+    participantType: 'founder_operator',
     acceptedTerms: true,
+    acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: fixtureAcceptedAt,
     acceptedEducation: true,
   });
   const target = auth.upsertAuthUser({
@@ -85,7 +104,10 @@ test('admin routes require backend admin sessions and revoke target user session
     name: 'Target User',
     role: 'user',
     method: 'email',
+    participantType: 'founder_operator',
     acceptedTerms: true,
+    acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: fixtureAcceptedAt,
     acceptedEducation: true,
   });
 
@@ -107,6 +129,179 @@ test('admin routes require backend admin sessions and revoke target user session
   assert.equal(adminUsers.status, 200);
   assert.ok(((await readJson(adminUsers)).items as Array<{ email: string }>).some((item) => item.email === 'target@example.com'));
 
+  access.recordAccessRequest({
+    email: 'pending@example.com',
+    method: 'email',
+    participantType: 'founder_operator',
+  });
+  const saveRequestedParticipant = await fetch(`${baseUrl}/api/admin/users/pending@example.com/access`, {
+    method: 'PATCH',
+    headers: {
+      ...adminHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ participantType: 'investor' }),
+  });
+  assert.equal(saveRequestedParticipant.status, 200);
+  const saveRequestedParticipantPayload = await readJson(saveRequestedParticipant);
+  const savedRequestedRecord = saveRequestedParticipantPayload.record as {
+    participantType?: string;
+    status?: string;
+    role?: string;
+  };
+  assert.equal(savedRequestedRecord.participantType, 'investor');
+  assert.equal(savedRequestedRecord.status, 'requested');
+  assert.equal(savedRequestedRecord.role, 'user');
+  assert.equal(access.getAccessRecord('pending@example.com')?.participantType, 'investor');
+  assert.equal(access.getAccessRecord('pending@example.com')?.status, 'requested');
+  const savedRequestedUser = (saveRequestedParticipantPayload.users as Array<{
+    email?: string;
+    accessStatus?: string;
+    approvedAccess?: boolean;
+    approvalReady?: boolean;
+  }>).find((item) => item.email === 'pending@example.com');
+  assert.equal(savedRequestedUser?.accessStatus, 'requested');
+  assert.equal(savedRequestedUser?.approvedAccess, false);
+  assert.equal(savedRequestedUser?.approvalReady, false);
+  assert.equal(
+    access.listAdminAuditEvents().some(
+      (event) => event.targetEmail === 'pending@example.com' && event.action === 'access.approved',
+    ),
+    false,
+  );
+
+  const incompleteApproval = await fetch(`${baseUrl}/api/admin/users/user@example.com/access`, {
+    method: 'PATCH',
+    headers: {
+      ...adminHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      status: 'approved',
+      participantType: 'partner',
+    }),
+  });
+  assert.equal(incompleteApproval.status, 400);
+  assert.match(String((await readJson(incompleteApproval)).error), /verified identity and current beta terms/i);
+
+  const invalidParticipant = await fetch(`${baseUrl}/api/admin/users/target@example.com/access`, {
+    method: 'PATCH',
+    headers: {
+      ...adminHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      status: 'revoked',
+      participantType: 'tester',
+    }),
+  });
+  assert.equal(invalidParticipant.status, 400);
+  assert.match(String((await readJson(invalidParticipant)).error), /participant type must/i);
+
+  const acceptedAt = '2026-07-11T12:01:00.000Z';
+  consent.recordBetaConsent({
+    email: 'user@example.com',
+    participantType: 'partner',
+    authMethod: 'email',
+    acceptanceSource: 'signup',
+    termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+    termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
+    acceptedAt,
+  });
+  access.recordAccessRequest({
+    email: 'user@example.com',
+    method: 'email',
+    identityVerifiedAt: '2026-07-11T12:00:00.000Z',
+    acceptedTermsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
+    acceptedTermsAt: acceptedAt,
+  });
+  const approveUser = await fetch(`${baseUrl}/api/admin/users/user@example.com/access`, {
+    method: 'PATCH',
+    headers: {
+      ...adminHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      status: 'approved',
+      participantType: 'partner',
+    }),
+  });
+  assert.equal(approveUser.status, 200);
+  const approvePayload = await readJson(approveUser);
+  assert.equal((approvePayload.record as { participantType?: string }).participantType, 'partner');
+  const approvedUser = (approvePayload.users as Array<{
+    email: string;
+    participantType?: string;
+    identityVerified?: boolean;
+    termsCurrent?: boolean;
+    termsVersion?: string | null;
+    approvalReady?: boolean;
+  }>).find((item) => item.email === 'user@example.com');
+  assert.equal(approvedUser?.participantType, 'partner');
+  assert.equal(approvedUser?.identityVerified, true);
+  assert.equal(approvedUser?.termsCurrent, true);
+  assert.equal(approvedUser?.termsVersion, betaProgram.CURRENT_BETA_TERMS_VERSION);
+  assert.equal(approvedUser?.approvalReady, true);
+
+  fs.writeFileSync(path.join(process.cwd(), 'beta-consent-receipts.json'), '{malformed');
+  const revokeApprovedUser = async () => fetch(`${baseUrl}/api/admin/users/user@example.com/access`, {
+    method: 'PATCH',
+    headers: {
+      ...adminHeaders,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      status: 'revoked',
+      note: 'Consent evidence became unavailable',
+    }),
+  });
+
+  const revokeApprovedUserResponse = await revokeApprovedUser();
+  assert.equal(revokeApprovedUserResponse.status, 200);
+  const revokedApprovedUserPayload = await readJson(revokeApprovedUserResponse);
+  const revokedApprovedUser = (revokedApprovedUserPayload.users as Array<{
+    email: string;
+    termsCurrent?: boolean;
+    approvalReady?: boolean;
+  }>).find((item) => item.email === 'user@example.com');
+  assert.equal((revokedApprovedUserPayload.record as { status?: string }).status, 'revoked');
+  assert.equal(revokedApprovedUser?.termsCurrent, false);
+  assert.equal(revokedApprovedUser?.approvalReady, false);
+  assert.equal(access.getAccessRecord('user@example.com')?.status, 'revoked');
+  assert.equal(auth.listAuthSessions().some((session) => session.userId === user.id), false);
+
+  const firstRevokedRecord = access.getAccessRecord('user@example.com');
+  const firstRevocationEvents = access.listAdminAuditEvents().filter(
+    (event) => event.action === 'access.revoked' && event.targetEmail === 'user@example.com',
+  );
+  assert.equal(firstRevocationEvents.length, 1);
+
+  const retryRevocationResponse = await revokeApprovedUser();
+  assert.equal(retryRevocationResponse.status, 200);
+  assert.equal(access.getAccessRecord('user@example.com')?.updatedAt, firstRevokedRecord?.updatedAt);
+  assert.equal(
+    access.listAdminAuditEvents().filter(
+      (event) => event.action === 'access.revoked' && event.targetEmail === 'user@example.com',
+    ).length,
+    1,
+  );
+
+  for (const invalidParticipantType of [null, '']) {
+    const invalidOmittedParticipant = await fetch(`${baseUrl}/api/admin/users/invalid-participant@example.com/access`, {
+      method: 'PATCH',
+      headers: {
+        ...adminHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: 'revoked',
+        participantType: invalidParticipantType,
+      }),
+    });
+    assert.equal(invalidOmittedParticipant.status, 400);
+    assert.match(String((await readJson(invalidOmittedParticipant)).error), /participant type must/i);
+  }
+
   const revokeTarget = await fetch(`${baseUrl}/api/admin/users/target@example.com/access`, {
     method: 'PATCH',
     headers: {
@@ -115,12 +310,14 @@ test('admin routes require backend admin sessions and revoke target user session
     },
     body: JSON.stringify({
       status: 'revoked',
+      participantType: 'investor',
       note: 'Route-level revocation smoke test',
     }),
   });
   assert.equal(revokeTarget.status, 200);
   const revokePayload = await readJson(revokeTarget);
   assert.equal((revokePayload.record as { status?: string }).status, 'revoked');
+  assert.equal((revokePayload.record as { participantType?: string }).participantType, 'investor');
 
   const revokedTargetWorkspace = await fetch(`${baseUrl}/api/workspace`, { headers: targetHeaders });
   assert.equal(revokedTargetWorkspace.status, 401);

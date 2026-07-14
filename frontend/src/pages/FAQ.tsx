@@ -324,14 +324,14 @@ export default function FAQ() {
         <div className="mt-16 text-center p-10 rounded-2xl bg-gradient-to-br from-violet-900/30 to-navy-800/60 border border-violet-700/30">
           <h3 className="text-2xl font-bold text-white mb-3">Still have questions?</h3>
           <p className="text-slate-400 mb-6 max-w-md mx-auto">
-            Book a workflow audit when you have a recurring founder workflow ready, or start a free preview first.
+            Apply for the controlled beta, or book a workflow audit when you have a recurring founder workflow ready.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <button
               onClick={() => navigate('/signup?next=%2Fdashboard')}
               className="btn-primary"
             >
-              Start free preview
+              Apply for beta
             </button>
             <a
               href="mailto:hello@purpleorange.io"

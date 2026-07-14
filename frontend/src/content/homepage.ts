@@ -90,7 +90,7 @@ export const homepageNav: HomepageNavItem[] = [
   { label: 'Product', href: '#features' },
   { label: 'Use cases', href: '#how-it-works' },
   { label: 'Integrations', href: '/integrations' },
-  { label: 'Pricing', href: '/pricing' },
+  { label: 'Beta access', href: '#beta-access' },
   { label: 'Resources', href: '/blog/' },
 ];
 
@@ -99,8 +99,8 @@ export const heroCopy = {
   headline: 'AI agents for founder work.',
   subhead:
     'Violema turns recurring founder workflows into source-linked missions with review gates, delivery, run history, and visible costs.',
-  primaryCta: 'Book workflow audit',
-  secondaryCta: 'Start free preview',
+  primaryCta: 'Apply for beta',
+  secondaryCta: 'Book workflow audit',
   surfaceNote: 'Slack ready today. Discord, Telegram, and iMessage coming soon.',
 };
 
@@ -598,10 +598,10 @@ export const betaAccessSteps: BetaAccessStep[] = [
 ];
 
 export const betaAccessSignals: BetaAccessSignal[] = [
-  { label: 'Workflow audit', value: 'Call first' },
-  { label: 'Start plan', value: '$79/mo' },
-  { label: 'Pro plan', value: '$249/mo' },
-  { label: 'Founder control', value: 'Approval gates included' },
+  { label: 'Beta access', value: 'Manual approval' },
+  { label: 'Trial', value: '500 credits' },
+  { label: 'Start', value: '$79/mo' },
+  { label: 'Pro', value: '$249/mo' },
 ];
 
 export const comparisonRows = [
