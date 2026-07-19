@@ -65,7 +65,8 @@ render_production_nginx_config() {
     cat >>"$NGINX_SITE" <<EOF
 
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name $LEGACY_DOMAIN;
 
     ssl_certificate     $legacy_cert;
