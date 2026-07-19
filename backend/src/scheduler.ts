@@ -27,7 +27,7 @@ export interface AutomationStudioState {
 
 export interface AutomationRecord {
   id: string;
-  version?: 2;
+  version?: number;
   workspaceId?: string;
   owner_user_id?: string;
   name: string;
@@ -79,7 +79,7 @@ type AutomationSeed = Omit<
 const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
   {
     id: 'auto_weekly_founder_update',
-    version: 2,
+    version: 3,
     name: 'Weekly founder update',
     description: 'A source-linked operating brief that rolls up revenue, product, customer, calendar, email, market, and decision signals for founder review.',
     authoring_mode: 'guided',
@@ -94,8 +94,10 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
     actions: [
       'Check Stripe revenue, churn, expansion, and failed-payment signals',
       'Scan GitHub delivery progress, blockers, and unreviewed pull requests',
+      'Review Linear delivery status, active work, and blockers',
       'Review founder-critical email commitments and unanswered threads',
       'Review calendar for investor, customer, and team commitments this week',
+      'Review recently changed Google Drive operating documents',
       'Scan market and competitor changes since the last update',
       'Draft the weekly founder update with key decisions, risks, and next actions',
       'Deliver latest result to #all-purple-orange after approval',
@@ -113,21 +115,40 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
         kind: 'query',
         title: 'Scan GitHub delivery',
         objective: 'Pull merged pull requests, blocked issues, stale reviews, and release risk from GitHub.',
-        inputs: { source: 'github', query_type: 'delivery_risk' },
+        inputs: {
+          source: 'github',
+          query_type: 'delivery_risk',
+          filters: { owner: 'maximisto', repo: 'violema' },
+          limit: 10,
+        },
+      },
+      {
+        id: 'step_linear_delivery',
+        kind: 'query',
+        title: 'Review Linear delivery',
+        objective: 'Pull recently updated work, active delivery status, and blockers from Linear.',
+        inputs: { source: 'linear', query_type: 'delivery_status', limit: 10 },
       },
       {
         id: 'step_email_commitments',
         kind: 'query',
         title: 'Review email commitments',
         objective: 'Find founder-critical follow-ups, investor/customer commitments, and unanswered priority threads.',
-        inputs: { source: 'email', providers: ['google_workspace', 'microsoft_365'], query_type: 'commitments' },
+        inputs: { source: 'email', query_type: 'commitments', limit: 10 },
       },
       {
         id: 'step_calendar_commitments',
         kind: 'query',
         title: 'Review calendar commitments',
         objective: 'Review upcoming meetings, deadlines, and relationship commitments for the next seven days.',
-        inputs: { source: 'calendar', providers: ['google_workspace', 'microsoft_365'], query_type: 'weekly_commitments' },
+        inputs: { source: 'calendar', query_type: 'weekly_commitments', limit: 10 },
+      },
+      {
+        id: 'step_drive_context',
+        kind: 'query',
+        title: 'Review operating documents',
+        objective: 'Review metadata for recently changed Google Drive operating documents without reading file bodies.',
+        inputs: { source: 'google_drive', query_type: 'recent_files', limit: 10 },
       },
       {
         id: 'step_market_scan',
@@ -535,8 +556,26 @@ export function ensureCoreAutomationSeeds(
   onTrigger: (record: AutomationRecord) => Promise<{ ok: boolean; error?: string } | void>
 ) {
   const current = readAutomations();
-  const existingIds = new Set(current.map((item) => item.id));
   const now = new Date().toISOString();
+  const seedsById = new Map(CORE_AUTOMATION_SEEDS.map((seed) => [seed.id, seed]));
+  const existingIds = new Set(current.map((item) => item.id));
+  let changed = false;
+
+  const upgraded = current.map((item) => {
+    const seed = seedsById.get(item.id);
+    if (!seed || (item.version || 0) >= (seed.version || 0)) return item;
+    changed = true;
+    return withAutomationDefaults({
+      ...item,
+      ...seed,
+      status: item.status,
+      created_at: item.created_at,
+      last_run_at: item.last_run_at,
+      last_run_status: item.last_run_status,
+      consecutive_failures: item.consecutive_failures,
+      next_run_at: item.next_run_at,
+    });
+  });
   const additions = CORE_AUTOMATION_SEEDS
     .filter((seed) => !existingIds.has(seed.id))
     .map((seed) => withAutomationDefaults({
@@ -545,8 +584,8 @@ export function ensureCoreAutomationSeeds(
       created_at: now,
     }));
 
-  if (additions.length > 0) {
-    writeAutomations([...current, ...additions]);
+  if (changed || additions.length > 0) {
+    writeAutomations([...upgraded, ...additions]);
   }
 
   const seeded = readAutomations()
