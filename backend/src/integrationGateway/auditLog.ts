@@ -16,6 +16,37 @@ export interface AppendWorkflowLedgerEventInput {
   now?: () => string;
 }
 
+export interface AppendIntegrationQueryLedgerEventInput {
+  workspaceId: string;
+  workflowId: string;
+  automationId?: string;
+  taskId?: string;
+  taskRunId?: string;
+  source: string;
+  queryType?: string;
+  ok: boolean;
+  live?: boolean;
+  message?: string;
+  now?: () => string;
+}
+
+function labelizeSource(source: string) {
+  const labels: Record<string, string> = {
+    stripe: 'Stripe',
+    github: 'GitHub',
+    linear: 'Linear',
+    email: 'Gmail',
+    calendar: 'Google Calendar',
+    google_drive: 'Google Drive',
+  };
+  if (labels[source]) return labels[source];
+  return source
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ') || 'Integration';
+}
+
 function safeTimestampId(value: string) {
   return value.replace(/[^a-zA-Z0-9]+/g, '-').replace(/-+$/g, '');
 }
@@ -45,6 +76,31 @@ export function appendWorkflowLedgerEvent(input: AppendWorkflowLedgerEventInput)
   };
   writeEvents([...readEvents(), event]);
   return event;
+}
+
+export function appendIntegrationQueryLedgerEvent(
+  input: AppendIntegrationQueryLedgerEventInput,
+) {
+  const label = labelizeSource(input.source);
+  const failureMessage = input.message?.trim() || 'integration unavailable';
+  return appendWorkflowLedgerEvent({
+    workspaceId: input.workspaceId,
+    workflowId: input.workflowId,
+    automationId: input.automationId,
+    taskId: input.taskId,
+    taskRunId: input.taskRunId,
+    type: input.ok ? 'data_read' : 'connector_failed',
+    summary: input.ok
+      ? `Read ${input.live ? 'live ' : ''}${label} data.`
+      : `${label} read blocked: ${failureMessage}`,
+    metadata: {
+      source: input.source,
+      queryType: input.queryType,
+      ok: input.ok,
+      live: Boolean(input.live),
+    },
+    now: input.now,
+  });
 }
 
 export function listWorkflowLedgerEvents(input: {

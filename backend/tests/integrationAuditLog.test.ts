@@ -45,3 +45,58 @@ test('workflow ledger persists and filters run events', async () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('integration query ledger events support every live source without storing payload data', async () => {
+  const originalCwd = process.cwd();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'violema-integration-ledger-'));
+  process.chdir(tempDir);
+
+  try {
+    const audit = await import('../src/integrationGateway/auditLog');
+    const success = audit.appendIntegrationQueryLedgerEvent({
+      workspaceId: 'purpleorangehq',
+      workflowId: 'weekly-founder-update',
+      automationId: 'auto_weekly_founder_update',
+      taskId: 'task_weekly',
+      taskRunId: 'run_weekly',
+      source: 'github',
+      queryType: 'delivery_risk',
+      ok: true,
+      live: true,
+      message: 'private provider data must not be stored',
+      now: () => '2026-07-19T12:00:00.000Z',
+    });
+    const failure = audit.appendIntegrationQueryLedgerEvent({
+      workspaceId: 'purpleorangehq',
+      workflowId: 'weekly-founder-update',
+      taskRunId: 'run_weekly',
+      source: 'google_drive',
+      queryType: 'recent_files',
+      ok: false,
+      live: false,
+      message: 'Google Drive needs read access.',
+      now: () => '2026-07-19T12:01:00.000Z',
+    });
+
+    assert.equal(success.type, 'data_read');
+    assert.equal(success.summary, 'Read live GitHub data.');
+    assert.deepEqual(success.metadata, {
+      source: 'github',
+      queryType: 'delivery_risk',
+      ok: true,
+      live: true,
+    });
+    assert.equal(failure.type, 'connector_failed');
+    assert.equal(failure.summary, 'Google Drive read blocked: Google Drive needs read access.');
+    assert.deepEqual(failure.metadata, {
+      source: 'google_drive',
+      queryType: 'recent_files',
+      ok: false,
+      live: false,
+    });
+    assert.doesNotMatch(JSON.stringify([success, failure]), /private provider data/);
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
