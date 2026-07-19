@@ -21,6 +21,22 @@ export function inferEditorWorkflowId(steps: WorkflowReadinessUiStep[]): string 
   const querySteps = steps.filter((step) => step.kind === 'query');
   if (querySteps.length === 0) return '';
 
+  const querySources = querySteps.map((step) => step.inputs?.source);
+  const weeklyFounderSources = [
+    'stripe',
+    'github',
+    'linear',
+    'email',
+    'calendar',
+    'google_drive',
+  ];
+  if (
+    querySources.length === weeklyFounderSources.length &&
+    weeklyFounderSources.every((source) => querySources.includes(source))
+  ) {
+    return 'weekly-founder-update';
+  }
+
   const hasOnlyStripeQueries = querySteps.every((step) => step.inputs?.source === 'stripe');
   if (!hasOnlyStripeQueries) return '';
 
@@ -81,6 +97,14 @@ export function getDashboardReadinessBlockerAction(
       kind: 'editor',
       label: 'Set destination',
       section: 'setup',
+    };
+  }
+
+  if (blocker.route) {
+    return {
+      kind: 'navigate',
+      label: 'Open integration setup',
+      href: blocker.route,
     };
   }
 

@@ -49,6 +49,29 @@ assert(
 );
 
 assert(
+  inferEditorWorkflowId([
+    { kind: 'query', inputs: { source: 'stripe', query_type: 'revenue_summary' } },
+    { kind: 'query', inputs: { source: 'github', query_type: 'delivery_risk' } },
+    { kind: 'query', inputs: { source: 'linear', query_type: 'delivery_status' } },
+    { kind: 'query', inputs: { source: 'email', query_type: 'commitments' } },
+    { kind: 'query', inputs: { source: 'calendar', query_type: 'weekly_commitments' } },
+    { kind: 'query', inputs: { source: 'google_drive', query_type: 'recent_files' } },
+    { kind: 'search', inputs: { query: 'market signals' } },
+    { kind: 'deliver', inputs: {} },
+  ]) === 'weekly-founder-update',
+  'Weekly Founder Update inference recognizes the canonical live source set',
+);
+
+assert(
+  inferEditorWorkflowId([
+    { kind: 'query', inputs: { source: 'stripe', query_type: 'revenue_summary' } },
+    { kind: 'query', inputs: { source: 'github', query_type: 'delivery_risk' } },
+    { kind: 'query', inputs: { source: 'email', query_type: 'commitments' } },
+  ]) === '',
+  'Weekly Founder Update inference stays off for a partial source set',
+);
+
+assert(
   getWorkflowReadinessDeliveryTarget({
     notify: '  ',
     steps: [
@@ -93,6 +116,18 @@ const slackAction = getDashboardReadinessBlockerAction({ key: 'slack_target' });
 assert(slackAction?.kind === 'editor', 'Slack target blocker stays in the editor');
 assert(slackAction?.label === 'Set destination', 'Slack target blocker uses the destination-specific label');
 assert(slackAction?.kind === 'editor' && slackAction.section === 'setup', 'Slack target blocker points to the setup section');
+
+const githubAction = getDashboardReadinessBlockerAction({
+  key: 'github',
+  route: '/integrations?provider=github&workflow=weekly-founder-update',
+});
+assert(githubAction?.kind === 'navigate', 'partner blockers map to navigation');
+assert(githubAction?.label === 'Open integration setup', 'partner blockers use a setup label');
+assert(
+  githubAction?.kind === 'navigate' &&
+    githubAction.href === '/integrations?provider=github&workflow=weekly-founder-update',
+  'partner blockers preserve the backend repair route',
+);
 
 assert(
   getDashboardReadinessBlockerAction({ key: 'unsupported_workflow' }) === null,

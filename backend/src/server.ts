@@ -198,6 +198,7 @@ import {
 } from './integrationGateway/auditLog';
 import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
 import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
+import { buildWeeklyFounderRuntimeStatus } from './integrationGateway/workflowRuntimeStatus';
 import {
   buildAutomationExperimentAttribution,
   buildAutomationScenarioTelemetry,
@@ -4531,9 +4532,17 @@ app.post('/api/integrations/composio/connect', async (req: Request, res: Respons
   res.json({ redirectUrl });
 });
 
-app.get('/api/workflows/:workflowId/readiness', (req: Request, res: Response) => {
+app.get('/api/workflows/:workflowId/readiness', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const deliveryTarget = typeof req.query.deliveryTarget === 'string' ? req.query.deliveryTarget : undefined;
+  const runtimeStatus = req.params.workflowId === 'weekly-founder-update'
+    ? buildWeeklyFounderRuntimeStatus({
+        connectedPartnerApps: isComposioEnabled()
+          ? await listConnectedApps({ entityId: workspaceId })
+          : [],
+        nativeStatus: getIntegrationStatus(),
+      })
+    : undefined;
 
   res.json({
     ok: true,
@@ -4541,6 +4550,7 @@ app.get('/api/workflows/:workflowId/readiness', (req: Request, res: Response) =>
       workspaceId,
       workflowId: req.params.workflowId,
       deliveryTarget,
+      runtimeStatus,
     }),
   });
 });
