@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test:brand-bleed": "node tests/pageEdgeBrandBleed.contract.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",

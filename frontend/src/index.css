@@ -244,6 +244,35 @@
 }
 
 @layer components {
+  .page-brand-bleed {
+    position: fixed;
+    left: 6px;
+    top: 50%;
+    z-index: 40;
+    width: clamp(5.75rem, 7vw, 7.75rem);
+    height: auto;
+    max-width: none;
+    transform: translateY(-50%);
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.94;
+  }
+
+  @media (max-width: 1279px) {
+    .page-brand-bleed {
+      width: clamp(3.75rem, 7vw, 5.25rem);
+      opacity: 0.48;
+      filter: brightness(0.7) saturate(0.86);
+    }
+  }
+
+  @media (max-width: 639px) {
+    .page-brand-bleed {
+      width: 3.25rem;
+      opacity: 0.34;
+    }
+  }
+
   .btn-primary {
     @apply inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg transition-all duration-200 hover:shadow-lg;
   }
@@ -604,10 +633,6 @@
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.36'/%3E%3C/svg%3E");
     background-size: 180px 180px;
     mix-blend-mode: screen;
-  }
-
-  .hero-side-mark {
-    transform: translateX(-50%);
   }
 
   .founder-product-stage {

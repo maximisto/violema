@@ -42,6 +42,35 @@ img {
   max-width: 100%;
 }
 
+.page-brand-bleed {
+  position: fixed;
+  left: 6px;
+  top: 50%;
+  z-index: 40;
+  width: clamp(5.75rem, 7vw, 7.75rem);
+  height: auto;
+  max-width: none;
+  transform: translateY(-50%);
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.94;
+}
+
+@media (max-width: 1279px) {
+  .page-brand-bleed {
+    width: clamp(3.75rem, 7vw, 5.25rem);
+    opacity: 0.48;
+    filter: brightness(0.7) saturate(0.86);
+  }
+}
+
+@media (max-width: 639px) {
+  .page-brand-bleed {
+    width: 3.25rem;
+    opacity: 0.34;
+  }
+}
+
 a {
   color: inherit;
   text-decoration: none;

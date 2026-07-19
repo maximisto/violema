@@ -320,13 +320,6 @@ export default function Hero() {
       <div className="founder-hero-bg absolute inset-0 -z-20" />
       <div className="founder-hero-grid absolute inset-0 -z-10" />
       <div className="founder-hero-noise absolute inset-0 -z-10" />
-      <img
-        src="/brand/purple-orange-hero-mark.png"
-        alt=""
-        aria-hidden="true"
-        className="hero-side-mark pointer-events-none absolute left-0 top-[15.5rem] z-0 hidden h-36 w-36 select-none object-contain opacity-90 drop-shadow-[0_0_30px_rgba(168,85,247,0.28)] lg:block xl:top-[16.5rem] xl:h-44 xl:w-44 2xl:top-[17rem] 2xl:h-56 2xl:w-56"
-        decoding="async"
-      />
 
       <div className="relative z-10 mx-auto max-w-[88rem] px-4 pb-16 pt-28 sm:px-6 lg:px-24 xl:pb-24 xl:pt-36 2xl:px-8">
         <div className="grid items-center gap-x-12 gap-y-14 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]">

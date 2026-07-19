@@ -3,6 +3,7 @@ import { lazy, Suspense } from 'react';
 import Landing from './pages/Landing';
 import ProtectedRoute from './components/ProtectedRoute';
 import CalendlyAuditModal from './components/CalendlyAuditModal';
+import PageBrandBleed from './components/PageBrandBleed';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const FAQ = lazy(() => import('./pages/FAQ'));
@@ -34,6 +35,7 @@ function RouteFallback() {
 export default function App() {
   return (
     <BrowserRouter>
+      <PageBrandBleed />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<Landing />} />
