@@ -1,5 +1,5 @@
 /**
- * Composio Bridge — turns Composio's 250+ pre-built integrations into tools
+ * Composio Bridge — turns Composio's pre-built integrations into tools
  * Claude can call. Activated by setting COMPOSIO_API_KEY in the environment.
  *
  * When inactive, every helper here returns false / null gracefully so the rest
@@ -8,36 +8,153 @@
  * See docs/INTEGRATIONS_ARCHITECTURE.md for the full strategy.
  */
 
-import type { ComposioToolSet as ComposioToolSetType } from 'composio-core';
+export interface ComposioClientAdapter {
+  tools: {
+    execute(
+      slug: string,
+      body: {
+        userId: string;
+        arguments: Record<string, unknown>;
+        dangerouslySkipVersionCheck: true;
+      },
+    ): Promise<unknown>;
+  };
+  authConfigs: {
+    list(query: { toolkit: string }): Promise<{ items: Array<{ id: string }> }>;
+    create(
+      toolkitSlug: string,
+      options: {
+        type: 'use_composio_managed_auth';
+        name: string;
+      },
+    ): Promise<{ id: string }>;
+  };
+  connectedAccounts: {
+    link(
+      userId: string,
+      authConfigId: string,
+      options: { allowMultiple: true },
+    ): Promise<{ redirectUrl?: string | null }>;
+    list(query: {
+      userIds: string[];
+      statuses: Array<'ACTIVE'>;
+    }): Promise<{
+      items: Array<{ toolkit?: { slug?: string } | null }>;
+    }>;
+  };
+}
 
-let toolset: ComposioToolSetType | null = null;
-let initAttempted = false;
+export interface ComposioBridge {
+  isEnabled(): boolean;
+  executeAction(
+    actionName: string,
+    input: Record<string, unknown>,
+    ctx: ComposioExecutionContext,
+  ): Promise<unknown>;
+  getConnectionUrl(
+    appName: string,
+    ctx: ComposioExecutionContext,
+  ): Promise<string | null>;
+  listConnectedApps(ctx: ComposioExecutionContext): Promise<string[]>;
+}
 
-function getToolset(): ComposioToolSetType | null {
-  if (initAttempted) return toolset;
-  initAttempted = true;
+export function createComposioBridge(
+  client: ComposioClientAdapter | null,
+): ComposioBridge {
+  return {
+    isEnabled() {
+      return client !== null;
+    },
 
+    async executeAction(actionName, input, ctx) {
+      if (!client) {
+        throw new Error('Composio is not configured. Set COMPOSIO_API_KEY to enable.');
+      }
+
+      return await client.tools.execute(actionName, {
+        userId: ctx.entityId,
+        arguments: input,
+        // Violema accepts dynamic partner-tool names, so there is no single
+        // toolkit version to pin at this boundary.
+        dangerouslySkipVersionCheck: true,
+      });
+    },
+
+    async getConnectionUrl(appName, ctx) {
+      if (!client) return null;
+
+      const toolkitSlug = appName.trim().toLowerCase();
+      const authConfigs = await client.authConfigs.list({ toolkit: toolkitSlug });
+      let authConfigId = authConfigs.items[0]?.id;
+
+      if (!authConfigId) {
+        const authConfig = await client.authConfigs.create(toolkitSlug, {
+          type: 'use_composio_managed_auth',
+          name: `${toolkitSlug} Auth Config`,
+        });
+        authConfigId = authConfig.id;
+      }
+
+      const connection = await client.connectedAccounts.link(
+        ctx.entityId,
+        authConfigId,
+        { allowMultiple: true },
+      );
+      return connection.redirectUrl ?? null;
+    },
+
+    async listConnectedApps(ctx) {
+      if (!client) return [];
+
+      const connections = await client.connectedAccounts.list({
+        userIds: [ctx.entityId],
+        statuses: ['ACTIVE'],
+      });
+      return connections.items
+        .map((connection) => connection.toolkit?.slug ?? '')
+        .filter(Boolean);
+    },
+  };
+}
+
+type ComposioModule = {
+  Composio: new (config: { apiKey: string }) => unknown;
+};
+
+// The backend compiles to CommonJS while the supported Composio SDK is
+// ESM-only. Using native import here preserves lazy loading without converting
+// the entire backend module system.
+const importEsmModule = new Function(
+  'specifier',
+  'return import(specifier)',
+) as (specifier: string) => Promise<ComposioModule>;
+
+let clientPromise: Promise<ComposioClientAdapter | null> | null = null;
+let clientLoadFailed = false;
+
+async function getClient(): Promise<ComposioClientAdapter | null> {
   const apiKey = process.env.COMPOSIO_API_KEY;
-  if (!apiKey) {
-    console.log('[composio] disabled (set COMPOSIO_API_KEY to enable)');
-    return null;
-  }
+  if (!apiKey) return null;
+  if (clientPromise) return await clientPromise;
 
-  try {
-    // Lazy import so the SDK never loads when Composio isn't configured.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { ComposioToolSet } = require('composio-core') as typeof import('composio-core');
-    toolset = new ComposioToolSet({ apiKey });
-    console.log('[composio] enabled');
-    return toolset;
-  } catch (err) {
-    console.error('[composio] failed to initialise:', err instanceof Error ? err.message : err);
-    return null;
-  }
+  clientPromise = (async () => {
+    try {
+      const { Composio } = await importEsmModule('@composio/core');
+      const client = new Composio({ apiKey }) as ComposioClientAdapter;
+      console.log('[composio] enabled');
+      return client;
+    } catch (err) {
+      clientLoadFailed = true;
+      console.error('[composio] failed to initialise:', err instanceof Error ? err.message : err);
+      return null;
+    }
+  })();
+
+  return await clientPromise;
 }
 
 export function isComposioEnabled(): boolean {
-  return getToolset() !== null;
+  return Boolean(process.env.COMPOSIO_API_KEY) && !clientLoadFailed;
 }
 
 /**
@@ -63,16 +180,8 @@ export async function executeComposioAction(
   input: Record<string, unknown>,
   ctx: ComposioExecutionContext,
 ): Promise<unknown> {
-  const ts = getToolset();
-  if (!ts) {
-    throw new Error('Composio is not configured. Set COMPOSIO_API_KEY to enable.');
-  }
-
-  return await ts.executeAction({
-    action: actionName,
-    params: input,
-    entityId: ctx.entityId,
-  });
+  const bridge = createComposioBridge(await getClient());
+  return await bridge.executeAction(actionName, input, ctx);
 }
 
 /**
@@ -83,13 +192,9 @@ export async function getComposioConnectionUrl(
   appName: string,
   ctx: ComposioExecutionContext,
 ): Promise<string | null> {
-  const ts = getToolset();
-  if (!ts) return null;
-
   try {
-    const entity = await ts.client.getEntity(ctx.entityId);
-    const connection = await entity.initiateConnection({ appName });
-    return connection.redirectUrl ?? null;
+    const bridge = createComposioBridge(await getClient());
+    return await bridge.getConnectionUrl(appName, ctx);
   } catch (err) {
     console.error(`[composio] connection init failed for ${appName}:`, err);
     return null;
@@ -101,13 +206,9 @@ export async function getComposioConnectionUrl(
  * Used by the /integrations page to show "Connected ✓" badges.
  */
 export async function listConnectedApps(ctx: ComposioExecutionContext): Promise<string[]> {
-  const ts = getToolset();
-  if (!ts) return [];
-
   try {
-    const entity = await ts.client.getEntity(ctx.entityId);
-    const connections = await entity.getConnections();
-    return connections.map((c) => c.appName ?? '').filter(Boolean);
+    const bridge = createComposioBridge(await getClient());
+    return await bridge.listConnectedApps(ctx);
   } catch (err) {
     console.error('[composio] listConnectedApps failed:', err);
     return [];

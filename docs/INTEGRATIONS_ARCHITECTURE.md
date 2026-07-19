@@ -69,7 +69,7 @@ Hero integrations are where customers **judge VIOLEMA**. Get them perfect. Long-
 │  Backend                                                │
 │  ┌────────────────────┐    ┌─────────────────────────┐ │
 │  │ Tier 1 dispatcher  │    │ Tier 2 (Composio SDK)   │ │
-│  │ - slack.ts         │    │ - composio-core         │ │
+│  │ - slack.ts         │    │ - @composio/core        │ │
 │  │ - github.ts        │    │ - 250 tool schemas      │ │
 │  │ - stripe.ts        │    │ - OAuth handled         │ │
 │  │ - hubspot.ts       │    │                         │ │
