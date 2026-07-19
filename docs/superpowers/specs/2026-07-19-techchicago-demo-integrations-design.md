@@ -230,6 +230,36 @@ The canonical source sequence becomes:
 
 The backend seed remains the execution source of truth. The frontend template must describe the same sources and boundaries without claiming unsupported behavior.
 
+### Public website integration status
+
+Update the public integrations page so the frozen demo set is visible and accurately labeled.
+
+The page may show an integration as **Active** only when its final production smoke test passes. Until then:
+
+- GitHub is labeled `Connecting`;
+- Google Drive is labeled `Needs reauthorization`;
+- any provider that fails a fresh functional check is labeled `Unavailable` or removed from the active group.
+
+After final verification, the Active group contains:
+
+- Stripe
+- Gmail
+- Google Calendar
+- Google Drive
+- Linear
+- GitHub
+- Web search
+- Slack
+- Email
+
+The page must distinguish:
+
+- **Workflow data:** Stripe, Gmail, Google Calendar, Google Drive, Linear, GitHub, and web search;
+- **Delivery:** Slack and email;
+- **Identity:** Google and Microsoft sign-in.
+
+The public page must not claim that deferred integrations are active. Notion, HubSpot, Airtable, Figma, Vercel, Microsoft workflow-data tools, and other deferred systems remain outside the active group.
+
 ## Connection Repairs
 
 ### Google Drive
@@ -363,3 +393,4 @@ The pre-demo work is complete only when:
 - backend tests, frontend tests, backend build, frontend build, and diff checks pass;
 - production is healthy after deployment;
 - the TechChicago Week demo-readiness write-up is current and usable without reading the code.
+- the public integrations page lists the frozen demo set as Active only after the corresponding production checks pass.
