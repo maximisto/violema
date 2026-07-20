@@ -5,10 +5,15 @@ export interface IntegrationNextAction {
 
 export interface IntegrationReadinessError {
   ok: false;
-  code: 'integration_not_ready' | 'unsupported_query' | 'integration_query_failed';
+  code:
+    | 'integration_not_ready'
+    | 'integration_scope_insufficient'
+    | 'unsupported_query'
+    | 'integration_query_failed';
   source: string;
   workflowId?: string;
   message: string;
+  can_continue?: boolean;
   nextAction: IntegrationNextAction;
 }
 

@@ -16,6 +16,16 @@ export interface WorkflowReadinessReport {
   optionalIntegrationIds: string[];
   firstRunRequiresApproval: boolean;
   blockers: WorkflowReadinessBlocker[];
+  warnings: WorkflowReadinessBlocker[];
+}
+
+export interface WorkflowRuntimeIntegrationStatus {
+  ready: boolean;
+  detail?: string;
+  code?:
+    | 'integration_not_ready'
+    | 'integration_scope_insufficient'
+    | 'integration_query_failed';
 }
 
 type MinimalIntegrationReadiness =
@@ -46,6 +56,19 @@ interface WorkflowRequirements {
 }
 
 const REVENUE_WATCH_DEFAULT_DELIVERY_TARGET = '#all-purple-orange';
+const WEEKLY_FOUNDER_UPDATE_DEFAULT_DELIVERY_TARGET = '#all-purple-orange';
+
+const INTEGRATION_LABELS: Record<string, string> = {
+  stripe: 'Stripe',
+  github: 'GitHub',
+  linear: 'Linear',
+  email: 'Gmail',
+  calendar: 'Google Calendar',
+  google_drive: 'Google Drive',
+  tavily: 'Web search',
+  slack: 'Slack',
+  postmark: 'Email',
+};
 
 function readConfiguredFlag(
   value:
@@ -95,6 +118,24 @@ function readWorkflowRequirements(workflowId: string): WorkflowRequirements {
     };
   }
 
+  if (workflowId === 'weekly-founder-update') {
+    return {
+      supported: true,
+      requiredIntegrationIds: [
+        'stripe',
+        'github',
+        'linear',
+        'email',
+        'calendar',
+        'tavily',
+        'slack',
+      ],
+      optionalIntegrationIds: ['google_drive', 'postmark'],
+      firstRunRequiresApproval: true,
+      defaultDeliveryTarget: WEEKLY_FOUNDER_UPDATE_DEFAULT_DELIVERY_TARGET,
+    };
+  }
+
   return {
     supported: false,
     requiredIntegrationIds: [],
@@ -108,10 +149,12 @@ export function checkWorkflowReadiness(input: {
   workspaceId: string;
   deliveryTarget?: string | null;
   settingsView?: WorkspaceSettingsView | MinimalSettingsView;
+  runtimeStatus?: Record<string, WorkflowRuntimeIntegrationStatus>;
 }): WorkflowReadinessReport {
   const settingsView = input.settingsView || getWorkspaceSettingsView(input.workspaceId);
   const requirements = readWorkflowRequirements(input.workflowId);
   const blockers: WorkflowReadinessBlocker[] = [];
+  const warnings: WorkflowReadinessBlocker[] = [];
   const deliveryTarget =
     input.deliveryTarget === undefined || input.deliveryTarget === null
       ? requirements.defaultDeliveryTarget
@@ -134,6 +177,36 @@ export function checkWorkflowReadiness(input: {
     });
   }
 
+  if (requirements.supported && input.workflowId === 'weekly-founder-update') {
+    for (const integrationId of requirements.requiredIntegrationIds.filter(
+      (id) => id !== 'stripe',
+    )) {
+      const status = input.runtimeStatus?.[integrationId];
+      if (status?.ready) continue;
+      const label = INTEGRATION_LABELS[integrationId] || integrationId;
+      blockers.push({
+        key: integrationId,
+        label: integrationId === 'slack' ? 'Connect Slack' : `Connect ${label}`,
+        detail: status?.detail || `${label} has not passed a live readiness check.`,
+        route: `/integrations?provider=${integrationId}&workflow=weekly-founder-update`,
+      });
+    }
+
+    for (const integrationId of requirements.optionalIntegrationIds) {
+      const status = input.runtimeStatus?.[integrationId];
+      if (status?.ready) continue;
+      const label = INTEGRATION_LABELS[integrationId] || integrationId;
+      warnings.push({
+        key: integrationId,
+        label: status?.code === 'integration_scope_insufficient'
+          ? `Reauthorize ${label}`
+          : `Connect ${label}`,
+        detail: status?.detail || `${label} is unavailable as a supporting integration.`,
+        route: `/integrations?provider=${integrationId}&workflow=weekly-founder-update`,
+      });
+    }
+  }
+
   if (requirements.supported && input.workflowId === 'revenue-watch' && !deliveryTarget?.trim()) {
     blockers.push({
       key: 'slack_target',
@@ -149,11 +222,16 @@ export function checkWorkflowReadiness(input: {
     summary: !requirements.supported
       ? `Unsupported workflow: ${input.workflowId}.`
       : blockers.length === 0
-        ? 'Revenue Watch is ready for a sandbox run. First live delivery requires approval.'
+        ? input.workflowId === 'weekly-founder-update'
+          ? warnings.length > 0
+            ? `Weekly Founder Update is ready for a sandbox run with ${warnings.length} supporting integration warning${warnings.length === 1 ? '' : 's'}. Delivery requires approval.`
+            : 'Weekly Founder Update is ready for a sandbox run. Delivery requires approval.'
+          : 'Revenue Watch is ready for a sandbox run. First live delivery requires approval.'
         : `${blockers.length} readiness item${blockers.length === 1 ? '' : 's'} must be fixed before this workflow can run with real data.`,
     requiredIntegrationIds: requirements.requiredIntegrationIds,
     optionalIntegrationIds: requirements.optionalIntegrationIds,
     firstRunRequiresApproval: requirements.firstRunRequiresApproval,
     blockers,
+    warnings,
   };
 }

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { applyQueryStepPayloadToExecution, executeQueryData } from '../src/integrationGateway/queryData';
 import type { StripeLikeClient } from '../src/integrationGateway/adapters/nativeStripe';
+import type { PartnerComposioQueryInput } from '../src/integrationGateway/adapters/partnerComposio';
+import type { IntegrationQueryResult } from '../src/integrationGateway/types';
 import type { AutomationStepExecution } from '../src/platform/types';
 
 interface StripeRevenueLike {
@@ -56,24 +58,90 @@ test('executeQueryData never returns placeholder Stripe revenue when Stripe is m
   assert.doesNotMatch(JSON.stringify(result), /12745(?:0)|10823(?:0)|15294(?:00)/);
 });
 
-test('executeQueryData keeps legacy non-Stripe sample data isolated', async () => {
+test('executeQueryData routes every partner demo source through the live adapter', async () => {
+  const calls: PartnerComposioQueryInput[] = [];
+  const partner = async (input: PartnerComposioQueryInput): Promise<IntegrationQueryResult> => {
+    calls.push(input);
+    return {
+      ok: true,
+      source: input.source,
+      query_type: input.queryType,
+      data: { verified: true },
+      fetched_at: input.now?.toISOString() || '2026-07-19T12:00:00.000Z',
+      latency_ms: 1,
+      cache_hit: false,
+      live: true,
+    };
+  };
+  const now = new Date('2026-07-19T12:00:00.000Z');
+  const cases = [
+    { source: 'github', queryType: 'delivery_risk' },
+    { source: 'linear', queryType: 'delivery_status' },
+    { source: 'email', queryType: 'commitments' },
+    { source: 'calendar', queryType: 'weekly_commitments' },
+    { source: 'google_drive', queryType: 'recent_files' },
+  ];
+
+  for (const item of cases) {
+    const result = await executeQueryData({
+      workspaceId: 'purpleorangehq',
+      source: item.source,
+      queryType: item.queryType,
+      filters: { owner: 'maximisto', repo: 'violema' },
+      limit: 10,
+      now,
+      clientOverrides: { partner },
+    });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) throw new Error(`expected ${item.source} live success`);
+    assert.equal(result.live, true);
+    assert.doesNotMatch(JSON.stringify(result), /"simulated":true/);
+  }
+
+  assert.deepEqual(
+    calls.map(({ workspaceId, source, queryType, filters, limit, now: callNow }) => ({
+      workspaceId,
+      source,
+      queryType,
+      filters,
+      limit,
+      now: callNow?.toISOString(),
+    })),
+    cases.map((item) => ({
+      workspaceId: 'purpleorangehq',
+      source: item.source,
+      queryType: item.queryType,
+      filters: { owner: 'maximisto', repo: 'violema' },
+      limit: 10,
+      now: '2026-07-19T12:00:00.000Z',
+    })),
+  );
+});
+
+test('executeQueryData never substitutes demo sample data after a partner failure', async () => {
   const result = await executeQueryData({
-    workspaceId: 'workspace_test',
+    workspaceId: 'purpleorangehq',
     source: 'github',
-    queryType: 'open_issues',
-    now: new Date('2026-06-29T12:00:00.000Z'),
+    queryType: 'delivery_risk',
+    filters: { owner: 'maximisto', repo: 'violema' },
+    clientOverrides: {
+      partner: async () => ({
+        ok: false,
+        code: 'integration_not_ready',
+        source: 'github',
+        message: 'GitHub must be connected before this workflow can read live data.',
+        can_continue: false,
+        nextAction: {
+          label: 'Connect GitHub',
+          route: '/integrations?provider=github',
+        },
+      }),
+    },
   });
 
-  if (!result.ok) throw new Error('expected GitHub mock success');
-  assert.equal(result.source, 'github');
-  assert.equal(result.live, false);
-  assert.equal(result.simulated, true);
-  assert.equal(result.message, 'Simulated GitHub sample data. Connect GitHub to query your live workspace data.');
-  assert.deepEqual(result.nextAction, {
-    label: 'Connect GitHub',
-    route: '/integrations?provider=github',
-  });
-  assert.equal((result.data as { total: number }).total, 34);
+  assert.equal(result.ok, false);
+  assert.doesNotMatch(JSON.stringify(result), /simulated|open_issues|34/);
 });
 
 test('applyQueryStepPayloadToExecution marks readiness errors as failed automation steps', () => {
@@ -110,7 +178,7 @@ test('applyQueryStepPayloadToExecution marks readiness errors as failed automati
   ]);
 });
 
-test('applyQueryStepPayloadToExecution keeps successful query payloads successful', () => {
+test('applyQueryStepPayloadToExecution keeps successful live query payloads successful', () => {
   const stepExecution = makeQueryStepExecution();
   const stepErrors: string[] = [];
 
@@ -119,11 +187,9 @@ test('applyQueryStepPayloadToExecution keeps successful query payloads successfu
     payload: {
       ok: true,
       source: 'github',
-      query_type: 'open_issues',
-      data: { total: 34 },
-      live: false,
-      simulated: true,
-      message: 'Simulated GitHub sample data. Connect GitHub to query your live workspace data.',
+      query_type: 'delivery_risk',
+      data: { counts: { openIssues: 2 } },
+      live: true,
     },
     stepExecution,
     stepErrors,
@@ -131,7 +197,7 @@ test('applyQueryStepPayloadToExecution keeps successful query payloads successfu
   });
 
   assert.equal(stepExecution.status, 'succeeded');
-  assert.equal(stepExecution.summary, 'Pulled simulated GitHub sample data. Connect GitHub to query your live workspace data.');
+  assert.equal(stepExecution.summary, 'Pulled the requested live data successfully.');
   assert.equal(stepExecution.error, undefined);
   assert.equal(stepExecution.artifactKind, 'query_data');
   assert.equal(stepExecution.toolCalls, 1);
@@ -139,11 +205,9 @@ test('applyQueryStepPayloadToExecution keeps successful query payloads successfu
   assert.deepEqual(stepExecution.output, {
     ok: true,
     source: 'github',
-    query_type: 'open_issues',
-    data: { total: 34 },
-    live: false,
-    simulated: true,
-    message: 'Simulated GitHub sample data. Connect GitHub to query your live workspace data.',
+    query_type: 'delivery_risk',
+    data: { counts: { openIssues: 2 } },
+    live: true,
   });
   assert.deepEqual(stepErrors, []);
 });

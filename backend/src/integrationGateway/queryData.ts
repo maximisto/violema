@@ -1,4 +1,9 @@
 import { queryStripeRevenue, type StripeLikeClient } from './adapters/nativeStripe';
+import {
+  queryPartnerComposio,
+  type PartnerComposioQueryInput,
+  type PartnerComposioSource,
+} from './adapters/partnerComposio';
 import type { IntegrationQueryResult, IntegrationQuerySuccess } from './types';
 import type { AutomationStepExecution } from '../platform/types';
 
@@ -23,6 +28,7 @@ export interface ExecuteQueryDataInput {
   now?: Date;
   clientOverrides?: {
     stripe?: StripeLikeClient;
+    partner?: (input: PartnerComposioQueryInput) => Promise<IntegrationQueryResult>;
   };
   credentialOverrides?: {
     stripeSecretKey?: string;
@@ -83,6 +89,18 @@ const LEGACY_MOCK_DATA: Record<string, Record<string, unknown>> = {
   },
 };
 
+const PARTNER_DEMO_SOURCES: PartnerComposioSource[] = [
+  'github',
+  'linear',
+  'email',
+  'calendar',
+  'google_drive',
+];
+
+function isPartnerDemoSource(source: string): source is PartnerComposioSource {
+  return PARTNER_DEMO_SOURCES.includes(source as PartnerComposioSource);
+}
+
 function readQueryPayloadFailureMessage(payload: Record<string, unknown>, stepTitle: string) {
   if (typeof payload.message === 'string' && payload.message.trim()) {
     return payload.message.trim();
@@ -140,6 +158,18 @@ export async function executeQueryData(
       now,
       client: input.clientOverrides?.stripe,
       secretKey: input.credentialOverrides?.stripeSecretKey,
+    });
+  }
+
+  if (isPartnerDemoSource(input.source)) {
+    const partnerQuery = input.clientOverrides?.partner ?? queryPartnerComposio;
+    return await partnerQuery({
+      workspaceId: input.workspaceId,
+      source: input.source,
+      queryType: input.queryType,
+      filters: input.filters,
+      limit: input.limit,
+      now,
     });
   }
 

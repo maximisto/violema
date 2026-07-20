@@ -29,10 +29,24 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
     assert.equal(weekly.timezone, 'America/Chicago');
     assert.equal(weekly.execution_policy?.reviewPolicy, 'standard');
     assert.equal(weekly.notify, '#all-purple-orange');
-    assert.ok(weekly.steps?.some((step) => step.inputs?.source === 'stripe'), 'Expected Stripe revenue step.');
-    assert.ok(weekly.steps?.some((step) => step.inputs?.source === 'github'), 'Expected GitHub delivery/risk step.');
-    assert.ok(weekly.steps?.some((step) => step.inputs?.source === 'calendar'), 'Expected calendar step.');
-    assert.ok(weekly.steps?.some((step) => step.deliveryTarget?.channel === 'slack'), 'Expected Slack delivery step.');
+    assert.equal(weekly.version, 3);
+    assert.deepEqual(
+      weekly.steps
+        ?.filter((step) => step.kind === 'query')
+        .map((step) => step.inputs?.source),
+      ['stripe', 'github', 'linear', 'email', 'calendar', 'google_drive'],
+    );
+    assert.ok(weekly.steps?.some((step) => step.kind === 'search'), 'Expected Tavily market-search step.');
+    assert.ok(weekly.steps?.some((step) => step.kind === 'summarize'), 'Expected founder brief step.');
+    assert.ok(
+      weekly.steps?.some(
+        (step) =>
+          step.deliveryTarget?.channel === 'slack' &&
+          step.deliveryTarget.target === '#all-purple-orange' &&
+          step.inputs?.approval_required === true,
+      ),
+      'Expected approval-gated Slack delivery step.',
+    );
 
     const missions = buildMissionRecords({
       workspaceId: 'purpleorangehq',
@@ -45,6 +59,39 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
     assert.equal(mission.workflowTemplateId, 'weekly-founder-update');
     assert.equal(mission.review.policy, 'before_delivery');
     assert.equal(mission.review.approvalChannel, 'slack');
+
+    const legacy = {
+      ...weekly,
+      version: 2,
+      created_at: '2026-06-01T12:00:00.000Z',
+      last_run_at: '2026-07-18T12:00:00.000Z',
+      last_run_status: 'succeeded' as const,
+      consecutive_failures: 0,
+      steps: weekly.steps?.filter(
+        (step) => !['linear', 'google_drive'].includes(String(step.inputs?.source || '')),
+      ),
+    };
+    fs.writeFileSync(
+      path.join(tempDir, 'automations.json'),
+      JSON.stringify([legacy], null, 2),
+    );
+
+    scheduler.ensureCoreAutomationSeeds(async () => ({ ok: true }));
+    const upgraded = scheduler.listAutomations().find(
+      (item) => item.id === 'auto_weekly_founder_update',
+    );
+
+    assert.ok(upgraded, 'Expected upgraded weekly founder seed.');
+    assert.equal(upgraded.version, 3);
+    assert.equal(upgraded.created_at, '2026-06-01T12:00:00.000Z');
+    assert.equal(upgraded.last_run_at, '2026-07-18T12:00:00.000Z');
+    assert.equal(upgraded.last_run_status, 'succeeded');
+    assert.deepEqual(
+      upgraded.steps
+        ?.filter((step) => step.kind === 'query')
+        .map((step) => step.inputs?.source),
+      ['stripe', 'github', 'linear', 'email', 'calendar', 'google_drive'],
+    );
   } finally {
     scheduler?.deleteAutomation('auto_weekly_founder_update');
     process.chdir(originalCwd);

@@ -191,7 +191,11 @@ import {
   finalizePendingApprovalRequestedLedgerEvents,
   type PendingApprovalRequestedLedgerEvent,
 } from './integrationGateway/approvalLedger';
-import { appendWorkflowLedgerEvent, listWorkflowLedgerEvents } from './integrationGateway/auditLog';
+import {
+  appendIntegrationQueryLedgerEvent,
+  appendWorkflowLedgerEvent,
+  listWorkflowLedgerEvents,
+} from './integrationGateway/auditLog';
 import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
 import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
 import {
@@ -1615,7 +1619,7 @@ const NEXUS_TOOLS: Tool[] = [
       properties: {
         source: {
           type: 'string',
-          enum: ['stripe', 'hubspot', 'github', 'linear', 'notion', 'salesforce', 'jira', 'posthog', 'google_analytics'],
+          enum: ['stripe', 'hubspot', 'github', 'linear', 'email', 'calendar', 'google_drive', 'notion', 'salesforce', 'jira', 'posthog', 'google_analytics'],
           description: 'The data source to query',
         },
         query_type: { type: 'string', description: 'Type of data to retrieve' },
@@ -3637,22 +3641,18 @@ async function executeAutomationCore(
           stepErrors,
           artifactCount: chartArtifact ? 2 : 1,
         });
-        if (payloadSource === 'stripe') {
-          appendWorkflowLedgerEvent({
+        if (payloadSource) {
+          appendIntegrationQueryLedgerEvent({
             workspaceId,
             workflowId: runContext.workflowId,
             automationId: automation.id,
             taskId: runContext.taskId,
             taskRunId: runContext.taskRunId,
-            type: payload.ok === false ? 'connector_failed' : 'data_read',
-            summary: payload.ok === false
-              ? `Stripe read blocked: ${String(payload.message || 'integration not ready')}`
-              : 'Read Stripe revenue summary.',
-            metadata: {
-              source: 'stripe',
-              queryType,
-              ok: payload.ok,
-            },
+            source: payloadSource,
+            queryType,
+            ok: payload.ok !== false,
+            live: payload.live === true,
+            message: typeof payload.message === 'string' ? payload.message : undefined,
           });
         }
         continue;

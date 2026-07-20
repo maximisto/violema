@@ -69,6 +69,67 @@ for (const template of WORKFLOW_TEMPLATES) {
 assert(getWorkflowTemplateById('weekly-founder-brief')?.title === 'Weekly founder brief', 'resolves a known template by id');
 assert(getWorkflowTemplateById('does-not-exist') === undefined, 'returns undefined for an unknown id');
 
+const weeklyFounderUpdate = getWorkflowTemplateById('weekly-founder-brief');
+assert(Boolean(weeklyFounderUpdate), 'Weekly Founder Update template exists');
+assert(
+  JSON.stringify(
+    weeklyFounderUpdate?.steps
+      .filter((step) => step.kind === 'query')
+      .map((step) => step.inputs?.source),
+  ) === JSON.stringify(['stripe', 'github', 'linear', 'email', 'calendar', 'google_drive']),
+  'Weekly Founder Update uses the canonical live query source sequence',
+);
+assert(
+  JSON.stringify(weeklyFounderUpdate?.integrations) === JSON.stringify([
+    'Stripe',
+    'GitHub',
+    'Linear',
+    'Gmail',
+    'Google Calendar',
+    'Google Drive',
+    'Web search',
+    'Slack',
+    'Email',
+  ]),
+  'Weekly Founder Update lists the frozen demo integration set',
+);
+assert(
+  JSON.stringify(weeklyFounderUpdate?.requiredIntegrationIds) === JSON.stringify([
+    'stripe',
+    'github',
+    'linear',
+    'email',
+    'calendar',
+    'tavily',
+    'slack',
+  ]),
+  'Weekly Founder Update declares required live integrations',
+);
+assert(
+  JSON.stringify(weeklyFounderUpdate?.optionalIntegrationIds) === JSON.stringify([
+    'google_drive',
+    'postmark',
+  ]),
+  'Weekly Founder Update declares supporting integrations',
+);
+assert(
+  weeklyFounderUpdate?.firstRunRequiresApproval === true,
+  'Weekly Founder Update first run requires approval',
+);
+assert(
+  weeklyFounderUpdate?.steps.some((step) => step.kind === 'search'),
+  'Weekly Founder Update includes current web research',
+);
+assert(
+  weeklyFounderUpdate?.steps.some(
+    (step) =>
+      step.kind === 'deliver' &&
+      step.inputs?.approval_required === true &&
+      step.deliveryTarget?.channel === 'slack',
+  ),
+  'Weekly Founder Update delivery remains approval-gated',
+);
+
 const revenueWatch = getWorkflowTemplateById('revenue-watch');
 assert(Boolean(revenueWatch), 'Revenue Watch template exists');
 assert(
