@@ -429,7 +429,7 @@ export async function queryPartnerComposio(
       time_max: windowEnd,
       show_deleted: false,
       single_events: true,
-      response_detail: 'basic',
+      response_detail: 'minimal',
       max_results_per_calendar: limit,
     });
     if (isPartnerFailure(payload)) {
