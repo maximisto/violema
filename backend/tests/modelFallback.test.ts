@@ -60,7 +60,7 @@ test('generateTextDetailed falls back to OpenAI after retryable Anthropic failur
       assert.equal(body.model, 'gpt-4.1-mini');
       assert.equal(body.messages?.[0]?.role, 'system');
       return new Response(JSON.stringify({
-        choices: [{ message: { content: 'Fallback founder brief' } }],
+        choices: [{ message: { content: 'Fallback founder brief' }, finish_reason: 'length' }],
         usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
       }), {
         headers: { 'content-type': 'application/json' },
@@ -79,6 +79,7 @@ test('generateTextDetailed falls back to OpenAI after retryable Anthropic failur
     );
 
     assert.equal(result.text, 'Fallback founder brief');
+    assert.equal(result.stopReason, 'length');
     assert.equal(result.usage?.totalTokens, 18);
     assert.equal(anthropicCalls, 2);
     assert.equal(fetchCalls, 1);

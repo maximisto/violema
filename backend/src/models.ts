@@ -40,6 +40,7 @@ export interface TextGenerationUsage {
 
 export interface TextGenerationResult {
   text: string;
+  stopReason?: string;
   usage?: TextGenerationUsage;
 }
 
@@ -636,7 +637,7 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
 
   const data = await response.json() as {
     error?: { message?: string };
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
     usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   };
 
@@ -646,6 +647,7 @@ async function generateWithOpenAI(route: ModelRoute, system: string, messages: M
 
   return {
     text: data.choices?.[0]?.message?.content?.trim() || '',
+    stopReason: data.choices?.[0]?.finish_reason,
     usage: data.usage
       ? {
           inputTokens: data.usage.prompt_tokens,
@@ -688,6 +690,7 @@ async function generateWithAnthropicRoute(route: ModelRoute, system: string, mes
 
   return {
     text: anthropicTextFromResponse(response),
+    stopReason: response.stop_reason || undefined,
     usage,
   };
 }

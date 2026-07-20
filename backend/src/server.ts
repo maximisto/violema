@@ -83,6 +83,11 @@ import {
   requestAutomationChanges,
   validateAutomationDeliveryDraft,
 } from './platform/automationLifecycle';
+import {
+  AUTOMATION_SUMMARY_MAX_TOKENS,
+  AUTOMATION_SUMMARY_WORD_LIMIT,
+  requireCompleteAutomationSummary,
+} from './platform/automationSummaryPolicy';
 import { extractToolArtifactsFromResult, type StoredToolArtifact } from './platform/toolArtifacts';
 import {
   createAutomation,
@@ -3493,7 +3498,7 @@ async function ensureAutomationSummaryText(
       ),
     );
 
-    return fallbackSummaryResult.text || buildDeterministicAutomationSummary(automation, artifacts, stepExecutions, stepErrors);
+    return requireCompleteAutomationSummary(fallbackSummaryResult);
   } catch (error) {
     const summaryError = error instanceof Error ? error.message : 'Unknown summary generation error';
     stepErrors.push(`Fallback summary: ${summaryError}`);
@@ -3712,13 +3717,13 @@ async function executeAutomationCore(
           `Summary step "${step.title}"`,
           generateTextDetailed(
           step.modelTier || plan.suggestedModelTier,
-          'You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. Be concrete, skim-friendly, and avoid filler.',
+          `You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output of at most ${AUTOMATION_SUMMARY_WORD_LIMIT} words. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. End with a short "Next actions" section. Be concrete, skim-friendly, and avoid filler.`,
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
-          900,
+          AUTOMATION_SUMMARY_MAX_TOKENS,
           workspaceId,
           ),
         );
-        summaryText = summaryResult.text;
+        summaryText = requireCompleteAutomationSummary(summaryResult);
         artifacts.push({
           kind: 'summary',
           title: step.title,
