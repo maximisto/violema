@@ -10,6 +10,7 @@ import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import { Link } from 'react-router-dom';
 import BrandIcon from '../components/BrandIcon';
 import PublicHeader from '../components/PublicHeader';
+import { DEMO_INTEGRATIONS, IDENTITY_INTEGRATIONS, DEFERRED_INTEGRATIONS } from '../content/demoIntegrations';
 import { useTheme } from '../lib/useTheme';
 
 interface PartnerApp {
@@ -32,47 +33,6 @@ interface IntegrationCatalog {
   };
   partnerApps: PartnerApp[];
 }
-
-const NATIVE_NOW = [
-  {
-    name: 'Slack',
-    detail: 'Messaging and team coordination',
-    description: 'Send updates, deliver summaries, and run Violema where teams already work.',
-  },
-  {
-    name: 'Email',
-    detail: 'Outbound notifications and follow-ups',
-    description: 'Route alerts, summaries, and human-facing messages through email when Slack is not the right surface.',
-  },
-  {
-    name: 'Web search',
-    detail: 'Current information and research',
-    description: 'Pull current web context into real tasks instead of relying on stale model memory.',
-  },
-  {
-    name: 'Browser screenshots',
-    detail: 'Visual inspection and capture',
-    description: 'Inspect real pages, grab screenshots, and bring visual state back into the workflow.',
-  },
-  {
-    name: 'Stripe',
-    detail: 'Billing and workspace purchases',
-    description: 'Support billing state for approved workspaces after workflow scope and access are agreed.',
-  },
-  {
-    name: 'GitHub',
-    detail: 'Issues, repos, and engineering context',
-    description: 'Support engineering workflows where code, repo state, and shipping decisions matter.',
-  },
-];
-
-const NEXT_UP = [
-  { name: 'Notion', body: 'Workspace knowledge sync' },
-  { name: 'Linear', body: 'Product issue and cycle sync' },
-  { name: 'Google Calendar', body: 'Calendar-aware scheduling and follow-up' },
-  { name: 'Microsoft Teams', body: 'Shared alerts into more team destinations' },
-  { name: 'Custom MCP tools', body: 'A cleaner long-tail layer for non-core business tools' },
-];
 
 const CUSTOM = [
   { name: 'Custom MCP tools', body: 'Internal APIs and private systems' },
@@ -99,7 +59,7 @@ function ComposioConnectSection() {
             connectedApps: Array.isArray(data.partner?.connectedApps) ? data.partner.connectedApps : [],
             unavailableMessage: typeof data.partner?.unavailableMessage === 'string'
               ? data.partner.unavailableMessage
-              : 'Some one-click connectors are temporarily unavailable. Violema can still run native and sample-data workflows while we finish the connector layer.',
+              : 'Sign in to an approved workspace to manage OAuth connections and verify workflow access.',
           },
           partnerApps: Array.isArray(data.partnerApps) ? data.partnerApps : [],
         });
@@ -115,7 +75,7 @@ function ComposioConnectSection() {
             partner: {
               enabled: false,
               connectedApps: [],
-              unavailableMessage: 'Some one-click connectors are temporarily unavailable. Violema can still run native and sample-data workflows while we finish the connector layer.',
+              unavailableMessage: 'Sign in to an approved workspace to manage OAuth connections and verify workflow access.',
             },
             partnerApps: [],
           });
@@ -161,7 +121,7 @@ function ComposioConnectSection() {
         <p className="mt-5 text-sm text-slate-500">Loading available integrations…</p>
       ) : !catalog.partner.enabled ? (
         <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200/90">
-          <p className="font-semibold">Some one-click connectors are temporarily unavailable.</p>
+          <p className="font-semibold">Connection setup lives inside approved workspaces.</p>
           <p className="mt-1 text-amber-200/70">{catalog.partner.unavailableMessage}</p>
         </div>
       ) : (
@@ -234,25 +194,25 @@ export default function IntegrationsPage() {
                 Integrations
               </div>
               <h1 className="mt-5 max-w-5xl text-4xl font-extrabold leading-[0.96] text-white sm:text-5xl lg:text-[4rem]">
-                Connect the tools
-                <span className="gradient-text"> that actually matter.</span>
+                Real company systems.
+                <span className="gradient-text"> One reviewable workflow.</span>
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg">
-                Violema does not need every connector on day one. It needs the right systems first: where work starts, where decisions land, and where execution needs to follow through.
+                Nine production integrations power Violema’s TechChicago demo workflow: live operating data in, a source-backed founder update out, and explicit approval before delivery.
               </p>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 {[
                   {
-                    title: 'Native now',
-                    body: 'The core tools already wired into the product and available to real workflows today.',
+                    title: 'Workflow data',
+                    body: 'Stripe, Gmail, Calendar, Drive, Linear, GitHub, and live web research.',
                   },
                   {
-                    title: 'Expand next',
-                    body: 'The next layer of high-leverage connectors and messaging surfaces already on the product path.',
+                    title: 'Delivery',
+                    body: 'Slack is the primary reviewed delivery surface, with Postmark email available as fallback.',
                   },
                   {
-                    title: 'Custom later',
-                    body: 'Private systems and enterprise-specific tooling should plug in through a deliberate integration layer, not a hacked-on one-off.',
+                    title: 'Identity',
+                    body: 'Google and Microsoft sign-in secure workspace access without being counted as workflow-data connectors.',
                   },
                 ].map((item) => (
                   <div key={item.title} className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
@@ -269,16 +229,16 @@ export default function IntegrationsPage() {
                   <Bot className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">How we should talk about integrations</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Production boundary</p>
                   <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                    Be precise. Native where it’s real. Expandable where the architecture supports it. Custom where the customer needs it.
+                    Violema reads only the approved, bounded data needed for the workflow. Gmail and Drive stay metadata-only. External delivery stays held until review.
                   </p>
                 </div>
               </div>
               <div className="mt-5 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Best next implementation</p>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Flagship workflow</p>
                 <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                  Keep the core connectors native, then add an embedded integration partner for the long tail. That is how we eventually earn a broad integrations claim without faking it first.
+                  Weekly Founder Update rolls up revenue, delivery, commitments, operating context, and market signals into one inspectable brief.
                 </p>
               </div>
             </div>
@@ -292,19 +252,23 @@ export default function IntegrationsPage() {
                 <Sparkles className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Native now</p>
-                <h2 className="mt-1 text-2xl font-semibold text-white">The current operating layer</h2>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Production verified</p>
+                <h2 className="mt-1 text-2xl font-semibold text-white">Active workflow and delivery integrations</h2>
               </div>
             </div>
             <div className="mt-6 grid gap-4 md:grid-cols-2">
-              {NATIVE_NOW.map(({ name, detail, description }) => (
-                <div key={name} className="rounded-2xl border border-navy-700/60 bg-navy-950/45 p-4">
-                  <div className="flex items-center gap-3">
+              {DEMO_INTEGRATIONS.map(({ id, name, category, detail, description }) => (
+                <div key={id} className="rounded-2xl border border-green-500/15 bg-navy-950/45 p-4">
+                  <div className="flex items-start gap-3">
                     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-100">
                       <BrandIcon name={name} className="h-[1.05rem] w-[1.05rem]" />
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-white">{name}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-white">{name}</p>
+                        <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-green-300">Active</span>
+                      </div>
+                      <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-violet-300/80">{category}</p>
                       <p className="text-xs text-slate-500">{detail}</p>
                     </div>
                   </div>
@@ -320,23 +284,24 @@ export default function IntegrationsPage() {
                 <Globe className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Messaging surfaces</p>
-                <h2 className="mt-1 text-xl font-semibold text-white">Where Violema shows up</h2>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Identity layer</p>
+                <h2 className="mt-1 text-xl font-semibold text-white">Secure workspace access</h2>
               </div>
             </div>
             <div className="mt-5 space-y-3">
-              {[
-                { label: 'Slack', note: 'Primary team-facing surface for alerts, summaries, approvals, and shared execution.' },
-                { label: 'Web app', note: 'Primary control surface for workflows, settings, task visibility, and full execution detail.' },
-              ].map(({ label, note }) => (
-                <div key={label} className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
+              {IDENTITY_INTEGRATIONS.map(({ id, name, category, detail }) => (
+                <div key={id} className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
                   <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                    <BrandIcon name={label} className="h-4 w-4 text-cyan-200" />
-                    {label}
+                    <BrandIcon name={name} className="h-4 w-4 text-cyan-200" />
+                    {name}
                   </div>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-400">{note}</p>
+                  <p className="mt-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-cyan-300/80">{category}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-400">{detail}</p>
                 </div>
               ))}
+              <p className="px-1 text-xs leading-relaxed text-slate-500">
+                Identity providers authenticate people. They are intentionally separate from the nine systems that read workflow data or deliver approved results.
+              </p>
             </div>
           </div>
         </section>
@@ -345,17 +310,20 @@ export default function IntegrationsPage() {
 
         <section className="mt-8 grid gap-5 lg:grid-cols-2">
           <div className="rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Coming next</p>
-            <h3 className="mt-2 text-2xl font-semibold text-white">The next connector wave</h3>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">After the demos</p>
+            <h3 className="mt-2 text-2xl font-semibold text-white">Intentionally deferred</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500">
+              We froze the connector scope around one product workflow that can be demonstrated end to end.
+            </p>
             <div className="mt-5 space-y-3">
-              {NEXT_UP.map((item) => (
-                <div key={item.name} className="flex items-start gap-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3 text-sm text-slate-400">
+              {DEFERRED_INTEGRATIONS.map((item) => (
+                <div key={item.id} className="flex items-start gap-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3 text-sm text-slate-400">
                   <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-100">
                     <BrandIcon name={item.name} className="h-4 w-4" />
                   </span>
                   <span>
                     <span className="block font-semibold text-slate-100">{item.name}</span>
-                    <span className="mt-0.5 block">{item.body}</span>
+                    <span className="mt-0.5 block">{item.detail}</span>
                   </span>
                 </div>
               ))}
@@ -384,7 +352,7 @@ export default function IntegrationsPage() {
             <div>
               <h3 className="text-2xl font-semibold text-white">The honest product line</h3>
               <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-400">
-                Market the current product around the integrations that are actually there. Then position the broader connector layer as expandable, not magical. That is how we keep credibility while still aiming higher.
+                Violema is a real, reviewable operating workflow across nine active integrations. The next connector wave comes after this loop is reliable—not before.
               </p>
             </div>
             <div className="flex flex-col gap-3">

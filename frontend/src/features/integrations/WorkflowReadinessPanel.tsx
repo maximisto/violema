@@ -18,6 +18,7 @@ export interface WorkflowReadinessReport {
   optionalIntegrationIds: string[];
   firstRunRequiresApproval: boolean;
   blockers: WorkflowReadinessBlocker[];
+  warnings?: WorkflowReadinessBlocker[];
 }
 
 export interface WorkflowReadinessBlockerAction {
@@ -67,6 +68,38 @@ export function WorkflowReadinessPanel({
                   <div key={blocker.key} className="rounded-xl border border-white/8 bg-navy-950/35 px-3 py-2">
                     <p className="text-xs font-semibold text-white">{blocker.label}</p>
                     <p className="mt-1 text-[11px] leading-5 text-slate-400">{blocker.detail}</p>
+                    {action?.onClick ? (
+                      <button
+                        type="button"
+                        onClick={action.onClick}
+                        className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-100"
+                      >
+                        {action.label}
+                      </button>
+                    ) : action?.route ? (
+                      <Link
+                        to={action.route}
+                        className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 hover:text-cyan-100"
+                      >
+                        {action.label}
+                      </Link>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+          {report.warnings && report.warnings.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {report.warnings.map((warning) => {
+                const action = getBlockerAction?.(warning) || (!getBlockerAction && warning.route
+                  ? { label: 'Open setup', route: warning.route }
+                  : null);
+
+                return (
+                  <div key={warning.key} className="rounded-xl border border-amber-500/15 bg-amber-500/5 px-3 py-2">
+                    <p className="text-xs font-semibold text-amber-100">{warning.label}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-slate-400">{warning.detail}</p>
                     {action?.onClick ? (
                       <button
                         type="button"
