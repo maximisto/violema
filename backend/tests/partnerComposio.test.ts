@@ -126,7 +126,7 @@ test('Calendar commitment reads use a seven-day bounded window', async () => {
       time_max: '2026-07-26T12:00:00.000Z',
       show_deleted: false,
       single_events: true,
-      response_detail: 'basic',
+      response_detail: 'minimal',
       max_results_per_calendar: 10,
     },
   });
