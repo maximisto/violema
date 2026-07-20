@@ -7,7 +7,7 @@
 **Primary delivery:** Slack `#all-purple-orange`  
 **Production:** [violema.com](https://violema.com)  
 **Current production code:** `571a563e339bf898aa2156aa055a689901b6c393`  
-**Last updated:** 2026-07-20 03:07 UTC / 2026-07-19 22:07 CDT
+**Last updated:** 2026-07-20 03:44 UTC / 2026-07-19 22:44 CDT
 
 ## Executive Status
 
@@ -21,10 +21,10 @@ Violema is ready to demonstrate a real, reviewable founder-operations workflow a
 - No required source returned simulated, mock, synthetic, or demo data.
 - The workflow generated a complete founder brief and stopped at review.
 - The review ledger contains six `data_read` events, `draft_created`, and `approval_requested`.
-- No external action has occurred for the held rehearsal.
+- The reviewed brief was delivered exactly once to Slack.
 - A dry-run approval resolved the real Slack target and validated the delivery path without sending or changing state.
-
-One irreversible acceptance item remains intentionally held: Max must approve the exact staged brief before it is posted to `#all-purple-orange`.
+- Max approved the exact staged artifact for run `run_1784516726967_jl8atr`.
+- Slack returned a real delivery receipt and the final ledger is complete.
 
 ## Frozen Integration Matrix
 
@@ -98,6 +98,32 @@ The review approval endpoint was called with `dryRun: true`.
 - The task remained `waiting_review`.
 - The ledger remained unchanged.
 - No Slack message or email was sent.
+
+### Approved delivery
+
+Max explicitly approved run `run_1784516726967_jl8atr` for `#all-purple-orange`.
+
+| Field | Receipt |
+|---|---|
+| Artifact SHA-256 | `9f080bcb0cd7fa83e2de900e3cedea875aecb8bd7e75a74bcf6455421d4a5e4c` |
+| Artifact length | 5,430 characters |
+| Reviewer | Max Markovtsev |
+| Reviewed at | 2026-07-20 03:44:19 UTC / 2026-07-19 22:44:19 CDT |
+| Delivery status | `delivered` |
+| Slack target | `#all-purple-orange` |
+| Slack timestamp | `1784519059.952149` |
+| Final task status | `completed` |
+| Review required | `false` |
+
+The final run ledger contains:
+
+- six `data_read` events;
+- one `draft_created`;
+- one `approval_requested`;
+- one `approval_granted`;
+- one `external_action_executed`.
+
+The approval and external-action counts are exactly one each.
 
 ## Exact 3–5 Minute Demo
 
@@ -356,10 +382,6 @@ Postmark is the email fallback.
 
 ## Unresolved Items
 
-| Item | Owner | Status | Required action |
-|---|---|---|---|
-| Approve the exact staged founder brief | Max | Held intentionally | Review run `run_1784516726967_jl8atr`, then explicitly approve delivery |
-| Verify real Slack receipt and final ledger events | Codex / Max | Pending approval | Send once, confirm receipt, inspect ledger, update this record |
-| Keep demo browser clean | Demo operator | Before every demo | Use a fresh session and select the newest run ID |
+No integration, delivery, or infrastructure blocker remains.
 
-No integration or infrastructure blocker remains.
+The recurring operator responsibility is to use a fresh demo session, select the newest run ID, and approve only the exact artifact visible during that demo.
