@@ -57,7 +57,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
     outcome: 'A reviewed Monday brief across revenue, delivery, and market — ready to share.',
     cadence: 'every monday at 9am',
     destination: 'slack',
-    notify: '#all-purple-orange',
+    notify: '#violema-demo',
     integrations: [
       'Stripe',
       'GitHub',
@@ -90,7 +90,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
       { kind: 'query', title: 'Review operating documents', objective: 'Review metadata for recently changed Google Drive operating documents without reading file bodies.', inputs: { source: 'google_drive', query_type: 'recent_files', limit: 10 } },
       { kind: 'search', title: 'Scan market signals', objective: 'Research customer, competitor, pricing, platform, and AI automation changes since the last update.', inputs: { query: 'AI automation platform startup competitor pricing product launch founder update', num_results: 6 } },
       { kind: 'summarize', title: 'Draft founder brief', objective: 'Synthesize a founder-ready brief with signals, risks, decisions needed, and next actions.' },
-      { kind: 'deliver', title: 'Hold for approval and deliver', objective: 'Send the reviewed weekly founder update after approval.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#all-purple-orange' } },
+      { kind: 'deliver', title: 'Hold for approval and deliver', objective: 'Send the reviewed weekly founder update after approval.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#violema-demo' } },
     ],
   },
   {
@@ -101,7 +101,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
     outcome: "A daily heads-up on revenue movement and churn risk before it's a surprise.",
     cadence: 'daily at 9am',
     destination: 'slack',
-    notify: '#all-purple-orange',
+    notify: '#violema-demo',
     integrations: ['Stripe'],
     requiredIntegrationIds: ['stripe'],
     optionalIntegrationIds: [],
@@ -111,7 +111,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
       { kind: 'query', title: 'Pull Stripe revenue pulse', objective: 'Check revenue, failed payments, churn events, and upgrades.', inputs: { source: 'stripe', query_type: 'revenue_summary' } },
       { kind: 'analyze', title: 'Analyze revenue risk', objective: 'Identify what changed, what matters, and where founder attention is needed.' },
       { kind: 'summarize', title: 'Create revenue brief', objective: 'Write a short risk/opportunity brief with next actions.' },
-      { kind: 'deliver', title: 'Send revenue watch', objective: 'Send the reviewed revenue watch to the founder channel.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#all-purple-orange' } },
+      { kind: 'deliver', title: 'Send revenue watch', objective: 'Send the reviewed revenue watch to the founder channel.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#violema-demo' } },
     ],
   },
   {
@@ -122,14 +122,14 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
     outcome: 'A weekly memo on competitor pricing, launches, and positioning shifts.',
     cadence: 'every monday at 8am',
     destination: 'slack',
-    notify: '#all-purple-orange',
+    notify: '#violema-demo',
     integrations: ['Web search'],
     description: 'Track pricing, launches, positioning changes, and messaging shifts across key competitors.',
     steps: [
       { kind: 'search', title: 'Search competitor moves', objective: 'Find pricing, launch, and positioning changes from key competitors.', inputs: { query: 'AI agent automation platform competitor pricing launches positioning', num_results: 8 } },
       { kind: 'analyze', title: 'Extract strategic signals', objective: 'Separate noise from moves that affect positioning, roadmap, or sales.' },
       { kind: 'summarize', title: 'Draft competitor memo', objective: 'Create a concise founder memo with implications and recommended action.' },
-      { kind: 'deliver', title: 'Deliver competitor memo', objective: 'Send the reviewed competitor memo after approval.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#all-purple-orange' } },
+      { kind: 'deliver', title: 'Deliver competitor memo', objective: 'Send the reviewed competitor memo after approval.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#violema-demo' } },
     ],
   },
   {
@@ -140,7 +140,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
     outcome: 'A daily read on the accounts and product friction that threaten retention.',
     cadence: 'daily at 8am',
     destination: 'slack',
-    notify: '#all-purple-orange',
+    notify: '#violema-demo',
     integrations: ['PostHog', 'GitHub'],
     description: 'Watch customer signals, product friction, unanswered threads, and usage changes that could affect retention.',
     steps: [

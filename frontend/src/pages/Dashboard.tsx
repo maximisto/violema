@@ -690,7 +690,7 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
         'Search competitor pricing and product moves this week.',
         'Analyze the signal and identify founder-level decisions.',
         'Generate the weekly founder update.',
-        'Deliver latest result to #all-purple-orange after review.',
+        'Deliver latest result to #violema-demo after review.',
       ].join('\n'),
       source: 'sample',
       modelTier: 'balanced',
@@ -698,7 +698,7 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
       agentRole: 'operator_manager',
       runStatus: 'waiting_review',
       schedule: 'Every Monday at 9am',
-      notify: '#all-purple-orange',
+      notify: '#violema-demo',
       condition: 'Only deliver after the evidence trail and summary are reviewed.',
       actions: [
         'Query Stripe revenue movement',
@@ -706,7 +706,7 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
         'Search competitor pricing changes',
         'Analyze founder-level risks and opportunities',
         'Generate the weekly founder update',
-        'Deliver latest result to #all-purple-orange after review',
+        'Deliver latest result to #violema-demo after review',
       ],
       steps: [
         {
@@ -741,7 +741,7 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
           kind: 'deliver',
           title: 'Hold for approval and deliver',
           objective: 'Send the reviewed update to the founder channel.',
-          deliveryTarget: { channel: 'slack', target: '#all-purple-orange' },
+          deliveryTarget: { channel: 'slack', target: '#violema-demo' },
         },
       ],
       executionPolicy: { ...DEFAULT_EXECUTION_POLICY },
@@ -834,7 +834,7 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
         {
           stepId: 'preview-step-deliver',
           kind: 'deliver',
-          title: 'Deliver to #all-purple-orange',
+          title: 'Deliver to #violema-demo',
           assignedRole: 'slack_messenger',
           status: 'planned',
           summary: 'Waiting for review approval before delivery.',
@@ -5931,8 +5931,8 @@ export default function Dashboard() {
                     <p className="ui-section-label px-1">Result destination</p>
                     <div className="mt-2 flex flex-wrap gap-2 px-1">
                       {[
-                        { label: 'Slack', value: 'slack', placeholder: '#all-purple-orange or C0APS37V8V8' },
-                        { label: 'Email', value: 'email', placeholder: 'max@purpleorange.io' },
+                        { label: 'Slack', value: 'slack', placeholder: '#violema-demo or C0APS37V8V8' },
+                        { label: 'Email', value: 'email', placeholder: 'max@violema.com' },
                         { label: 'None', value: 'none', placeholder: '' },
                       ].map((option) => (
                         <button
@@ -5958,13 +5958,13 @@ export default function Dashboard() {
                         onChange={(event) => updateAutomationDestination(automationEditor.destinationType, event.target.value)}
 	                        aria-label="Result destination"
 	                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none disabled:text-slate-600"
-	                        placeholder={automationEditor.destinationType === 'email' ? 'max@purpleorange.io' : 'Slack channel name or ID'}
+	                        placeholder={automationEditor.destinationType === 'email' ? 'max@violema.com' : 'Slack channel name or ID'}
 	                        disabled={automationEditor.destinationType === 'none'}
 	                      />
 	                    </div>
 	                    {automationEditor.destinationType === 'slack' && automationEditor.notify && !isLikelySlackTarget(automationEditor.notify) ? (
 	                      <p className="mt-2 px-1 text-xs leading-5 text-amber-300">
-	                        Use a Slack channel name like <span className="font-mono">#all-purple-orange</span> or an ID like <span className="font-mono">C0APS37V8V8</span>.
+	                        Use a Slack channel name like <span className="font-mono">#violema-demo</span> or an ID like <span className="font-mono">C0APS37V8V8</span>.
 	                      </p>
 	                    ) : (
 	                      <p className="mt-2 px-1 text-xs leading-5 text-slate-400">
@@ -6218,7 +6218,7 @@ export default function Dashboard() {
                                         onClick={() => updateAutomationStepDeliveryTarget(
                                           index,
                                           option.value as AutomationEditorDraft['destinationType'],
-                                          option.value === 'none' ? '' : deliveryValue || (option.value === 'email' ? 'max@purpleorange.io' : '#all-purple-orange'),
+                                          option.value === 'none' ? '' : deliveryValue || (option.value === 'email' ? 'max@violema.com' : '#violema-demo'),
                                         )}
                                         className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                                           deliveryType === option.value
@@ -6240,13 +6240,13 @@ export default function Dashboard() {
                                       event.target.value,
                                     )}
                                     className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none disabled:text-slate-600"
-                                    placeholder={deliveryType === 'email' ? 'max@purpleorange.io' : '#all-purple-orange or C0APS37V8V8'}
+                                    placeholder={deliveryType === 'email' ? 'max@violema.com' : '#violema-demo or C0APS37V8V8'}
                                     disabled={deliveryType === 'none'}
                                   />
                                 </div>
                                 {deliveryType === 'slack' && deliveryValue && !isLikelySlackTarget(deliveryValue) ? (
                                   <p className="mt-2 px-1 text-xs leading-5 text-amber-300">
-                                    Use a Slack channel like <span className="font-mono">#all-purple-orange</span> or a channel ID.
+                                    Use a Slack channel like <span className="font-mono">#violema-demo</span> or a channel ID.
                                   </p>
                                 ) : (
                                   <p className="mt-2 px-1 text-xs leading-5 text-slate-400">
