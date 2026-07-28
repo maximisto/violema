@@ -182,7 +182,7 @@ export function estimateUsageEventCredits(event: UsageEvent): number {
 const PROVIDER_COST_USD_PER_1M_TOKENS: Record<ModelTier, number> = {
   micro: 0.10,
   default: 6.00,
-  hard: 15.00,
+  hard: 25.00,
   critical: 30.00,
   ops: 0.20,
 };

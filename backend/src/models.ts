@@ -219,19 +219,19 @@ function getTextRouteDefault(profile: TextProfile): ModelRoute {
     },
     default: {
       provider: 'anthropic',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       baseUrl: env('ANTHROPIC_BASE_URL'),
     },
     hard: {
       provider: 'anthropic',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       baseUrl: env('ANTHROPIC_BASE_URL'),
     },
     critical: {
       provider: 'anthropic',
-      model: 'claude-opus-4-8',
+      model: 'claude-opus-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       baseUrl: env('ANTHROPIC_BASE_URL'),
     },
@@ -246,12 +246,12 @@ function getTextRouteDefault(profile: TextProfile): ModelRoute {
   const legacyOverrides: Partial<Record<LegacyTextProfile, Partial<ModelRoute>>> = {
     balanced: {
       provider: 'anthropic',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
     },
     frontier: {
       provider: 'anthropic',
-      model: 'claude-opus-4-8',
+      model: 'claude-opus-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
     },
     operations: {

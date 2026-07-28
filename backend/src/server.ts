@@ -620,7 +620,7 @@ async function testProviderConnection(input: {
     const response = await client.messages.create({
       model: input.provider === 'minimax'
         ? process.env.MODEL_OPS_MODEL?.trim() || 'minimax/minimax-m2.7'
-        : process.env.MODEL_DEFAULT_MODEL?.trim() || 'claude-sonnet-4-6',
+        : process.env.MODEL_DEFAULT_MODEL?.trim() || 'claude-sonnet-5',
       max_tokens: 8,
       system: 'Return only the word OK.',
       messages: [{ role: 'user', content: 'ping' }],
@@ -629,7 +629,7 @@ async function testProviderConnection(input: {
       ok: true,
       provider: input.provider,
       mode: 'verified' as const,
-      detail: `Verified with model ${response.model || (input.provider === 'minimax' ? 'minimax/minimax-m2.7' : 'claude-sonnet-4-6')}.`,
+      detail: `Verified with model ${response.model || (input.provider === 'minimax' ? 'minimax/minimax-m2.7' : 'claude-sonnet-5')}.`,
     };
   }
 
