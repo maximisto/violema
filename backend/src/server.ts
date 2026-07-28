@@ -3717,7 +3717,7 @@ async function executeAutomationCore(
           `Summary step "${step.title}"`,
           generateTextDetailed(
           step.modelTier || plan.suggestedModelTier,
-          `You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output of at most ${AUTOMATION_SUMMARY_WORD_LIMIT} words. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If there is operational or metrics data, include a compact section for it. End with a short "Next actions" section. Be concrete, skim-friendly, and avoid filler.`,
+          `You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output of at most ${AUTOMATION_SUMMARY_WORD_LIMIT} words. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If the evidence compares competitors, products, or several entities, include a compact markdown table (for example | Competitor | Move | Why it matters |) built only from the evidence — never invent rows. If there is operational or metrics data, include a compact section for it. End with a short "Next actions" section. Be concrete, skim-friendly, and avoid filler.`,
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           AUTOMATION_SUMMARY_MAX_TOKENS,
           workspaceId,
