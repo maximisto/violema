@@ -31,7 +31,10 @@ interface SlackConversationListResponse {
 }
 
 const DEFAULT_SLACK_CHANNEL_ALIASES: Record<string, string> = {
-  '#founders': '#all-purple-orange',
+  // Raise-period reroute: every founder-report send lands in the demo channel
+  // until the pre-seed closes. Revert both entries to '#all-purple-orange' after.
+  '#founders': '#violema-demo',
+  '#all-purple-orange': '#violema-demo',
 };
 
 function getRequiredEnv(name: string): string {

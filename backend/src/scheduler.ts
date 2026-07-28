@@ -69,7 +69,10 @@ function shouldScheduleAutomationTasks() {
 }
 
 const LEGACY_DELIVERY_TARGETS: Record<string, string> = {
-  '#founders': '#all-purple-orange',
+  // Raise-period reroute: stored automations pointing at the old founder
+  // channels are rewritten on read so demos land in #violema-demo.
+  '#founders': '#violema-demo',
+  '#all-purple-orange': '#violema-demo',
 };
 type AutomationSeed = Omit<
   AutomationRecord,
@@ -100,7 +103,7 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
       'Review recently changed Google Drive operating documents',
       'Scan market and competitor changes since the last update',
       'Draft the weekly founder update with key decisions, risks, and next actions',
-      'Deliver latest result to #all-purple-orange after approval',
+      'Deliver latest result to #violema-demo after approval',
     ],
     steps: [
       {
@@ -170,7 +173,7 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
         title: 'Deliver to Slack',
         objective: 'Send the reviewed weekly founder update to the founder channel after approval.',
         inputs: { approval_required: true },
-        deliveryTarget: { channel: 'slack', target: '#all-purple-orange' },
+        deliveryTarget: { channel: 'slack', target: '#violema-demo' },
       },
     ],
     execution_policy: {
@@ -179,7 +182,7 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
       reviewPolicy: 'standard',
       maxElasticLanes: 2,
     },
-    notify: '#all-purple-orange',
+    notify: '#violema-demo',
     status: 'active',
   },
 ];
@@ -298,8 +301,8 @@ function normalizeDeliveryTargetText(value: string | undefined): string | undefi
 
 function normalizeAutomationText(value: string) {
   return value
-    .replace(/#founders\b/gi, '#all-purple-orange')
-    .replace(/#all-purple-orange\s+channel/gi, '#all-purple-orange channel');
+    .replace(/#founders\b/gi, '#violema-demo')
+    .replace(/#all-purple-orange\b/gi, '#violema-demo');
 }
 
 function normalizeAutomationRecord(record: AutomationRecord): AutomationRecord {

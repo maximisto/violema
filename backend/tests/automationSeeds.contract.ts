@@ -28,7 +28,7 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
     assert.equal(weekly.cron_expression, '0 9 * * 1');
     assert.equal(weekly.timezone, 'America/Chicago');
     assert.equal(weekly.execution_policy?.reviewPolicy, 'standard');
-    assert.equal(weekly.notify, '#all-purple-orange');
+    assert.equal(weekly.notify, '#violema-demo');
     assert.equal(weekly.version, 3);
     assert.deepEqual(
       weekly.steps
@@ -42,7 +42,7 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
       weekly.steps?.some(
         (step) =>
           step.deliveryTarget?.channel === 'slack' &&
-          step.deliveryTarget.target === '#all-purple-orange' &&
+          step.deliveryTarget.target === '#violema-demo' &&
           step.inputs?.approval_required === true,
       ),
       'Expected approval-gated Slack delivery step.',

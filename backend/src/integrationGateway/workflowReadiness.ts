@@ -55,8 +55,10 @@ interface WorkflowRequirements {
   defaultDeliveryTarget?: string;
 }
 
-const REVENUE_WATCH_DEFAULT_DELIVERY_TARGET = '#all-purple-orange';
-const WEEKLY_FOUNDER_UPDATE_DEFAULT_DELIVERY_TARGET = '#all-purple-orange';
+// Raise-period reroute: founder-report defaults land in the demo channel
+// until the pre-seed closes. Revert to '#all-purple-orange' after.
+const REVENUE_WATCH_DEFAULT_DELIVERY_TARGET = '#violema-demo';
+const WEEKLY_FOUNDER_UPDATE_DEFAULT_DELIVERY_TARGET = '#violema-demo';
 
 const INTEGRATION_LABELS: Record<string, string> = {
   stripe: 'Stripe',
