@@ -39,6 +39,14 @@ assert(
   /<BrowserRouter>\s*<PageBrandBleed \/>\s*<Suspense/.test(app),
   'global branding renders once outside the route switch',
 );
+assert(component.includes('useLocation'), 'global mark is route-aware');
+for (const productPrefix of ["'/dashboard'", "'/dashboard-preview'", "'/admin'", "'/settings'", "'/connect'", "'/plans'"]) {
+  assert(
+    component.includes(productPrefix),
+    `product surface ${productPrefix} excluded from the branding mark`,
+  );
+}
+assert(component.includes('return null'), 'product surfaces render no branding mark');
 assert(!hero.includes('po-half-logo'), 'hero no longer owns the branding mark');
 assert(appCss.includes('.page-brand-bleed'), 'SPA stylesheet defines the branding treatment');
 assert(appCss.includes('position: fixed'), 'SPA branding stays in place while scrolling');
