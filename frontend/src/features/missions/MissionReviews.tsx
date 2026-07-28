@@ -1,3 +1,4 @@
+import MarkdownContent from '../../components/MarkdownContent';
 import type { MissionWorkspaceView } from './types';
 
 interface MissionReviewsProps {
@@ -107,7 +108,7 @@ export function MissionReviews({
               </span>
             </div>
             <div className="max-h-[340px] overflow-auto px-3 py-3">
-              <pre className="whitespace-pre-wrap break-words font-sans text-[12px] leading-5 text-slate-200">{reviewBody}</pre>
+              <MarkdownContent text={reviewBody} className="break-words text-[12px] leading-5 text-slate-200 [&_p]:mb-2 [&_p]:text-[12px] [&_li]:text-[12px] [&_td]:text-[12px] [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-[13px]" />
             </div>
             <div className="flex flex-col gap-2 border-t border-white/10 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-[10px] leading-4 text-slate-500">
