@@ -1,3 +1,6 @@
+import { buildSlackMessagePayload } from './slackBlocks';
+import { collectLinkImageBlocks } from './linkPreviews';
+
 interface SendMessageInput {
   to: string;
   subject?: string;
@@ -296,7 +299,15 @@ export async function validateMessageTarget(input: { to: string; channel?: strin
 
 async function sendSlackMessage(input: SendMessageInput) {
   const token = getRequiredEnv('SLACK_BOT_TOKEN');
-  const text = input.subject ? `${input.subject}\n\n${input.body}` : input.body;
+  const payload = buildSlackMessagePayload({ subject: input.subject, body: input.body });
+  if (payload.blocks && input.subject) {
+    // Evidence articles usually publish preview images; surface up to three so
+    // the brief lands with real graphics. Fail-soft — misses never block the send.
+    const imageBlocks = await collectLinkImageBlocks(input.body);
+    if (imageBlocks.length > 0) {
+      payload.blocks.splice(payload.blocks.length - 1, 0, ...imageBlocks);
+    }
+  }
   const validated = await validateMessageTarget({ to: input.to, channel: 'slack' });
 
   const response = await fetch('https://slack.com/api/chat.postMessage', {
@@ -307,8 +318,11 @@ async function sendSlackMessage(input: SendMessageInput) {
     },
     body: JSON.stringify({
       channel: validated.normalizedTarget,
-      text,
+      text: payload.text,
       mrkdwn: true,
+      ...(payload.blocks
+        ? { blocks: payload.blocks, unfurl_links: false, unfurl_media: false }
+        : {}),
       ...(input.threadTs ? { thread_ts: input.threadTs } : {}),
     }),
   });
