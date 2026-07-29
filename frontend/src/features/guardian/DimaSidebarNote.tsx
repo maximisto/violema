@@ -14,7 +14,7 @@ export function DimaSidebarNote() {
           src="/brand/violema-trust-cane-corso.png"
           alt=""
           aria-hidden="true"
-          className="dima-sidebar-mark pointer-events-none absolute left-1/2 top-1/2 h-16 w-[13.25rem] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain object-center opacity-44"
+          className="dima-sidebar-mark pointer-events-none absolute left-1/2 top-1/2 h-16 w-[13.25rem] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain object-center"
           draggable={false}
         />
       </div>

@@ -1564,12 +1564,51 @@
 }
 
 .dima-sidebar-mark {
+  /* Brand-violet line work: flatten the art to a single ink, then colorize.
+     Light violet on dark surfaces; the light theme deepens it below. */
+  opacity: 0.62;
   filter:
-    grayscale(1)
-    saturate(0.12)
-    contrast(1.12)
-    brightness(1.08)
-    drop-shadow(0 0 18px rgba(148, 163, 184, 0.12));
+    brightness(0)
+    saturate(100%)
+    invert(70%)
+    sepia(35%)
+    saturate(5900%)
+    hue-rotate(230deg)
+    brightness(102%)
+    contrast(101%)
+    drop-shadow(0 0 18px rgba(139, 92, 246, 0.22));
+}
+
+.theme-light .dima-sidebar-mark {
+  opacity: 0.88;
+  filter:
+    brightness(0)
+    saturate(100%)
+    invert(20%)
+    sepia(90%)
+    saturate(5500%)
+    hue-rotate(268deg)
+    brightness(90%)
+    contrast(100%)
+    drop-shadow(0 0 14px rgba(124, 58, 237, 0.18));
+}
+
+/* Inspector panel depth gradient ends on black in dark; on bone that endpoint
+   must warm up or it reads as a smudge toward the panel bottom. */
+.theme-light .to-black\/80 {
+  --tw-gradient-to: rgba(244, 236, 223, 0.9) var(--tw-gradient-to-position);
+}
+
+/* Mission surfaces (command hero, detail card, map, calendar, credit drawer)
+   paint arbitrary-value gradients whose base stops are baked navy-900/950
+   rgba values, so the token flip never reaches them. Any bg-arbitrary class
+   carrying those dark stops gets the light panel treatment instead; the
+   violet accent radial is preserved on top of a white-to-bone base. */
+.theme-light [class*="bg-["][class*="rgba(15,23,42"],
+.theme-light [class*="bg-["][class*="rgba(2,6,23,0.42)"] {
+  background-image:
+    radial-gradient(circle at 12% 0%, rgba(139, 92, 246, 0.10), transparent 36%),
+    linear-gradient(135deg, #ffffff, #fdfaf5 58%, #f3ecdf);
 }
 
 @keyframes dima-patrol {
@@ -1855,6 +1894,12 @@
 .theme-light [class*="text-violet-200/"],
 .theme-light [class*="text-violet-300/"] { color: rgba(109, 40, 217, 0.85); }
 .theme-light [class*="text-cyan-300/"] { color: rgba(14, 116, 144, 0.85); }
+.theme-light [class*="text-amber-200/"],
+.theme-light [class*="text-amber-300/"] { color: rgba(180, 83, 9, 0.9); }
+.theme-light [class*="text-green-200/"],
+.theme-light [class*="text-green-300/"] { color: rgba(21, 128, 61, 0.9); }
+.theme-light [class*="text-red-200/"],
+.theme-light [class*="text-red-300/"] { color: rgba(185, 28, 28, 0.9); }
 
 /* Home-area hero backdrop is a hardcoded dark gradient. */
 .theme-light .home-hero-bg {

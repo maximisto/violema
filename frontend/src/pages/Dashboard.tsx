@@ -924,7 +924,7 @@ const MODE_BUTTONS = [
     label: 'Auto',
     fullLabel: 'Autonomous',
     icon: Zap,
-    activeClass: 'bg-green-900/50 text-green-300 border-green-800/50',
+    activeClass: 'border-green-400/45 bg-green-400/12 text-green-300',
     statusColor: 'text-green-500',
     statusIcon: '⚡',
     tooltip: 'Acts immediately without confirmation',
@@ -934,7 +934,7 @@ const MODE_BUTTONS = [
     label: 'Cautious',
     fullLabel: 'Cautious',
     icon: Shield,
-    activeClass: 'bg-yellow-900/50 text-yellow-300 border-yellow-800/50',
+    activeClass: 'border-amber-400/50 bg-amber-400/12 text-amber-300',
     statusColor: 'text-yellow-500',
     statusIcon: '🛡',
     tooltip: 'Explains intent before each major action',
@@ -944,7 +944,7 @@ const MODE_BUTTONS = [
     label: '',
     fullLabel: 'Supervised',
     icon: Eye,
-    activeClass: 'bg-red-950/60 text-red-300 border-red-800/60',
+    activeClass: 'border-red-400/45 bg-red-400/12 text-red-300',
     statusColor: 'text-red-400',
     statusIcon: '👁',
     tooltip: 'Full reasoning visible at every step',
@@ -3506,15 +3506,15 @@ export default function Dashboard() {
           title={tooltip}
           aria-label={tooltip}
           aria-pressed={autonomyMode === mode}
-          className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all duration-150 ${
+          className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-xl border transition-all duration-150 ${
             compact ? 'flex-1 justify-center' : ''
           } ${
             autonomyMode === mode
-              ? `${activeClass} border shadow-[0_8px_18px_rgba(2,6,23,0.18)]`
-              : 'border-navy-800/60 bg-navy-950/25 text-slate-400 hover:border-navy-700 hover:bg-navy-800/80 hover:text-slate-100'
+              ? `${activeClass} shadow-[0_8px_18px_rgba(2,6,23,0.14),inset_0_1px_0_rgba(255,255,255,0.06)]`
+              : 'border-transparent bg-transparent text-slate-400 hover:bg-navy-800/70 hover:text-slate-100'
           }`}
         >
-          <Icon className={mode === 'supervised' ? 'w-5 h-5 text-red-400' : 'w-3 h-3'} />
+          <Icon className="h-3.5 w-3.5" />
           {label && <span>{label}</span>}
         </button>
       ))}
