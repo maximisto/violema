@@ -178,8 +178,7 @@ export default function Footer() {
 
         <div className="flex flex-col gap-4 border-t border-white/10 py-6 text-sm text-[#828ea4] sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2.5">
-            <img src="/po-logo.png" alt="Purple Orange LLC" className="po-logo h-5 w-5 object-contain" />
-            <span>© {new Date().getFullYear()} Purple Orange LLC. All rights reserved.</span>
+            <span>© {new Date().getFullYear()} Violema, Inc. All rights reserved.</span>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-telemetry text-[0.5rem]">
             <span>TLS in transit</span>
