@@ -132,6 +132,7 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center gap-2 xl:hidden">
+            <ThemeToggle className="h-14 w-14 rounded-2xl" />
             <button
               type="button"
               className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-[#f4f1ec] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition duration-200 hover:border-violet-200/40"

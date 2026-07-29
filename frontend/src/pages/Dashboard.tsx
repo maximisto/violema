@@ -4442,13 +4442,13 @@ export default function Dashboard() {
           } min-h-0 overflow-hidden border-r border-navy-800 bg-navy-900 flex flex-col sidebar-enter`}
         >
           {/* Logo */}
-          <div className="flex items-center gap-2.5 px-4 py-4 border-b border-navy-800">
+          <div className="flex items-center gap-2 px-3 py-4 border-b border-navy-800">
             <button
               onClick={() => navigate('/')}
               className="flex min-w-0 items-center group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-xl pr-1"
               aria-label="Go to Violema home"
             >
-              <ViolemaLogo className="h-10 w-[11.25rem]" />
+              <ViolemaLogo className="h-12 w-[12.25rem]" />
             </button>
             <span className="ml-auto text-[10px] bg-violet-900/50 text-violet-300 border border-violet-800/50 rounded-full px-2 py-0.5 font-medium flex-shrink-0 shadow-sm">
               Beta
