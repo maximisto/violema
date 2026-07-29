@@ -69,7 +69,12 @@ async function fetchOgImage(
   try {
     const response = await fetchImpl(link.url, {
       signal: controller.signal,
-      headers: { Accept: 'text/html', 'User-Agent': 'ViolemaBriefBot/1.0 (+https://violema.com)' },
+      headers: {
+        Accept: 'text/html',
+        // Browser-like UA: many publishers 403 unknown bots, which starves the
+        // brief of images. The product name stays present for transparency.
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 ViolemaBriefBot/1.0',
+      },
     });
     if (!response.ok) return null;
     const contentType = response.headers.get('content-type') || '';
@@ -86,13 +91,27 @@ async function fetchOgImage(
 
 export async function collectLinkImageBlocks(
   markdown: string,
-  options?: { limit?: number; timeoutMs?: number; fetchImpl?: typeof fetch },
+  options?: { limit?: number; timeoutMs?: number; fetchImpl?: typeof fetch; candidates?: BriefLink[] },
 ): Promise<SlackBlock[]> {
   const limit = options?.limit ?? 3;
   const timeoutMs = options?.timeoutMs ?? 3500;
   const fetchImpl = options?.fetchImpl ?? fetch;
 
-  const links = extractBriefLinks(markdown, limit);
+  // Explicit evidence links (from the run's own search results) come first so
+  // images never depend on the model formatting markdown links in the memo.
+  const links: BriefLink[] = [];
+  const seenHosts = new Set<string>();
+  for (const candidate of [...(options?.candidates ?? []), ...extractBriefLinks(markdown, limit)]) {
+    if (links.length >= limit) break;
+    try {
+      const parsed = new URL(candidate.url);
+      if (parsed.protocol !== 'https:' || !isFetchableHost(parsed.hostname) || seenHosts.has(parsed.hostname)) continue;
+      seenHosts.add(parsed.hostname);
+      links.push({ url: candidate.url, label: candidate.label?.trim() || parsed.hostname });
+    } catch {
+      continue;
+    }
+  }
   if (links.length === 0) return [];
 
   const results = await Promise.all(links.map((link) => fetchOgImage(link, timeoutMs, fetchImpl)));

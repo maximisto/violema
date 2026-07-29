@@ -63,6 +63,22 @@ test('collectLinkImageBlocks returns divider plus image blocks from fetched page
   ]);
 });
 
+test('explicit evidence candidates produce images even when the memo has no links', async () => {
+  const blocks = await collectLinkImageBlocks('Brief with **bold** but zero links.', {
+    candidates: [
+      { url: 'https://news.acme-example.com/pricing', label: 'Acme pricing move' },
+      { url: 'http://insecure-example.com/a', label: 'rejected http' },
+      { url: 'https://news.acme-example.com/dupe', label: 'same host duplicate' },
+    ],
+    fetchImpl: async () => stubResponse('<meta property="og:image" content="https://cdn.acme-example.com/hero.png">'),
+  });
+
+  assert.deepEqual(blocks, [
+    { type: 'divider' },
+    { type: 'image', image_url: 'https://cdn.acme-example.com/hero.png', alt_text: 'Acme pricing move' },
+  ]);
+});
+
 test('collectLinkImageBlocks returns nothing when fetches fail or pages lack images', async () => {
   const failing = await collectLinkImageBlocks(BRIEF, {
     fetchImpl: async () => {

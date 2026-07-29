@@ -2420,6 +2420,29 @@ function inferAutomationScreenshotInput(action: string) {
   };
 }
 
+// Harvests https article links from the run's own web_search artifacts so
+// Slack deliveries can attach preview images without depending on the model
+// citing sources in the memo body. Titles and URLs only — never bodies.
+function collectAutomationSourceLinks(
+  artifacts: Array<{ kind?: string; payload?: unknown }>,
+): Array<{ url: string; label: string }> {
+  const links: Array<{ url: string; label: string }> = [];
+  for (const artifact of artifacts) {
+    if (artifact.kind !== 'web_search' || !isObjectRecord(artifact.payload)) continue;
+    const results = Array.isArray((artifact.payload as { results?: unknown[] }).results)
+      ? ((artifact.payload as { results: unknown[] }).results)
+      : [];
+    for (const result of results) {
+      if (!isObjectRecord(result)) continue;
+      const url = typeof result.url === 'string' ? result.url : '';
+      if (!url.startsWith('https://')) continue;
+      links.push({ url, label: typeof result.title === 'string' && result.title ? result.title : url });
+      if (links.length >= 6) return links;
+    }
+  }
+  return links;
+}
+
 function buildDeliveryTargetFromNotify(notify?: string | null) {
   const target = notify?.trim();
   if (!target) return null;
@@ -3717,7 +3740,7 @@ async function executeAutomationCore(
           `Summary step "${step.title}"`,
           generateTextDetailed(
           step.modelTier || plan.suggestedModelTier,
-          `You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output of at most ${AUTOMATION_SUMMARY_WORD_LIMIT} words. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If the evidence compares competitors, products, or several entities, include a compact markdown table (for example | Competitor | Move | Why it matters |) built only from the evidence — never invent rows. If there is operational or metrics data, include a compact section for it. End with a short "Next actions" section. Be concrete, skim-friendly, and avoid filler.`,
+          `You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output of at most ${AUTOMATION_SUMMARY_WORD_LIMIT} words. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If the evidence compares competitors, products, or several entities, include a compact markdown table (for example | Competitor | Move | Why it matters |) built only from the evidence — never invent rows. Cite sources inline as markdown links — when a bullet or row draws on a specific article from the evidence, link a short label like [TechCrunch](https://example.com/article); include two to four such links total and only use URLs that appear in the evidence. If there is operational or metrics data, include a compact section for it. End with a short "Next actions" section. Be concrete, skim-friendly, and avoid filler.`,
           [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           AUTOMATION_SUMMARY_MAX_TOKENS,
           workspaceId,
@@ -3753,6 +3776,7 @@ async function executeAutomationCore(
           step,
           notify: automation.notify,
         });
+        const sourceLinks = collectAutomationSourceLinks(artifacts);
         if (!deliveryTarget) {
           stepExecution.status = 'skipped';
           stepExecution.summary = 'Skipped delivery because no target was configured.';
@@ -3804,6 +3828,7 @@ async function executeAutomationCore(
               deliveryTarget: deliveryTarget.target,
               approvalRequired: true,
               visualArtifacts,
+              sourceLinks,
             },
           });
           stepExecution.status = 'succeeded';
@@ -3832,6 +3857,7 @@ async function executeAutomationCore(
           subject: `Automation run: ${automation.name}`,
           body,
           channel: deliveryTarget.channel,
+          evidenceLinks: sourceLinks,
         }));
         artifacts.push({
           kind: 'delivery',
@@ -5869,7 +5895,7 @@ app.post('/api/automations/:id/reviews/:runId/approve', async (req: Request, res
             to,
             subject,
           })
-        : ({ to, body, subject, channel }) => sendMessage({ to, body, subject, channel }),
+        : ({ to, body, subject, channel, evidenceLinks }) => sendMessage({ to, body, subject, channel, evidenceLinks }),
     });
     const workflowId = inferWorkflowIdFromAutomation(context.automation);
     const approvalLedgerEvent = {
@@ -6264,7 +6290,7 @@ export function startServer() {
   ensureCoreAutomationSeeds(runAutomation);
 
   return app.listen(PORT, () => {
-    console.log(`Violema by Purple Orange AI — backend running on http://localhost:${PORT}`);
+    console.log(`Violema, Inc. — backend running on http://localhost:${PORT}`);
   });
 }
 

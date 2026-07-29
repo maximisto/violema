@@ -7,6 +7,7 @@ interface SendMessageInput {
   body: string;
   channel?: string;
   threadTs?: string;
+  evidenceLinks?: Array<{ url: string; label: string }>;
 }
 
 type MessageChannel = 'slack' | 'email' | 'teams';
@@ -303,7 +304,7 @@ async function sendSlackMessage(input: SendMessageInput) {
   if (payload.blocks && input.subject) {
     // Evidence articles usually publish preview images; surface up to three so
     // the brief lands with real graphics. Fail-soft — misses never block the send.
-    const imageBlocks = await collectLinkImageBlocks(input.body);
+    const imageBlocks = await collectLinkImageBlocks(input.body, { candidates: input.evidenceLinks });
     if (imageBlocks.length > 0) {
       payload.blocks.splice(payload.blocks.length - 1, 0, ...imageBlocks);
     }
