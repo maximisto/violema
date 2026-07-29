@@ -86,7 +86,7 @@ import {
   type MissionSelectableTask,
 } from '../features/missions/missionSelectionState';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
-import { resolveWorkspaceContext } from '../lib/workspace';
+import { isFounderWorkspace, resolveWorkspaceContext } from '../lib/workspace';
 import { fetchBackendAuthSession, isAdminSession, type AuthSession } from '../lib/auth';
 import ViolemaLogo from '../components/ViolemaLogo';
 import type { Conversation, Message, AutonomyMode } from '../types';
@@ -1873,6 +1873,14 @@ export default function Dashboard() {
   const location = useLocation();
   const navigate = useNavigate();
   const workspace = useMemo(() => resolveWorkspaceContext(), []);
+  // The founder workspace keeps live demo delivery defaults; every other
+  // workspace starts with an empty destination and neutral hints, because
+  // #violema-demo and max@violema.com are undeliverable or wrong for them.
+  const demoWorkspaceDefaults = isFounderWorkspace(workspace.workspaceId);
+  const slackTargetHint = demoWorkspaceDefaults ? '#violema-demo or C0APS37V8V8' : '#your-channel or C0123456789';
+  const emailTargetHint = demoWorkspaceDefaults ? 'max@violema.com' : 'you@company.com';
+  const slackTargetExample = demoWorkspaceDefaults ? '#violema-demo' : '#founder-ops';
+  const slackChannelIdExample = demoWorkspaceDefaults ? 'C0APS37V8V8' : 'C0123456789';
   const [isMobileSidebar, setIsMobileSidebar] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth < 1024 : false
   );
@@ -2639,8 +2647,10 @@ export default function Dashboard() {
           ...step,
           id: `${template.id}-step-${index + 1}`,
           deliveryTarget: step.kind === 'deliver'
-            ? step.deliveryTarget || (template.notify
-              ? { channel: template.destination === 'email' ? 'email' : 'slack', target: template.notify }
+            ? (demoWorkspaceDefaults
+              ? step.deliveryTarget || (template.notify
+                ? { channel: template.destination === 'email' ? 'email' : 'slack', target: template.notify }
+                : null)
               : null)
             : step.deliveryTarget || null,
         })
@@ -2653,7 +2663,7 @@ export default function Dashboard() {
         schedule: template.cadence,
         timezone,
         description: template.description,
-        notify: template.notify,
+        notify: demoWorkspaceDefaults ? template.notify : '',
         condition: current?.condition || '',
         authoringMode: 'guided',
         workflowPrompt: buildWorkflowPromptFromBlocks(steps),
@@ -2662,7 +2672,7 @@ export default function Dashboard() {
         destinationType: template.destination,
       };
     });
-  }, []);
+  }, [demoWorkspaceDefaults]);
 
   const closeAutomationEditor = useCallback(() => {
     setAutomationEditor(null);
@@ -3513,7 +3523,7 @@ export default function Dashboard() {
   const openUpgrade = () => {
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
-      window.location.assign('mailto:sales@purpleorange.io?subject=Violema%20Enterprise');
+      window.location.assign('mailto:max@violema.com?subject=Violema%20Enterprise');
       return;
     }
     navigate(`/plans?plan=${nextPlanId}`);
@@ -5931,8 +5941,8 @@ export default function Dashboard() {
                     <p className="ui-section-label px-1">Result destination</p>
                     <div className="mt-2 flex flex-wrap gap-2 px-1">
                       {[
-                        { label: 'Slack', value: 'slack', placeholder: '#violema-demo or C0APS37V8V8' },
-                        { label: 'Email', value: 'email', placeholder: 'max@violema.com' },
+                        { label: 'Slack', value: 'slack', placeholder: slackTargetHint },
+                        { label: 'Email', value: 'email', placeholder: emailTargetHint },
                         { label: 'None', value: 'none', placeholder: '' },
                       ].map((option) => (
                         <button
@@ -5958,13 +5968,13 @@ export default function Dashboard() {
                         onChange={(event) => updateAutomationDestination(automationEditor.destinationType, event.target.value)}
 	                        aria-label="Result destination"
 	                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none disabled:text-slate-600"
-	                        placeholder={automationEditor.destinationType === 'email' ? 'max@violema.com' : 'Slack channel name or ID'}
+	                        placeholder={automationEditor.destinationType === 'email' ? emailTargetHint : 'Slack channel name or ID'}
 	                        disabled={automationEditor.destinationType === 'none'}
 	                      />
 	                    </div>
 	                    {automationEditor.destinationType === 'slack' && automationEditor.notify && !isLikelySlackTarget(automationEditor.notify) ? (
 	                      <p className="mt-2 px-1 text-xs leading-5 text-amber-300">
-	                        Use a Slack channel name like <span className="font-mono">#violema-demo</span> or an ID like <span className="font-mono">C0APS37V8V8</span>.
+	                        Use a Slack channel name like <span className="font-mono">{slackTargetExample}</span> or an ID like <span className="font-mono">{slackChannelIdExample}</span>.
 	                      </p>
 	                    ) : (
 	                      <p className="mt-2 px-1 text-xs leading-5 text-slate-400">
@@ -6218,7 +6228,9 @@ export default function Dashboard() {
                                         onClick={() => updateAutomationStepDeliveryTarget(
                                           index,
                                           option.value as AutomationEditorDraft['destinationType'],
-                                          option.value === 'none' ? '' : deliveryValue || (option.value === 'email' ? 'max@violema.com' : '#violema-demo'),
+                                          option.value === 'none'
+                                            ? ''
+                                            : deliveryValue || (demoWorkspaceDefaults ? (option.value === 'email' ? 'max@violema.com' : '#violema-demo') : ''),
                                         )}
                                         className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                                           deliveryType === option.value
@@ -6240,13 +6252,13 @@ export default function Dashboard() {
                                       event.target.value,
                                     )}
                                     className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none disabled:text-slate-600"
-                                    placeholder={deliveryType === 'email' ? 'max@violema.com' : '#violema-demo or C0APS37V8V8'}
+                                    placeholder={deliveryType === 'email' ? emailTargetHint : slackTargetHint}
                                     disabled={deliveryType === 'none'}
                                   />
                                 </div>
                                 {deliveryType === 'slack' && deliveryValue && !isLikelySlackTarget(deliveryValue) ? (
                                   <p className="mt-2 px-1 text-xs leading-5 text-amber-300">
-                                    Use a Slack channel like <span className="font-mono">#violema-demo</span> or a channel ID.
+                                    Use a Slack channel like <span className="font-mono">{slackTargetExample}</span> or a channel ID.
                                   </p>
                                 ) : (
                                   <p className="mt-2 px-1 text-xs leading-5 text-slate-400">

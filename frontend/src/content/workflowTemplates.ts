@@ -83,7 +83,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
     description: 'Roll up revenue, delivery, customers, calendar, email, and market signals into a reviewed founder update.',
     steps: [
       { kind: 'query', title: 'Check Stripe revenue', objective: 'Pull MRR movement, failed payments, churn, expansion, and customer revenue signals from Stripe.', inputs: { source: 'stripe', query_type: 'revenue_summary' } },
-      { kind: 'query', title: 'Scan GitHub delivery', objective: 'Pull merged pull requests, blocked issues, stale reviews, and release risk from GitHub.', inputs: { source: 'github', query_type: 'delivery_risk', filters: { owner: 'maximisto', repo: 'violema' }, limit: 10 } },
+      { kind: 'query', title: 'Scan GitHub delivery', objective: 'Pull merged pull requests, blocked issues, stale reviews, and release risk from GitHub.', inputs: { source: 'github', query_type: 'delivery_risk', limit: 10 } },
       { kind: 'query', title: 'Review Linear delivery', objective: 'Pull recently updated work, active delivery status, and blockers from Linear.', inputs: { source: 'linear', query_type: 'delivery_status', limit: 10 } },
       { kind: 'query', title: 'Review email commitments', objective: 'Find founder-critical follow-ups and unanswered priority threads from Gmail metadata.', inputs: { source: 'email', query_type: 'commitments', limit: 10 } },
       { kind: 'query', title: 'Review calendar commitments', objective: 'Review meetings and relationship commitments for the next seven days.', inputs: { source: 'calendar', query_type: 'weekly_commitments', limit: 10 } },

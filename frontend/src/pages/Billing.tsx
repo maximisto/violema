@@ -13,7 +13,6 @@ import { BillingCheckoutError, TOP_UP_OPTIONS, createBillingCheckout, formatCred
 import { clearAuthSession, fetchBackendAuthSession } from '../lib/auth';
 import { checkoutErrorDecision, decidePricingAccess, type PricingAccessDecision } from '../lib/pricingAccess';
 import PublicHeader from '../components/PublicHeader';
-import { persistWorkspaceContext } from '../lib/workspace';
 import { useTheme } from '../lib/useTheme';
 import {
   SAMPLE_RUNS,
@@ -92,7 +91,6 @@ export default function Billing() {
         : { href: currentReturnPath, label: 'Checking access…' };
 
   useEffect(() => {
-    persistWorkspaceContext();
     let active = true;
     void fetchBackendAuthSession()
       .then((next) => {
@@ -655,7 +653,7 @@ export default function Billing() {
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                     <a
-                      href="mailto:sales@purpleorange.io?subject=Violema%20Enterprise"
+                      href="mailto:max@violema.com?subject=Violema%20Enterprise"
                       className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-5 py-2.5 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/16"
                     >
                       Contact sales
