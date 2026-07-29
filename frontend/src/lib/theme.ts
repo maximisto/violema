@@ -13,7 +13,7 @@ export const THEME_STORAGE_KEY = 'violema_theme';
 // Master switch for the light theme. While false the toggle is hidden and every
 // surface renders dark (even for visitors who previously stored a light
 // preference) — the light theme code stays in place, ready to re-enable.
-export const LIGHT_THEME_ENABLED = false;
+export const LIGHT_THEME_ENABLED = true;
 
 export function normalizeThemeValue(value: unknown): ThemeMode {
   return value === 'light' ? 'light' : 'dark';
