@@ -9,7 +9,7 @@ const SECTIONS = [
   {
     id: 'overview',
     title: '1. Overview',
-    content: `Purple Orange AI, Inc. ("Purple Orange AI", "we", "our", or "us") operates VIOLEMA, an AI operator platform accessible at violema.com and related subdomains (the "Service"). This Privacy Policy explains how we collect, use, store, and share information when you use the Service.
+    content: `Violema, Inc., a Delaware corporation ("Violema", "we", "our", or "us") operates VIOLEMA, an AI operator platform accessible at violema.com and related subdomains (the "Service"). This Privacy Policy explains how we collect, use, store, and share information when you use the Service.
 
 By using VIOLEMA, you agree to the practices described in this policy. If you do not agree, please discontinue use of the Service.
 
@@ -58,7 +58,7 @@ We do **not** use your conversation content or data to train AI models. Your dat
 
 **Legal obligations.** We may disclose information if required by law, court order, or governmental authority, or if we believe disclosure is necessary to protect our rights, your safety, or the safety of others.
 
-**Business transfers.** If Purple Orange AI is acquired or merges with another company, your data may be transferred as part of that transaction. We will notify you before your data becomes subject to a different privacy policy.`,
+**Business transfers.** If Violema is acquired or merges with another company, your data may be transferred as part of that transaction. We will notify you before your data becomes subject to a different privacy policy.`,
   },
   {
     id: 'ai',
@@ -146,7 +146,7 @@ The "last updated" date at the top of this page reflects the most recent revisio
     content: `For privacy-related questions, requests, or concerns:
 
 **Email:** privacy@purpleorange.io
-**Post:** Purple Orange AI, Inc., Attn: Privacy Team, [Address]
+**Post:** Violema, Inc., Attn: Privacy Team, [Address]
 
 For EU/EEA-specific queries, our EU representative can be reached at eu-privacy@purpleorange.io.
 

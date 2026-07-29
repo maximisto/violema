@@ -8,7 +8,7 @@ const SECTIONS = [
   {
     id: 'acceptance',
     title: '1. Acceptance of Terms',
-    content: `By accessing or using VIOLEMA (the "Service") provided by Purple Orange AI, Inc. ("Purple Orange AI", "we", "us", "our"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Service.
+    content: `By accessing or using VIOLEMA (the "Service") provided by Violema, Inc., a Delaware corporation ("Violema", "we", "us", "our"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Service.
 
 These Terms apply to all visitors, users, and others who access or use the Service. By using VIOLEMA on behalf of an organisation, you represent that you have authority to bind that organisation to these Terms.
 
@@ -66,9 +66,9 @@ We reserve the right to investigate violations and cooperate with law enforcemen
   {
     id: 'ip',
     title: '6. Intellectual Property',
-    content: `**Our IP.** The Service, including all software, design, branding, documentation, and AI models (excluding Anthropic's models), is owned by Purple Orange AI and protected by copyright, trademark, and other intellectual property laws. You may not copy, modify, or distribute our proprietary materials without written permission.
+    content: `**Our IP.** The Service, including all software, design, branding, documentation, and AI models (excluding Anthropic's models), is owned by Violema and protected by copyright, trademark, and other intellectual property laws. You may not copy, modify, or distribute our proprietary materials without written permission.
 
-**Your content.** You retain ownership of content you create and input into the Service. By using VIOLEMA, you grant Purple Orange AI a limited, non-exclusive licence to process your content solely to provide the Service.
+**Your content.** You retain ownership of content you create and input into the Service. By using VIOLEMA, you grant Violema a limited, non-exclusive licence to process your content solely to provide the Service.
 
 **AI outputs.** The intellectual property status of AI-generated content is an evolving area of law. To the extent permitted by law, you own AI-generated outputs that result from your prompts, subject to any third-party IP embedded in those outputs.
 
@@ -79,19 +79,19 @@ We reserve the right to investigate violations and cooperate with law enforcemen
     title: '7. Beta Confidentiality and Evaluation Terms',
     content: `**Beta information.** "Beta Information" means nonpublic information disclosed through or about the controlled beta, including pre-release product behavior, interfaces, documentation, benchmarks, roadmaps, pricing experiments, and nonpublic commercial or technical information.
 
-**Evaluation-only use.** You may use Beta Information only to evaluate VIOLEMA and provide feedback during your approved participation. You may not use Beta Information for any other purpose without Purple Orange AI's written permission.
+**Evaluation-only use.** You may use Beta Information only to evaluate VIOLEMA and provide feedback during your approved participation. You may not use Beta Information for any other purpose without Violema, Inc.'s written permission.
 
-**Protection and disclosure.** You must use reasonable care to protect Beta Information and may not disclose it to any third party without Purple Orange AI's written permission.
+**Protection and disclosure.** You must use reasonable care to protect Beta Information and may not disclose it to any third party without Violema, Inc.'s written permission.
 
 **Exclusions.** Beta Information does not include information that you can document was already public through no breach of these Terms, previously known to you without restriction, independently developed without use of Beta Information, or lawfully received from another source without a duty of confidentiality.
 
-**Required disclosure.** If law or valid legal process requires disclosure, you may disclose only what is legally required and, when permitted, must give Purple Orange AI prompt advance notice and reasonable assistance in seeking protective treatment.
+**Required disclosure.** If law or valid legal process requires disclosure, you may disclose only what is legally required and, when permitted, must give Violema prompt advance notice and reasonable assistance in seeking protective treatment.
 
-**Publicity restrictions.** During the confidential beta, you may not publish screenshots, recordings, benchmarks, roadmaps, or public claims about the product without Purple Orange AI's written approval.
+**Publicity restrictions.** During the confidential beta, you may not publish screenshots, recordings, benchmarks, roadmaps, or public claims about the product without Violema, Inc.'s written approval.
 
 **Duration.** These obligations continue for two years after your last beta access. Information qualifying as a trade secret remains protected for as long as it qualifies as a trade secret under applicable law.
 
-**Participant data.** Purple Orange AI's obligation to protect participant workspace data continues under the Privacy Policy and applicable onboarding terms.
+**Participant data.** Violema, Inc.'s obligation to protect participant workspace data continues under the Privacy Policy and applicable onboarding terms.
 
 **Counsel-review notice.** This beta confidentiality language should be reviewed by qualified counsel before broad external onboarding.`,
   },
@@ -103,7 +103,7 @@ We reserve the right to investigate violations and cooperate with law enforcemen
   {
     id: 'third-party',
     title: '9. Third-Party Integrations',
-    content: `VIOLEMA allows you to connect third-party services (Slack, GitHub, Stripe, HubSpot, etc.). Your use of these services is governed by their own terms and privacy policies. Purple Orange AI is not responsible for the practices, content, or reliability of third-party services.
+    content: `VIOLEMA allows you to connect third-party services (Slack, GitHub, Stripe, HubSpot, etc.). Your use of these services is governed by their own terms and privacy policies. Violema is not responsible for the practices, content, or reliability of third-party services.
 
 By connecting an integration, you authorise VIOLEMA to interact with that service on your behalf within the scope of permissions you grant. You can revoke these permissions at any time from your account settings.`,
   },
@@ -137,7 +137,7 @@ SOME JURISDICTIONS DO NOT ALLOW THESE LIMITATIONS, SO THEY MAY NOT APPLY TO YOU 
   {
     id: 'indemnification',
     title: '13. Indemnification',
-    content: `You agree to indemnify and hold harmless Purple Orange AI, its officers, directors, employees, and agents from any claims, damages, costs, or liabilities arising from: (a) your use of the Service; (b) your violation of these Terms; (c) your violation of any third-party rights; or (d) content you submit through the Service.`,
+    content: `You agree to indemnify and hold harmless Violema, its officers, directors, employees, and agents from any claims, damages, costs, or liabilities arising from: (a) your use of the Service; (b) your violation of these Terms; (c) your violation of any third-party rights; or (d) content you submit through the Service.`,
   },
   {
     id: 'governing',
@@ -161,7 +161,7 @@ For minor changes (e.g., typo corrections, clarifications that don't change your
     content: `For questions about these Terms:
 
 **Email:** legal@purpleorange.io
-**Post:** Purple Orange AI, Inc., Attn: Legal, [Address]
+**Post:** Violema, Inc., Attn: Legal, [Address]
 
 For security issues: security@purpleorange.io
 For billing issues: billing@purpleorange.io`,
