@@ -87,6 +87,8 @@ import {
 } from '../features/missions/missionSelectionState';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
 import { isFounderWorkspace, resolveWorkspaceContext } from '../lib/workspace';
+import { useTheme } from '../lib/useTheme';
+import ThemeToggle from '../components/ThemeToggle';
 import { fetchBackendAuthSession, isAdminSession, type AuthSession } from '../lib/auth';
 import ViolemaLogo from '../components/ViolemaLogo';
 import type { Conversation, Message, AutonomyMode } from '../types';
@@ -1873,6 +1875,9 @@ export default function Dashboard() {
   const location = useLocation();
   const navigate = useNavigate();
   const workspace = useMemo(() => resolveWorkspaceContext(), []);
+  // Workspace surfaces honor the same theme scope as marketing: the tokenized
+  // navy/ink/slate palette flips to the warm bone ramp under `.theme-light`.
+  const { scopeClass } = useTheme();
   // The founder workspace keeps live demo delivery defaults; every other
   // workspace starts with an empty destination and neutral hints, because
   // #violema-demo and max@violema.com are undeliverable or wrong for them.
@@ -4408,7 +4413,7 @@ export default function Dashboard() {
   const chatTabActive = workspaceArea === 'home' && activeWorkspaceTab === 'chat';
 
   return (
-    <div className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-navy-950 md:h-screen md:min-h-screen">
+    <div className={`relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-navy-950 md:h-screen md:min-h-screen ${scopeClass}`}>
       {uiNotice && (
         <div className="pointer-events-none absolute inset-x-3 top-3 z-50 flex justify-center">
           <div
@@ -5031,6 +5036,8 @@ export default function Dashboard() {
 	              <Eye className="w-3.5 h-3.5" />
 	              <span className="hidden 2xl:inline">Inspector</span>
 	            </button>
+
+	            <ThemeToggle className="hidden h-8 w-8 shrink-0 rounded-lg sm:inline-flex" />
 	          </div>
 
 	          <div className="flex min-w-0 flex-col gap-1.5 lg:flex-row lg:items-end lg:justify-between">
