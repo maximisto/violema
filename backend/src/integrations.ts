@@ -8,6 +8,7 @@ interface SendMessageInput {
   channel?: string;
   threadTs?: string;
   evidenceLinks?: Array<{ url: string; label: string }>;
+  attachedImages?: Array<{ url: string; alt: string }>;
 }
 
 type MessageChannel = 'slack' | 'email' | 'teams';
@@ -302,11 +303,15 @@ async function sendSlackMessage(input: SendMessageInput) {
   const token = getRequiredEnv('SLACK_BOT_TOKEN');
   const payload = buildSlackMessagePayload({ subject: input.subject, body: input.body });
   if (payload.blocks && input.subject) {
-    // Evidence articles usually publish preview images; surface up to three so
-    // the brief lands with real graphics. Fail-soft — misses never block the send.
-    const imageBlocks = await collectLinkImageBlocks(input.body, { candidates: input.evidenceLinks });
-    if (imageBlocks.length > 0) {
-      payload.blocks.splice(payload.blocks.length - 1, 0, ...imageBlocks);
+    // Rendered run charts lead, then evidence-article previews; both sit above
+    // the branded footer. Fail-soft — misses never block the send.
+    const chartBlocks = (input.attachedImages ?? [])
+      .filter((image) => /^https:\/\//.test(image.url))
+      .map((image) => ({ type: 'image' as const, image_url: image.url, alt_text: image.alt || 'Run chart' }));
+    const articleBlocks = await collectLinkImageBlocks(input.body, { candidates: input.evidenceLinks });
+    const extraBlocks = [...chartBlocks, ...articleBlocks];
+    if (extraBlocks.length > 0) {
+      payload.blocks.splice(payload.blocks.length - 1, 0, ...extraBlocks);
     }
   }
   const validated = await validateMessageTarget({ to: input.to, channel: 'slack' });

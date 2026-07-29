@@ -65,6 +65,7 @@ import {
 } from './security';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
+import { renderChartSpecsToFiles } from './chartImage';
 import { executeComposioAction, getComposioConnectionUrl, isComposioEnabled, isComposioToolName, listConnectedApps } from './composioBridge';
 import {
   buildAutomationChartArtifactFromQueryPayload,
@@ -220,6 +221,10 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 const SCREENSHOT_DIR = path.join(process.cwd(), 'generated-screenshots');
 const AUTOMATIONS_FILE = path.join(process.cwd(), 'automations.json');
+const BRIEF_CHARTS_DIR = path.join(process.cwd(), 'brief-charts');
+// Absolute base for links Slack must fetch; unset (e.g. local dev) disables
+// chart attachments rather than emitting URLs that resolve nowhere.
+const PUBLIC_APP_BASE_URL = (process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || '').trim();
 const SLACK_EVENT_CACHE_WINDOW_MS = 5 * 60 * 1000;
 const AUTOMATION_STEP_TIMEOUT_MS = Number(process.env.AUTOMATION_STEP_TIMEOUT_MS || 45000);
 const MAX_TOOL_ITERATIONS = readPositiveIntegerEnv('MAX_TOOL_ITERATIONS', 24);
@@ -354,6 +359,10 @@ app.use(express.json({
   },
 }));
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+fs.mkdirSync(BRIEF_CHARTS_DIR, { recursive: true });
+// Mounted before the auth gate: Slack fetches brief chart images anonymously,
+// and the unguessable UUID filename is the access control.
+app.use('/api/brief-charts', express.static(BRIEF_CHARTS_DIR, { maxAge: '14d', immutable: true, index: false }));
 
 app.use((req: Request, res: Response, next: () => void) => {
   if (isPublicBetaApiPath(req.method, req.path)) {
@@ -3777,6 +3786,11 @@ async function executeAutomationCore(
           notify: automation.notify,
         });
         const sourceLinks = collectAutomationSourceLinks(artifacts);
+        const deliveryChartImages = renderChartSpecsToFiles({
+          specs: selectReviewGateVisualArtifacts(artifacts).map((visual) => visual.payload),
+          dir: BRIEF_CHARTS_DIR,
+          baseUrl: PUBLIC_APP_BASE_URL,
+        });
         if (!deliveryTarget) {
           stepExecution.status = 'skipped';
           stepExecution.summary = 'Skipped delivery because no target was configured.';
@@ -3858,6 +3872,7 @@ async function executeAutomationCore(
           body,
           channel: deliveryTarget.channel,
           evidenceLinks: sourceLinks,
+          attachedImages: deliveryChartImages,
         }));
         artifacts.push({
           kind: 'delivery',
@@ -5895,7 +5910,16 @@ app.post('/api/automations/:id/reviews/:runId/approve', async (req: Request, res
             to,
             subject,
           })
-        : ({ to, body, subject, channel, evidenceLinks }) => sendMessage({ to, body, subject, channel, evidenceLinks }),
+        : ({ to, body, subject, channel, evidenceLinks, chartSpecs }) => sendMessage({
+            to,
+            body,
+            subject,
+            channel,
+            evidenceLinks,
+            attachedImages: chartSpecs?.length
+              ? renderChartSpecsToFiles({ specs: chartSpecs, dir: BRIEF_CHARTS_DIR, baseUrl: PUBLIC_APP_BASE_URL })
+              : undefined,
+          }),
     });
     const workflowId = inferWorkflowIdFromAutomation(context.automation);
     const approvalLedgerEvent = {

@@ -31,3 +31,4 @@ backend/workflow-ledger-events.json
 backend/*.json.bak
 backend/*.json.bak.*
 graphify-out/
+backend/brief-charts/

@@ -14,6 +14,7 @@ type SendReviewMessage = (input: {
   subject?: string;
   channel?: AutomationStepDeliveryTarget['channel'];
   evidenceLinks?: Array<{ url: string; label: string }>;
+  chartSpecs?: unknown[];
 }) => Promise<Record<string, unknown>>;
 
 interface ReviewArtifact {
@@ -24,6 +25,7 @@ interface ReviewArtifact {
     deliveryTarget?: string;
     approvalRequired?: boolean;
     sourceLinks?: Array<{ url: string; label: string }>;
+    visualArtifacts?: Array<{ title?: string; payload?: unknown }>;
   };
 }
 
@@ -197,6 +199,9 @@ export async function approveAutomationReview(input: {
     subject: artifact.title || input.task.title,
     channel: deliveryTarget.includes('@') ? 'email' : 'slack',
     evidenceLinks: Array.isArray(artifact.payload?.sourceLinks) ? artifact.payload.sourceLinks : undefined,
+    chartSpecs: Array.isArray(artifact.payload?.visualArtifacts)
+      ? artifact.payload.visualArtifacts.map((visual) => visual?.payload).filter(Boolean)
+      : undefined,
   });
   const taskStepExecutions = markDeliveryStepDelivered(input.task.metadata?.latestStepExecutions, delivery, reviewedAt);
   const runStepExecutions = markDeliveryStepDelivered(input.taskRun.metadata?.stepExecutions, delivery, reviewedAt);
