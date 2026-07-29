@@ -9,7 +9,6 @@ import { beginOAuthFlow, persistAuthSessionToBackend, type AuthMethod, type Part
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import BrandIcon from '../components/BrandIcon';
 import PublicHeader from '../components/PublicHeader';
-import { persistWorkspaceContext } from '../lib/workspace';
 
 const PROVIDER_METHODS: Array<{
   id: Exclude<AuthMethod, 'email'>;
@@ -121,7 +120,6 @@ export default function Signup() {
     setSubmitting(true);
     setErrorMessage(null);
     setSuccessMessage(null);
-    persistWorkspaceContext();
     const session = {
       intent: 'signup',
       email: email.trim(),
@@ -158,7 +156,6 @@ export default function Signup() {
     }
     setErrorMessage(null);
     setSuccessMessage(null);
-    persistWorkspaceContext();
     beginOAuthFlow(provider, {
       intent: 'signup',
       next: oauthNext,

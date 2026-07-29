@@ -6,7 +6,6 @@ import Mail from 'lucide-react/dist/esm/icons/mail.js';
 import { beginOAuthFlow, getAuthSession, persistAuthSessionToBackend, type AuthMethod } from '../lib/auth';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import PublicHeader from '../components/PublicHeader';
-import { persistWorkspaceContext } from '../lib/workspace';
 
 const PROVIDER_METHODS: Array<{
   id: Exclude<AuthMethod, 'email'>;
@@ -42,7 +41,6 @@ export default function Login() {
     setSubmitting(true);
     setErrorMessage(null);
     setSuccessMessage(null);
-    persistWorkspaceContext();
     const session = {
       intent: 'login',
       email: email.trim(),
@@ -69,7 +67,6 @@ export default function Login() {
   function handleProviderAuth(provider: Exclude<AuthMethod, 'email'>) {
     setErrorMessage(null);
     setSuccessMessage(null);
-    persistWorkspaceContext();
     beginOAuthFlow(provider, {
       intent: 'login',
       next,

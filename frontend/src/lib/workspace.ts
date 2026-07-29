@@ -8,6 +8,15 @@ const DEFAULT_WORKSPACE: WorkspaceContext = {
   workspaceName: 'Purple Orange HQ',
 };
 
+// The founder's own workspace doubles as the investor-demo surface: it keeps
+// demo delivery defaults (#violema-demo, max@violema.com) that would be wrong
+// — and in Slack's case undeliverable — for every other workspace.
+export const FOUNDER_WORKSPACE_ID = 'purpleorangehq';
+
+export function isFounderWorkspace(workspaceId: string | null | undefined): boolean {
+  return workspaceId === FOUNDER_WORKSPACE_ID;
+}
+
 const WORKSPACE_ID_KEY = 'violema_workspace_id';
 const WORKSPACE_NAME_KEY = 'violema_workspace_name';
 const LEGACY_WORKSPACE_ID_KEYS = ['nexus_workspace_id', 'nexus_workspace'];
@@ -77,4 +86,14 @@ export function persistWorkspaceContext(workspace: WorkspaceContext = DEFAULT_WO
   } catch {
     // Ignore localStorage write failures.
   }
+}
+
+// Adopts the server-assigned workspace after authentication. Keeps a name the
+// user already chose for the same workspace; only falls back to the provided
+// name when the workspace actually changes.
+export function adoptAuthWorkspace(workspaceId: string, fallbackName: string) {
+  const storedId = safeReadLocalStorage(WORKSPACE_ID_KEY);
+  const storedName = safeReadLocalStorage(WORKSPACE_NAME_KEY);
+  const workspaceName = storedId === workspaceId && storedName ? storedName : fallbackName;
+  persistWorkspaceContext({ workspaceId, workspaceName });
 }

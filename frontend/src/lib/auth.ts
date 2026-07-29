@@ -1,3 +1,5 @@
+import { adoptAuthWorkspace, isFounderWorkspace } from './workspace';
+
 export type AccessRole = 'user' | 'admin';
 export type AuthMethod = 'email' | 'google' | 'microsoft';
 export type ParticipantType = 'founder_operator' | 'investor' | 'partner';
@@ -126,6 +128,22 @@ function hydrateCachedSession(value: Partial<AuthSession>): AuthSession | null {
   return session ? { ...session, role: 'user' } : null;
 }
 
+// The session payload spreads the full backend user record, so it carries the
+// server-assigned default workspace even though AuthSession does not model it.
+function adoptWorkspaceFromAuthPayload(user: Partial<AuthSession>, session: AuthSession) {
+  const workspaceId = typeof (user as { defaultWorkspaceId?: unknown }).defaultWorkspaceId === 'string'
+    ? ((user as { defaultWorkspaceId: string }).defaultWorkspaceId).trim()
+    : '';
+  if (!workspaceId) return;
+  const firstName = session.name?.trim().split(/\s+/)[0] || '';
+  const fallbackName = isFounderWorkspace(workspaceId)
+    ? 'Purple Orange HQ'
+    : firstName
+      ? `${firstName}'s workspace`
+      : 'My workspace';
+  adoptAuthWorkspace(workspaceId, fallbackName);
+}
+
 export type PersistAuthSessionResult =
   | { status: 'authenticated'; session: AuthSession }
   | { status: 'verification_sent'; message: string };
@@ -184,6 +202,7 @@ export async function persistAuthSessionToBackend(
   }
 
   saveAuthSession(nextSession);
+  adoptWorkspaceFromAuthPayload(payload.user, nextSession);
   return { status: 'authenticated', session: nextSession };
 }
 
@@ -207,6 +226,7 @@ export async function fetchBackendAuthSession() {
     return null;
   }
   saveAuthSession(session);
+  adoptWorkspaceFromAuthPayload(payload.user, session);
   return session;
 }
 
