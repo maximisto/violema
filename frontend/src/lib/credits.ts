@@ -345,7 +345,7 @@ export function buildTopUpRequest(snapshot: CreditSnapshot) {
 
 export function buildReferralMessage(snapshot: CreditSnapshot) {
   return [
-    'Try Violema: an AI coworker for chat, research, automations, and delegated work.',
+    'Try Violema: the reviewable AI operator for research, automations, and delegated work.',
     `Workspace: ${snapshot.workspaceName}`,
     `New users get a bonus, and I get ${formatCredits(snapshot.referralBonus)} credits when you join.`,
     'Start here: https://violema.com',

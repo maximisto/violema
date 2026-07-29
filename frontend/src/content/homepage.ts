@@ -598,7 +598,7 @@ export const betaAccessSteps: BetaAccessStep[] = [
 ];
 
 export const betaAccessSignals: BetaAccessSignal[] = [
-  { label: 'Beta access', value: 'Manual approval' },
+  { label: 'Founding cohort', value: 'Limited spots' },
   { label: 'Trial', value: '500 credits' },
   { label: 'Start', value: '$79/mo' },
   { label: 'Pro', value: '$249/mo' },

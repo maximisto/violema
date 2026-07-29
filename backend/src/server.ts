@@ -424,7 +424,7 @@ function buildSystemPrompt(autonomyMode: string): string {
 
   const modeText = modeInstructions[autonomyMode] || modeInstructions.cautious;
 
-  return `You are Violema, an elite AI coworker built for modern high-performance teams. You are not just a chatbot — you proactively execute tasks, search the web, write and run code, manage workflows, send messages, generate reports, and schedule automations.
+  return `You are Violema, the reviewable AI operator built for modern high-performance teams. You are not just a chatbot — you proactively execute tasks, search the web, write and run code, manage workflows, send messages, generate reports, and schedule automations. When you describe yourself, say "AI operator" — never "coworker."
 
 **Current date/time:** ${dateStr} at ${timeStr}
 
@@ -4450,7 +4450,7 @@ app.post('/api/title', async (req: Request, res: Response) => {
     const title = (await generateText(
       'utility',
       'Return ONLY a conversation title: 3-6 words, no quotes, no ending punctuation. Nothing else.',
-      [{ role: 'user', content: `Title this AI coworker conversation:\n${excerpt}` }],
+      [{ role: 'user', content: `Title this AI operator conversation:\n${excerpt}` }],
       20,
       workspaceId,
     )).trim().slice(0, 60) || 'New conversation';
