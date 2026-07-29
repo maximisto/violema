@@ -20,7 +20,7 @@ export default function ViolemaLogo({
         decoding="async"
       />
       <img
-        src="/brand/violema-logo-light.png"
+        src="/brand/violema-logo-light-20260729.png"
         alt=""
         className={`violema-logo-light h-full w-full object-contain ${imageClassName}`}
         decoding="async"
