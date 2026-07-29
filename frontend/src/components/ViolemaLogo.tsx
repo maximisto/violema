@@ -14,7 +14,7 @@ export default function ViolemaLogo({
   return (
     <span className={`violema-logo-electric flex shrink-0 items-center ${className}`} aria-hidden="true">
       <img
-        src="/brand/violema-logo-20260510.png"
+        src="/brand/violema-logo-20260729.png"
         alt=""
         className={`violema-logo-dark h-full w-full object-contain drop-shadow-[0_0_18px_rgba(168,85,247,0.22)] ${imageClassName}`}
         decoding="async"
