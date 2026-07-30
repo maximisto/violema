@@ -3540,6 +3540,15 @@ async function ensureAutomationSummaryText(
   }
 }
 
+// Reviewer feedback from a request-changes → rerun cycle rides into the model
+// steps so the next draft actually addresses it — with an honesty guard, since
+// briefs must stay evidence-only.
+function buildReviewFeedbackBlock(feedback?: string) {
+  const trimmed = feedback?.trim();
+  if (!trimmed) return '';
+  return `\n\nREVIEWER FEEDBACK on the previous run — address it explicitly in this output: "${trimmed}". If the gathered evidence does not cover something the reviewer asked for, name that gap plainly in the output — never invent facts to satisfy the request.`;
+}
+
 async function runAutomationStepWithTimeout<T>(label: string, operation: Promise<T>) {
   let timeoutId: NodeJS.Timeout | undefined;
   try {
@@ -3569,6 +3578,7 @@ async function executeAutomationCore(
     notify?: string;
     condition?: string;
     timezone?: string;
+    reviewFeedback?: string;
   },
   plan: AutomationExecutionPlan,
   workspaceId: string,
@@ -3634,7 +3644,10 @@ async function executeAutomationCore(
         const query = typeof step.inputs?.query === 'string'
           ? step.inputs.query
           : inferAutomationSearchQuery(step.title, automation);
-        const payload = await runAutomationStepWithTimeout(`Search step "${step.title}"`, searchWeb(query, 6));
+        const searchQuery = automation.reviewFeedback?.trim()
+          ? `${query}. Also cover: ${automation.reviewFeedback.trim()}`
+          : query;
+        const payload = await runAutomationStepWithTimeout(`Search step "${step.title}"`, searchWeb(searchQuery, 6));
         artifacts.push({
           kind: 'web_search',
           title: step.title,
@@ -3726,7 +3739,7 @@ async function executeAutomationCore(
           generateTextDetailed(
           step.modelTier || plan.suggestedModelTier,
           'You are an internal VIOLEMA analyst. Produce a compact, decision-ready analysis based only on the supplied evidence. Be concrete and avoid filler.',
-          [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
+          [{ role: 'user', content: `${step.objective}${buildReviewFeedbackBlock(automation.reviewFeedback)}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           500,
           workspaceId,
           ),
@@ -3751,8 +3764,8 @@ async function executeAutomationCore(
           `Summary step "${step.title}"`,
           generateTextDetailed(
           step.modelTier || plan.suggestedModelTier,
-          `You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output of at most ${AUTOMATION_SUMMARY_WORD_LIMIT} words. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If the evidence compares competitors, products, or several entities, include a compact markdown table (for example | Competitor | Move | Why it matters |) built only from the evidence — never invent rows. Cite sources inline as markdown links — when a bullet or row draws on a specific article from the evidence, link a short label like [TechCrunch](https://example.com/article); include two to four such links total and only use URLs that appear in the evidence. If there is operational or metrics data, include a compact section for it. End with a short "Next actions" section. Be concrete, skim-friendly, and avoid filler.`,
-          [{ role: 'user', content: `${step.objective}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
+          `You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output of at most ${AUTOMATION_SUMMARY_WORD_LIMIT} words. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If the evidence compares competitors, products, or several entities, include a compact markdown table (for example | Competitor | Move | Why it matters |) built only from the evidence — never invent rows. Cite sources inline as markdown links — when a bullet or row draws on a specific article from the evidence, link a short label like [TechCrunch](https://example.com/article); include two to four such links total and only use URLs that appear in the evidence. If there is operational or metrics data, include a compact section for it. End with a short "Next actions" section containing concrete business moves for the reader drawn from the evidence — never process notes, suggestions about improving this report, or offers of further help. Output the deliverable only, with no meta commentary before or after it. Be concrete, skim-friendly, and avoid filler.`,
+          [{ role: 'user', content: `${step.objective}${buildReviewFeedbackBlock(automation.reviewFeedback)}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           AUTOMATION_SUMMARY_MAX_TOKENS,
           workspaceId,
           ),
@@ -3969,6 +3982,7 @@ async function runAutomation(automation: {
   notify?: string;
   condition?: string;
   timezone?: string;
+  reviewFeedback?: string;
 }) {
   const workspaceId = automation.workspaceId || DEFAULT_WORKSPACE_ID;
   const workflowId = inferWorkflowIdFromAutomation(automation);
@@ -6053,7 +6067,15 @@ app.post('/api/automations/:id/reviews/:runId/rerun', (req: Request, res: Respon
   }
 
   updateTask(context.task.id, taskPatch);
-  const record = triggerAutomationNow(req.params.id, runAutomation);
+  // Feed the reviewer's ask into the fresh run: the rerun note plus any stored
+  // request-changes note, so research and drafting both address it.
+  const storedChangeNote = (context.taskRun.metadata?.reviewRequest as { note?: string } | undefined)?.note;
+  const reviewFeedback = [note, storedChangeNote]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value && value !== 'Reviewer requested a fresh run.')
+    .filter((value, index, all) => all.indexOf(value) === index)
+    .join(' — ');
+  const record = triggerAutomationNow(req.params.id, (fresh) => runAutomation({ ...fresh, reviewFeedback: reviewFeedback || undefined }));
   broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_rerun_requested');
   res.json({ ok: true, item: record, message: `Requested a fresh run for ${context.automation.name}` });
 });
