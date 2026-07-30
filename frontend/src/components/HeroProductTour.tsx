@@ -7,19 +7,19 @@ export type HeroTourSlide = {
   alt: string;
 };
 
-export const HERO_IMAGE_VERSION = '20260622';
+export const HERO_IMAGE_VERSION = '20260729';
 export const heroImageSrc = (name: `P${1 | 2 | 3 | 4 | 5}`) => `/brand/${name}.jpg?v=${HERO_IMAGE_VERSION}`;
 
 /**
- * A slow, ambient walk-through of the live product. Each frame is a real
- * Violema view, ordered to tell the founder workflow from home to scheduling.
+ * A slow, ambient walk-through of the live product (light theme), following one
+ * real Competitor monitor run from chat to analytics.
  */
 export const heroTourSlides: HeroTourSlide[] = [
-  { src: heroImageSrc('P1'), path: 'violema.com / chat', alt: 'Violema home chat with mission context inspector and Dima approval state.' },
-  { src: heroImageSrc('P2'), path: 'violema.com / missions', alt: 'Violema mission cockpit showing weekly founder update progress, review, and cost controls.' },
-  { src: heroImageSrc('P3'), path: 'violema.com / map', alt: 'Violema workflow map showing steps, tools, integrations, and agent handoff path.' },
-  { src: heroImageSrc('P4'), path: 'violema.com / calendar', alt: 'Violema calendar for scheduling recurring founder workflows with connected stack context.' },
-  { src: heroImageSrc('P5'), path: 'violema.com / workflow builder', alt: 'Violema workflow builder for creating and saving a recurring automation.' },
+  { src: heroImageSrc('P1'), path: 'violema.com / chat', alt: 'Violema home chat with the context inspector showing a completed competitor monitor mission.' },
+  { src: heroImageSrc('P2'), path: 'violema.com / missions', alt: 'Violema mission cockpit showing competitor monitor run progress, cost, and cadence controls.' },
+  { src: heroImageSrc('P3'), path: 'violema.com / reviews', alt: 'Violema review gate with the drafted competitor memo, source evidence, and delivery receipt.' },
+  { src: heroImageSrc('P4'), path: 'violema.com / calendar', alt: 'Violema calendar scheduling recurring founder workflows across the connected stack.' },
+  { src: heroImageSrc('P5'), path: 'violema.com / analytics', alt: 'Violema analytics with the credit waterfall, per-step run cost, and runway forecast.' },
 ];
 
 export const HERO_TOUR_MS = 7200;
