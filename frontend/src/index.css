@@ -1894,12 +1894,31 @@
 .theme-light [class*="text-violet-200/"],
 .theme-light [class*="text-violet-300/"] { color: rgba(109, 40, 217, 0.85); }
 .theme-light [class*="text-cyan-300/"] { color: rgba(14, 116, 144, 0.85); }
+.theme-light [class*="text-amber-100/"],
 .theme-light [class*="text-amber-200/"],
 .theme-light [class*="text-amber-300/"] { color: rgba(180, 83, 9, 0.9); }
 .theme-light [class*="text-green-200/"],
 .theme-light [class*="text-green-300/"] { color: rgba(21, 128, 61, 0.9); }
 .theme-light [class*="text-red-200/"],
 .theme-light [class*="text-red-300/"] { color: rgba(185, 28, 28, 0.9); }
+.theme-light [class*="text-cyan-100/"],
+.theme-light [class*="text-cyan-200/"] { color: rgba(21, 94, 117, 0.9); }
+
+/* Emerald is the workspace's success family (pills, schedule rows, receipts);
+   rose/blue/sky round out the remaining accent text tuned for dark. */
+.theme-light .text-emerald-100 { color: #064e3b; }
+.theme-light .text-emerald-200 { color: #065f46; }
+.theme-light .text-emerald-300 { color: #047857; }
+.theme-light .text-emerald-400 { color: #059669; }
+.theme-light [class*="text-emerald-100/"],
+.theme-light [class*="text-emerald-200/"],
+.theme-light [class*="text-emerald-300/"] { color: rgba(4, 120, 87, 0.92); }
+.theme-light .text-rose-100 { color: #881337; }
+.theme-light .text-rose-200 { color: #9f1239; }
+.theme-light .text-rose-300 { color: #be123c; }
+.theme-light .text-blue-100 { color: #1e3a8a; }
+.theme-light .text-blue-400 { color: #2563eb; }
+.theme-light .text-sky-100 { color: #0c4a6e; }
 
 /* Home-area hero backdrop is a hardcoded dark gradient. */
 .theme-light .home-hero-bg {
