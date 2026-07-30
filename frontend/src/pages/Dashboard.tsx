@@ -4071,7 +4071,23 @@ export default function Dashboard() {
         return workspaceSurface(
           <>
             {renderCommandDashboard()}
-            <WorkflowTemplateGallery templates={WORKFLOW_TEMPLATES} onUse={applyFounderWorkflowTemplate} />
+            <WorkflowTemplateGallery
+              templates={WORKFLOW_TEMPLATES}
+              onUse={applyFounderWorkflowTemplate}
+              userMissions={taskItems
+                .filter((item) => item.automationId)
+                .map((item) => ({
+                  key: String(item.automationId),
+                  title: item.title,
+                  outcome: item.description,
+                  cadence: item.schedule,
+                  stepsCount: item.steps?.length || item.actions?.length || 0,
+                }))}
+              onOpenMission={(key) => {
+                const item = taskItems.find((entry) => String(entry.automationId) === key);
+                if (item) void handleAutomationEdit(item, 'workflow');
+              }}
+            />
           </>
         );
       }

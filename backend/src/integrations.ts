@@ -308,7 +308,12 @@ async function sendSlackMessage(input: SendMessageInput) {
     const chartBlocks = (input.attachedImages ?? [])
       .filter((image) => /^https:\/\//.test(image.url))
       .map((image) => ({ type: 'image' as const, image_url: image.url, alt_text: image.alt || 'Run chart' }));
-    const articleBlocks = await collectLinkImageBlocks(input.body, { candidates: input.evidenceLinks });
+    // Generated intelligence outranks publisher art: with real charts attached,
+    // at most one article preview rides along.
+    const articleBlocks = await collectLinkImageBlocks(input.body, {
+      candidates: input.evidenceLinks,
+      limit: chartBlocks.length > 0 ? 1 : 3,
+    });
     const extraBlocks = [...chartBlocks, ...articleBlocks];
     if (extraBlocks.length > 0) {
       payload.blocks.splice(payload.blocks.length - 1, 0, ...extraBlocks);

@@ -3756,6 +3756,60 @@ async function executeAutomationCore(
         stepExecution.artifactKind = 'analysis';
         stepExecution.artifactCount = 1;
         stepExecution.tokenUsage = analysisResult.usage;
+
+        // Competitive analyses additionally extract a structured matrix on the
+        // hard tier so real intelligence charts (pricing, funding) ship to the
+        // review pane and Slack — evidence-only, numbers never invented.
+        if (/competitor|competitive|market/i.test(`${step.title} ${step.objective}`)) {
+          try {
+            const intelResult = await runAutomationStepWithTimeout(
+              `Intelligence extraction for "${step.title}"`,
+              generateTextDetailed(
+                'hard',
+                'You extract competitive intelligence as strict JSON. From the supplied evidence only, list up to 6 competitors as {"competitors":[{"name":string,"focus":string|null,"pricing_usd_month":number|null,"funding_musd":number|null}]}. Use null for anything the evidence does not state — never estimate or invent numbers. Output the JSON object only.',
+                [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
+                700,
+                workspaceId,
+              ),
+            );
+            const parsed = JSON.parse(intelResult.text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')) as {
+              competitors?: Array<{ name?: unknown; focus?: unknown; pricing_usd_month?: unknown; funding_musd?: unknown }>;
+            };
+            const competitors = (parsed.competitors || []).filter((entry) => typeof entry?.name === 'string' && entry.name.trim());
+            const chartConfigs: Array<{ field: 'pricing_usd_month' | 'funding_musd'; title: string; subtitle: string; yLabel: string }> = [
+              { field: 'pricing_usd_month', title: 'Competitor pricing', subtitle: 'USD per user / month · evidence-backed', yLabel: 'USD/month' },
+              { field: 'funding_musd', title: 'Disclosed funding', subtitle: 'USD millions · evidence-backed', yLabel: 'USD (M)' },
+            ];
+            for (const config of chartConfigs) {
+              const rows = competitors
+                .map((entry) => ({ label: String(entry.name).trim(), value: Number(entry[config.field]) }))
+                .filter((row) => Number.isFinite(row.value) && row.value > 0);
+              if (rows.length >= 2) {
+                artifacts.push({
+                  kind: 'chart',
+                  title: `${config.title} chart`,
+                  payload: {
+                    success: true,
+                    artifact_type: 'chart',
+                    chart: {
+                      type: 'bar',
+                      title: config.title,
+                      subtitle: config.subtitle,
+                      y_label: config.yLabel,
+                      insight: `Extracted from run evidence by the analysis step.`,
+                      data: rows,
+                      generated_at: new Date().toISOString(),
+                    },
+                    row_count: rows.length,
+                    render_target: 'mission_workspace_artifact',
+                  },
+                });
+              }
+            }
+          } catch {
+            // Intelligence extraction is additive; the analysis stands without it.
+          }
+        }
         continue;
       }
 
@@ -3764,7 +3818,7 @@ async function executeAutomationCore(
           `Summary step "${step.title}"`,
           generateTextDetailed(
           step.modelTier || plan.suggestedModelTier,
-          `You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output of at most ${AUTOMATION_SUMMARY_WORD_LIMIT} words. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If the evidence compares competitors, products, or several entities, include a compact markdown table (for example | Competitor | Move | Why it matters |) built only from the evidence — never invent rows. Cite sources inline as markdown links — when a bullet or row draws on a specific article from the evidence, link a short label like [TechCrunch](https://example.com/article); include two to four such links total and only use URLs that appear in the evidence. If there is operational or metrics data, include a compact section for it. End with a short "Next actions" section containing concrete business moves for the reader drawn from the evidence — never process notes, suggestions about improving this report, or offers of further help. Output the deliverable only, with no meta commentary before or after it. Be concrete, skim-friendly, and avoid filler.`,
+          `You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output of at most ${AUTOMATION_SUMMARY_WORD_LIMIT} words. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If the evidence compares competitors, products, or several entities, include a compact markdown table (for example | Competitor | Move | Why it matters |) built only from the evidence — never invent rows. Cite sources inline as markdown links — when a bullet or row draws on a specific article from the evidence, link a short label like [TechCrunch](https://example.com/article); include two to four such links total and only use URLs that appear in the evidence. If there is operational or metrics data, include a compact section for it. End with a short "Next actions" section containing concrete business moves for the reader drawn from the evidence — never process notes, suggestions about improving this report, or offers of further help. When the evidence lacks a specific datapoint, state what IS known and frame the gap as a concrete follow-up (for example "pricing not yet disclosed — tracking for the next run"); never write bare "no information" placeholders. Output the deliverable only, with no meta commentary before or after it. Be concrete, skim-friendly, and avoid filler.`,
           [{ role: 'user', content: `${step.objective}${buildReviewFeedbackBlock(automation.reviewFeedback)}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
           AUTOMATION_SUMMARY_MAX_TOKENS,
           workspaceId,

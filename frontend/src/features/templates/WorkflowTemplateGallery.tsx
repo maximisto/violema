@@ -1,9 +1,19 @@
 import { ArrowRight, Clock, Layers3 } from 'lucide-react';
 import type { WorkflowTemplateDefinition } from '../../content/workflowTemplates';
 
+export interface GalleryUserMission {
+  key: string;
+  title: string;
+  outcome?: string;
+  cadence?: string;
+  stepsCount: number;
+}
+
 interface WorkflowTemplateGalleryProps {
   templates: WorkflowTemplateDefinition[];
   onUse: (id: string) => void;
+  userMissions?: GalleryUserMission[];
+  onOpenMission?: (key: string) => void;
   className?: string;
 }
 
@@ -51,7 +61,7 @@ const DEFAULT_ACCENT = {
   aura: 'hover:border-violet-400/45 hover:shadow-[0_22px_48px_-20px_rgba(124,58,237,0.42)]',
 };
 
-export function WorkflowTemplateGallery({ templates, onUse, className }: WorkflowTemplateGalleryProps) {
+export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], onOpenMission, className }: WorkflowTemplateGalleryProps) {
   if (templates.length === 0) return null;
 
   return (
@@ -149,6 +159,68 @@ export function WorkflowTemplateGallery({ templates, onUse, className }: Workflo
           );
         })}
       </div>
+
+      {userMissions.length > 0 ? (
+        <>
+          <div className="relative mt-6 flex items-center gap-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-500">Your missions</p>
+            <span className="h-px flex-1 bg-white/8" />
+            <p className="text-[10px] text-slate-500">The collection grows with every mission you create</p>
+          </div>
+          <div className="relative mt-3.5 grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+            {userMissions.map((mission, index) => {
+              const numeral = String(templates.length + index + 1).padStart(2, '0');
+              return (
+                <article
+                  key={mission.key}
+                  className="group relative flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-navy-950/45 transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-400/45 hover:shadow-[0_22px_48px_-20px_rgba(124,58,237,0.42)]"
+                >
+                  {/* your missions wear the house colors */}
+                  <span aria-hidden className="h-[2.5px] w-full bg-gradient-to-r from-violet-400 via-[#f59e0b]/70 to-transparent" />
+                  <div className="flex flex-1 flex-col p-4">
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute right-3.5 top-2.5 font-display text-[1.7rem] font-semibold leading-none tracking-tight text-violet-300/45"
+                    >
+                      {numeral}
+                    </span>
+                    <span className="inline-flex w-fit items-center rounded-full border border-violet-300/25 bg-violet-300/10 px-2 py-0.5 text-[10px] font-semibold text-violet-100">
+                      Your mission
+                    </span>
+                    <h3 className="mt-3 pr-10 text-[15px] font-semibold tracking-[-0.01em] text-white">{mission.title}</h3>
+                    {mission.outcome ? (
+                      <p className="mt-1.5 text-[12.5px] leading-5 text-slate-300">{mission.outcome}</p>
+                    ) : null}
+                    <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/5 pt-3">
+                      <span className="inline-flex items-center gap-2.5 text-[10px] font-medium text-slate-500">
+                        {mission.cadence ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" aria-hidden="true" />
+                            {mission.cadence}
+                          </span>
+                        ) : null}
+                        <span className="inline-flex items-center gap-1">
+                          <Layers3 className="h-3 w-3" aria-hidden="true" />
+                          {mission.stepsCount} steps
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onOpenMission?.(mission.key)}
+                        aria-label={`Open the ${mission.title} mission`}
+                        className="inline-flex items-center gap-1 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100 transition-all group-hover:border-violet-300/50 group-hover:bg-violet-500/20 hover:gap-1.5"
+                      >
+                        Open mission
+                        <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }
