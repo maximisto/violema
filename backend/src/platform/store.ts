@@ -228,6 +228,29 @@ export function finalizeTaskRun(taskRunId: string, patch: {
   return updatedRun;
 }
 
+/**
+ * In-flight runs live only in process memory, so a restart strands their
+ * records in running/retrying forever. Called once at boot to fail them.
+ */
+export function sweepOrphanedTaskRuns(bootTime: Date) {
+  const swept: TaskRunRecord[] = [];
+
+  updateJsonFile<TaskRunRecord[]>(TASK_RUNS_FILE, [], (taskRuns) => taskRuns.map((run) => {
+    if (run.status !== 'running' && run.status !== 'retrying') return run;
+    if (new Date(run.startedAt).getTime() >= bootTime.getTime()) return run;
+    const updated: TaskRunRecord = {
+      ...run,
+      status: 'failed',
+      finishedAt: new Date().toISOString(),
+      error: 'Interrupted by a backend restart before completion. Safe to rerun.',
+    };
+    swept.push(updated);
+    return updated;
+  }));
+
+  return swept;
+}
+
 export function updateTaskRun(taskRunId: string, patch: Partial<Omit<TaskRunRecord, 'id' | 'workspaceId' | 'taskId' | 'startedAt'>>) {
   let updatedRun: TaskRunRecord | null = null;
 

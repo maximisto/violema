@@ -147,6 +147,7 @@ import {
   summarizeReferralRewards,
   mapTaskRunToStatus,
   isElasticLane,
+  sweepOrphanedTaskRuns,
   updateTask,
   updateTaskRun,
   upsertBillingConfig,
@@ -6395,6 +6396,10 @@ app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
 });
 
 export function startServer() {
+  const orphaned = sweepOrphanedTaskRuns(new Date());
+  if (orphaned.length > 0) {
+    console.log(`Swept ${orphaned.length} task run(s) orphaned by the previous shutdown.`);
+  }
   loadPersistedAutomations(runAutomation);
   ensureCoreAutomationSeeds(runAutomation);
 

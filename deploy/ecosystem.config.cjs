@@ -7,7 +7,8 @@ module.exports = {
       instances: 1,
       autorestart: true,
       watch: false,
-      max_memory_restart: '512M',
+      // 512M killed the backend mid-analysis on 2026-07-30 (16GB box, 12GB free)
+      max_memory_restart: '2048M',
       env: {
         NODE_ENV: 'production',
         PORT: 3001,
