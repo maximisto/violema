@@ -30,10 +30,17 @@ assert(theme.themeScopeClass('dark') === '', 'dark → no class');
 assert(theme.nextTheme('dark') === 'light', 'dark toggles to light');
 assert(theme.nextTheme('light') === 'dark', 'light toggles to dark');
 
-// Store: default when nothing stored
+// Time-of-day defaulting is deterministic per hour
+assert(theme.timeOfDayTheme(6) === 'light', '6am → light');
+assert(theme.timeOfDayTheme(15) === 'light', '3pm → light');
+assert(theme.timeOfDayTheme(16) === 'dark', '4pm → dark');
+assert(theme.timeOfDayTheme(23) === 'dark', '11pm → dark');
+assert(theme.timeOfDayTheme(5) === 'dark', '5am → dark');
+
+// Store: no saved choice falls back to the time-of-day default
 store.clear();
 theme.__resetThemeCacheForTests();
-assert(theme.getThemeSnapshot() === 'dark', 'empty store snapshots dark');
+assert(theme.getThemeSnapshot() === theme.timeOfDayTheme(), 'empty store uses time-of-day default');
 
 // set + persist
 theme.setTheme('light');

@@ -1396,7 +1396,9 @@
 .mobile-header-logo {
   height: 4.2rem;
   width: 17.4rem;
-  max-width: calc(100vw - 78px);
+  /* Budget for BOTH right-side controls (theme toggle + menu, 48px each),
+     their gap, and the row padding — or the logo shoves them off screen. */
+  max-width: calc(100vw - 152px);
 }
 
 .mobile-nav-drawer {

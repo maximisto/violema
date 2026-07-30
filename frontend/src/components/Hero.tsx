@@ -42,15 +42,6 @@ function MobileHeroVisual() {
           <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-ink-900/95 to-transparent" />
         </div>
 
-        <img
-          src="/brand/dima/dima-action.png?v=20260707"
-          alt=""
-          aria-hidden="true"
-          data-mobile-hero-dima="true"
-          className="pointer-events-none absolute -bottom-1 right-2 z-10 w-[42%] max-w-[13rem] select-none object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.62)]"
-          decoding="async"
-          loading="eager"
-        />
       </div>
     </div>
   );

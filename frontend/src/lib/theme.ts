@@ -19,6 +19,12 @@ export function normalizeThemeValue(value: unknown): ThemeMode {
   return value === 'light' ? 'light' : 'dark';
 }
 
+/** Default for visitors with no saved choice: light during working daylight
+ * (06:00–15:59 local), dark otherwise. A saved toggle always wins. */
+export function timeOfDayTheme(hour: number = new Date().getHours()): ThemeMode {
+  return hour >= 6 && hour < 16 ? 'light' : 'dark';
+}
+
 /** Class to put on a marketing wrapper. Dark needs none (`:root` is dark). */
 export function themeScopeClass(theme: ThemeMode): string {
   return theme === 'light' ? 'theme-light' : '';
@@ -34,7 +40,9 @@ let current: ThemeMode | null = null;
 function readStored(): ThemeMode {
   if (typeof window === 'undefined') return DEFAULT_THEME;
   try {
-    return normalizeThemeValue(window.localStorage.getItem(THEME_STORAGE_KEY));
+    const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (raw === 'light' || raw === 'dark') return raw;
+    return LIGHT_THEME_ENABLED ? timeOfDayTheme() : DEFAULT_THEME;
   } catch {
     return DEFAULT_THEME;
   }
