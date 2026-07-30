@@ -61,7 +61,27 @@ const DEFAULT_ACCENT = {
   aura: 'hover:border-violet-400/45 hover:shadow-[0_22px_48px_-20px_rgba(124,58,237,0.42)]',
 };
 
+/** Legacy or renamed live missions that should claim a template card anyway. */
+const TEMPLATE_TITLE_ALIASES: Record<string, string> = {
+  'weekly founder update': 'weekly founder brief',
+};
+
+const normalizeMissionTitle = (title: string) => {
+  const normalized = title.trim().toLowerCase();
+  return TEMPLATE_TITLE_ALIASES[normalized] ?? normalized;
+};
+
 export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], onOpenMission, className }: WorkflowTemplateGalleryProps) {
+  // A live mission that matches a template claims that card (badge + open CTA)
+  // so each of the six loops appears exactly once. Only genuinely custom
+  // missions render in the "Your missions" section below.
+  const liveByTitle = new Map(userMissions.map((mission) => [normalizeMissionTitle(mission.title), mission]));
+  const claimedKeys = new Set(
+    templates
+      .map((template) => liveByTitle.get(normalizeMissionTitle(template.title))?.key)
+      .filter((key): key is string => Boolean(key)),
+  );
+  const customMissions = userMissions.filter((mission) => !claimedKeys.has(mission.key));
   if (templates.length === 0) return null;
 
   return (
@@ -97,6 +117,7 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
           const toneClass = CATEGORY_TONE[template.category] ?? 'border-white/15 bg-white/5 text-slate-200';
           const accent = CATEGORY_ACCENT[template.category] ?? DEFAULT_ACCENT;
           const numeral = String(index + 1).padStart(2, '0');
+          const liveMission = liveByTitle.get(normalizeMissionTitle(template.title));
           return (
             <article
               key={template.id}
@@ -113,8 +134,16 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
                   {numeral}
                 </span>
 
-                <span className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${toneClass}`}>
-                  {template.category}
+                <span className="flex items-center gap-1.5">
+                  <span className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${toneClass}`}>
+                    {template.category}
+                  </span>
+                  {liveMission ? (
+                    <span className="inline-flex w-fit items-center gap-1 rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-100">
+                      <span aria-hidden className="h-1 w-1 rounded-full bg-emerald-300" />
+                      Live
+                    </span>
+                  ) : null}
                 </span>
 
                 <h3 className="mt-3 pr-10 text-[15px] font-semibold tracking-[-0.01em] text-white">{template.title}</h3>
@@ -146,11 +175,11 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
                   </span>
                   <button
                     type="button"
-                    onClick={() => onUse(template.id)}
-                    aria-label={`Start the ${template.title} mission`}
+                    onClick={() => (liveMission && onOpenMission ? onOpenMission(liveMission.key) : onUse(template.id))}
+                    aria-label={liveMission ? `Open the ${template.title} mission` : `Start the ${template.title} mission`}
                     className="inline-flex items-center gap-1 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100 transition-all group-hover:border-violet-300/50 group-hover:bg-violet-500/20 hover:gap-1.5"
                   >
-                    Start mission
+                    {liveMission ? 'Open mission' : 'Start mission'}
                     <ArrowRight className="h-3 w-3" aria-hidden="true" />
                   </button>
                 </div>
@@ -160,7 +189,7 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
         })}
       </div>
 
-      {userMissions.length > 0 ? (
+      {customMissions.length > 0 ? (
         <>
           <div className="relative mt-6 flex items-center gap-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-500">Your missions</p>
@@ -168,7 +197,7 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
             <p className="text-[10px] text-slate-500">The collection grows with every mission you create</p>
           </div>
           <div className="relative mt-3.5 grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
-            {userMissions.map((mission, index) => {
+            {customMissions.map((mission, index) => {
               const numeral = String(templates.length + index + 1).padStart(2, '0');
               return (
                 <article
