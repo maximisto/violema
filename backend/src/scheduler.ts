@@ -682,6 +682,17 @@ export function createAutomation(
   input: Omit<AutomationRecord, 'id' | 'cron_expression' | 'status' | 'created_at' | 'last_run_at' | 'last_run_status' | 'next_run_at'>,
   onTrigger: (record: AutomationRecord) => Promise<{ ok: boolean; error?: string } | void>
 ) {
+  // Starting the same mission twice (collection card, chat, editor) must not
+  // spawn a second scheduled copy — reuse the workspace's active automation.
+  const normalizedName = input.name.trim().toLowerCase();
+  const existing = readAutomations().find(
+    (item) =>
+      item.workspaceId === input.workspaceId &&
+      item.status === 'active' &&
+      item.name.trim().toLowerCase() === normalizedName,
+  );
+  if (existing) return existing;
+
   const cronExpression = normalizeSchedule(input.schedule);
   const timezone = normalizeTimeZone(input.timezone);
   const record = withAutomationDefaults({
