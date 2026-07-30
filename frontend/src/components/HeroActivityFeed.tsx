@@ -38,13 +38,13 @@ const ACTIVITY: Activity[] = [
     iconWrap: 'bg-emerald-500/16 text-emerald-300',
   },
   {
-    initials: 'D',
-    name: 'Dima',
-    avatar: 'from-signal-400 to-[#cf4a10]',
-    action: 'Guarded 1 risk before send',
+    initials: 'RG',
+    name: 'Review gate',
+    avatar: 'from-violet-400 to-[#7c3cff]',
+    action: 'Held 1 risk for founder approval',
     meta: 'Trust boundary · 9:04 AM',
     Icon: ShieldAlert,
-    iconWrap: 'bg-signal-500/16 text-signal-300',
+    iconWrap: 'bg-violet-500/16 text-violet-300',
   },
 ];
 

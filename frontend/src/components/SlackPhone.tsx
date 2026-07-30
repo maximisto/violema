@@ -8,8 +8,9 @@ import BrandIcon from './BrandIcon';
 /**
  * A built (not screenshotted) iPhone running Slack dark mode that plays a full,
  * live Violema run: the founder asks → Violema pulls the stack (source logos) →
- * posts a trend chart → the reviewable update card → Dima guards a risk → the
- * founder approves → Violema confirms delivery. Messages populate with typing
+ * posts the branded chart card (mirroring the real PNG Violema now delivers) →
+ * the reviewable update card → the review gate holds delivery → the founder
+ * approves → Violema confirms delivery. Messages populate with typing
  * indicators so it feels alive; the Approve button is clickable. Auto-plays in
  * view; collapses to the delivered state under reduced motion.
  */
@@ -63,18 +64,47 @@ const TypingBubble = () => (
 
 type SlackPhoneVariant = 'standard' | 'hero';
 
-function HeroDimaStage() {
+/** The branded chart card Violema now really delivers, as the hero stage art. */
+function ChartCardArt({ compact = false }: { compact?: boolean }) {
+  const rows: Array<[string, number, string]> = [
+    ['MRR', 100, '8.2k'],
+    ['Expansion', 62, '1.4k'],
+    ['New logos', 44, '6'],
+  ];
+  return (
+    <div className={`overflow-hidden rounded-xl bg-[#faf7f2] shadow-[0_10px_28px_-10px_rgba(0,0,0,0.55)] ${compact ? 'p-2.5' : 'p-3.5'}`}>
+      <div className="flex items-center gap-1.5">
+        <span className="relative h-3.5 w-[5px] overflow-hidden rounded-full bg-[#7c3aed]">
+          <span className="absolute inset-x-0 top-0 h-1/2 bg-[#f59e0b]" />
+        </span>
+        <span className={`font-bold text-[#14110e] ${compact ? 'text-[0.6rem]' : 'text-[0.78rem]'}`}>Revenue snapshot</span>
+        <span className={`ml-auto font-bold text-emerald-600 ${compact ? 'text-[0.54rem]' : 'text-[0.66rem]'}`}>▲ 18% WoW</span>
+      </div>
+      <div className={compact ? 'mt-1.5 grid gap-1' : 'mt-2.5 grid gap-2'}>
+        {rows.map(([label, width, value]) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <span className={`w-14 flex-none text-right font-semibold text-[#14110e] ${compact ? 'text-[0.5rem]' : 'text-[0.6rem]'}`}>{label}</span>
+            <span className={`${compact ? 'h-1.5' : 'h-2'} rounded-full bg-gradient-to-r from-[#7c3aed] to-[#a78bfa]`} style={{ width: `${width * 0.52}%` }} />
+            <span className={`font-semibold text-[#6b6253] ${compact ? 'text-[0.5rem]' : 'text-[0.6rem]'}`}>{value}</span>
+          </div>
+        ))}
+      </div>
+      <p className={`text-[#6b6253] ${compact ? 'mt-1.5 text-[0.44rem]' : 'mt-2.5 text-[0.52rem]'}`}>Violema · evidence-linked run data</p>
+    </div>
+  );
+}
+
+function HeroChartStage() {
   return (
     <div className="relative shrink-0 border-b border-white/[0.07] bg-[#080b13] px-3.5 pb-3 pt-2.5">
-      <div className="relative h-[16.25rem] overflow-hidden rounded-[1.35rem] bg-[radial-gradient(circle_at_50%_24%,rgba(124,58,237,0.28),transparent_42%),linear-gradient(180deg,rgba(9,12,23,0.96),rgba(4,6,13,0.98))]">
-        <div aria-hidden className="absolute inset-x-4 top-4 h-28 rounded-full bg-cyan-400/12 blur-[44px]" />
-        <img
-          src="/brand/dima/dima-action.png?v=20260707"
-          alt=""
-          className="absolute left-1/2 top-4 h-[14.5rem] w-[15.25rem] -translate-x-1/2 object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.55)]"
-          decoding="async"
-          loading="eager"
-        />
+      <div className="relative overflow-hidden rounded-[1.35rem] bg-[radial-gradient(circle_at_50%_24%,rgba(124,58,237,0.28),transparent_46%),linear-gradient(180deg,rgba(9,12,23,0.96),rgba(4,6,13,0.98))] p-4">
+        <div aria-hidden className="absolute inset-x-4 top-2 h-24 rounded-full bg-violet-400/14 blur-[44px]" />
+        <div className="relative">
+          <ChartCardArt />
+        </div>
+        <p className="relative mt-2.5 text-center text-[0.5rem] font-semibold uppercase tracking-[0.16em] text-violet-200/75">
+          Charts land in Slack, not just the app
+        </p>
       </div>
     </div>
   );
@@ -194,7 +224,7 @@ export default function SlackPhone({
               <Search className="h-3.5 w-3.5 flex-none text-[#7c8aa3]" />
             </div>
 
-            {isHero ? <HeroDimaStage /> : null}
+            {isHero ? <HeroChartStage /> : null}
 
             {/* thread (bottom-anchored by default; scrollable under the hero Dima stage) */}
             <div
@@ -248,24 +278,10 @@ export default function SlackPhone({
                 </div>
               )}
 
-              {/* trend chart */}
+              {/* branded chart card — the PNG Violema now actually posts */}
               {showChart && (
-                <div className="slackphone-in ml-8 overflow-hidden rounded-lg border border-white/10 bg-white/[0.035] p-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[0.56rem] font-semibold text-[#dbe2f4]">MRR · last 6 weeks</span>
-                    <span className="text-[0.56rem] font-bold text-emerald-300">▲ 18% WoW</span>
-                  </div>
-                  <svg viewBox="0 0 124 36" className="mt-1.5 h-9 w-full" preserveAspectRatio="none">
-                    <defs>
-                      <linearGradient id="mrrbars" x1="0" y1="1" x2="0" y2="0">
-                        <stop offset="0" stopColor="#7c3aed" />
-                        <stop offset="1" stopColor="#22d3ee" />
-                      </linearGradient>
-                    </defs>
-                    {[13, 17, 15, 23, 21, 32].map((h, i) => (
-                      <rect key={i} x={i * 21 + 2} y={36 - h} width="13" height={h} rx="2.5" fill="url(#mrrbars)" />
-                    ))}
-                  </svg>
+                <div className="slackphone-in ml-8">
+                  <ChartCardArt compact />
                 </div>
               )}
 
@@ -312,16 +328,16 @@ export default function SlackPhone({
                 </div>
               )}
 
-              {/* Dima guards a risk */}
+              {/* review gate holds delivery */}
               {showGuard && (
                 <div className="slackphone-in flex items-start gap-2">
-                  <img src="/brand/dima/dima-mark.png" alt="" className="h-6 w-6 flex-none rounded-md border border-white/10 bg-ink-900 object-cover" decoding="async" loading="lazy" />
+                  <span className="flex h-6 w-6 flex-none items-center justify-center rounded-md border border-violet-400/30 bg-violet-500/15 text-[0.7rem]">🛡</span>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[0.66rem] font-bold text-white">Dima</span>
-                      <span className="rounded bg-signal-500/15 px-1 text-[0.4rem] font-bold uppercase tracking-[0.08em] text-signal-300">Guardian</span>
+                      <span className="text-[0.66rem] font-bold text-white">Review gate</span>
+                      <span className="rounded bg-violet-500/15 px-1 text-[0.4rem] font-bold uppercase tracking-[0.08em] text-violet-300">Held</span>
                     </div>
-                    <p className="mt-0.5 text-[0.6rem] leading-snug text-[#c2cadb]">🛡 Held the churn risk for your eyes before anything shipped.</p>
+                    <p className="mt-0.5 text-[0.6rem] leading-snug text-[#c2cadb]">Nothing ships until you say so — the churn risk is flagged for your eyes.</p>
                   </div>
                 </div>
               )}
@@ -348,7 +364,7 @@ export default function SlackPhone({
                   <ViAvatar />
                   <div className="min-w-0">
                     <p className="text-[0.62rem] leading-snug text-[#c2cadb]">
-                      <span className="font-semibold text-emerald-300">Delivered</span> to <span className="font-semibold text-white">#founder-updates</span> · logged with every source.
+                      <span className="font-semibold text-emerald-300">Delivered</span> to <span className="font-semibold text-white">#founder-updates</span> · chart card + every source attached.
                     </p>
                   </div>
                 </div>
