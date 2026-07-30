@@ -1617,14 +1617,14 @@ const NEXUS_TOOLS: Tool[] = [
   },
   {
     name: 'send_message',
-    description: 'Send a message via Slack, email, or Microsoft Teams to a person or channel.',
+    description: 'Send a message via Slack or email to a person or channel.',
     input_schema: {
       type: 'object' as const,
       properties: {
         to: { type: 'string', description: 'Recipient (Slack username @handle, email, or #channel)' },
         subject: { type: 'string', description: 'Subject line (email) or message title' },
         body: { type: 'string', description: 'The message content (markdown supported)' },
-        channel: { type: 'string', enum: ['slack', 'email', 'teams'], description: 'Communication channel' },
+        channel: { type: 'string', enum: ['slack', 'email'], description: 'Communication channel' },
       },
       required: ['to', 'body'],
     },

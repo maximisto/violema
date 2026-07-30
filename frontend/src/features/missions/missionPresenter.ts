@@ -869,7 +869,6 @@ export const CORE_MISSION_INTEGRATIONS: MissionIntegrationView[] = [
   { id: 'gmail', label: 'Gmail', shortLabel: 'GM', category: 'Email' },
   { id: 'google-calendar', label: 'Google Calendar', shortLabel: 'GC', category: 'Calendar' },
   { id: 'outlook', label: 'Outlook', shortLabel: 'OL', category: 'Email' },
-  { id: 'microsoft-teams', label: 'Microsoft Teams', shortLabel: 'MT', category: 'Team' },
 ];
 
 export function buildMissionWorkspaceView(task?: MissionSourceTask | null): MissionWorkspaceView {

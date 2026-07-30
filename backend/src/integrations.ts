@@ -11,7 +11,9 @@ interface SendMessageInput {
   attachedImages?: Array<{ url: string; alt: string }>;
 }
 
-type MessageChannel = 'slack' | 'email' | 'teams';
+// Teams stays out of this union until a real connector exists — the enum is
+// model-facing, and an advertised channel with a stub sender fails live runs.
+type MessageChannel = 'slack' | 'email';
 
 interface ValidatedMessageTarget {
   channel: MessageChannel;
@@ -125,7 +127,7 @@ export async function searchWeb(query: string, numResults = 5) {
 }
 
 function inferMessageChannel(input: SendMessageInput): MessageChannel {
-  if (input.channel === 'slack' || input.channel === 'email' || input.channel === 'teams') {
+  if (input.channel === 'slack' || input.channel === 'email') {
     return input.channel;
   }
 
@@ -415,7 +417,7 @@ export async function sendMessage(input: SendMessageInput) {
     return sendEmailMessage({ ...input, channel });
   }
 
-  throw new Error('Microsoft Teams is not configured in this demo yet.');
+  throw new Error(`Unsupported delivery channel: ${channel}`);
 }
 
 export function getIntegrationStatus() {
