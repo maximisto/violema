@@ -4413,7 +4413,7 @@ export default function Dashboard() {
   const chatTabActive = workspaceArea === 'home' && activeWorkspaceTab === 'chat';
 
   return (
-    <div className={`relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-navy-950 md:h-screen md:min-h-screen ${scopeClass}`}>
+    <div className={`app-viewport-height relative flex overflow-hidden bg-navy-950 ${scopeClass}`}>
       {uiNotice && (
         <div className="pointer-events-none absolute inset-x-3 top-3 z-50 flex justify-center">
           <div
@@ -6681,6 +6681,10 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Pinned action bar: always visible regardless of drawer scroll. */}
+            <div className="border-t border-navy-800/80 bg-navy-950/70 px-5 py-3.5">
               {hasUnconfiguredDelivery ? (
                 <p className="mb-2 text-right text-[11px] text-amber-400">
                   Add a notification target in Setup before saving — your workflow has a Deliver step with no destination.

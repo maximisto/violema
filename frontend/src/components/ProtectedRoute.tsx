@@ -1,6 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { fetchBackendAuthSession, isAdminSession } from '../lib/auth';
+
+/** Publishes the banner's measured height so fixed-height app surfaces
+ * (`.app-viewport-height`) can subtract it and keep their bottom edge —
+ * and pinned controls — on screen. */
+function useBannerHeightVariable(active: boolean) {
+  const bannerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!active || !bannerRef.current) {
+      root.style.setProperty('--app-banner-h', '0px');
+      return;
+    }
+    const node = bannerRef.current;
+    const apply = () => root.style.setProperty('--app-banner-h', `${node.offsetHeight}px`);
+    apply();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(apply) : null;
+    observer?.observe(node);
+    window.addEventListener('resize', apply);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', apply);
+      root.style.setProperty('--app-banner-h', '0px');
+    };
+  }, [active]);
+
+  return bannerRef;
+}
 
 interface ProtectedRouteProps {
   children: JSX.Element;
@@ -12,6 +40,7 @@ export default function ProtectedRoute({ children, blockedRedirectPath = '/signu
   const location = useLocation();
   const [status, setStatus] = useState<'checking' | 'allowed' | 'blocked' | 'denied' | 'requires-terms'>('checking');
   const [showAdminTermsPrompt, setShowAdminTermsPrompt] = useState(false);
+  const bannerRef = useBannerHeightVariable(showAdminTermsPrompt);
 
   useEffect(() => {
     let active = true;
@@ -73,7 +102,7 @@ export default function ProtectedRoute({ children, blockedRedirectPath = '/signu
   return (
     <>
       {showAdminTermsPrompt ? (
-        <div className="relative z-[70] border-b border-amber-400/20 bg-amber-400/10 px-4 py-2 text-center text-sm text-amber-100">
+        <div ref={bannerRef} className="relative z-[70] border-b border-amber-400/20 bg-amber-400/10 px-4 py-2 text-center text-sm text-amber-100">
           The current beta terms are ready for review. Admin access remains available.{' '}
           <Link to={adminTermsPath} className="font-semibold underline underline-offset-2 hover:text-white">
             Review and accept

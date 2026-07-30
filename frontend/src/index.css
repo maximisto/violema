@@ -1401,6 +1401,14 @@
   max-width: calc(100vw - 152px);
 }
 
+/* Fixed-height app surfaces size to the viewport MINUS any banner above them
+   (ProtectedRoute publishes --app-banner-h). Without this, a terms banner
+   pushes the app's bottom edge — and its pinned controls — below the fold. */
+.app-viewport-height {
+  height: calc(100dvh - var(--app-banner-h, 0px));
+  min-height: calc(100dvh - var(--app-banner-h, 0px));
+}
+
 .mobile-nav-drawer {
   min-height: calc(100dvh - 4.75rem);
   max-height: calc(100dvh - 4.75rem);
