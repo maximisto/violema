@@ -6,6 +6,14 @@ export default {
   ],
   theme: {
     extend: {
+      // The codebase uses fine-grained alpha steps (…/6, /62, /96) but Tailwind
+      // only compiles slash modifiers present in the opacity scale — off-scale
+      // steps silently produced NO css, leaving panels transparent (invisible
+      // on dark, glaring on light). A full 1–99 scale makes every authored
+      // step real.
+      opacity: Object.fromEntries(
+        Array.from({ length: 99 }, (_, i) => [String(i + 1), String((i + 1) / 100)]),
+      ),
       colors: {
         // Neutral surfaces/text are variable-backed so a single set of CSS
         // custom properties (defined in index.css) drives every shade AND every
