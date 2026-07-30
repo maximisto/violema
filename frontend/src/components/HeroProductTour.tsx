@@ -10,7 +10,7 @@ export type HeroTourSlide = {
   alt: string;
 };
 
-export const HERO_IMAGE_VERSION = '20260730';
+export const HERO_IMAGE_VERSION = '20260730b';
 /** Both capture sets exist (P1–P6 light and P1-dark–P6-dark), so each theme
  * shows its own: light captures on the light site, dark on dark. */
 export const DARK_TOUR_SLIDES_READY = true;
@@ -26,7 +26,7 @@ export const heroTourSlides: HeroTourSlide[] = [
   { name: 'P2', src: heroImageSrc('P2'), path: 'violema.com / missions', alt: 'Violema mission cockpit showing competitor monitor run progress, cost, and cadence controls.' },
   { name: 'P3', src: heroImageSrc('P3'), path: 'violema.com / collection', alt: 'Violema mission collection: six numbered operating loops, from the weekly founder brief to the monthly investor update.' },
   { name: 'P4', src: heroImageSrc('P4'), path: 'violema.com / reviews', alt: 'Violema review gate with the drafted competitor memo, source evidence, and delivery receipt.' },
-  { name: 'P5', src: heroImageSrc('P5'), path: 'violema.com / calendar', alt: 'Violema calendar scheduling recurring founder workflows across the connected stack.' },
+  { name: 'P5', src: heroImageSrc('P5'), path: 'violema.com / calendar', alt: 'Violema calendar scheduling recurring founder workflows, with the delivered competitor memo artifact in the context inspector.' },
   { name: 'P6', src: heroImageSrc('P6'), path: 'violema.com / analytics', alt: 'Violema analytics with the credit waterfall, per-step run cost, and the agent floor on duty.' },
 ];
 
