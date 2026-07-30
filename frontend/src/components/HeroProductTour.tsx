@@ -3,30 +3,31 @@ import { useTheme } from '../lib/useTheme';
 
 export type HeroTourSlide = {
   /** Base asset name; light lives at P{n}.jpg, dark at P{n}-dark.jpg. */
-  name: `P${1 | 2 | 3 | 4 | 5}`;
+  name: `P${1 | 2 | 3 | 4 | 5 | 6}`;
   src: string;
   /** Path shown in the frame's address bar. It reads like a live walk-through. */
   path: string;
   alt: string;
 };
 
-export const HERO_IMAGE_VERSION = '20260729';
-/** Flip when the dark-theme captures (P1-dark.jpg … P5-dark.jpg) exist; until
- * then both themes show the light captures. */
-export const DARK_TOUR_SLIDES_READY = false;
-export const heroImageSrc = (name: `P${1 | 2 | 3 | 4 | 5}`, theme: 'light' | 'dark' = 'light') =>
+export const HERO_IMAGE_VERSION = '20260730';
+/** Both capture sets exist (P1–P6 light and P1-dark–P6-dark), so each theme
+ * shows its own: light captures on the light site, dark on dark. */
+export const DARK_TOUR_SLIDES_READY = true;
+export const heroImageSrc = (name: `P${1 | 2 | 3 | 4 | 5 | 6}`, theme: 'light' | 'dark' = 'light') =>
   `/brand/${name}${theme === 'dark' ? '-dark' : ''}.jpg?v=${HERO_IMAGE_VERSION}`;
 
 /**
- * A slow, ambient walk-through of the live product (light theme), following one
- * real Competitor monitor run from chat to analytics.
+ * A slow, ambient walk-through of the live product, following one real
+ * Competitor monitor run from chat through the collection to analytics.
  */
 export const heroTourSlides: HeroTourSlide[] = [
   { name: 'P1', src: heroImageSrc('P1'), path: 'violema.com / chat', alt: 'Violema home chat with the context inspector showing a completed competitor monitor mission.' },
   { name: 'P2', src: heroImageSrc('P2'), path: 'violema.com / missions', alt: 'Violema mission cockpit showing competitor monitor run progress, cost, and cadence controls.' },
-  { name: 'P3', src: heroImageSrc('P3'), path: 'violema.com / reviews', alt: 'Violema review gate with the drafted competitor memo, source evidence, and delivery receipt.' },
-  { name: 'P4', src: heroImageSrc('P4'), path: 'violema.com / calendar', alt: 'Violema calendar scheduling recurring founder workflows across the connected stack.' },
-  { name: 'P5', src: heroImageSrc('P5'), path: 'violema.com / analytics', alt: 'Violema analytics with the credit waterfall, per-step run cost, and runway forecast.' },
+  { name: 'P3', src: heroImageSrc('P3'), path: 'violema.com / collection', alt: 'Violema mission collection: six numbered operating loops, from the weekly founder brief to the monthly investor update.' },
+  { name: 'P4', src: heroImageSrc('P4'), path: 'violema.com / reviews', alt: 'Violema review gate with the drafted competitor memo, source evidence, and delivery receipt.' },
+  { name: 'P5', src: heroImageSrc('P5'), path: 'violema.com / calendar', alt: 'Violema calendar scheduling recurring founder workflows across the connected stack.' },
+  { name: 'P6', src: heroImageSrc('P6'), path: 'violema.com / analytics', alt: 'Violema analytics with the credit waterfall, per-step run cost, and the agent floor on duty.' },
 ];
 
 export const HERO_TOUR_MS = 7200;
