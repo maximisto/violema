@@ -4087,6 +4087,10 @@ export default function Dashboard() {
                 const item = taskItems.find((entry) => String(entry.automationId) === key);
                 if (item) void handleAutomationEdit(item, 'workflow');
               }}
+              onRunMission={(key) => {
+                const item = taskItems.find((entry) => String(entry.automationId) === key);
+                if (item) void handleAutomationRun(item);
+              }}
             />
           </>
         );

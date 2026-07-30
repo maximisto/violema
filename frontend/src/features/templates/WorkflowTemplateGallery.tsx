@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, Layers3 } from 'lucide-react';
+import { ArrowRight, Clock, Layers3, Play } from 'lucide-react';
 import type { WorkflowTemplateDefinition } from '../../content/workflowTemplates';
 
 export interface GalleryUserMission {
@@ -14,6 +14,8 @@ interface WorkflowTemplateGalleryProps {
   onUse: (id: string) => void;
   userMissions?: GalleryUserMission[];
   onOpenMission?: (key: string) => void;
+  /** Fires a run-now for a live mission straight from its card. */
+  onRunMission?: (key: string) => void;
   className?: string;
 }
 
@@ -71,7 +73,7 @@ const normalizeMissionTitle = (title: string) => {
   return TEMPLATE_TITLE_ALIASES[normalized] ?? normalized;
 };
 
-export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], onOpenMission, className }: WorkflowTemplateGalleryProps) {
+export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], onOpenMission, onRunMission, className }: WorkflowTemplateGalleryProps) {
   // A live mission that matches a template claims that card (badge + open CTA)
   // so each of the six loops appears exactly once. Only genuinely custom
   // missions render in the "Your missions" section below.
@@ -173,15 +175,28 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
                       {template.steps.length} steps
                     </span>
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => (liveMission && onOpenMission ? onOpenMission(liveMission.key) : onUse(template.id))}
-                    aria-label={liveMission ? `Open the ${template.title} mission` : `Start the ${template.title} mission`}
-                    className="inline-flex items-center gap-1 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100 transition-all group-hover:border-violet-300/50 group-hover:bg-violet-500/20 hover:gap-1.5"
-                  >
-                    {liveMission ? 'Open mission' : 'Start mission'}
-                    <ArrowRight className="h-3 w-3" aria-hidden="true" />
-                  </button>
+                  <span className="inline-flex items-center gap-1.5">
+                    {liveMission && onRunMission ? (
+                      <button
+                        type="button"
+                        onClick={() => onRunMission(liveMission.key)}
+                        aria-label={`Run the ${template.title} mission now`}
+                        className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-100 transition-all hover:border-emerald-300/50 hover:bg-emerald-500/20"
+                      >
+                        <Play className="h-3 w-3" aria-hidden="true" />
+                        Run
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => (liveMission && onOpenMission ? onOpenMission(liveMission.key) : onUse(template.id))}
+                      aria-label={liveMission ? `Open the ${template.title} mission` : `Start the ${template.title} mission`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100 transition-all group-hover:border-violet-300/50 group-hover:bg-violet-500/20 hover:gap-1.5"
+                    >
+                      {liveMission ? 'Open mission' : 'Start mission'}
+                      <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  </span>
                 </div>
               </div>
             </article>
