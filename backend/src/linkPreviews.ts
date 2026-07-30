@@ -41,6 +41,17 @@ export function extractBriefLinks(markdown: string, limit: number): BriefLink[] 
   return links;
 }
 
+/** og:image content arrives HTML-escaped; undecoded &amp; breaks signed CDN URLs. */
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/gi, '&')
+    .replace(/&#0*38;|&#x0*26;/gi, '&')
+    .replace(/&quot;|&#0*34;/gi, '"')
+    .replace(/&apos;|&#0*39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
 export function parseOgImageFromHtml(html: string): string | null {
   const metaTags = html.match(/<meta\s[^>]*>/gi) || [];
   let fallback: string | null = null;
@@ -50,7 +61,7 @@ export function parseOgImageFromHtml(html: string): string | null {
     if (!nameMatch) continue;
     const contentMatch = tag.match(/content\s*=\s*["']([^"']+)["']/i);
     if (!contentMatch) continue;
-    const url = contentMatch[1].trim();
+    const url = decodeHtmlEntities(contentMatch[1].trim());
     if (!/^https:\/\//.test(url)) continue;
     if (nameMatch[1].toLowerCase() === 'og:image') return url;
     fallback = fallback || url;
@@ -115,7 +126,27 @@ export async function collectLinkImageBlocks(
   if (links.length === 0) return [];
 
   const results = await Promise.all(links.map((link) => fetchOgImage(link, timeoutMs, fetchImpl)));
-  const found = results.filter((result): result is { link: BriefLink; imageUrl: string } => result !== null);
+  const candidates = results.filter((result): result is { link: BriefLink; imageUrl: string } => result !== null);
+  // Slack downloads image_url server-side at post time; one unfetchable image
+  // (signed/expiring CDN, hotlink protection) fails the whole message as
+  // invalid_blocks. Probe first and drop anything Slack couldn't pull.
+  const probed = await Promise.all(
+    candidates.map(async (candidate) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetchImpl(candidate.imageUrl, { signal: controller.signal });
+        const contentType = (response.headers.get('content-type') || '').toLowerCase();
+        return response.ok && contentType.startsWith('image/') ? candidate : null;
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timer);
+        controller.abort();
+      }
+    }),
+  );
+  const found = probed.filter((result): result is { link: BriefLink; imageUrl: string } => result !== null);
   if (found.length === 0) return [];
 
   const blocks: SlackBlock[] = [{ type: 'divider' }];

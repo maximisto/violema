@@ -18,6 +18,10 @@ function stubResponse(body: string, contentType = 'text/html'): Response {
   return new Response(body, { status: 200, headers: { 'content-type': contentType } });
 }
 
+function stubImage(status = 200): Response {
+  return new Response('binary', { status, headers: { 'content-type': 'image/png' } });
+}
+
 test('extractBriefLinks takes https links, deduped by host, up to the limit', () => {
   const links = extractBriefLinks(BRIEF, 3);
   assert.deepEqual(links.map((link) => link.url), [
@@ -50,6 +54,7 @@ test('collectLinkImageBlocks returns divider plus image blocks from fetched page
   const blocks = await collectLinkImageBlocks(BRIEF, {
     fetchImpl: async (input) => {
       const url = String(input);
+      if (url.startsWith('https://cdn.')) return stubImage();
       if (url.includes('acme')) {
         return stubResponse('<meta property="og:image" content="https://cdn.acme-example.com/hero.png">');
       }
@@ -70,13 +75,55 @@ test('explicit evidence candidates produce images even when the memo has no link
       { url: 'http://insecure-example.com/a', label: 'rejected http' },
       { url: 'https://news.acme-example.com/dupe', label: 'same host duplicate' },
     ],
-    fetchImpl: async () => stubResponse('<meta property="og:image" content="https://cdn.acme-example.com/hero.png">'),
+    fetchImpl: async (input) =>
+      String(input).startsWith('https://cdn.')
+        ? stubImage()
+        : stubResponse('<meta property="og:image" content="https://cdn.acme-example.com/hero.png">'),
   });
 
   assert.deepEqual(blocks, [
     { type: 'divider' },
     { type: 'image', image_url: 'https://cdn.acme-example.com/hero.png', alt_text: 'Acme pricing move' },
   ]);
+});
+
+test('parseOgImageFromHtml decodes HTML entities in the content attribute', () => {
+  const html = '<meta property="og:image" content="https://cdn.example.com/a.png?e=214&amp;v=beta&amp;t=sig">';
+  assert.equal(parseOgImageFromHtml(html), 'https://cdn.example.com/a.png?e=214&v=beta&t=sig');
+});
+
+test('collectLinkImageBlocks drops images Slack could not download', async () => {
+  // Slack fetches image_url server-side at post time; a 403 (signed/expiring
+  // CDN, hotlink protection) fails the WHOLE message as invalid_blocks.
+  const blocks = await collectLinkImageBlocks('No inline links.', {
+    candidates: [
+      { url: 'https://news.acme-example.com/pricing', label: 'Public image' },
+      { url: 'https://social-example.com/post', label: 'Signed expiring image' },
+    ],
+    fetchImpl: async (input) => {
+      const url = String(input);
+      if (url === 'https://cdn.acme-example.com/ok.png') return stubImage();
+      if (url === 'https://cdn.social-example.com/expired.png') return stubImage(403);
+      if (url.includes('news.acme')) {
+        return stubResponse('<meta property="og:image" content="https://cdn.acme-example.com/ok.png">');
+      }
+      return stubResponse('<meta property="og:image" content="https://cdn.social-example.com/expired.png">');
+    },
+  });
+
+  assert.deepEqual(blocks, [
+    { type: 'divider' },
+    { type: 'image', image_url: 'https://cdn.acme-example.com/ok.png', alt_text: 'Public image' },
+  ]);
+
+  const allUnfetchable = await collectLinkImageBlocks('No inline links.', {
+    candidates: [{ url: 'https://social-example.com/post', label: 'Signed expiring image' }],
+    fetchImpl: async (input) =>
+      String(input).startsWith('https://cdn.')
+        ? stubResponse('<html>login wall</html>')
+        : stubResponse('<meta property="og:image" content="https://cdn.social-example.com/expired.png">'),
+  });
+  assert.deepEqual(allUnfetchable, [], 'No divider without at least one downloadable image.');
 });
 
 test('collectLinkImageBlocks returns nothing when fetches fail or pages lack images', async () => {
