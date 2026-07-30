@@ -1,6 +1,9 @@
 import type { TextGenerationResult } from '../models';
 
-export const AUTOMATION_SUMMARY_MAX_TOKENS = 1400;
+// Sized for the current brief shape on the hard tier: up to the word limit of
+// prose plus a competitor table and inline source links, with headroom so
+// complete drafts never trip the truncation rejection.
+export const AUTOMATION_SUMMARY_MAX_TOKENS = 2200;
 export const AUTOMATION_SUMMARY_WORD_LIMIT = 650;
 
 const TRUNCATION_STOP_REASONS = new Set([

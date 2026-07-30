@@ -16,10 +16,13 @@ export type SlackBlock =
   | { type: 'image'; image_url: string; alt_text: string }
   | { type: 'context'; elements: SlackTextObject[] };
 
-// Slack hard limits: 3000 chars per section text, 150 per header, 50 blocks.
+// Slack hard limits: 3000 chars per section text, 150 per header, 50 blocks
+// per message. Longer briefs are split across threaded messages at send time;
+// MAX_CONTENT_BLOCKS is only a runaway backstop.
 const SECTION_TEXT_LIMIT = 2900;
 const HEADER_TEXT_LIMIT = 148;
-const MAX_CONTENT_BLOCKS = 45;
+const MAX_CONTENT_BLOCKS = 130;
+export const SLACK_BLOCKS_PER_MESSAGE = 45;
 
 function escapeSlackText(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -173,6 +176,24 @@ export function markdownToSlackBlocks(markdown: string): SlackBlock[] {
   }
 
   return blocks;
+}
+
+/** Splits a block list into Slack-sized messages; parts after the first open
+ * with a "continued" context line so threaded delivery reads naturally. */
+export function chunkSlackBlocks(blocks: SlackBlock[], perMessage = SLACK_BLOCKS_PER_MESSAGE): SlackBlock[][] {
+  if (blocks.length <= perMessage) return [blocks];
+  const chunks: SlackBlock[][] = [];
+  for (let start = 0; start < blocks.length; start += perMessage) {
+    const part = blocks.slice(start, start + perMessage);
+    if (start > 0) {
+      part.unshift({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: `_…continued (part ${chunks.length + 1})_` }],
+      });
+    }
+    chunks.push(part);
+  }
+  return chunks;
 }
 
 // Blocks are only worth building when the body actually carries markdown

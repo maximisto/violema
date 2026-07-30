@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildSlackMessagePayload,
+  chunkSlackBlocks,
   hasMarkdownStructure,
   markdownToSlackBlocks,
   toSlackMrkdwn,
+  SLACK_BLOCKS_PER_MESSAGE,
 } from '../src/slackBlocks';
 
 const COMPETITOR_BRIEF = [
@@ -83,10 +85,22 @@ test('hasMarkdownStructure detects briefs but not chat text', () => {
   assert.ok(!hasMarkdownStructure('Sounds good, shipping it now.'));
 });
 
-test('oversized briefs truncate below Slack block limits with a pointer back to the run', () => {
-  const huge = Array.from({ length: 80 }, (_, i) => `## Section ${i}\n\ncontent ${i}`).join('\n\n');
+test('chunkSlackBlocks splits long briefs into threaded parts with continuation markers', () => {
+  const blocks = markdownToSlackBlocks(
+    ['# Long brief', ...Array.from({ length: 60 }, (_, i) => `## Section ${i}\n\ncontent ${i}`)].join('\n\n'),
+  );
+  const chunks = chunkSlackBlocks(blocks);
+  assert.ok(chunks.length >= 2, 'long brief splits into multiple messages');
+  assert.ok(chunks.every((chunk) => chunk.length <= SLACK_BLOCKS_PER_MESSAGE + 1));
+  assert.equal(chunks[0][0].type, 'header');
+  assert.match(JSON.stringify(chunks[1][0]), /continued \(part 2\)/);
+  assert.deepEqual(chunkSlackBlocks(blocks.slice(0, 10)), [blocks.slice(0, 10)], 'short briefs stay one message');
+});
+
+test('runaway briefs still hit the backstop with a pointer back to the run', () => {
+  const huge = Array.from({ length: 120 }, (_, i) => `## Section ${i}\n\ncontent ${i}`).join('\n\n');
   const blocks = markdownToSlackBlocks(huge);
-  assert.ok(blocks.length <= 46);
+  assert.ok(blocks.length <= 131);
   const last = blocks[blocks.length - 1];
   assert.equal(last.type, 'context');
   assert.match(JSON.stringify(last), /truncated/i);

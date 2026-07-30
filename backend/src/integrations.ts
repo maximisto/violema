@@ -1,4 +1,4 @@
-import { buildSlackMessagePayload } from './slackBlocks';
+import { buildSlackMessagePayload, chunkSlackBlocks } from './slackBlocks';
 import { collectLinkImageBlocks } from './linkPreviews';
 
 interface SendMessageInput {
@@ -316,32 +316,41 @@ async function sendSlackMessage(input: SendMessageInput) {
   }
   const validated = await validateMessageTarget({ to: input.to, channel: 'slack' });
 
-  const response = await fetch('https://slack.com/api/chat.postMessage', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      channel: validated.normalizedTarget,
-      text: payload.text,
-      mrkdwn: true,
-      ...(payload.blocks
-        ? { blocks: payload.blocks, unfurl_links: false, unfurl_media: false }
-        : {}),
-      ...(input.threadTs ? { thread_ts: input.threadTs } : {}),
-    }),
-  });
-
-  const data = await response.json() as {
-    ok?: boolean;
-    error?: string;
-    ts?: string;
-    channel?: string;
+  const post = async (body: Record<string, unknown>) => {
+    const response = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json() as {
+      ok?: boolean;
+      error?: string;
+      ts?: string;
+      channel?: string;
+    };
+    if (!response.ok || !data.ok) {
+      throw new Error(`Slack send failed: ${data.error || response.statusText}`);
+    }
+    return data;
   };
 
-  if (!response.ok || !data.ok) {
-    throw new Error(`Slack send failed: ${data.error || response.statusText}`);
+  // Briefs larger than one Slack message split into threaded continuations
+  // under the first message instead of truncating.
+  const chunks = payload.blocks ? chunkSlackBlocks(payload.blocks) : [null];
+  let first: { ts?: string; channel?: string } | null = null;
+  for (const [index, chunk] of chunks.entries()) {
+    const data = await post({
+      channel: validated.normalizedTarget,
+      text: index === 0 ? payload.text : '…continued',
+      mrkdwn: true,
+      ...(chunk ? { blocks: chunk, unfurl_links: false, unfurl_media: false } : {}),
+      ...(index === 0 && input.threadTs ? { thread_ts: input.threadTs } : {}),
+      ...(index > 0 && first?.ts ? { thread_ts: first.ts } : {}),
+    });
+    if (index === 0) first = data;
   }
 
   return {
@@ -350,8 +359,9 @@ async function sendSlackMessage(input: SendMessageInput) {
     to: validated.target,
     status: 'delivered',
     sent_at: new Date().toISOString(),
-    slack_channel: data.channel || validated.normalizedTarget,
-    slack_ts: data.ts || null,
+    slack_channel: first?.channel || validated.normalizedTarget,
+    slack_ts: first?.ts || null,
+    ...(chunks.length > 1 ? { slack_parts: chunks.length } : {}),
   };
 }
 

@@ -226,7 +226,9 @@ const BRIEF_CHARTS_DIR = path.join(process.cwd(), 'brief-charts');
 // chart attachments rather than emitting URLs that resolve nowhere.
 const PUBLIC_APP_BASE_URL = (process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || '').trim();
 const SLACK_EVENT_CACHE_WINDOW_MS = 5 * 60 * 1000;
-const AUTOMATION_STEP_TIMEOUT_MS = Number(process.env.AUTOMATION_STEP_TIMEOUT_MS || 45000);
+// Hang guard, not a pace expectation: Opus-tier drafting of evidence-heavy
+// briefs (table + source links) legitimately runs past a minute.
+const AUTOMATION_STEP_TIMEOUT_MS = Number(process.env.AUTOMATION_STEP_TIMEOUT_MS || 120000);
 const MAX_TOOL_ITERATIONS = readPositiveIntegerEnv('MAX_TOOL_ITERATIONS', 24);
 const CHAT_MAX_OUTPUT_TOKENS = readPositiveIntegerEnv('CHAT_MAX_OUTPUT_TOKENS', 8000);
 const handledSlackEvents = new Map<string, number>();
