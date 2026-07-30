@@ -1,9 +1,69 @@
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
+import CalendarCheck from 'lucide-react/dist/esm/icons/calendar-check.js';
+import Phone from 'lucide-react/dist/esm/icons/phone.js';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import { Link, useNavigate } from 'react-router-dom';
 import { consultationUrl, openCalendlyConsultation } from '../lib/calendly';
 import ViolemaLogo from './ViolemaLogo';
 import Reveal from './Reveal';
+
+/** Violema's own voice-agent number — set when provisioned; empty hides the
+ * call line and leads with the Calendly booking instead. */
+const VIOLEMA_VOICE_NUMBER: string = '';
+
+/** The guard post: Dima anchors the very bottom of the site (desktop), beside
+ * the audit CTA and the channel roster — mirrors the PurpleOrangeGroup band. */
+function FooterGuardBand() {
+  return (
+    <div className="mb-10 overflow-hidden rounded-2xl border border-violet-500/20 bg-[radial-gradient(circle_at_88%_10%,rgba(139,92,246,0.14),transparent_42%)]">
+      <div className="flex flex-col items-center gap-6 px-6 py-7 sm:px-8 lg:flex-row lg:items-end lg:justify-between lg:gap-8">
+        <div className="max-w-xl text-center lg:text-left">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-violet-300/90">The guard post</p>
+          <h3 className="mt-2 font-display text-xl font-semibold tracking-[-0.02em] text-white sm:text-2xl">
+            Book a free AI workflow audit
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-[#aeb7cd]">
+            Twenty minutes on your recurring work — a human runs the audit, Dima guards the review gate.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 lg:justify-start">
+            <a
+              href={consultationUrl}
+              onClick={(event) => { void openCalendlyConsultation(event, 'footer-guard-band'); }}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-500 px-4 text-sm font-semibold text-white transition duration-200 hover:brightness-110"
+            >
+              <CalendarCheck className="h-4 w-4" aria-hidden="true" />
+              Book the audit
+            </a>
+            {VIOLEMA_VOICE_NUMBER ? (
+              <a
+                href={`tel:${VIOLEMA_VOICE_NUMBER.replace(/[^+\d]/g, '')}`}
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] px-4 text-sm font-semibold text-white transition duration-200 hover:border-violet-300/40"
+              >
+                <Phone className="h-4 w-4" aria-hidden="true" />
+                Call — the agent books it · {VIOLEMA_VOICE_NUMBER}
+              </a>
+            ) : null}
+          </div>
+          <div className="mt-3.5 flex flex-wrap items-center justify-center gap-1.5 lg:justify-start">
+            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+              {VIOLEMA_VOICE_NUMBER ? 'Voice agent · live' : 'Voice agent · arriving'}
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-slate-400">Text agent · soon</span>
+            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-slate-400">Email briefings · soon</span>
+          </div>
+        </div>
+        <img
+          src="/brand/dima/dima-action.png?v=20260707"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none hidden h-44 w-auto select-none object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.55)] lg:block"
+          decoding="async"
+          loading="lazy"
+        />
+      </div>
+    </div>
+  );
+}
 
 const footerLinks = {
   Product: [
@@ -175,6 +235,8 @@ export default function Footer() {
             ))}
           </div>
         </div>
+
+        <FooterGuardBand />
 
         <div className="flex flex-col gap-4 border-t border-white/10 py-6 text-sm text-[#828ea4] sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2.5">
