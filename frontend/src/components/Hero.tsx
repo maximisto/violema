@@ -21,6 +21,7 @@ type HeroCtaAction = 'apply_for_beta' | 'book_workflow_audit';
 const proofIcons = [CalendarDays, ShieldCheck, Link2, DollarSign];
 
 function MobileHeroVisual() {
+  const { index } = useHeroTour();
   return (
     <div data-mobile-hero-visual="true" className="relative mt-7 lg:hidden">
       <div aria-hidden className="absolute -inset-x-7 -inset-y-8 -z-10">
@@ -30,18 +31,20 @@ function MobileHeroVisual() {
 
       <div className="relative pb-8">
         <div className="relative overflow-hidden rounded-[1.45rem] border border-white/[0.08] bg-black shadow-[0_34px_80px_-30px_rgba(0,0,0,0.9)]">
-          <img
-            src={heroImageSrc('P1')}
-            alt="Violema desktop workspace with chat, mission context, and founder workflow controls."
-            width={1800}
-            height={1010}
-            className="block w-full"
-            decoding="async"
-          />
+          <HeroTourImages index={index} />
           <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[1.45rem] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
           <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-ink-900/95 to-transparent" />
         </div>
 
+        <img
+          src="/brand/dima/dima-action.png?v=20260707"
+          alt=""
+          aria-hidden="true"
+          data-mobile-hero-dima="true"
+          className="pointer-events-none absolute -bottom-1 right-2 z-10 w-[42%] max-w-[13rem] select-none object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.62)]"
+          decoding="async"
+          loading="eager"
+        />
       </div>
     </div>
   );

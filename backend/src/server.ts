@@ -6077,7 +6077,14 @@ app.post('/api/automations/:id/reviews/:runId/rerun', (req: Request, res: Respon
     .join(' — ');
   const record = triggerAutomationNow(req.params.id, (fresh) => runAutomation({ ...fresh, reviewFeedback: reviewFeedback || undefined }));
   broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_rerun_requested');
-  res.json({ ok: true, item: record, message: `Requested a fresh run for ${context.automation.name}` });
+  res.json({
+    ok: true,
+    item: record,
+    reviewFeedbackApplied: Boolean(reviewFeedback),
+    message: reviewFeedback
+      ? `Requested a fresh run for ${context.automation.name} — reviewer feedback attached.`
+      : `Requested a fresh run for ${context.automation.name}`,
+  });
 });
 
 app.patch('/api/automations/:id', async (req: Request, res: Response) => {

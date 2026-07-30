@@ -2726,6 +2726,9 @@ export default function Dashboard() {
   }, [closeAutomationEditor, navigate]);
 
   const pendingRunAfterSave = useRef(false);
+  // Last change-request note, resent on rerun so reviewer feedback reaches the
+  // fresh run even if the stored copy is unavailable.
+  const lastChangeNoteRef = useRef('');
 
   const handleAutomationEditorSave = useCallback(async () => {
     if (!automationEditor) return;
@@ -3073,6 +3076,7 @@ export default function Dashboard() {
         },
       );
       if (!response.ok) throw new Error(await readApiError(response, 'Could not request changes'));
+      lastChangeNoteRef.current = note.trim();
       await refreshAutomations();
       showNotice('success', 'Change request saved.');
     } catch (error) {
@@ -3097,12 +3101,13 @@ export default function Dashboard() {
             'X-Workspace-Id': workspace.workspaceId,
             'X-Workspace-Name': workspace.workspaceName,
           },
-          body: JSON.stringify({ reviewer: reviewerLabel }),
+          body: JSON.stringify({ reviewer: reviewerLabel, note: lastChangeNoteRef.current || undefined }),
         },
       );
       if (!response.ok) throw new Error(await readApiError(response, 'Could not rerun mission'));
+      const payload = await response.json().catch(() => null) as { message?: string } | null;
       await refreshAutomations();
-      showNotice('success', 'Fresh run requested.');
+      showNotice('success', payload?.message || 'Fresh run requested.');
     } catch (error) {
       showNotice('error', error instanceof Error ? error.message : 'Could not rerun mission');
     } finally {
