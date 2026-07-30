@@ -94,22 +94,6 @@ function ChartCardArt({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function HeroChartStage() {
-  return (
-    <div className="relative shrink-0 border-b border-white/[0.07] bg-[#080b13] px-3.5 pb-3 pt-2.5">
-      <div className="relative overflow-hidden rounded-[1.35rem] bg-[radial-gradient(circle_at_50%_24%,rgba(124,58,237,0.28),transparent_46%),linear-gradient(180deg,rgba(9,12,23,0.96),rgba(4,6,13,0.98))] p-4">
-        <div aria-hidden className="absolute inset-x-4 top-2 h-24 rounded-full bg-violet-400/14 blur-[44px]" />
-        <div className="relative">
-          <ChartCardArt />
-        </div>
-        <p className="relative mt-2.5 text-center text-[0.5rem] font-semibold uppercase tracking-[0.16em] text-violet-200/75">
-          Charts land in Slack, not just the app
-        </p>
-      </div>
-    </div>
-  );
-}
-
 export default function SlackPhone({
   className = '',
   variant = 'standard',
@@ -224,17 +208,12 @@ export default function SlackPhone({
               <Search className="h-3.5 w-3.5 flex-none text-[#7c8aa3]" />
             </div>
 
-            {isHero ? <HeroChartStage /> : null}
 
             {/* thread (bottom-anchored by default; scrollable under the hero Dima stage) */}
             <div
               ref={threadRef}
               data-hero-phone-thread={isHero ? 'true' : undefined}
-              className={`flex flex-1 flex-col gap-2.5 px-3.5 pb-3 pt-3 ${
-                isHero
-                  ? 'justify-start overflow-y-auto overscroll-contain [scrollbar-color:rgba(167,139,250,0.42)_transparent] [scrollbar-width:thin]'
-                  : 'justify-end overflow-hidden'
-              }`}
+              className="flex flex-1 flex-col justify-end gap-2.5 overflow-hidden px-3.5 pb-3 pt-3"
             >
               <div className="flex items-center gap-2">
                 <span className="h-px flex-1 bg-white/8" />
