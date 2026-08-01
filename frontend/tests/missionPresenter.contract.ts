@@ -251,6 +251,7 @@ const deliveredMission = buildMissionWorkspaceView({
     status: 'delivered',
     deliveryTarget: '#all-purple-orange',
   },
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- deliberately partial test fixture
 } as any);
 
 assert(deliveredMission.status === 'completed', 'approved deliveries stay completed');

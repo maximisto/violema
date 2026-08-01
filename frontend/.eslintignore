@@ -1,0 +1,9 @@
+dist
+node_modules
+
+# Stray filesystem sync-conflict duplicates (e.g. "Foo 2.tsx"). These are not
+# canonical source files -- see the agent run report for provenance details.
+* [0-9].ts
+* [0-9].tsx
+**/* [0-9].ts
+**/* [0-9].tsx

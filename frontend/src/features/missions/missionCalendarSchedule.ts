@@ -1,4 +1,4 @@
-import type { MissionAgentView, MissionStatus, MissionWorkspaceView } from './types';
+import type { MissionStatus, MissionWorkspaceView } from './types';
 
 export type FounderCalendarTone =
   | 'strategy'

@@ -683,7 +683,6 @@ function buildMetrics(task: MissionSourceTask | undefined | null, steps: Mission
   const actualCredits = task?.actualCredits ?? steps.reduce((sum, step) => sum + (step.actualCredits || 0), 0);
   const estimatedCredits = task?.estimatedCredits ?? steps.reduce((sum, step) => sum + (step.estimatedCredits || 0), 0);
   const credits = actualCredits || estimatedCredits;
-  const completedSteps = steps.filter((step) => step.status === 'completed').length;
   const failedSteps = steps.filter((step) => step.status === 'failed').length;
   const artifactCount = task?.latestArtifacts?.length || 0;
   const creditsPerArtifact = credits > 0 && artifactCount > 0

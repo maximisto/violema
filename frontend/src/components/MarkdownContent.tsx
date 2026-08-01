@@ -3,7 +3,9 @@
 // render as structured output (headings, tables, stat tiles), not raw text.
 
 const TOKEN_DELIMITER = '\u0000';
+// eslint-disable-next-line no-control-regex -- NUL is an internal stash delimiter, never user input
 const TOKEN_PATTERN = /\u0000(\d+)\u0000/;
+// eslint-disable-next-line no-control-regex -- same internal stash delimiter as TOKEN_PATTERN
 const TOKEN_PATTERN_GLOBAL = /\u0000(\d+)\u0000/g;
 
 function escapeHtml(value: string) {

@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom';
 import FileText from 'lucide-react/dist/esm/icons/file-text.js';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -212,7 +211,6 @@ function renderContent(text: string) {
 }
 
 export default function TermsOfService() {
-  const navigate = useNavigate();
   const { scopeClass } = useTheme();
 
   return (

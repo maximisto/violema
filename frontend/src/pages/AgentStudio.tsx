@@ -9,13 +9,10 @@ import BookOpen from 'lucide-react/dist/esm/icons/book-open.js';
 import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2.js';
 import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right.js';
 import Clock3 from 'lucide-react/dist/esm/icons/clock-3.js';
-import Cpu from 'lucide-react/dist/esm/icons/cpu.js';
 import Flame from 'lucide-react/dist/esm/icons/flame.js';
-import Gauge from 'lucide-react/dist/esm/icons/gauge.js';
 import Layers3 from 'lucide-react/dist/esm/icons/layers-3.js';
 import LineChart from 'lucide-react/dist/esm/icons/line-chart.js';
 import Orbit from 'lucide-react/dist/esm/icons/orbit.js';
-import Radar from 'lucide-react/dist/esm/icons/radar.js';
 import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw.js';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import Target from 'lucide-react/dist/esm/icons/target.js';
@@ -899,15 +896,6 @@ function clonePromotionHistory(history?: StudioPromotionRecord[]) {
   return history.map((entry) => ({ ...entry }));
 }
 
-function cloneOperatingPlans(plans?: StudioOperatingPlan[]) {
-  if (!plans) return undefined;
-  return plans.map((plan) => ({
-    ...plan,
-    executionPolicy: { ...plan.executionPolicy },
-    roleDirectives: cloneRoleDirectives(plan.roleDirectives),
-  }));
-}
-
 function appendPromotionHistory(
   history: StudioPromotionRecord[] | undefined,
   entry: Omit<StudioPromotionRecord, 'id' | 'appliedAt' | 'actor'>,
@@ -1295,12 +1283,6 @@ function getPromotionModeTone(mode: StudioPromotionRecord['mode']) {
     default:
       return 'border-amber-500/18 bg-amber-500/8 text-amber-100';
   }
-}
-
-function getDirectiveActionLabel(mode: 'cheaper' | 'review' | 'promote') {
-  if (mode === 'cheaper') return 'Promote steering only';
-  if (mode === 'review') return 'Promote steering only';
-  return 'Promote steering only';
 }
 
 function getRunExperimentAttribution(run?: PlatformTaskRunRecord): RunExperimentAttribution {
@@ -2447,7 +2429,7 @@ export default function AgentStudio() {
     }
 
     return { riskItems: riskItems.slice(0, 3), wasteItems: wasteItems.slice(0, 3) };
-  }, [phaseEvidence, selectedMath.recommendedElasticLanes, selectedPolicy.maxElasticLanes, selectedRow, selectedRow?.successRate]);
+  }, [phaseEvidence, selectedMath.recommendedElasticLanes, selectedPolicy.maxElasticLanes, selectedRow]);
 
   const optimizationScorecard = useMemo(() => {
     const spendPressure = clampNumber(Math.round((currentSpendIndex * 0.55) + (selectedMath.toolCalls * 6) + (selectedMath.activeElasticLanes * 5)), 10, 99);
@@ -3536,15 +3518,6 @@ export default function AgentStudio() {
     }));
   }, [replayComparedRun]);
 
-  const pairedReplayTimeline = useMemo(() => {
-    const length = Math.max(replayTimeline.length, replayComparedTimeline.length);
-    return Array.from({ length }, (_, index) => ({
-      index,
-      current: replayTimeline[index],
-      compared: replayComparedTimeline[index],
-    }));
-  }, [replayComparedTimeline, replayTimeline]);
-
   const replayComparedPhaseOverlay = useMemo(
     () => buildReplayPhaseOverlay(replayComparedRun, phaseEvidence),
     [phaseEvidence, replayComparedRun],
@@ -3668,19 +3641,10 @@ export default function AgentStudio() {
       ] as Array<{ label: string; value: string; tone: 'positive' | 'negative' | 'neutral' }>,
     };
   }, [
-    formatDirectivePhaseScope,
-    formatSignedDelta,
-    getDirectiveModeLabel,
     replayInsights,
     replayWeakSpot,
     recommendedReplayFix,
-    runComparison?.previous,
-    runComparison?.current.credits,
-    runComparison?.current.durationMs,
-    runComparison?.current.status,
-    runComparison?.previous?.credits,
-    runComparison?.previous?.durationMs,
-    runComparison?.previous?.status,
+    runComparison,
     selectedReplayPhaseDelta,
     selectedReplayPhaseDetail?.phase,
   ]);
@@ -4001,7 +3965,7 @@ export default function AgentStudio() {
 
   const currentComparisonRunRecord = useMemo(
     () => [...(currentCohortPerformance?.runs || []), ...(selectedExperimentPerformance?.runs || [])].find((run) => run.id === runComparison?.current.id),
-    [currentCohortPerformance?.runs, runComparison?.current.id, selectedExperimentPerformance?.runs]
+    [currentCohortPerformance?.runs, runComparison, selectedExperimentPerformance?.runs]
   );
 
   const previousComparisonRunRecord = useMemo(
@@ -4871,7 +4835,7 @@ export default function AgentStudio() {
     if (item.action === 'apply_policy' && item.policyAction) {
       applyRecommendationAction(item.policyAction);
     }
-  }, [applyRecommendationAction, nextExperimentQueue]);
+  }, [applyRecommendationAction]);
 
   const handleSaveExperiment = useCallback(async () => {
     const nextHistory = [
@@ -5324,7 +5288,7 @@ export default function AgentStudio() {
     setSelectedDirectivePhase(phase);
     setSelectedWorkerRole(getPreferredRoleForPhase(phase));
     setNotice({ tone: 'success', message: `Focused Live on ${formatDirectivePhaseScope([phase])} for ${getPreferredRoleForPhase(phase)}.` });
-  }, [formatDirectivePhaseScope]);
+  }, []);
 
   const handleOpenReplayFromLiveLoop = useCallback(() => {
     const contextTargetRunId = operationalContext?.recommendationEvidence[0]?.relatedRunIds?.find((runId) => runId !== operationalContext?.runId)
@@ -5432,14 +5396,12 @@ export default function AgentStudio() {
     };
   }, [
     activeRoom,
-    formatDirectivePhaseScope,
     handleFocusLiveContextPhase,
     handleOpenOptimizeFromReplayLoop,
     handleOpenReplayFromLiveLoop,
     handleOpenLiveFromOptimizeLoop,
     operationalContext,
     previewPreset.label,
-    optimizeDecisionBrief.headline,
     optimizeDecisionBrief.nextStep,
     phaseSimulationPreview,
     recommendedReplayFix,

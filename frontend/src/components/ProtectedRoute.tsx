@@ -76,7 +76,7 @@ export default function ProtectedRoute({ children, blockedRedirectPath = '/signu
     return () => {
       active = false;
     };
-  }, [location.pathname, location.search]);
+  }, [location.pathname, location.search, requireAdmin]);
 
   if (status === 'checking') {
     return (

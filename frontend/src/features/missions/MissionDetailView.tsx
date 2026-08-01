@@ -1,7 +1,6 @@
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
 import type React from 'react';
 import BarChart3 from 'lucide-react/dist/esm/icons/bar-chart-3.js';
-import Bot from 'lucide-react/dist/esm/icons/bot.js';
 import CalendarDays from 'lucide-react/dist/esm/icons/calendar-days.js';
 import CreditCard from 'lucide-react/dist/esm/icons/credit-card.js';
 import Eye from 'lucide-react/dist/esm/icons/eye.js';

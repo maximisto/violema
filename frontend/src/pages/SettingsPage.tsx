@@ -351,6 +351,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     void loadSettings();
+    // Intentionally runs once on mount; loadSettings is redefined each render
+    // (not memoized), so listing it here would refetch settings on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

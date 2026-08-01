@@ -11,7 +11,6 @@ import Send from 'lucide-react/dist/esm/icons/send.js';
 import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check.js';
 import Smartphone from 'lucide-react/dist/esm/icons/smartphone.js';
 import UserCheck from 'lucide-react/dist/esm/icons/user-check.js';
-import { useState } from 'react';
 import {
   comparisonRows,
   controls,
