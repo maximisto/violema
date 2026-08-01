@@ -1,37 +1,93 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import AlertTriangle from 'lucide-react/dist/esm/icons/alert-triangle.js';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
 import Bot from 'lucide-react/dist/esm/icons/bot.js';
 import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2.js';
 import Globe from 'lucide-react/dist/esm/icons/globe.js';
 import Link2 from 'lucide-react/dist/esm/icons/link-2.js';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-2.js';
+import LogIn from 'lucide-react/dist/esm/icons/log-in.js';
 import Plug from 'lucide-react/dist/esm/icons/plug.js';
+import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.js';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import { Link } from 'react-router-dom';
 import BrandIcon from '../components/BrandIcon';
 import PublicHeader from '../components/PublicHeader';
 import { DEMO_INTEGRATIONS, IDENTITY_INTEGRATIONS, DEFERRED_INTEGRATIONS } from '../content/demoIntegrations';
+import {
+  getPartnerAppSlugs,
+  isPartnerAppConnected,
+  isSlugConnected,
+  resolveToolkitSlug,
+} from '../features/integrations/partnerToolkits';
 import { useTheme } from '../lib/useTheme';
+import { getWorkspaceRequest } from '../lib/workspace';
 
 interface PartnerApp {
   name: string;
   label: string;
   detail: string;
   status?: string;
+  /** Present on the newer catalog shape; absent on already-deployed servers. */
+  partnerAppName?: string;
+  sources?: string[];
 }
 
-interface IntegrationCatalog {
-  readiness: {
-    headline: string;
-    body: string;
-    stages: Array<{ title: string; body: string }>;
-  };
-  partner: {
-    enabled: boolean;
-    connectedApps: string[];
-    unavailableMessage: string;
-  };
-  partnerApps: PartnerApp[];
+/**
+ * The connect surface has four honest states instead of one catch-all banner.
+ * `anonymous` exists because /integrations is a public route while the catalog
+ * endpoint sits behind the beta session gate — a signed-out visitor used to be
+ * told connections "live inside approved workspaces" with no way to act on it.
+ */
+type ConnectState =
+  | { kind: 'loading' }
+  | { kind: 'anonymous' }
+  | { kind: 'unavailable' }
+  | { kind: 'ready'; enabled: boolean; degraded: boolean; connectedApps: string[]; apps: PartnerApp[] };
+
+/** Focus/visibility refetches are throttled so tab-flipping cannot become a poll. */
+const REFRESH_THROTTLE_MS = 4000;
+/** OAuth propagation lag after the return leg: bounded retries, then stop. */
+const RETURN_RETRY_DELAY_MS = 2500;
+const RETURN_RETRY_LIMIT = 3;
+const HIGHLIGHT_MS = 4500;
+const JUST_CONNECTED_MS = 6000;
+/** A refused or abandoned OAuth grant says so; it never silently retries. */
+const CONNECT_FAILED_MESSAGE = 'Connection didn’t complete — try again';
+/** Shown per card when live connection state could not be read at all. */
+const STATUS_UNAVAILABLE_LABEL = 'Status unavailable';
+
+async function fetchConnectState(): Promise<ConnectState> {
+  try {
+    // Workspace-scoped: a multi-workspace operator must see the catalog for the
+    // workspace they are actually in, not their default one.
+    const request = getWorkspaceRequest('/api/integrations/catalog');
+    const response = await fetch(request.url, { credentials: 'same-origin', headers: request.headers });
+    if (response.status === 401 || response.status === 403) return { kind: 'anonymous' };
+    if (!response.ok) return { kind: 'unavailable' };
+
+    const data = await response.json() as {
+      partner?: { enabled?: boolean; connectedApps?: string[]; degraded?: boolean; apps?: PartnerApp[] };
+      partnerApps?: PartnerApp[];
+    };
+
+    // Feature-detect: the newer contract nests apps under `partner`, while
+    // already-deployed servers return a top-level `partnerApps` array.
+    const partner = data.partner;
+    const apps = Array.isArray(partner?.apps)
+      ? partner.apps
+      : Array.isArray(data.partnerApps) ? data.partnerApps : [];
+
+    return {
+      kind: 'ready',
+      enabled: Boolean(partner?.enabled),
+      degraded: partner?.degraded === true,
+      connectedApps: Array.isArray(partner?.connectedApps) ? partner.connectedApps : [],
+      apps,
+    };
+  } catch {
+    return { kind: 'unavailable' };
+  }
 }
 
 const CUSTOM = [
@@ -41,72 +97,254 @@ const CUSTOM = [
   { name: 'Security workflows', body: 'Security-conscious rollouts that need tighter scoping' },
 ];
 
+function ConnectionStatusNotice({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+      <p className="text-sm font-semibold text-amber-100">Connection status is temporarily unavailable</p>
+      <p className="mt-1 max-w-2xl text-sm leading-relaxed text-amber-200/70">
+        Violema could not read your live connection state just now, so this list may be incomplete. Nothing was changed.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-100 transition-colors hover:bg-amber-400/16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60"
+      >
+        <RefreshCw className="h-3 w-3" />
+        Retry
+      </button>
+    </div>
+  );
+}
+
 function ComposioConnectSection() {
-  const [catalog, setCatalog] = useState<IntegrationCatalog | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [state, setState] = useState<ConnectState>({ kind: 'loading' });
+  const [busyApp, setBusyApp] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDisconnect, setPendingDisconnect] = useState<string | null>(null);
+  const [highlightSlug, setHighlightSlug] = useState('');
+  const [returnSlug, setReturnSlug] = useState('');
+  const [failedSlug, setFailedSlug] = useState('');
+
+  const mounted = useRef(true);
+  const inFlight = useRef(false);
+  const lastFetchAt = useRef(0);
+  const returnAttempts = useRef(0);
+  const scrolledSlug = useRef('');
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const cardNodes = useRef(new Map<string, HTMLElement>());
+
+  // Sign-in returns the visitor to whatever deep link brought them here, so a
+  // `?provider=` CTA survives the round trip through /login. A consumed return
+  // leg is dropped so signing in cannot replay a stale success state.
+  const signInHref = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete('connected');
+    params.delete('status');
+    const search = params.toString();
+    const here = `${window.location.pathname}${search ? `?${search}` : ''}`;
+    return `/login?next=${encodeURIComponent(here)}`;
+  }, []);
 
   useEffect(() => {
-    let active = true;
-    fetch('/api/integrations/catalog', { credentials: 'same-origin' })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!active) return;
-        setCatalog({
-          readiness: data.readiness,
-          partner: {
-            enabled: Boolean(data.partner?.enabled),
-            connectedApps: Array.isArray(data.partner?.connectedApps) ? data.partner.connectedApps : [],
-            unavailableMessage: typeof data.partner?.unavailableMessage === 'string'
-              ? data.partner.unavailableMessage
-              : 'Sign in to an approved workspace to manage OAuth connections and verify workflow access.',
-          },
-          partnerApps: Array.isArray(data.partnerApps) ? data.partnerApps : [],
-        });
-      })
-      .catch(() => {
-        if (active) {
-          setCatalog({
-            readiness: {
-              headline: 'Workflow readiness, not connector setup',
-              body: 'Connect the tools this workflow needs, approve the boundaries, run a dry test, then let Violema operate with a record you can inspect.',
-              stages: [],
-            },
-            partner: {
-              enabled: false,
-              connectedApps: [],
-              unavailableMessage: 'Sign in to an approved workspace to manage OAuth connections and verify workflow access.',
-            },
-            partnerApps: [],
-          });
-        }
-      });
+    mounted.current = true;
     return () => {
-      active = false;
+      mounted.current = false;
     };
   }, []);
 
-  async function handleConnect(appName: string) {
-    setBusy(appName);
-    setError(null);
+  const refresh = useCallback(async (options?: { force?: boolean }) => {
+    if (inFlight.current) return;
+    if (!options?.force && Date.now() - lastFetchAt.current < REFRESH_THROTTLE_MS) return;
+    inFlight.current = true;
     try {
-      const res = await fetch('/api/integrations/composio/connect', {
+      const next = await fetchConnectState();
+      lastFetchAt.current = Date.now();
+      if (mounted.current) setState(next);
+    } finally {
+      inFlight.current = false;
+    }
+  }, []);
+
+  // Deep link (?provider=) and OAuth return leg (?connected=&status=).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const providerSlug = resolveToolkitSlug(params.get('provider'));
+
+    // The callback URL can carry more than one `status`: the provider appends
+    // its own verdict, and an older deployed backend also pre-seeds one. Reading
+    // only the first value let a seeded `status=success` mask a refused grant,
+    // so every value is inspected and any 'failed' wins outright.
+    const statusValues = params.getAll('status');
+    const returnFailed = statusValues.includes('failed');
+    const returnSucceeded = !returnFailed && statusValues.includes('success');
+    const returnedSlug = resolveToolkitSlug(params.get('connected'));
+
+    if (returnFailed) {
+      returnAttempts.current = 0;
+      setReturnSlug('');
+      setFailedSlug(returnedSlug);
+      if (returnedSlug) setHighlightSlug(returnedSlug);
+      else setError(CONNECT_FAILED_MESSAGE);
+    } else if (returnSucceeded && returnedSlug) {
+      returnAttempts.current = 0;
+      setFailedSlug('');
+      setReturnSlug(returnedSlug);
+      setHighlightSlug(returnedSlug);
+    } else if (providerSlug) {
+      setHighlightSlug(providerSlug);
+    }
+
+    if (statusValues.length > 0) {
+      // Strip the consumed return leg so a refresh cannot replay a stale verdict.
+      params.delete('connected');
+      params.delete('status');
+      const search = params.toString();
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`,
+      );
+    }
+
+    // Server truth governs either way: a failed return still refetches, so a
+    // connection that did land is not hidden by the callback's verdict.
+    void refresh({ force: true });
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!highlightSlug) return;
+    const timer = window.setTimeout(() => setHighlightSlug(''), HIGHLIGHT_MS);
+    return () => window.clearTimeout(timer);
+  }, [highlightSlug]);
+
+  // Land the visitor on the card they were sent for; fall back to the section
+  // when the deep-linked app is not one of the partner connectors.
+  useEffect(() => {
+    if (!highlightSlug || state.kind === 'loading') return;
+    if (scrolledSlug.current === highlightSlug) return;
+    const node = cardNodes.current.get(highlightSlug) || sectionRef.current;
+    if (!node) return;
+    scrolledSlug.current = highlightSlug;
+    node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightSlug, state]);
+
+  // OAuth can land before the provider reports the connection. Retry a bounded
+  // number of times, then fall back to the focus refetch below.
+  useEffect(() => {
+    if (!returnSlug || state.kind !== 'ready') return;
+
+    if (isSlugConnected(returnSlug, state.connectedApps)) {
+      const timer = window.setTimeout(() => setReturnSlug(''), JUST_CONNECTED_MS);
+      return () => window.clearTimeout(timer);
+    }
+
+    if (returnAttempts.current >= RETURN_RETRY_LIMIT) return;
+    const timer = window.setTimeout(() => {
+      returnAttempts.current += 1;
+      void refresh({ force: true });
+    }, RETURN_RETRY_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [returnSlug, state, refresh]);
+
+  // Coming back from an OAuth tab should not require a manual reload.
+  useEffect(() => {
+    const onFocus = () => {
+      void refresh();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [refresh]);
+
+  const registerCard = (app: PartnerApp) => (node: HTMLElement | null) => {
+    for (const slug of getPartnerAppSlugs(app)) {
+      if (node) cardNodes.current.set(slug, node);
+      else cardNodes.current.delete(slug);
+    }
+  };
+
+  // While connection state is unreadable, mutating is worse than waiting: a
+  // connect click can mint a duplicate account and a disconnect can revoke one
+  // the operator cannot currently see.
+  const mutationsBlocked = state.kind === 'ready' && state.degraded;
+
+  async function handleConnect(app: PartnerApp) {
+    if (mutationsBlocked) return;
+    setBusyApp(app.name);
+    setError(null);
+    setFailedSlug('');
+    try {
+      const request = getWorkspaceRequest('/api/integrations/composio/connect');
+      const res = await fetch(request.url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...request.headers },
         credentials: 'same-origin',
-        body: JSON.stringify({ appName }),
+        body: JSON.stringify({ appName: app.name }),
       });
-      const data = await res.json() as { redirectUrl?: string; error?: string };
-      if (!res.ok || !data.redirectUrl) throw new Error('Could not open this connector. Try again or use native setup for now.');
+      if (res.status === 401 || res.status === 403) {
+        setState({ kind: 'anonymous' });
+        setBusyApp(null);
+        return;
+      }
+      const data = await res.json().catch(() => ({})) as { redirectUrl?: string; error?: string };
+      if (!res.ok || !data.redirectUrl) {
+        throw new Error(typeof data.error === 'string' && data.error.trim()
+          ? data.error.trim()
+          : 'Could not open this connector. Try again or use native setup for now.');
+      }
       window.location.assign(data.redirectUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not connect');
-      setBusy(null);
+      setBusyApp(null);
+    }
+  }
+
+  async function handleDisconnect(app: PartnerApp) {
+    if (mutationsBlocked) return;
+    setBusyApp(app.name);
+    setError(null);
+    try {
+      const request = getWorkspaceRequest('/api/integrations/composio/disconnect');
+      const res = await fetch(request.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...request.headers },
+        credentials: 'same-origin',
+        body: JSON.stringify({ appName: app.name }),
+      });
+      if (res.status === 401 || res.status === 403) {
+        setState({ kind: 'anonymous' });
+        return;
+      }
+      // 404 means the connection was already gone — the refetch reconciles it.
+      if (!res.ok && res.status !== 404) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(typeof data.error === 'string' && data.error.trim()
+          ? data.error.trim()
+          : 'Could not disconnect this app. Try again in a moment.');
+      }
+      setPendingDisconnect(null);
+      setReturnSlug('');
+      setFailedSlug('');
+      await refresh({ force: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not disconnect');
+    } finally {
+      setBusyApp(null);
     }
   }
 
   return (
-    <section className="mt-8 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
+    <section
+      ref={sectionRef}
+      id="connect-your-tools"
+      className="mt-8 scroll-mt-24 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6"
+    >
       <div className="flex items-center gap-3">
         <div className="rounded-2xl bg-violet-500/10 p-3 text-violet-300">
           <Plug className="h-5 w-5" />
@@ -117,61 +355,195 @@ function ComposioConnectSection() {
         </div>
       </div>
 
-      {catalog === null ? (
+      {state.kind === 'loading' && (
         <p className="mt-5 text-sm text-slate-500">Loading available integrations…</p>
-      ) : !catalog.partner.enabled ? (
-        <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200/90">
-          <p className="font-semibold">Connection setup lives inside approved workspaces.</p>
-          <p className="mt-1 text-amber-200/70">{catalog.partner.unavailableMessage}</p>
+      )}
+
+      {state.kind === 'anonymous' && (
+        <div className="mt-5 rounded-2xl border border-violet-500/20 bg-violet-500/6 p-5">
+          <p className="text-sm font-semibold text-white">Sign in to connect your tools</p>
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-400">
+            Connections are scoped to your workspace, so Violema needs to know who you are before it can open an OAuth flow. Sign in and you land back on this page.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link
+              to={signInHref}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-500"
+            >
+              <LogIn className="h-4 w-4" />
+              Sign in
+            </Link>
+            <Link
+              to="/signup?next=%2Fintegrations"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/16"
+            >
+              Apply for beta
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
-      ) : (
+      )}
+
+      {state.kind === 'unavailable' && <ConnectionStatusNotice onRetry={() => void refresh({ force: true })} />}
+
+      {state.kind === 'ready' && (
         <>
           <p className="mt-3 text-sm text-slate-400">
             Choose the tools this workflow needs. Violema will test access, explain the boundaries, and run a dry check before anything goes live.
           </p>
+
           {error && (
             <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
               {error}
             </div>
           )}
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {catalog.partnerApps.map((app) => {
-              const connected = catalog.partner.connectedApps.some((connectedApp) => connectedApp.toLowerCase() === app.name.toLowerCase());
-              const isBusy = busy === app.name;
-              return (
-                <button
-                  key={app.name}
-                  onClick={() => !connected && handleConnect(app.name)}
-                  disabled={connected || isBusy}
-                  className={`rounded-2xl border px-4 py-4 text-left transition-all ${
-                    connected
-                      ? 'border-green-500/30 bg-green-500/5 cursor-default'
-                      : 'border-navy-700/60 bg-navy-950/45 hover:border-violet-500/40 hover:bg-navy-800/60'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-100">
-                        <BrandIcon name={app.label || app.name} className="h-4 w-4" />
-                      </span>
-                      <p className="min-w-0 truncate text-sm font-semibold text-white">{app.label}</p>
+
+          {state.degraded && <ConnectionStatusNotice onRetry={() => void refresh({ force: true })} />}
+
+          {!state.enabled ? (
+            <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+              <p className="text-sm font-semibold text-amber-100">Connections are not enabled on this server</p>
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-amber-200/70">
+                One-click OAuth connections are switched off for this deployment, so nothing here is connected on your behalf. Stripe and Slack still connect natively from settings.
+              </p>
+              <Link
+                to="/settings"
+                className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200 transition-colors hover:text-cyan-100"
+              >
+                Open native setup
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          ) : state.apps.length === 0 ? (
+            <p className="mt-5 text-sm text-slate-500">
+              No one-click connectors are published for this workspace yet.
+            </p>
+          ) : (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {state.apps.map((app) => {
+                const slugs = getPartnerAppSlugs(app);
+                // While degraded the catalog cannot speak to connection state,
+                // so no card claims either answer.
+                const statusUnknown = state.degraded;
+                const connected = !statusUnknown && isPartnerAppConnected(app, state.connectedApps);
+                const isBusy = busyApp === app.name;
+                const isReturnTarget = Boolean(returnSlug) && slugs.includes(returnSlug);
+                const isFailedReturn = !statusUnknown && !connected && Boolean(failedSlug) && slugs.includes(failedSlug);
+                const isHighlighted = (Boolean(highlightSlug) && slugs.includes(highlightSlug)) || isReturnTarget;
+                const isFinishing = !statusUnknown && !connected && isReturnTarget && returnAttempts.current < RETURN_RETRY_LIMIT;
+                const confirming = pendingDisconnect === app.name;
+
+                return (
+                  <article
+                    key={app.name}
+                    ref={registerCard(app)}
+                    className={`flex flex-col rounded-2xl border px-4 py-4 transition-all duration-500 ${
+                      connected
+                        ? 'border-green-500/30 bg-green-500/5'
+                        : isFailedReturn
+                          ? 'border-red-500/30 bg-red-500/5'
+                          : statusUnknown
+                            ? 'border-navy-700/60 bg-navy-950/45'
+                            : 'border-navy-700/60 bg-navy-950/45 hover:border-violet-500/40 hover:bg-navy-800/60'
+                    } ${isHighlighted ? 'ring-1 ring-violet-400/50 shadow-[0_0_28px_rgba(139,92,246,0.16)]' : ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-100">
+                          <BrandIcon name={app.label || app.name} className="h-4 w-4" />
+                        </span>
+                        <p className="min-w-0 truncate text-sm font-semibold text-white">{app.label || app.name}</p>
+                      </div>
+                      {connected ? (
+                        <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-400" />
+                      ) : isBusy || isFinishing ? (
+                        <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-violet-400" />
+                      ) : isFailedReturn ? (
+                        <AlertTriangle className="h-4 w-4 flex-shrink-0 text-red-400" />
+                      ) : statusUnknown ? (
+                        <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-300/70" />
+                      ) : (
+                        <ArrowRight className="h-4 w-4 flex-shrink-0 text-slate-500" />
+                      )}
                     </div>
-                    {connected ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-400" />
-                    ) : isBusy ? (
-                      <Loader2 className="h-4 w-4 text-violet-400 animate-spin" />
-                    ) : (
-                      <ArrowRight className="h-4 w-4 text-slate-500" />
+
+                    <p className="mt-1.5 text-xs leading-5 text-slate-500">{app.detail}</p>
+
+                    {isFailedReturn && (
+                      <p className="mt-2 text-[11px] leading-5 text-red-300">{CONNECT_FAILED_MESSAGE}</p>
                     )}
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">{app.detail}</p>
-                  <p className="mt-2 text-[10px] uppercase tracking-wider font-medium">
-                    {connected ? <span className="text-green-400">Connected</span> : <span className="text-violet-400">Connect</span>}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      {statusUnknown ? (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200/80">
+                            {STATUS_UNAVAILABLE_LABEL}
+                          </span>
+                          <button
+                            type="button"
+                            disabled
+                            title="Connection status could not be read, so connecting is paused."
+                            className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-xl border border-navy-700/60 bg-navy-900/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 opacity-70"
+                          >
+                            Connect
+                          </button>
+                        </>
+                      ) : connected ? (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-green-400">
+                            {isReturnTarget ? 'Just connected' : 'Connected'}
+                          </span>
+                          {confirming ? (
+                            <span className="inline-flex items-center gap-2 text-[10px] text-slate-400">
+                              Disconnect?
+                              <button
+                                type="button"
+                                onClick={() => handleDisconnect(app)}
+                                disabled={isBusy}
+                                className="font-semibold uppercase tracking-[0.14em] text-red-300 transition-colors hover:text-red-200 disabled:opacity-60"
+                              >
+                                {isBusy ? 'Working…' : 'Confirm'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPendingDisconnect(null)}
+                                className="font-semibold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-slate-300"
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setPendingDisconnect(app.name)}
+                              className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 transition-colors hover:text-slate-300"
+                            >
+                              Disconnect
+                            </button>
+                          )}
+                        </>
+                      ) : isFinishing ? (
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Finishing connection…
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleConnect(app)}
+                          disabled={isBusy}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-200 transition-colors hover:border-violet-400/50 hover:bg-violet-500/16 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+                        >
+                          {isBusy ? 'Opening…' : isFailedReturn ? 'Try again' : 'Connect'}
+                          {!isBusy && <ArrowRight className="h-3 w-3" />}
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
     </section>

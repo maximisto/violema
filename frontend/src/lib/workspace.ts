@@ -79,6 +79,34 @@ export function resolveWorkspaceContext(): WorkspaceContext {
   };
 }
 
+export interface WorkspaceRequest {
+  url: string;
+  headers: Record<string, string>;
+}
+
+/**
+ * Scope a request to a workspace the same way on every surface: query params
+ * for logs and caches, headers for the server's own resolution. Callers that
+ * hit several endpoints in a row pass one already-resolved context so a
+ * mid-loop workspace switch cannot split a batch across two workspaces.
+ */
+export function buildWorkspaceRequest(endpoint: string, context: WorkspaceContext): WorkspaceRequest {
+  const url = new URL(endpoint, window.location.origin);
+  url.searchParams.set('workspace_id', context.workspaceId);
+  url.searchParams.set('workspace_name', context.workspaceName);
+  return {
+    url: url.toString(),
+    headers: {
+      'X-Workspace-Id': context.workspaceId,
+      'X-Workspace-Name': context.workspaceName,
+    },
+  };
+}
+
+export function getWorkspaceRequest(endpoint: string): WorkspaceRequest {
+  return buildWorkspaceRequest(endpoint, resolveWorkspaceContext());
+}
+
 export function persistWorkspaceContext(workspace: WorkspaceContext = DEFAULT_WORKSPACE) {
   try {
     localStorage.setItem(WORKSPACE_ID_KEY, workspace.workspaceId);

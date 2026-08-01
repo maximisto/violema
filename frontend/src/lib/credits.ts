@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { resolveWorkspaceContext } from './workspace';
+import { buildWorkspaceRequest, getWorkspaceRequest, resolveWorkspaceContext } from './workspace';
+
+// Workspace-request building lives in ./workspace now that non-billing surfaces
+// (the connect page) need it too. Re-exported so this module's existing import
+// path keeps working.
+export { getWorkspaceRequest };
 
 /**
  * A CreditSnapshot only ever exists when it came back from the billing API.
@@ -126,23 +131,6 @@ function isCreditSnapshot(value: unknown): value is CreditSnapshot {
     typeof snap.projectedDaysLeft === 'number' &&
     typeof snap.lastUpdatedAt === 'string'
   );
-}
-
-function buildWorkspaceRequest(endpoint: string, context: ReturnType<typeof resolveWorkspaceContext>) {
-  const url = new URL(endpoint, window.location.origin);
-  url.searchParams.set('workspace_id', context.workspaceId);
-  url.searchParams.set('workspace_name', context.workspaceName);
-  return {
-    url: url.toString(),
-    headers: {
-      'X-Workspace-Id': context.workspaceId,
-      'X-Workspace-Name': context.workspaceName,
-    },
-  };
-}
-
-export function getWorkspaceRequest(endpoint: string) {
-  return buildWorkspaceRequest(endpoint, resolveWorkspaceContext());
 }
 
 /** Returns null when no endpoint could produce a real snapshot. Never substitutes numbers. */

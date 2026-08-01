@@ -365,6 +365,9 @@ const ACTION_TEMPLATES: Array<{ label: string; block: WorkflowBlockDraft }> = [
   },
 ];
 
+/** Trailing debounce for the automation-editor readiness read (see effect below). */
+const READINESS_DEBOUNCE_MS = 600;
+
 const DEFAULT_EXECUTION_POLICY: AutomationExecutionPolicyDraft = {
   mode: 'recommended',
   optimizationGoal: 'balanced',
@@ -1935,6 +1938,9 @@ export default function Dashboard() {
   const [automationSetupOptionalOpen, setAutomationSetupOptionalOpen] = useState(false);
   const [automationEstimate, setAutomationEstimate] = useState<CreditEstimatePreview | null>(null);
   const [workflowReadiness, setWorkflowReadiness] = useState<WorkflowReadinessReport | null>(null);
+  // Server could not read live connection state — the blockers below may be
+  // stale, which is a different thing from "not connected".
+  const [workflowReadinessDegraded, setWorkflowReadinessDegraded] = useState(false);
   const [runLedgerEvents, setRunLedgerEvents] = useState<WorkflowLedgerEvent[]>([]);
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
   const [backendAuthSession, setBackendAuthSession] = useState<AuthSession | null>(null);
@@ -3332,9 +3338,43 @@ export default function Dashboard() {
     }
   }, [activeConvoId]);
 
+  // Returning from an OAuth connect flow (usually another tab) should refresh
+  // the blocker list without making the operator close and reopen the editor.
+  // Guarded twice: only while the editor is open, and throttled so repeated
+  // tab-flipping cannot turn focus into a polling loop.
+  const [readinessRefreshNonce, setReadinessRefreshNonce] = useState(0);
+  const readinessRefreshAt = useRef(0);
+  // Identifies "a genuinely new readiness question" (editor, workspace, or an
+  // explicit refresh) as opposed to the same question re-asked mid-keystroke.
+  const readinessImmediateGate = useRef('');
+  const readinessEditorOpen = Boolean(automationEditorWorkflowId && automationEditor);
+
+  useEffect(() => {
+    if (!readinessEditorOpen) return;
+
+    const requestRefresh = () => {
+      const now = Date.now();
+      if (now - readinessRefreshAt.current < 4000) return;
+      readinessRefreshAt.current = now;
+      setReadinessRefreshNonce((value) => value + 1);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') requestRefresh();
+    };
+
+    window.addEventListener('focus', requestRefresh);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', requestRefresh);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [readinessEditorOpen]);
+
   useEffect(() => {
     if (!automationEditorWorkflowId || !automationEditor) {
       setWorkflowReadiness(null);
+      setWorkflowReadinessDegraded(false);
+      readinessImmediateGate.current = '';
       return;
     }
 
@@ -3343,24 +3383,47 @@ export default function Dashboard() {
       deliveryTarget: automationReadinessTarget,
       workspaceId: workspace.workspaceId,
     });
-    fetch(`/api/workflows/${automationEditorWorkflowId}/readiness?${params.toString()}`, {
-      signal: controller.signal,
-      credentials: 'same-origin',
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Could not load workflow readiness');
-        return response.json();
-      })
-      .then((payload) => {
-        setWorkflowReadiness(payload?.report ? payload.report : null);
-      })
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return;
-        setWorkflowReadiness(null);
-      });
 
-    return () => controller.abort();
-  }, [automationEditorWorkflowId, automationReadinessFetchKey, automationReadinessTarget, workspace.workspaceId]);
+    const run = () => {
+      fetch(`/api/workflows/${automationEditorWorkflowId}/readiness?${params.toString()}`, {
+        signal: controller.signal,
+        credentials: 'same-origin',
+      })
+        .then(async (response) => {
+          if (!response.ok) throw new Error('Could not load workflow readiness');
+          return response.json();
+        })
+        .then((payload) => {
+          setWorkflowReadiness(payload?.report ? payload.report : null);
+          setWorkflowReadinessDegraded(payload?.degraded === true);
+        })
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === 'AbortError') return;
+          setWorkflowReadiness(null);
+          setWorkflowReadinessDegraded(false);
+        });
+    };
+
+    // The fetch key changes on every keystroke (name, prompt, step text), so an
+    // undebounced effect turned one typed sentence into ~30 requests. Opening
+    // the editor, switching workspace, and the focus refetch still read
+    // immediately — only successive edits inside the same open editor wait for
+    // typing to settle.
+    const gate = `${automationEditorWorkflowId}::${workspace.workspaceId}::${readinessRefreshNonce}`;
+    const immediate = readinessImmediateGate.current !== gate;
+    readinessImmediateGate.current = gate;
+
+    if (immediate) {
+      run();
+      return () => controller.abort();
+    }
+
+    const timer = window.setTimeout(run, READINESS_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [automationEditorWorkflowId, automationReadinessFetchKey, automationReadinessTarget, readinessRefreshNonce, workspace.workspaceId]);
 
   const updateAutomationStep = useCallback((index: number, value: string) => {
     setAutomationEditor((current) => {
@@ -6038,7 +6101,11 @@ export default function Dashboard() {
 	                    )}
                   </div>
 
-                  <WorkflowReadinessPanel report={workflowReadiness} getBlockerAction={getReadinessBlockerAction} />
+                  <WorkflowReadinessPanel
+                    report={workflowReadiness}
+                    degraded={workflowReadinessDegraded}
+                    getBlockerAction={getReadinessBlockerAction}
+                  />
 
                   <details
                     className="rounded-2xl border border-navy-700/70 bg-navy-950/35 p-3"

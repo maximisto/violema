@@ -27,11 +27,21 @@ export interface WorkflowReadinessBlockerAction {
   route?: string;
 }
 
+/**
+ * Distinct from any blocker copy on purpose: an unreachable connection provider
+ * must never be presented as "Gmail is not connected".
+ */
+export const READINESS_DEGRADED_NOTICE =
+  'Connection status is temporarily unavailable — these blockers may be stale.';
+
 export function WorkflowReadinessPanel({
   report,
+  degraded,
   getBlockerAction,
 }: {
   report: WorkflowReadinessReport | null;
+  /** The server could not read live connection state for this check. */
+  degraded?: boolean;
   getBlockerAction?: (blocker: WorkflowReadinessBlocker) => WorkflowReadinessBlockerAction | null;
 }) {
   if (!report) return null;
@@ -51,6 +61,12 @@ export function WorkflowReadinessPanel({
         <div className="min-w-0 flex-1">
           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow readiness</p>
           <p className="mt-1 text-sm font-semibold text-white">{report.summary}</p>
+          {degraded ? (
+            <p className="mt-2 flex items-start gap-1.5 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[11px] leading-5 text-amber-100">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-300" />
+              {READINESS_DEGRADED_NOTICE}
+            </p>
+          ) : null}
           {report.firstRunRequiresApproval ? (
             <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-cyan-200">
               <ShieldCheck className="h-3.5 w-3.5" />

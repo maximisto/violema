@@ -452,7 +452,9 @@ export function MissionDetailView({
           <div className="rounded-2xl border border-navy-800/80 bg-navy-900/45 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300/80">Connected stack</p>
+                {/* Static template list — it describes what this mission works
+                    with, not what the workspace has actually connected. */}
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300/80">Works with</p>
                 <h3 className="mt-1 text-base font-semibold text-white">Mission context</h3>
               </div>
               <Network className="h-4 w-4 text-cyan-100" />

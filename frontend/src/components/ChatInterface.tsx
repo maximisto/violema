@@ -103,14 +103,25 @@ function extractResultMetrics(result?: Record<string, unknown>) {
     }));
 }
 
-function getSimulatedResultNotice(result?: Record<string, unknown>) {
+/**
+ * Two result shapes carry connect guidance and both ship a `nextAction`:
+ *   - simulated data (demo workspaces): `simulated: true` / `live: false`
+ *   - a hard block: `{ ok: false, code: 'integration_not_connected' }`
+ * The blocked shape used to render no CTA at all, so the one moment the user
+ * most needs a connect link was the one moment it was missing.
+ */
+function getResultConnectNotice(result?: Record<string, unknown>) {
   if (!result) return null;
+
+  const isBlocked = result.ok === false && result.code === 'integration_not_connected';
   const isSimulated = result.simulated === true || result.live === false || result.provider === 'mock' || result.status === 'mocked';
-  if (!isSimulated) return null;
+  if (!isBlocked && !isSimulated) return null;
 
   const message = typeof result.message === 'string' && result.message.trim()
     ? result.message.trim()
-    : 'Simulated data. Connect the source to query live workspace data.';
+    : isBlocked
+      ? 'This source is not connected. Connect it to query live workspace data.'
+      : 'Simulated data. Connect the source to query live workspace data.';
   const nextAction = result.nextAction && typeof result.nextAction === 'object'
     ? result.nextAction as Record<string, unknown>
     : null;
@@ -121,7 +132,7 @@ function getSimulatedResultNotice(result?: Record<string, unknown>) {
     ? nextAction.route.trim()
     : undefined;
 
-  return { message, label, route };
+  return { tone: isBlocked ? 'blocked' as const : 'simulated' as const, message, label, route };
 }
 
 interface ToolArtifact {
@@ -441,7 +452,7 @@ const ToolCallBlock = memo(function ToolCallBlock({
   const resultMetrics = extractResultMetrics(toolCall.result);
   const artifacts = extractToolArtifacts(toolCall.name, toolCall.result);
   const hasChartArtifact = artifacts.some((artifact) => artifact.kind === 'chart');
-  const simulatedNotice = getSimulatedResultNotice(toolCall.result);
+  const connectNotice = getResultConnectNotice(toolCall.result);
 
   useEffect(() => {
     if (hasChartArtifact) setExpanded(true);
@@ -479,9 +490,9 @@ const ToolCallBlock = memo(function ToolCallBlock({
                 {elapsed < 1000 ? `${elapsed}ms` : `${(elapsed / 1000).toFixed(1)}s`}
               </span>
             )}
-            {simulatedNotice && (
+            {connectNotice && (
               <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200">
-                Simulated
+                {connectNotice.tone === 'blocked' ? 'Not connected' : 'Simulated'}
               </span>
             )}
           </div>
@@ -514,23 +525,28 @@ const ToolCallBlock = memo(function ToolCallBlock({
         />
       </button>
 
+      {/* Rendered outside the collapsible body: a connect CTA the user has to
+          expand a tool card to find is a connect CTA nobody uses. */}
+      {connectNotice && (
+        <div className="border-t border-white/5 px-4 pb-3 pt-3">
+          <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium">{connectNotice.message}</p>
+              {connectNotice.route && connectNotice.label && (
+                <a
+                  href={connectNotice.route}
+                  className="rounded-full border border-amber-300/30 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100 transition-colors hover:bg-amber-300/16"
+                >
+                  {connectNotice.label}
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {expanded && (
         <div className="border-t border-white/5 px-4 pb-4 pt-3 space-y-3">
-          {simulatedNotice && (
-            <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-medium">{simulatedNotice.message}</p>
-                {simulatedNotice.route && simulatedNotice.label && (
-                  <a
-                    href={simulatedNotice.route}
-                    className="rounded-full border border-amber-300/30 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100 transition-colors hover:bg-amber-300/16"
-                  >
-                    {simulatedNotice.label}
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
           {toolCall.input && (
             <div className="rounded-xl border border-navy-800/70 bg-black/20 p-3">
               <div className="mb-2 flex items-center justify-between gap-3">

@@ -238,11 +238,13 @@ function AgendaCard({
   );
 }
 
+// Static template list — it describes what the mission works with, not what the
+// workspace has actually connected. Live connection state lives on /integrations.
 function StackStrip({ apps }: { apps: FounderCalendarApp[] }) {
   return (
     <div className="rounded-xl border border-navy-700/70 bg-navy-950/46 p-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Connected stack</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Works with</p>
         <span className="text-[10px] text-slate-600">{apps.length} apps</span>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
