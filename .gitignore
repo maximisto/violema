@@ -23,6 +23,7 @@ backend/platform-task-runs.json
 backend/platform-tasks.json
 backend/platform-workspaces.json
 backend/workflow-ledger-events.json
+backend/beta-consent-receipts.json
 # Runtime state backups. The base filenames above were ignored but their .bak
 # variants were not, so `git add -A` would have published real user records
 # (auth-users.json.bak holds id/email/name/role/workspaceIds) to a GitHub repo.
