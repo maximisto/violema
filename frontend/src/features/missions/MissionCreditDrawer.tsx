@@ -2,13 +2,17 @@ import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
 import BarChart3 from 'lucide-react/dist/esm/icons/bar-chart-3.js';
 import Clock3 from 'lucide-react/dist/esm/icons/clock-3.js';
 import CreditCard from 'lucide-react/dist/esm/icons/credit-card.js';
+import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.js';
 import TrendingUp from 'lucide-react/dist/esm/icons/trending-up.js';
 import X from 'lucide-react/dist/esm/icons/x.js';
 import Zap from 'lucide-react/dist/esm/icons/zap.js';
 import {
+  CREDITS_UNAVAILABLE_DETAIL,
+  CREDITS_UNAVAILABLE_TITLE,
   formatCredits,
   formatRelativeTime,
   getCreditRecommendation,
+  type CreditDataStatus,
   type CreditSnapshot,
   useRecentCreditUsage,
 } from '../../lib/credits';
@@ -18,12 +22,17 @@ import type { MissionWorkspaceView } from './types';
 
 interface MissionCreditDrawerProps {
   mission: MissionWorkspaceView;
-  snapshot: CreditSnapshot;
+  /** Null whenever the billing API has not produced a real snapshot. */
+  snapshot: CreditSnapshot | null;
+  creditsStatus: CreditDataStatus;
+  onRetryCredits: () => void;
   onClose: () => void;
   onTopUp: () => void;
   onUpgrade: () => void;
   onOpenAnalytics: () => void;
 }
+
+const DRAWER_SHELL_CLASS = 'fixed inset-x-3 bottom-3 z-50 max-h-[calc(100dvh-1.5rem)] overflow-hidden rounded-2xl border border-violet-300/20 bg-[radial-gradient(circle_at_16%_0%,rgba(124,92,255,0.24),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] shadow-[0_24px_80px_rgba(2,6,23,0.58)] backdrop-blur-xl sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-4 sm:w-[25rem]';
 
 const recommendationClasses = {
   urgent: 'border-red-300/24 bg-red-300/10 text-red-100',
@@ -37,44 +46,89 @@ const usageToneClasses = {
   amber: 'border-amber-300/18 bg-amber-300/8 text-amber-100',
 };
 
+/** Header shell shared by the real drawer and its loading/unavailable variants. */
+function DrawerHeader({ title, detail, onClose }: { title: string; detail: string; onClose: () => void }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-navy-800/80 px-4 py-4">
+      <div className="min-w-0">
+        <p className="inline-flex items-center gap-1.5 rounded-full border border-violet-300/22 bg-violet-300/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-100">
+          <CreditCard className="h-3 w-3" />
+          Credits
+        </p>
+        <h2 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-white">{title}</h2>
+        <p className="mt-1 text-[12px] leading-5 text-slate-500">{detail}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close credits"
+        className="rounded-lg border border-navy-700/70 bg-navy-950/55 p-1.5 text-slate-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 export function MissionCreditDrawer({
   mission,
   snapshot,
+  creditsStatus,
+  onRetryCredits,
   onClose,
   onTopUp,
   onUpgrade,
   onOpenAnalytics,
 }: MissionCreditDrawerProps) {
+  const { items: recentUsage, status: usageStatus } = useRecentCreditUsage();
+
+  // No real snapshot means no balance, no runway, and no recommendation. Show
+  // the state we are actually in instead of a plausible-looking one.
+  if (!snapshot) {
+    const loading = creditsStatus === 'loading';
+    return (
+      <aside className={DRAWER_SHELL_CLASS}>
+        <DrawerHeader
+          title={loading ? 'Loading usage…' : CREDITS_UNAVAILABLE_TITLE}
+          detail={loading ? 'Reading your workspace balance.' : 'No balance is shown.'}
+          onClose={onClose}
+        />
+        <div className="space-y-4 px-4 py-5">
+          {loading ? (
+            <>
+              <div className="h-24 animate-pulse rounded-2xl border border-navy-800 bg-navy-900/60" />
+              <div className="h-16 animate-pulse rounded-2xl border border-navy-800 bg-navy-900/60" />
+            </>
+          ) : (
+            <>
+              <div className="rounded-2xl border border-navy-700/80 bg-navy-950/46 p-4">
+                <p className="text-sm leading-6 text-slate-400">{CREDITS_UNAVAILABLE_DETAIL}</p>
+              </div>
+              <button
+                type="button"
+                onClick={onRetryCredits}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet-300/24 bg-violet-300/12 px-3 py-2.5 text-sm font-semibold text-violet-50 transition-colors hover:bg-violet-300/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Retry
+              </button>
+            </>
+          )}
+        </div>
+      </aside>
+    );
+  }
+
   const analytics = buildMissionCreditAnalytics(mission, snapshot);
   const summary = buildMissionDashboardSummary(mission);
   const recommendation = getCreditRecommendation(snapshot);
-  const { items: recentUsage, isLoading } = useRecentCreditUsage();
   const remainingPercent = snapshot.creditsTotal > 0
     ? Math.min(100, Math.max(0, Math.round((snapshot.creditsRemaining / snapshot.creditsTotal) * 100)))
     : 0;
 
   return (
-    <aside className="fixed inset-x-3 bottom-3 z-50 max-h-[calc(100dvh-1.5rem)] overflow-hidden rounded-2xl border border-violet-300/20 bg-[radial-gradient(circle_at_16%_0%,rgba(124,92,255,0.24),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] shadow-[0_24px_80px_rgba(2,6,23,0.58)] backdrop-blur-xl sm:inset-x-auto sm:bottom-4 sm:right-4 sm:top-4 sm:w-[25rem]">
-      <div className="flex items-start justify-between gap-3 border-b border-navy-800/80 px-4 py-4">
-        <div className="min-w-0">
-          <p className="inline-flex items-center gap-1.5 rounded-full border border-violet-300/22 bg-violet-300/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-100">
-            <CreditCard className="h-3 w-3" />
-            Credits
-          </p>
-          <h2 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-white">
-            {analytics.balanceLabel}
-          </h2>
-          <p className="mt-1 text-[12px] leading-5 text-slate-500">{analytics.runwayLabel}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close credits"
-          className="rounded-lg border border-navy-700/70 bg-navy-950/55 p-1.5 text-slate-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+    <aside className={DRAWER_SHELL_CLASS}>
+      <DrawerHeader title={analytics.balanceLabel} detail={analytics.runwayLabel} onClose={onClose} />
 
       <div className="panel-scroll max-h-[calc(100dvh-8rem)] space-y-4 overflow-y-auto px-4 py-4">
         <div className={`rounded-2xl border p-4 ${recommendationClasses[recommendation.tone]}`}>
@@ -137,9 +191,24 @@ export function MissionCreditDrawer({
         <div className="rounded-2xl border border-navy-700/80 bg-navy-950/46 p-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Recent usage</p>
-            <span className="text-[10px] text-slate-600">{isLoading ? 'Loading' : `${recentUsage.length} events`}</span>
+            <span className="text-[10px] text-slate-600">
+              {usageStatus === 'loading'
+                ? 'Loading'
+                : usageStatus === 'unavailable'
+                  ? 'Unavailable'
+                  : `${recentUsage.length} events`}
+            </span>
           </div>
           <div className="mt-3 space-y-2">
+            {usageStatus === 'loading' ? (
+              <div className="h-14 animate-pulse rounded-xl border border-navy-800 bg-navy-900/60" />
+            ) : recentUsage.length === 0 ? (
+              <p className="rounded-xl border border-navy-700/70 bg-navy-900/45 px-3 py-2.5 text-[11px] leading-5 text-slate-500">
+                {usageStatus === 'unavailable'
+                  ? 'Usage history could not be read, so nothing is listed here.'
+                  : 'No usage recorded yet for this workspace.'}
+              </p>
+            ) : null}
             {recentUsage.slice(0, 5).map((item) => (
               <div key={item.id} className={`rounded-xl border px-3 py-2.5 ${usageToneClasses[item.tone]}`}>
                 <div className="flex items-start justify-between gap-3">

@@ -54,13 +54,28 @@ function getProofRunById(id: string) {
   return getSampleRunById(id) || SAMPLE_RUNS[0];
 }
 
+/**
+ * A simulated Stripe session must never be presented as a completed purchase,
+ * so we refuse the redirect and say plainly that nothing was charged.
+ */
+function checkoutUnavailableIssue(reason: 'payments_not_configured' | 'no_session') {
+  if (reason === 'payments_not_configured') {
+    return {
+      message: 'Payments are not connected for this workspace yet, so this checkout would be a simulation rather than a real purchase. Nothing was charged. Email max@violema.com to get billing enabled.',
+    };
+  }
+  return {
+    message: 'Checkout did not return a payment session. Nothing was charged — try again in a moment.',
+  };
+}
+
 export default function Billing() {
   const location = useLocation();
   const navigate = useNavigate();
   const { scopeClass } = useTheme();
   const [session, setSession] = useState<Awaited<ReturnType<typeof fetchBackendAuthSession>>>(null);
   const [sessionResolved, setSessionResolved] = useState(false);
-  const { snapshot, refresh } = useCreditSnapshot();
+  const { snapshot, status: creditsStatus, refresh } = useCreditSnapshot();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
   const [checkoutIssue, setCheckoutIssue] = useState<{
@@ -110,6 +125,9 @@ export default function Billing() {
         if (active) setSessionResolved(true);
       });
     return () => { active = false; };
+    // Intentionally runs once on mount: this resolves the session exactly one time.
+    // Including currentReturnPath would re-fire the session check on every route change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -127,13 +145,13 @@ export default function Billing() {
     setCheckoutIssue(null);
     setBusyId(planId);
     try {
-      const result = await createBillingCheckout({ kind: 'subscription', planId });
-      if (result.session?.checkoutUrl) {
+      const outcome = await createBillingCheckout({ kind: 'subscription', planId });
+      if (outcome.kind === 'ready') {
         setRedirecting(true);
-        window.location.assign(result.session.checkoutUrl);
+        window.location.assign(outcome.checkoutUrl);
         return;
       }
-      setCheckoutIssue(checkoutErrorDecision({}, returnPath));
+      setCheckoutIssue(checkoutUnavailableIssue(outcome.reason));
     } catch (error) {
       const billingError = error instanceof BillingCheckoutError ? error : null;
       if (billingError?.status === 401 || billingError?.status === 403) {
@@ -159,13 +177,13 @@ export default function Billing() {
     setCheckoutIssue(null);
     setBusyId(offerId);
     try {
-      const result = await createBillingCheckout({ kind: 'top-up', offerId });
-      if (result.session?.checkoutUrl) {
+      const outcome = await createBillingCheckout({ kind: 'top-up', offerId });
+      if (outcome.kind === 'ready') {
         setRedirecting(true);
-        window.location.assign(result.session.checkoutUrl);
+        window.location.assign(outcome.checkoutUrl);
         return;
       }
-      setCheckoutIssue(checkoutErrorDecision({}, returnPath));
+      setCheckoutIssue(checkoutUnavailableIssue(outcome.reason));
     } catch (error) {
       const billingError = error instanceof BillingCheckoutError ? error : null;
       if (billingError?.status === 401 || billingError?.status === 403) {
@@ -345,7 +363,11 @@ export default function Billing() {
                 </p>
                 {checkoutState === 'success' ? (
                   <p className="mt-2 text-xs text-current/70">
-                    Current balance: {formatCredits(snapshot.creditsRemaining)} credits
+                    {snapshot
+                      ? `Current balance: ${formatCredits(snapshot.creditsRemaining)} credits`
+                      : creditsStatus === 'loading'
+                        ? 'Checking your current balance…'
+                        : 'Balance unavailable right now. Open your workspace to confirm the credits landed.'}
                   </p>
                 ) : (
                   <button

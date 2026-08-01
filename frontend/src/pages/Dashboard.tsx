@@ -1939,7 +1939,7 @@ export default function Dashboard() {
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
   const [backendAuthSession, setBackendAuthSession] = useState<AuthSession | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const { snapshot, refresh: refreshCredits } = useCreditSnapshot();
+  const { snapshot, status: creditsStatus, refresh: refreshCredits } = useCreditSnapshot();
   const canLoadTestCredits = isAdminSession(backendAuthSession);
   const hasBackendSlackConnection = Boolean(backendAuthSession?.slackWorkspace && backendAuthSession?.slackChannelId);
 
@@ -2517,11 +2517,11 @@ export default function Dashboard() {
     setActionBusy('run');
     try {
       const response = await fetch(`/api/automations/${task.automationId}/run`, { method: 'POST' });
-      if (!response.ok) throw new Error('Could not run automation');
+      if (!response.ok) throw new Error(await readApiError(response, 'Could not run automation'));
       await refreshAutomations();
       showNotice('success', `Started "${task.title}"`);
-    } catch {
-      showNotice('error', `Could not run "${task.title}"`);
+    } catch (error) {
+      showNotice('error', error instanceof Error && error.message !== 'Could not run automation' ? error.message : `Could not run "${task.title}"`);
     } finally {
       setActionBusy(null);
     }
@@ -3236,7 +3236,19 @@ export default function Dashboard() {
     }
     return selectedTaskWorkflowSteps.slice(0, 4);
   }, [selectedTask, selectedTaskWorkflowSteps]);
-  const lowCreditRunway = snapshot.projectedDaysLeft <= 7;
+  // Every credit label below is derived from a real snapshot or states plainly
+  // that there isn't one. No placeholder balances reach the UI.
+  const lowCreditRunway = snapshot !== null && snapshot.projectedDaysLeft <= 7;
+  const creditsUnavailable = creditsStatus === 'unavailable';
+  const creditBalanceLabel = snapshot
+    ? `${formatCredits(snapshot.creditsRemaining)} cr`
+    : creditsUnavailable ? 'Usage unavailable' : 'Loading credits…';
+  const creditRunwayLabel = snapshot
+    ? `${snapshot.projectedDaysLeft}d runway · ${snapshot.planName}`
+    : creditsUnavailable ? 'Could not reach billing' : 'Checking your balance';
+  const creditPlanLabel = snapshot
+    ? `${snapshot.planName} plan`
+    : creditsUnavailable ? 'Plan unavailable' : 'Loading plan…';
   const automationActionCount = useMemo(() => {
     if (!automationEditor) return 0;
     const sourceSteps = automationEditor.authoringMode === 'describe'
@@ -3531,6 +3543,11 @@ export default function Dashboard() {
   };
 
   const openUpgrade = () => {
+    // Without a readable plan, open the picker rather than guessing a target.
+    if (!snapshot) {
+      navigate('/plans');
+      return;
+    }
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
       window.location.assign('mailto:max@violema.com?subject=Violema%20Enterprise');
@@ -3810,8 +3827,8 @@ export default function Dashboard() {
   const renderCommandDashboard = () => (
     <MissionCommandDashboard
       mission={selectedMission}
-      creditBalanceLabel={`${formatCredits(snapshot.creditsRemaining)} cr`}
-      creditRunwayLabel={`${snapshot.projectedDaysLeft}d runway · ${snapshot.planName}`}
+      creditBalanceLabel={creditBalanceLabel}
+      creditRunwayLabel={creditRunwayLabel}
       lowCreditRunway={lowCreditRunway}
       onOpenWorkspace={() => {
         setMissionWorkspaceOpen(true);
@@ -4907,12 +4924,12 @@ export default function Dashboard() {
 	                  className="min-w-0 flex-1 rounded-lg text-left transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
 	                >
 	                  <p className="truncate text-[12px] font-medium leading-none text-slate-300">
-	                    {formatCredits(snapshot.creditsRemaining)} cr
+	                    {creditBalanceLabel}
 	                  </p>
 	                  <p className={`mt-0.5 truncate text-[10px] leading-none ${
 	                    lowCreditRunway ? 'text-amber-300/80' : 'text-slate-600'
 	                  }`}>
-	                    {snapshot.projectedDaysLeft}d runway · {snapshot.planName}
+	                    {creditRunwayLabel}
 	                  </p>
 	                </button>
 	                <button
@@ -4963,7 +4980,7 @@ export default function Dashboard() {
                 <p className="truncate text-[12px] font-medium leading-none text-slate-200">
                   {backendAuthSession?.name || backendAuthSession?.email || 'You'}
                 </p>
-                <p className="mt-0.5 text-[10px] leading-none text-slate-600">{snapshot.planName} plan</p>
+                <p className="mt-0.5 text-[10px] leading-none text-slate-600">{creditPlanLabel}</p>
               </div>
 
               {/* Slack status dot */}
@@ -5204,6 +5221,8 @@ export default function Dashboard() {
             <MissionCreditDrawer
               mission={selectedMission}
               snapshot={snapshot}
+              creditsStatus={creditsStatus}
+              onRetryCredits={() => { void refreshCredits(); }}
               onClose={() => setCreditDrawerOpen(false)}
               onTopUp={openTopUp}
               onUpgrade={() => { void openUpgrade(); }}

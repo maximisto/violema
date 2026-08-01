@@ -1,7 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { resolveWorkspaceContext } from './workspace';
 
-export type CreditSource = 'mock' | 'api';
+/**
+ * A CreditSnapshot only ever exists when it came back from the billing API.
+ * There is deliberately no 'mock' member: fabricated financial state must not
+ * be representable on the authenticated product path.
+ */
+export type CreditSource = 'api';
+
+/** Loading / resolved / could-not-reach-the-API. Never "here are some numbers anyway". */
+export type CreditDataStatus = 'loading' | 'ready' | 'unavailable';
+
+export const CREDITS_UNAVAILABLE_TITLE = 'Usage unavailable';
+export const CREDITS_UNAVAILABLE_DETAIL =
+  'We could not reach the billing service, so no balance is shown. Nothing here is estimated or assumed.';
 
 export interface CreditSnapshot {
   source: CreditSource;
@@ -73,21 +85,6 @@ export interface TopUpOption {
   description: string;
 }
 
-const MOCK_CREDIT_SNAPSHOT: CreditSnapshot = {
-  source: 'mock',
-  workspaceId: 'purpleorangehq',
-  workspaceName: 'Purple Orange HQ',
-  planName: 'Start',
-  creditsRemaining: 1684,
-  creditsTotal: 2000,
-  estimatedTaskCost: 18,
-  automationBurnMonthly: 420,
-  referralBonus: 2000,
-  topUpSuggestion: 500,
-  projectedDaysLeft: 18,
-  lastUpdatedAt: new Date().toISOString(),
-};
-
 export const TOP_UP_OPTIONS: TopUpOption[] = [
   {
     id: 'topup_500',
@@ -114,33 +111,6 @@ export const TOP_UP_OPTIONS: TopUpOption[] = [
 
 const CREDIT_ENDPOINTS = ['/api/billing/usage', '/api/usage/credits'];
 const RECENT_USAGE_ENDPOINTS = ['/api/billing/recent-usage', '/api/usage/recent', '/api/usage/activity'];
-
-const MOCK_RECENT_USAGE: RecentCreditUsage[] = [
-  {
-    id: 'usage-1',
-    title: 'Revenue research brief',
-    detail: 'Search + synthesis + report',
-    credits: 28,
-    timestamp: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
-    tone: 'violet',
-  },
-  {
-    id: 'usage-2',
-    title: 'Hourly Stripe monitor',
-    detail: 'Automation run + Slack digest',
-    credits: 16,
-    timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-    tone: 'cyan',
-  },
-  {
-    id: 'usage-3',
-    title: 'Browser screenshot audit',
-    detail: 'Capture + visual check',
-    credits: 8,
-    timestamp: new Date(Date.now() - 1000 * 60 * 160).toISOString(),
-    tone: 'amber',
-  },
-];
 
 function isCreditSnapshot(value: unknown): value is CreditSnapshot {
   if (!value || typeof value !== 'object') return false;
@@ -175,10 +145,12 @@ export function getWorkspaceRequest(endpoint: string) {
   return buildWorkspaceRequest(endpoint, resolveWorkspaceContext());
 }
 
-async function fetchCreditSnapshot(signal?: AbortSignal): Promise<CreditSnapshot> {
+/** Returns null when no endpoint could produce a real snapshot. Never substitutes numbers. */
+async function fetchCreditSnapshot(signal?: AbortSignal): Promise<CreditSnapshot | null> {
   const workspace = resolveWorkspaceContext();
 
   for (const endpoint of CREDIT_ENDPOINTS) {
+    if (signal?.aborted) return null;
     try {
       const request = buildWorkspaceRequest(endpoint, workspace);
       const response = await fetch(request.url, { signal, headers: request.headers });
@@ -196,7 +168,7 @@ async function fetchCreditSnapshot(signal?: AbortSignal): Promise<CreditSnapshot
       continue;
     }
   }
-  return MOCK_CREDIT_SNAPSHOT;
+  return null;
 }
 
 function isRecentCreditUsageList(value: unknown): value is RecentCreditUsage[] {
@@ -215,10 +187,12 @@ function isRecentCreditUsageList(value: unknown): value is RecentCreditUsage[] {
   });
 }
 
-async function fetchRecentUsage(signal?: AbortSignal): Promise<RecentCreditUsage[]> {
+/** Returns null when no endpoint could produce a real usage list. Never substitutes events. */
+async function fetchRecentUsage(signal?: AbortSignal): Promise<RecentCreditUsage[] | null> {
   const workspace = resolveWorkspaceContext();
 
   for (const endpoint of RECENT_USAGE_ENDPOINTS) {
+    if (signal?.aborted) return null;
     try {
       const request = buildWorkspaceRequest(endpoint, workspace);
       const response = await fetch(request.url, { signal, headers: request.headers });
@@ -232,49 +206,57 @@ async function fetchRecentUsage(signal?: AbortSignal): Promise<RecentCreditUsage
     }
   }
 
-  return MOCK_RECENT_USAGE;
+  return null;
 }
 
+/**
+ * `snapshot` is null until a real API response lands, and returns to null if a
+ * later refresh fails. Consumers must render loading or "usage unavailable"
+ * rather than any placeholder balance.
+ */
 export function useCreditSnapshot() {
-  const [snapshot, setSnapshot] = useState<CreditSnapshot>(MOCK_CREDIT_SNAPSHOT);
-  const [isLoading, setIsLoading] = useState(true);
+  const [snapshot, setSnapshot] = useState<CreditSnapshot | null>(null);
+  const [status, setStatus] = useState<CreditDataStatus>('loading');
 
-  async function refresh(signal?: AbortSignal) {
-    setIsLoading(true);
-    try {
-      const nextSnapshot = await fetchCreditSnapshot(signal);
-      setSnapshot(nextSnapshot);
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  const refresh = useCallback(async (signal?: AbortSignal) => {
+    setStatus('loading');
+    const nextSnapshot = await fetchCreditSnapshot(signal);
+    if (signal?.aborted) return;
+    setSnapshot(nextSnapshot);
+    setStatus(nextSnapshot ? 'ready' : 'unavailable');
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
     void refresh(controller.signal);
 
     return () => controller.abort();
-  }, []);
+  }, [refresh]);
 
-  return { snapshot, isLoading, refresh };
+  return { snapshot, status, isLoading: status === 'loading', refresh };
 }
 
+/** `items` is empty — not fabricated — whenever usage could not be read. */
 export function useRecentCreditUsage() {
-  const [items, setItems] = useState<RecentCreditUsage[]>(MOCK_RECENT_USAGE);
-  const [isLoading, setIsLoading] = useState(true);
+  const [items, setItems] = useState<RecentCreditUsage[]>([]);
+  const [status, setStatus] = useState<CreditDataStatus>('loading');
+
+  const refresh = useCallback(async (signal?: AbortSignal) => {
+    setStatus('loading');
+    const next = await fetchRecentUsage(signal);
+    if (signal?.aborted) return;
+    setItems(next || []);
+    setStatus(next ? 'ready' : 'unavailable');
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    setIsLoading(true);
-
-    fetchRecentUsage(controller.signal)
-      .then(setItems)
-      .finally(() => setIsLoading(false));
+    void refresh(controller.signal);
 
     return () => controller.abort();
-  }, []);
+  }, [refresh]);
 
-  return { items, isLoading };
+  return { items, status, isLoading: status === 'loading', refresh };
 }
 
 export async function fetchCreditEstimate(input: CreditEstimateInput): Promise<CreditEstimate | null> {
@@ -375,13 +357,38 @@ export class BillingCheckoutError extends Error {
   }
 }
 
+interface BillingCheckoutSessionResponse {
+  checkoutUrl?: string;
+  provider?: 'stripe' | 'mock';
+  status?: 'ready' | 'mocked';
+}
+
+/**
+ * A real, payable checkout, or an explicit refusal. There is no third shape:
+ * a mocked session never carries a `checkoutUrl` out of this module, so no
+ * caller can accidentally dress a simulated purchase up as a completed one.
+ */
+export type BillingCheckoutOutcome =
+  | { kind: 'ready'; checkoutUrl: string }
+  | { kind: 'unavailable'; reason: 'payments_not_configured' | 'no_session' };
+
+/** Treat anything that is not provably a live Stripe session as simulated. */
+function isSimulatedCheckoutSession(session: BillingCheckoutSessionResponse): boolean {
+  return (
+    session.provider === 'mock'
+    || session.status === 'mocked'
+    || session.provider !== 'stripe'
+    || (session.checkoutUrl || '').includes('/mock-checkout/')
+  );
+}
+
 export async function createBillingCheckout(input: {
   kind: 'subscription' | 'top-up';
   planId?: 'starter' | 'pro' | 'team';
   offerId?: TopUpOfferId | string;
   successUrl?: string;
   cancelUrl?: string;
-}) {
+}): Promise<BillingCheckoutOutcome> {
   const request = getWorkspaceRequest(
     input.kind === 'subscription'
       ? '/api/billing/stripe/checkout/subscription'
@@ -413,7 +420,7 @@ export async function createBillingCheckout(input: {
     ok: boolean;
     error?: string;
     code?: string;
-    session?: { checkoutUrl: string; provider: 'stripe' | 'mock'; status: 'ready' | 'mocked' };
+    session?: BillingCheckoutSessionResponse;
   } | null;
 
   if (!response.ok) {
@@ -426,9 +433,16 @@ export async function createBillingCheckout(input: {
   if (!result) {
     throw new BillingCheckoutError('Checkout returned an invalid response.', response.status);
   }
-  return result;
+  if (!result.session || !result.session.checkoutUrl) {
+    return { kind: 'unavailable', reason: 'no_session' };
+  }
+  if (isSimulatedCheckoutSession(result.session)) {
+    return { kind: 'unavailable', reason: 'payments_not_configured' };
+  }
+  return { kind: 'ready', checkoutUrl: result.session.checkoutUrl };
 }
 
+/** Redirects only for a live Stripe session. Returns false without navigating otherwise. */
 export async function openBillingCheckout(input: {
   kind: 'subscription' | 'top-up';
   planId?: 'starter' | 'pro' | 'team';
@@ -436,10 +450,8 @@ export async function openBillingCheckout(input: {
   successUrl?: string;
   cancelUrl?: string;
 }) {
-  const result = await createBillingCheckout(input);
-  if (result.session?.checkoutUrl) {
-    window.location.assign(result.session.checkoutUrl);
-    return true;
-  }
-  return false;
+  const outcome = await createBillingCheckout(input);
+  if (outcome.kind !== 'ready') return false;
+  window.location.assign(outcome.checkoutUrl);
+  return true;
 }

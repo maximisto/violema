@@ -7,7 +7,10 @@ import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right.js';
 import History from 'lucide-react/dist/esm/icons/history.js';
 import ExternalLink from 'lucide-react/dist/esm/icons/external-link.js';
 import TrendingUp from 'lucide-react/dist/esm/icons/trending-up.js';
+import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.js';
 import {
+  CREDITS_UNAVAILABLE_DETAIL,
+  CREDITS_UNAVAILABLE_TITLE,
   buildReferralMessage,
   formatCredits,
   formatRelativeTime,
@@ -39,9 +42,49 @@ function Stat({
 }
 
 export default function CreditSurface({ compact = false }: { compact?: boolean }) {
-  const { snapshot, isLoading } = useCreditSnapshot();
-  const { items: recentUsage, isLoading: usageLoading } = useRecentCreditUsage();
+  const { snapshot, status: creditsStatus, refresh: refreshCredits } = useCreditSnapshot();
+  const { items: recentUsage, status: usageStatus, refresh: refreshUsage } = useRecentCreditUsage();
   const [actionState, setActionState] = useState<string | null>(null);
+
+  // Skeleton until a real snapshot lands; an explicit refusal if it never does.
+  if (!snapshot) {
+    return (
+      <section className={`ui-panel overflow-hidden border-violet-500/15 ${compact ? 'p-2.5' : 'p-3.5 sm:p-4'}`}>
+        <div
+          className={`inline-flex items-center gap-2 rounded-full border border-violet-500/15 bg-violet-500/8 ${
+            compact ? 'px-2 py-0.5' : 'px-2.5 py-1'
+          } text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300`}
+        >
+          <Sparkles className="h-3 w-3" />
+          Credits
+        </div>
+        {creditsStatus === 'loading' ? (
+          <div className="mt-3 space-y-2" aria-busy="true">
+            <div className="h-16 animate-pulse rounded-2xl border border-navy-800 bg-navy-900/60" />
+            <div className="h-10 animate-pulse rounded-2xl border border-navy-800 bg-navy-900/60" />
+          </div>
+        ) : (
+          <>
+            <h3 className={`mt-2 ${compact ? 'text-[13px]' : 'text-sm'} font-semibold text-white`}>
+              {CREDITS_UNAVAILABLE_TITLE}
+            </h3>
+            <p className={`mt-1 ${compact ? 'text-[10px]' : 'text-[11px]'} leading-5 text-slate-500`}>
+              {CREDITS_UNAVAILABLE_DETAIL}
+            </p>
+            <button
+              type="button"
+              onClick={() => { void refreshCredits(); void refreshUsage(); }}
+              className="ui-pill mt-3 rounded-xl text-[9px] sm:text-[10px]"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Retry
+            </button>
+          </>
+        )}
+      </section>
+    );
+  }
+
   const progress = Math.max(0, Math.min(100, (snapshot.creditsRemaining / snapshot.creditsTotal) * 100));
   const lowBalance = progress < 25;
   const burnRate = snapshot.automationBurnMonthly / 30;
@@ -58,22 +101,24 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
     }
   }
 
-  function openPricing() {
+  // Arrow form (not hoisted declarations) so these are created after the null
+  // guard above and keep `snapshot` narrowed to a real snapshot.
+  const openPricing = () => {
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
       window.location.assign('mailto:max@violema.com?subject=Violema%20Enterprise');
       return;
     }
     window.location.assign(`/plans?plan=${nextPlanId}`);
-  }
+  };
 
   function handleTopUp() {
     window.location.assign('/plans?section=topups');
   }
 
-  function handleReferral() {
+  const handleReferral = () => {
     copyToClipboard(buildReferralMessage(snapshot), 'Referral message');
-  }
+  };
 
   const topUpLabel = compact ? 'Top up' : 'Top up now';
   const referralLabel = compact ? 'Refer' : 'Refer for 2k';
@@ -96,7 +141,7 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
           </div>
           <h3 className={`mt-2 ${compact ? 'text-[13px]' : 'text-sm'} font-semibold text-white`}>Violema Credits</h3>
           <p className={`mt-0.5 ${compact ? 'text-[10px]' : 'text-[11px]'} text-slate-500`}>
-            {snapshot.workspaceName} · {snapshot.planName} plan · {isLoading ? 'syncing…' : snapshot.source === 'api' ? 'live' : 'preview'}
+            {snapshot.workspaceName} · {snapshot.planName} plan · {creditsStatus === 'loading' ? 'syncing…' : 'live'}
           </p>
         </div>
         <div className={`rounded-xl border border-navy-700/60 bg-navy-950/60 ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'} text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]`}>
@@ -180,10 +225,19 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
               <span>Recent usage</span>
             </div>
             <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600">
-              {usageLoading ? 'loading' : 'live preview'}
+              {usageStatus === 'loading' ? 'loading' : usageStatus === 'unavailable' ? 'unavailable' : 'live'}
             </span>
           </div>
           <div className="mt-2 space-y-2">
+            {usageStatus === 'loading' ? (
+              <div className="h-14 animate-pulse rounded-xl border border-navy-800 bg-navy-900/60" />
+            ) : recentUsage.length === 0 ? (
+              <p className="rounded-xl border border-navy-700/60 bg-navy-900/45 px-3 py-2 text-[11px] leading-5 text-slate-500">
+                {usageStatus === 'unavailable'
+                  ? 'Usage history could not be read, so nothing is listed here.'
+                  : 'No usage recorded yet for this workspace.'}
+              </p>
+            ) : null}
             {recentUsage.slice(0, 3).map((item) => (
               <div
                 key={item.id}
@@ -265,7 +319,7 @@ export default function CreditSurface({ compact = false }: { compact?: boolean }
 
       <div className={`mt-2 flex items-center justify-between gap-3 ${compact ? 'px-0.5' : 'px-1'}`}>
         <p className="text-[10px] text-slate-600">
-          {snapshot.source === 'api' ? 'Live usage' : 'Preview data'} · workspace-aware billing is ready for a live API.
+          Live usage · updated {formatRelativeTime(snapshot.lastUpdatedAt)}
         </p>
         <button
           type="button"

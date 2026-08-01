@@ -3,18 +3,46 @@ import ArrowUpRight from 'lucide-react/dist/esm/icons/arrow-up-right.js';
 import CreditCard from 'lucide-react/dist/esm/icons/credit-card.js';
 import Gift from 'lucide-react/dist/esm/icons/gift.js';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
+import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw.js';
 import {
   buildReferralMessage,
-  buildTopUpRequest,
   getSuggestedUpgradePlanId,
   formatCredits,
   getCreditRecommendation,
   useCreditSnapshot,
+  CREDITS_UNAVAILABLE_TITLE,
 } from '../lib/credits';
 
 export default function BillingGateBar({ compact = false }: { compact?: boolean }) {
-  const { snapshot } = useCreditSnapshot();
+  const { snapshot, status: creditsStatus, refresh } = useCreditSnapshot();
   const [status, setStatus] = useState<string | null>(null);
+
+  // Until a real snapshot lands there is no balance to speak about. Stay silent
+  // while loading, and say plainly that we could not read usage if it failed.
+  if (!snapshot) {
+    if (creditsStatus !== 'unavailable') return null;
+    return (
+      <div className="rounded-2xl border border-navy-700/70 bg-navy-950/55 px-3 py-2.5 shadow-[0_12px_30px_rgba(2,6,23,0.14)]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-white">{CREDITS_UNAVAILABLE_TITLE}</p>
+            <p className="mt-1 text-[11px] text-slate-400">
+              We could not read your credit balance. No estimate is shown.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { void refresh(); }}
+            className="inline-flex flex-shrink-0 items-center gap-1.5 text-[11px] font-medium text-slate-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const recommendation = getCreditRecommendation(snapshot);
 
   if (compact && recommendation.tone !== 'urgent' && !status) {
@@ -39,14 +67,16 @@ export default function BillingGateBar({ compact = false }: { compact?: boolean 
     }
   }
 
-  async function handleUpgrade() {
+  // Arrow form (not a hoisted declaration) so it is created after the null
+  // guard above and keeps `snapshot` narrowed to a real snapshot.
+  const handleUpgrade = async () => {
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
       window.location.assign('mailto:max@violema.com?subject=Violema%20Enterprise');
       return;
     }
     window.location.assign(`/plans?plan=${nextPlanId}`);
-  }
+  };
 
   function handleTopUp() {
     window.location.assign('/plans?section=topups');
