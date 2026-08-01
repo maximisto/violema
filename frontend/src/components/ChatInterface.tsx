@@ -291,24 +291,6 @@ const CopyButton = memo(function CopyButton({ text, className = '' }: { text: st
   );
 });
 
-const ConfidenceBar = memo(function ConfidenceBar({ score }: { score: number }) {
-  const color =
-    score >= 90 ? 'bg-green-400' : score >= 75 ? 'bg-yellow-400' : 'bg-red-400';
-  const label =
-    score >= 90 ? 'High confidence' : score >= 75 ? 'Moderate confidence' : 'Low confidence';
-  return (
-    <div className="flex items-center gap-1.5" title={label}>
-      <div className="w-14 h-1 bg-navy-800 rounded-full overflow-hidden">
-        <div
-          className={`h-full ${color} rounded-full transition-all duration-700`}
-          style={{ width: `${score}%` }}
-        />
-      </div>
-      <span className="text-[10px] text-slate-600">{score}%</span>
-    </div>
-  );
-});
-
 function ThinkingBlock({
   content,
   isStreaming,
@@ -454,7 +436,6 @@ const ToolCallBlock = memo(function ToolCallBlock({
   const label = TOOL_LABELS[toolCall.name] || toolCall.name;
   const isDone = toolCall.status === 'complete';
   const elapsed = toolCall.elapsedMs;
-  const confidence = toolCall.confidence;
   const resultLinks = extractResultLinks(toolCall.result);
   const resultImages = extractResultImages(toolCall.result);
   const resultMetrics = extractResultMetrics(toolCall.result);
@@ -498,7 +479,6 @@ const ToolCallBlock = memo(function ToolCallBlock({
                 {elapsed < 1000 ? `${elapsed}ms` : `${(elapsed / 1000).toFixed(1)}s`}
               </span>
             )}
-            {isDone && confidence !== undefined && <ConfidenceBar score={confidence} />}
             {simulatedNotice && (
               <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200">
                 Simulated
@@ -1109,7 +1089,6 @@ export default function ChatInterface({
                         result: event.result,
                         status: 'complete' as const,
                         elapsedMs: event.elapsed_ms,
-                        confidence: event.confidence,
                       }
                     : tc
                 ),
@@ -1161,13 +1140,19 @@ export default function ChatInterface({
   }, []);
 
   const handleUpgradeCheckout = useCallback(async () => {
+    // With no readable plan we send the user to the plan picker rather than
+    // guessing an upgrade target from a balance we do not have.
+    if (!snapshot) {
+      window.location.assign('/plans');
+      return;
+    }
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
       window.location.assign('mailto:max@violema.com?subject=Violema%20Enterprise');
       return;
     }
     window.location.assign(`/plans?plan=${nextPlanId}`);
-  }, [snapshot.planName]);
+  }, [snapshot]);
 
   const handleTopUpCheckout = useCallback(() => {
     window.location.assign('/plans?section=topups');
@@ -1193,11 +1178,11 @@ export default function ChatInterface({
 
   const suggestions = SUGGESTIONS_BY_MODE[autonomyMode];
   const modeConfig = MODE_CONFIG[autonomyMode];
-  const modeLabel = modeConfig.label || 'Supervised';
   const ModeIcon = modeConfig.icon;
   const isCreditError = Boolean(error && /insufficient credits|credits exhausted|add a top-up|upgrade your plan/i.test(error));
-  const draftWillPressureCredits = draftEstimate !== null && draftEstimate > snapshot.creditsRemaining;
-  const lowRunway = snapshot.projectedDaysLeft <= 7;
+  // Both claims require a real balance. Without one we assert nothing.
+  const draftWillPressureCredits = snapshot !== null && draftEstimate !== null && draftEstimate > snapshot.creditsRemaining;
+  const lowRunway = snapshot !== null && snapshot.projectedDaysLeft <= 7;
 
   const statusText = {
     idle: 'Ready',

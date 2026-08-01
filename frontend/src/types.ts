@@ -24,7 +24,6 @@ export interface ToolCall {
   status: 'running' | 'complete' | 'error';
   startedAt?: number;
   elapsedMs?: number;
-  confidence?: number;
 }
 
 export interface Conversation {
@@ -48,7 +47,6 @@ export interface SSEEvent {
   message?: string;
   started_at?: number;
   elapsed_ms?: number;
-  confidence?: number;
   selected_profile?: string;
   selected_model?: string;
   selected_model_source?: string;
