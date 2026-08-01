@@ -43,7 +43,7 @@ type MinimalIntegrationReadiness =
       }>;
     };
 
-interface MinimalSettingsView {
+export interface MinimalSettingsView {
   integrations?: Record<string, MinimalIntegrationReadiness>;
 }
 
@@ -72,6 +72,22 @@ const INTEGRATION_LABELS: Record<string, string> = {
   postmark: 'Email',
 };
 
+/**
+ * Human label for an integration id. Falls back to title-casing the id so an
+ * unknown source still reads as a product name inside a blocker.
+ */
+export function labelIntegrationId(id: string): string {
+  if (INTEGRATION_LABELS[id]) return INTEGRATION_LABELS[id];
+
+  return (
+    id
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ') || 'Integration'
+  );
+}
+
 function readConfiguredFlag(
   value:
     | {
@@ -90,7 +106,7 @@ function readConfiguredFlag(
   );
 }
 
-function isConfigured(
+export function isConfigured(
   settingsView: WorkspaceSettingsView | MinimalSettingsView,
   id: string,
 ): boolean {

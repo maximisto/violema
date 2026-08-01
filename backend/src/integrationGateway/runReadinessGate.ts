@@ -1,0 +1,228 @@
+/**
+ * Run-time readiness enforcement.
+ *
+ * Readiness used to be advisory: the dashboard could show "connect Stripe"
+ * while the scheduler happily ran the automation anyway, burned credits, and
+ * produced a brief built on nothing. This module is the gate that turns that
+ * advice into an enforced precondition, evaluated before a run reserves any
+ * credits or calls any model.
+ *
+ * Enforcement is deliberately TIERED, because the readiness table only knows
+ * two workflows:
+ *
+ *   1. Demo workspaces      → bypassed entirely. Demo surfaces are allowed to
+ *                             show labeled sample data, so gating them would
+ *                             break the product tour.
+ *   2. Supported workflows  → the full `checkWorkflowReadiness` report.
+ *   3. Everything else      → per-step source readiness derived from the
+ *                             automation's own query steps. Applying the
+ *                             two-workflow table here would mark every custom
+ *                             automation permanently unready and brick them.
+ *
+ * Tier 3 is not stricter than the data layer already is: `executeQueryData`
+ * fails closed for a non-demo workspace on any source outside the live-capable
+ * set. The gate simply reaches that verdict before the money is spent, and
+ * names the connection to fix.
+ */
+
+import type { PartnerComposioSource } from './adapters/partnerComposio';
+import {
+  checkWorkflowReadiness,
+  isConfigured,
+  labelIntegrationId,
+  type MinimalSettingsView,
+  type WorkflowReadinessBlocker,
+  type WorkflowRuntimeIntegrationStatus,
+} from './workflowReadiness';
+import type { WorkspaceSettingsView } from '../settingsStore';
+
+/** Workflow ids `readWorkflowRequirements` actually has a requirements table for. */
+export const SUPPORTED_READINESS_WORKFLOW_IDS = ['revenue-watch', 'weekly-founder-update'] as const;
+
+/**
+ * Partner sources a query step can read live, keyed by the Composio adapter's
+ * own union. Typing this as a total Record means adding a source to
+ * `PartnerComposioSource` without teaching the gate about it fails typecheck
+ * rather than silently blocking every automation that uses it.
+ */
+const PARTNER_LIVE_QUERY_SOURCES: Record<PartnerComposioSource, true> = {
+  email: true,
+  calendar: true,
+  google_drive: true,
+  linear: true,
+  github: true,
+};
+
+/** Every query source that can be backed by live data: Stripe plus the partner set. */
+export const LIVE_CAPABLE_QUERY_SOURCES: string[] = [
+  'stripe',
+  ...Object.keys(PARTNER_LIVE_QUERY_SOURCES),
+];
+
+export interface RunReadinessStepLike {
+  kind?: string;
+  title?: string;
+  inputs?: Record<string, unknown> | null;
+}
+
+export interface RunReadinessDecision {
+  allowed: boolean;
+  /** Which tier produced the verdict — surfaced in logs and the blocked run record. */
+  tier: 'demo_bypass' | 'supported_workflow' | 'step_sources';
+  workflowId: string;
+  summary: string;
+  blockers: WorkflowReadinessBlocker[];
+}
+
+function readSource(step: RunReadinessStepLike): string {
+  const value = step.inputs?.source;
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function isPartnerLiveSource(source: string): source is PartnerComposioSource {
+  return Object.prototype.hasOwnProperty.call(PARTNER_LIVE_QUERY_SOURCES, source);
+}
+
+export function isSupportedReadinessWorkflow(workflowId: string): boolean {
+  return (SUPPORTED_READINESS_WORKFLOW_IDS as readonly string[]).includes(workflowId);
+}
+
+function connectRoute(source: string) {
+  return `/integrations?provider=${encodeURIComponent(source)}`;
+}
+
+function summarizeBlockers(blockers: WorkflowReadinessBlocker[]): string {
+  const names = blockers.map((blocker) => blocker.label.replace(/^Connect /, ''));
+  const list =
+    names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+
+  return `This automation cannot run yet — connect ${list} first. Violema blocks runs that would read an unconnected source rather than inventing the data.`;
+}
+
+/**
+ * Tier 3: readiness derived from the automation's own query steps.
+ * Non-query steps never block, and an automation with no query steps reads
+ * nothing external, so it passes.
+ */
+export function evaluateStepSourceReadiness(input: {
+  steps?: RunReadinessStepLike[];
+  settingsView?: WorkspaceSettingsView | MinimalSettingsView;
+  runtimeStatus?: Record<string, WorkflowRuntimeIntegrationStatus>;
+}): WorkflowReadinessBlocker[] {
+  const querySteps = (input.steps || []).filter((step) => step.kind === 'query');
+  const blockers: WorkflowReadinessBlocker[] = [];
+  const seen = new Set<string>();
+
+  for (const step of querySteps) {
+    const source = readSource(step);
+    if (seen.has(source)) continue;
+    seen.add(source);
+
+    if (!source) {
+      blockers.push({
+        key: 'unknown_source',
+        label: 'Name a data source',
+        detail: `Step "${step.title || 'a query step'}" does not name a data source, so Violema cannot verify where its numbers would come from.`,
+      });
+      continue;
+    }
+
+    const label = labelIntegrationId(source);
+
+    if (source === 'stripe') {
+      if (!input.settingsView || !isConfigured(input.settingsView, 'stripe')) {
+        blockers.push({
+          key: 'stripe',
+          label: 'Connect Stripe',
+          detail: 'Stripe read access is required before this automation can query live revenue data.',
+          route: connectRoute('stripe'),
+        });
+      }
+      continue;
+    }
+
+    if (isPartnerLiveSource(source)) {
+      const status = input.runtimeStatus?.[source];
+      if (!status?.ready) {
+        blockers.push({
+          key: source,
+          label: `Connect ${label}`,
+          detail: status?.detail || `${label} is not connected to this workspace.`,
+          route: connectRoute(source),
+        });
+      }
+      continue;
+    }
+
+    blockers.push({
+      key: source,
+      label: `Connect ${label}`,
+      detail: `${label} is not a source Violema can read live yet, so this step would have no real data to report.`,
+      route: connectRoute(source),
+    });
+  }
+
+  return blockers;
+}
+
+/**
+ * The enforcement decision for one automation run. Pure: the caller supplies
+ * the settings view, the runtime status, and whether the workspace is a demo,
+ * so this stays testable without a server or a Composio round trip.
+ */
+export function evaluateRunReadiness(input: {
+  workflowId: string;
+  workspaceId: string;
+  isDemoWorkspace: boolean;
+  steps?: RunReadinessStepLike[];
+  deliveryTarget?: string | null;
+  settingsView?: WorkspaceSettingsView | MinimalSettingsView;
+  runtimeStatus?: Record<string, WorkflowRuntimeIntegrationStatus>;
+}): RunReadinessDecision {
+  if (input.isDemoWorkspace) {
+    return {
+      allowed: true,
+      tier: 'demo_bypass',
+      workflowId: input.workflowId,
+      summary: 'Demo workspace: readiness enforcement bypassed.',
+      blockers: [],
+    };
+  }
+
+  if (isSupportedReadinessWorkflow(input.workflowId)) {
+    const report = checkWorkflowReadiness({
+      workflowId: input.workflowId,
+      workspaceId: input.workspaceId,
+      deliveryTarget: input.deliveryTarget,
+      settingsView: input.settingsView,
+      runtimeStatus: input.runtimeStatus,
+    });
+
+    return {
+      allowed: report.ready,
+      tier: 'supported_workflow',
+      workflowId: input.workflowId,
+      summary: report.ready ? report.summary : summarizeBlockers(report.blockers),
+      blockers: report.blockers,
+    };
+  }
+
+  const blockers = evaluateStepSourceReadiness({
+    steps: input.steps,
+    settingsView: input.settingsView,
+    runtimeStatus: input.runtimeStatus,
+  });
+
+  return {
+    allowed: blockers.length === 0,
+    tier: 'step_sources',
+    workflowId: input.workflowId,
+    summary:
+      blockers.length === 0
+        ? 'Every data source this automation reads is connected.'
+        : summarizeBlockers(blockers),
+    blockers,
+  };
+}

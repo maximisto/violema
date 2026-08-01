@@ -46,6 +46,12 @@ MICROSOFT_CLIENT_SECRET=your_microsoft_client_secret
 MICROSOFT_TENANT_ID=common
 PORT=3001
 NODE_ENV=production
+# Optional: comma-separated workspace ids allowed to receive LABELED simulated
+# sample data (demo query fixtures, simulated run_code/create_task). Every
+# workspace not listed here fails closed: unconnected sources block or error
+# instead of fabricating numbers. Leave unset so nothing is a demo workspace;
+# set deliberately before a sales/investor demo that needs sample-data beats.
+# DEMO_WORKSPACE_IDS=demo-workspace-id
 EOF
 ```
 
@@ -62,7 +68,8 @@ curl https://violema.com/api/health
 Notes:
 - The deploy script now bootstraps nginx over HTTP first, then switches to the full HTTPS config after Certbot succeeds.
 - The frontend is served from `frontend/dist` and `/api/*` is proxied to the Express backend on port `3001`.
-- `/api/health` now reports which real integrations are configured: Anthropic, Tavily, Postmark, and Slack.
+- `/api/health` is a public liveness probe and returns only `{ status, service, timestamp }`. Model ids, provider routing, and integration status are operator diagnostics and now live behind `GET /api/admin/health`, which requires an admin session.
+- With `NODE_ENV=production`, checkout endpoints return an honest 503 (`billing_not_configured`) instead of mock sessions when Stripe env vars are missing, and `/api/billing/stripe/mock-checkout/*` returns 404. Mock checkout exists for local development only.
 - Auth cookies can now be pinned to `violema.com` with `AUTH_COOKIE_DOMAIN=violema.com`, which is the right setting once DNS fully cuts over.
 - The production nginx template now supports redirecting the legacy host `nexus.purpleorange.io` to `violema.com` over HTTP with `LEGACY_DOMAIN=nexus.purpleorange.io`.
 - If you also want clean HTTPS redirects from the legacy host, keep or provision a separate certificate for `nexus.purpleorange.io` before adding an SSL redirect block for that host.

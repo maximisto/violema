@@ -7,6 +7,7 @@ export interface IntegrationReadinessError {
   ok: false;
   code:
     | 'integration_not_ready'
+    | 'integration_not_connected'
     | 'integration_scope_insufficient'
     | 'unsupported_query'
     | 'integration_query_failed';

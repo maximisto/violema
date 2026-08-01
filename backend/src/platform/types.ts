@@ -235,6 +235,11 @@ export interface AutomationStepExecution {
   };
   output?: Record<string, unknown>;
   artifactKind?: string;
+  /**
+   * Where this step's data came from. Optional and additive — older ledger
+   * records simply omit it. 'none' means the step produced no external data.
+   */
+  dataOrigin?: 'live' | 'simulated' | 'none';
 }
 
 export interface AutomationRolePlan {

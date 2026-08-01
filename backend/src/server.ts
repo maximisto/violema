@@ -76,6 +76,15 @@ import {
   isWorkflowDeliveryApprovalRequired,
   resolveWorkflowDeliveryTarget,
 } from './integrationGateway/workflowPolicy';
+import { isDemoWorkspace } from './platform/demoWorkspace';
+import {
+  buildFabricatedEvidenceDeliveryError,
+  findFabricatedEvidence,
+  liveOrigin,
+  readQueryPayloadDataOrigin,
+  readQueryPayloadOrigin,
+  type DataOriginRecord,
+} from './platform/provenance';
 import { buildGenerateReportResult } from './platform/reportGeneration';
 import {
   approveAutomationReview,
@@ -132,6 +141,7 @@ import {
   finalizeTaskRun,
   getBillingStatus,
   getStripeBillingConfig,
+  isBillingProductionEnvironment,
   getWorkspaceProfile,
   listLedgerEntries,
   listReferralEvents,
@@ -205,6 +215,7 @@ import {
 } from './integrationGateway/auditLog';
 import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
 import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
+import { evaluateRunReadiness, type RunReadinessDecision } from './integrationGateway/runReadinessGate';
 import { buildWeeklyFounderRuntimeStatus } from './integrationGateway/workflowRuntimeStatus';
 import {
   buildAutomationExperimentAttribution,
@@ -1379,7 +1390,6 @@ async function runAnthropicChatLoop(
         const toolStart = Date.now();
         const result = await executeToolCall(toolUseBlock.name, toolInput, { workspaceId });
         const elapsed = Date.now() - toolStart;
-        const confidence = randomConfidence(toolUseBlock.name);
 
         sendEvent({
           type: 'tool_result',
@@ -1387,7 +1397,6 @@ async function runAnthropicChatLoop(
           tool_name: toolUseBlock.name,
           result: parseToolResultPayload(result),
           elapsed_ms: elapsed,
-          confidence,
         });
 
         toolResults.push({
@@ -1524,7 +1533,6 @@ async function runOpenAIChatLoop(
 
         const result = await executeToolCall(toolName, parsedInput, { workspaceId });
         const elapsed = Date.now() - startedAt;
-        const confidence = randomConfidence(toolName);
 
         sendEvent({
           type: 'tool_result',
@@ -1532,7 +1540,6 @@ async function runOpenAIChatLoop(
           tool_name: toolName,
           result: parseToolResultPayload(result),
           elapsed_ms: elapsed,
-          confidence,
         });
 
         currentMessages.push({
@@ -1720,24 +1727,6 @@ const NEXUS_TOOLS: Tool[] = [
   },
 ];
 
-// Confidence scores by tool type (realistic ranges)
-const TOOL_CONFIDENCE: Record<string, [number, number]> = {
-  web_search: [72, 88],
-  browser_screenshot: [89, 97],
-  run_code: [91, 99],
-  create_task: [94, 99],
-  send_message: [96, 99],
-  query_data: [87, 97],
-  render_chart: [90, 98],
-  generate_report: [82, 94],
-  schedule_automation: [93, 99],
-};
-
-function randomConfidence(toolName: string): number {
-  const [min, max] = TOOL_CONFIDENCE[toolName] || [75, 90];
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
 type RenderableChartType = 'bar' | 'line' | 'area' | 'pie';
 
 function normalizeChartType(value: unknown): RenderableChartType {
@@ -1902,6 +1891,15 @@ async function executeToolCall(
     }
 
     case 'run_code': {
+      // Real workspaces never receive invented stdout or timings. Only demo
+      // workspaces keep the labeled simulated runtime below.
+      if (!isDemoWorkspace(ctx?.workspaceId || DEFAULT_WORKSPACE_ID)) {
+        return JSON.stringify({
+          success: false,
+          error: 'Code execution requires a connected sandbox runtime. No code was executed.',
+        });
+      }
+
       const language = toolInput.language as string;
       const code = toolInput.code as string;
       const execTime = (Math.random() * 0.2 + 0.02).toFixed(3) + 's';
@@ -1966,6 +1964,19 @@ async function executeToolCall(
     }
 
     case 'create_task': {
+      // A real workspace must never be handed a task id and Linear URL that do
+      // not exist. Demo workspaces keep the labeled simulated task.
+      if (!isDemoWorkspace(ctx?.workspaceId || DEFAULT_WORKSPACE_ID)) {
+        return JSON.stringify({
+          success: false,
+          error: 'Linear is not connected. Connect Linear to create real tasks.',
+          nextAction: {
+            label: 'Connect Linear',
+            route: '/integrations?provider=linear',
+          },
+        });
+      }
+
       const taskId = `TASK-${Math.floor(Math.random() * 9000) + 1000}`;
       return JSON.stringify({
         success: true,
@@ -2334,6 +2345,8 @@ interface AutomationExecutionArtifact {
   kind: 'web_search' | 'query_data' | 'summary' | 'delivery' | 'review_gate' | 'note' | 'analysis' | 'capture' | 'chart';
   title: string;
   payload: Record<string, unknown>;
+  /** Optional, additive provenance. Older ledger records simply omit it. */
+  origin?: DataOriginRecord;
 }
 
 function normalizeAutomationActionText(action: string) {
@@ -3653,7 +3666,9 @@ async function executeAutomationCore(
           kind: 'web_search',
           title: step.title,
           payload,
+          origin: liveOrigin('web_search', new Date().toISOString()),
         });
+        stepExecution.dataOrigin = 'live';
         stepExecution.status = 'succeeded';
         stepExecution.summary = `Gathered current web evidence for "${query}".`;
         stepExecution.output = { query, resultCount: Array.isArray((payload as { results?: unknown[] }).results) ? ((payload as { results?: unknown[] }).results?.length || 0) : undefined };
@@ -3680,13 +3695,15 @@ async function executeAutomationCore(
             stepTitle: step.title,
             payload,
           });
+        const queryOrigin = readQueryPayloadOrigin(payload);
         artifacts.push({
           kind: 'query_data',
           title: step.title,
           payload,
+          origin: queryOrigin,
         });
         if (chartArtifact) {
-          artifacts.push(chartArtifact);
+          artifacts.push({ ...chartArtifact, origin: queryOrigin });
         }
         applyQueryStepPayloadToExecution({
           stepTitle: step.title,
@@ -3695,6 +3712,7 @@ async function executeAutomationCore(
           stepErrors,
           artifactCount: chartArtifact ? 2 : 1,
         });
+        stepExecution.dataOrigin = readQueryPayloadDataOrigin(payload);
         if (payloadSource) {
           appendIntegrationQueryLedgerEvent({
             workspaceId,
@@ -3719,12 +3737,14 @@ async function executeAutomationCore(
           continue;
         }
 
-        const payload = JSON.parse(await runAutomationStepWithTimeout(`Capture step "${step.title}"`, executeToolCall('browser_screenshot', step.inputs))) as Record<string, unknown>;
+        const payload = JSON.parse(await runAutomationStepWithTimeout(`Capture step "${step.title}"`, executeToolCall('browser_screenshot', step.inputs, { workspaceId }))) as Record<string, unknown>;
         artifacts.push({
           kind: 'capture',
           title: step.title,
           payload,
+          origin: liveOrigin('browser_screenshot', new Date().toISOString()),
         });
+        stepExecution.dataOrigin = 'live';
         stepExecution.status = 'succeeded';
         stepExecution.summary = 'Captured the requested page state.';
         stepExecution.output = payload;
@@ -3936,6 +3956,15 @@ async function executeAutomationCore(
           continue;
         }
 
+        // Defense in depth: even if a fabricated payload slipped past the tool
+        // gates, it must not leave the building for a real workspace.
+        if (!isDemoWorkspace(workspaceId)) {
+          const fabricated = findFabricatedEvidence({ artifacts, stepExecutions });
+          if (fabricated) {
+            throw new Error(buildFabricatedEvidenceDeliveryError(fabricated));
+          }
+        }
+
         delivery = await runAutomationStepWithTimeout(`Delivery step "${step.title}"`, sendMessage({
           to: deliveryTarget.target,
           subject: `Automation run: ${automation.name}`,
@@ -4025,7 +4054,195 @@ async function executeAutomationCore(
   };
 }
 
-async function runAutomation(automation: {
+/**
+ * Resolve readiness for one automation run.
+ *
+ * `buildWeeklyFounderRuntimeStatus` is named for its first caller but returns
+ * the generic partner + native status map, which is exactly what the custom
+ * step-source tier needs — so it is reused rather than duplicated.
+ *
+ * A Composio lookup failure is treated as "nothing connected" instead of being
+ * allowed to escape: a readiness check that cannot be completed must fail
+ * closed, and the resulting blocker still names the connection to fix.
+ */
+export async function evaluateAutomationRunReadiness(input: {
+  workspaceId: string;
+  workflowId: string;
+  steps?: PersistedAutomationStep[];
+  deliveryTarget?: string | null;
+}): Promise<RunReadinessDecision> {
+  if (isDemoWorkspace(input.workspaceId)) {
+    return evaluateRunReadiness({
+      workflowId: input.workflowId,
+      workspaceId: input.workspaceId,
+      isDemoWorkspace: true,
+    });
+  }
+
+  let connectedPartnerApps: string[] = [];
+  if (isComposioEnabled()) {
+    try {
+      connectedPartnerApps = await listConnectedApps({ entityId: input.workspaceId });
+    } catch (error) {
+      console.warn(
+        `[readiness] could not list connected apps for ${input.workspaceId}; treating as unconnected`,
+        error,
+      );
+    }
+  }
+
+  return evaluateRunReadiness({
+    workflowId: input.workflowId,
+    workspaceId: input.workspaceId,
+    isDemoWorkspace: false,
+    steps: input.steps,
+    deliveryTarget: input.deliveryTarget,
+    settingsView: getWorkspaceSettingsView(input.workspaceId),
+    runtimeStatus: buildWeeklyFounderRuntimeStatus({
+      connectedPartnerApps,
+      nativeStatus: getIntegrationStatus(),
+    }),
+  });
+}
+
+/**
+ * Make a readiness block visible in the product without charging for it.
+ *
+ * The run never happened, so there is no hold to settle and no credits to
+ * report: the task/run pair exists purely so the operator sees "blocked —
+ * connect Stripe" next to the automation instead of silence. Charges stay at
+ * zero on both records, which keeps credit ledger metrics undistorted.
+ */
+function recordBlockedAutomationRun(input: {
+  automationId: string;
+  automationName: string;
+  automationDescription?: string;
+  notify?: string | null;
+  steps?: PersistedAutomationStep[];
+  workspaceId: string;
+  workflowId: string;
+  decision: RunReadinessDecision;
+}) {
+  const { workspaceId, decision } = input;
+  const artifacts = [
+    {
+      kind: 'note',
+      title: `${input.automationName} is not ready to run`,
+      payload: {
+        note: decision.summary,
+        code: 'workflow_not_ready',
+        blockers: decision.blockers,
+      },
+    },
+  ];
+  const readinessBlock = {
+    code: 'workflow_not_ready' as const,
+    tier: decision.tier,
+    workflowId: decision.workflowId,
+    summary: decision.summary,
+    blockers: decision.blockers,
+    blockedAt: new Date().toISOString(),
+  };
+
+  const task = createTask({
+    workspaceId,
+    title: input.automationName,
+    description: input.automationDescription,
+    kind: 'automation',
+    priority: 'medium',
+    metadata: {
+      automationId: input.automationId,
+      notify: input.notify || null,
+      sourceSteps: input.steps,
+      readinessBlock,
+    },
+  });
+  const taskRun = createTaskRun({
+    workspaceId,
+    taskId: task.id,
+    agentRole: 'operator',
+    modelTier: 'default',
+    // No work is performed and no hold is taken, so the run is free by construction.
+    estimatedCredits: 0,
+    metadata: {
+      automationId: input.automationId,
+      title: input.automationName,
+      sourceSteps: input.steps,
+      stepExecutions: [],
+      readinessBlock,
+    },
+  });
+
+  broadcastTaskPanelEvent(workspaceId, {
+    type: 'automation_run_started',
+    automationId: input.automationId,
+    taskId: task.id,
+    taskRunId: taskRun.id,
+  });
+
+  finalizeTaskRun(taskRun.id, {
+    status: 'failed',
+    actualCredits: 0,
+    error: decision.summary,
+    metadata: {
+      summary: decision.summary,
+      artifacts,
+      readinessBlock,
+    },
+  });
+  updateTask(task.id, {
+    status: 'blocked',
+    delegationState: 'review',
+    metadata: {
+      automationId: input.automationId,
+      notify: input.notify || null,
+      sourceSteps: input.steps,
+      latestSummary: decision.summary,
+      latestArtifacts: artifacts,
+      latestStepExecutions: [],
+      readinessBlock,
+    },
+  });
+
+  appendWorkflowLedgerEvent({
+    workspaceId,
+    workflowId: input.workflowId,
+    automationId: input.automationId,
+    taskId: task.id,
+    taskRunId: taskRun.id,
+    type: 'workflow_readiness_checked',
+    summary: decision.summary,
+    metadata: { readinessBlock },
+  });
+
+  const blockedSnapshot = buildTaskRunSnapshotEvent(workspaceId, taskRun.id, 'failed');
+  if (blockedSnapshot) {
+    broadcastTaskPanelEvent(workspaceId, blockedSnapshot);
+  }
+
+  return { task, taskRun };
+}
+
+/**
+ * The 409 an operator-initiated run gets when the workspace is not connected.
+ *
+ * `error` carries the full human summary because the dashboard's `readApiError`
+ * reads `error` first and `message` second, flattening both to a single toast
+ * string; `message` duplicates it so call sites that only read `message` still
+ * say something true. `code` and `blockers` are for the UI to grow into — the
+ * blocker shape already matches what WorkflowReadinessPanel renders.
+ */
+function respondWorkflowNotReady(res: Response, decision: RunReadinessDecision) {
+  res.status(409).json({
+    ok: false,
+    error: decision.summary,
+    message: decision.summary,
+    code: 'workflow_not_ready',
+    blockers: decision.blockers,
+  });
+}
+
+export async function runAutomation(automation: {
   id: string;
   workspaceId?: string;
   name: string;
@@ -4041,6 +4258,36 @@ async function runAutomation(automation: {
 }) {
   const workspaceId = automation.workspaceId || DEFAULT_WORKSPACE_ID;
   const workflowId = inferWorkflowIdFromAutomation(automation);
+
+  // Readiness is enforced here, before credits are provisioned, held, or spent,
+  // and before any model call. Every path into a run — cron, catch-up, manual
+  // trigger, rerun — funnels through this function, so this is the one gate
+  // that cannot be routed around.
+  const readiness = await evaluateAutomationRunReadiness({
+    workspaceId,
+    workflowId,
+    steps: automation.steps,
+    deliveryTarget: automation.notify,
+  });
+  if (!readiness.allowed) {
+    recordBlockedAutomationRun({
+      automationId: automation.id,
+      automationName: automation.name,
+      automationDescription: automation.description,
+      notify: automation.notify,
+      steps: automation.steps,
+      workspaceId,
+      workflowId,
+      decision: readiness,
+    });
+    console.warn(`[automation] ${automation.id} blocked before execution: ${readiness.summary}`);
+    return {
+      ok: false as const,
+      error: readiness.summary,
+      deliveryError: readiness.summary,
+    };
+  }
+
   ensureWorkspaceCredits(workspaceId);
   const executionPlan = buildAutomationExecutionPlan(automation);
   const experimentAttribution = buildAutomationExperimentAttribution(automation.studio_state);
@@ -5630,6 +5877,25 @@ app.get('/api/billing/stripe/config', (req: Request, res: Response) => {
   res.json(getStripeBillingConfig(workspaceId));
 });
 
+/**
+ * Checkout failures carry their own status and code (for example the
+ * production-only billing_not_configured), so the frontend can render an
+ * honest reason instead of a generic 400.
+ */
+function respondWithCheckoutError(res: Response, error: unknown, fallbackMessage: string) {
+  const statusCode = error instanceof Error && typeof (error as Error & { statusCode?: number }).statusCode === 'number'
+    ? (error as Error & { statusCode: number }).statusCode
+    : 400;
+  const code = error instanceof Error && typeof (error as Error & { code?: string }).code === 'string'
+    ? (error as Error & { code: string }).code
+    : undefined;
+
+  res.status(statusCode).json({
+    error: error instanceof Error ? error.message : fallbackMessage,
+    ...(code ? { code } : {}),
+  });
+}
+
 app.post('/api/billing/stripe/checkout/subscription', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const body = req.body as { planId?: string; successUrl?: string; cancelUrl?: string; metadata?: Record<string, string> };
@@ -5648,7 +5914,7 @@ app.post('/api/billing/stripe/checkout/subscription', async (req: Request, res: 
       billing: getBillingStatus(workspaceId),
     });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not create subscription checkout session' });
+    respondWithCheckoutError(res, error, 'Could not create subscription checkout session');
   }
 });
 
@@ -5674,11 +5940,18 @@ app.post('/api/billing/stripe/checkout/top-up', async (req: Request, res: Respon
       billing: getBillingStatus(workspaceId),
     });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not create top-up checkout session' });
+    respondWithCheckoutError(res, error, 'Could not create top-up checkout session');
   }
 });
 
 app.get('/api/billing/stripe/mock-checkout/:sessionId', (req: Request, res: Response) => {
+  // Mock checkout exists for local development only; production must never
+  // present a fake session page.
+  if (isBillingProductionEnvironment()) {
+    res.status(404).json({ error: 'Not found', code: 'not_found' });
+    return;
+  }
+
   const { workspaceId } = resolveWorkspaceContext(req);
   res.json({
     ok: true,
@@ -5936,11 +6209,30 @@ app.post('/api/automations', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/automations/:id/run', (req: Request, res: Response) => {
+app.post('/api/automations/:id/run', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const automation = getAutomationById(req.params.id);
   if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
     res.status(404).json({ error: 'Automation not found' });
+    return;
+  }
+
+  // Checked before triggering so an operator gets the missing connection back
+  // on the request itself, rather than discovering a blocked run later.
+  try {
+    const readiness = await evaluateAutomationRunReadiness({
+      workspaceId: automation.workspaceId || workspaceId,
+      workflowId: inferWorkflowIdFromAutomation(automation),
+      steps: automation.steps,
+      deliveryTarget: automation.notify,
+    });
+    if (!readiness.allowed) {
+      respondWorkflowNotReady(res, readiness);
+      return;
+    }
+  } catch (error) {
+    console.error('[automation] readiness check failed before manual run', error);
+    res.status(500).json({ error: 'Could not verify workflow readiness. Try again.' });
     return;
   }
 
@@ -5963,6 +6255,45 @@ app.post('/api/automations/:id/reviews/:runId/approve', async (req: Request, res
   if ('error' in context) {
     res.status(context.error === 'Automation not found' ? 404 : 400).json({ error: context.error });
     return;
+  }
+
+  // Provenance re-scan at the approval gate. The run-time scan fires at
+  // delivery, but an approval is a second, later decision against evidence
+  // stored on disk — so what is about to be sent is checked again here, using
+  // the same artifact resolution order the delivery path itself uses.
+  if (!isDemoWorkspace(workspaceId)) {
+    try {
+      const storedArtifacts = (Array.isArray(context.taskRun.metadata?.artifacts)
+        ? context.taskRun.metadata.artifacts
+        : Array.isArray(context.task.metadata?.latestArtifacts)
+          ? context.task.metadata.latestArtifacts
+          : []) as Parameters<typeof findFabricatedEvidence>[0]['artifacts'];
+      const storedStepExecutions = (Array.isArray(context.taskRun.metadata?.stepExecutions)
+        ? context.taskRun.metadata.stepExecutions
+        : Array.isArray(context.task.metadata?.latestStepExecutions)
+          ? context.task.metadata.latestStepExecutions
+          : []) as Parameters<typeof findFabricatedEvidence>[0]['stepExecutions'];
+      const fabricated = findFabricatedEvidence({
+        artifacts: storedArtifacts,
+        stepExecutions: storedStepExecutions,
+      });
+      if (fabricated) {
+        const detail = buildFabricatedEvidenceDeliveryError(fabricated);
+        res.status(409).json({
+          ok: false,
+          error: detail,
+          message: detail,
+          code: 'fabricated_evidence',
+        });
+        return;
+      }
+    } catch (error) {
+      // A scan that cannot complete must fail closed: nothing sends until the
+      // stored evidence can actually be verified.
+      console.error('[automation] provenance re-scan failed at approval', error);
+      res.status(500).json({ error: 'Could not verify stored run evidence before sending. Try again.' });
+      return;
+    }
   }
 
   try {
@@ -6086,11 +6417,28 @@ app.post('/api/automations/:id/reviews/:runId/request-changes', (req: Request, r
   }
 });
 
-app.post('/api/automations/:id/reviews/:runId/rerun', (req: Request, res: Response) => {
+app.post('/api/automations/:id/reviews/:runId/rerun', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const context = findAutomationReviewContext(workspaceId, req.params.id, req.params.runId);
   if ('error' in context) {
     res.status(context.error === 'Automation not found' ? 404 : 400).json({ error: context.error });
+    return;
+  }
+
+  try {
+    const rerunReadiness = await evaluateAutomationRunReadiness({
+      workspaceId: context.automation.workspaceId || workspaceId,
+      workflowId: inferWorkflowIdFromAutomation(context.automation),
+      steps: context.automation.steps,
+      deliveryTarget: context.automation.notify,
+    });
+    if (!rerunReadiness.allowed) {
+      respondWorkflowNotReady(res, rerunReadiness);
+      return;
+    }
+  } catch (error) {
+    console.error('[automation] readiness check failed before rerun', error);
+    res.status(500).json({ error: 'Could not verify workflow readiness. Try again.' });
     return;
   }
 
@@ -6347,11 +6695,45 @@ app.get('/api/billing/recent-usage', (req: Request, res: Response) => {
   res.json(items);
 });
 
+// Public liveness probe. Deliberately minimal: model ids, provider base URLs,
+// fallback chains, and integration status are operator diagnostics and live
+// behind /api/admin/health.
 app.get('/api/health', (_req: Request, res: Response) => {
-  const defaultClient = getChatClient('default');
-  const hardClient = getChatClient('hard');
-  const criticalClient = getChatClient('critical');
-  const opsClient = getChatClient('ops');
+  res.json({
+    status: 'ok',
+    service: 'violema-by-purple-orange-ai',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/admin/health', (req: Request, res: Response) => {
+  assertAdminAccess(req);
+
+  // Diagnostics must survive an unconfigured provider: a missing API key is
+  // exactly what an operator opens this endpoint to discover.
+  const probeChatClient = (profile: 'default' | 'hard' | 'critical' | 'ops') => {
+    try {
+      const resolved = getChatClient(profile);
+      return {
+        requested: resolved.requestedRoute.model,
+        executing: resolved.executingRoute.model,
+        fallbackApplied: resolved.fallbackApplied,
+        error: null as string | null,
+      };
+    } catch (error) {
+      return {
+        requested: null,
+        executing: null,
+        fallbackApplied: false,
+        error: error instanceof Error ? error.message : 'Chat client unavailable',
+      };
+    }
+  };
+
+  const defaultClient = probeChatClient('default');
+  const hardClient = probeChatClient('hard');
+  const criticalClient = probeChatClient('critical');
+  const opsClient = probeChatClient('ops');
 
   res.json({
     status: 'ok',
@@ -6366,12 +6748,16 @@ app.get('/api/health', (_req: Request, res: Response) => {
     },
     model_routing: getModelRoutingStatus(),
     chat_execution: {
-      default: defaultClient.executingRoute.model,
-      hard: hardClient.executingRoute.model,
-      critical: criticalClient.executingRoute.model,
-      ops_requested: opsClient.requestedRoute.model,
-      ops_executed: opsClient.executingRoute.model,
+      default: defaultClient.executing,
+      default_error: defaultClient.error,
+      hard: hardClient.executing,
+      hard_error: hardClient.error,
+      critical: criticalClient.executing,
+      critical_error: criticalClient.error,
+      ops_requested: opsClient.requested,
+      ops_executed: opsClient.executing,
       ops_fallback: opsClient.fallbackApplied,
+      ops_error: opsClient.error,
     },
     integrations: getIntegrationStatus(),
     timestamp: new Date().toISOString(),

@@ -6,6 +6,7 @@ import {
 } from './adapters/partnerComposio';
 import type { IntegrationQueryResult, IntegrationQuerySuccess } from './types';
 import type { AutomationStepExecution } from '../platform/types';
+import { isDemoWorkspace } from '../platform/demoWorkspace';
 
 export interface LegacyQueryDataSuccess<T = unknown>
   extends Omit<IntegrationQuerySuccess<T>, 'live' | 'cache_hit'> {
@@ -171,6 +172,24 @@ export async function executeQueryData(
       limit: input.limit,
       now,
     });
+  }
+
+  // Everything past this point is unconnected sample data. Real workspaces fail
+  // closed with connect guidance; only explicitly flagged demo workspaces are
+  // allowed to receive labeled simulated numbers.
+  if (!isDemoWorkspace(input.workspaceId)) {
+    const label = labelizeIntegrationSource(input.source);
+    return {
+      ok: false,
+      code: 'integration_not_connected',
+      source: input.source,
+      message: `${label} is not connected. Connect it to query live workspace data.`,
+      can_continue: false,
+      nextAction: {
+        label: `Connect ${label}`,
+        route: `/integrations?provider=${encodeURIComponent(input.source)}`,
+      },
+    };
   }
 
   const sourceData = LEGACY_MOCK_DATA[input.source] || {};

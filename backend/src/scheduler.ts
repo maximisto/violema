@@ -30,6 +30,12 @@ export interface AutomationRecord {
   version?: number;
   workspaceId?: string;
   owner_user_id?: string;
+  /**
+   * Explicit workflow identity. Without it `inferWorkflowIdFromAutomation`
+   * falls back to 'custom-workflow', which routes the automation away from the
+   * supported-workflow readiness table.
+   */
+  workflowId?: string;
   name: string;
   description?: string;
   authoring_mode?: 'guided' | 'describe';
@@ -82,7 +88,10 @@ type AutomationSeed = Omit<
 const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
   {
     id: 'auto_weekly_founder_update',
-    version: 3,
+    version: 4,
+    // Declared so readiness enforcement uses the weekly-founder requirements
+    // table instead of inferring 'custom-workflow' from the step sources.
+    workflowId: 'weekly-founder-update',
     name: 'Weekly founder update',
     description: 'A source-linked operating brief that rolls up revenue, product, customer, calendar, email, market, and decision signals for founder review.',
     authoring_mode: 'guided',

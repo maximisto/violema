@@ -121,6 +121,29 @@ function toMetadata(input?: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(input || {}).map(([key, value]) => [key, String(value)]));
 }
 
+export function isBillingProductionEnvironment(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
+/**
+ * Production never falls back to a mock checkout. A customer clicking "Upgrade"
+ * must either reach Stripe or see an honest failure — never a fake session that
+ * silently grants nothing.
+ */
+function assertMockCheckoutAllowed(reason: string) {
+  if (!isBillingProductionEnvironment()) return;
+
+  // The specific missing variable is operator information — log it, but keep
+  // configuration detail out of the response body.
+  console.error(`[billing] live checkout unavailable: ${reason}`);
+  const error = new Error(
+    'Checkout is temporarily unavailable. Please try again later or contact support.',
+  ) as Error & { statusCode?: number; code?: string };
+  error.statusCode = 503;
+  error.code = 'billing_not_configured';
+  throw error;
+}
+
 function createMockCheckoutSession(input: BillingCheckoutSessionInput, priceId: string | null, amountUsd?: number): BillingCheckoutSessionResult {
   const sessionId = `mock_chk_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   return {
@@ -144,6 +167,7 @@ function createMockCheckoutSession(input: BillingCheckoutSessionInput, priceId: 
 async function createRealCheckoutSession(input: BillingCheckoutSessionInput, priceId: string, amountUsd?: number): Promise<BillingCheckoutSessionResult> {
   const stripe = getStripeClient();
   if (!stripe) {
+    assertMockCheckoutAllowed('STRIPE_SECRET_KEY is not set');
     return createMockCheckoutSession(input, priceId, amountUsd);
   }
 
@@ -232,6 +256,7 @@ export async function createSubscriptionCheckoutSession(
   const amountUsd = plan.monthlyPriceUsd;
 
   if (!priceId) {
+    assertMockCheckoutAllowed(`STRIPE_PRICE_ID_${planId.toUpperCase()} is not set`);
     return createMockCheckoutSession({ workspaceId, kind: 'subscription', planId, ...input }, null, amountUsd);
   }
 
@@ -252,6 +277,7 @@ export async function createTopUpCheckoutSession(
   const amountUsd = offer.priceUsd;
 
   if (!priceId) {
+    assertMockCheckoutAllowed(`STRIPE_TOP_UP_PRICE_ID_${normalizeOfferKey(offer.id)} is not set`);
     return createMockCheckoutSession({ workspaceId, kind: 'payment', offerId, ...input }, null, amountUsd);
   }
 

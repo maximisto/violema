@@ -6,6 +6,7 @@ import { DEFAULT_WORKSPACE_ID, getWorkspaceProfile } from './workspace';
 
 interface AutomationLike {
   cron_expression?: string;
+  workspaceId?: string;
 }
 
 export interface CreditSnapshot {
@@ -63,9 +64,14 @@ function readAutomations(): AutomationLike[] {
 
 export function buildCreditSnapshot(workspaceId = DEFAULT_WORKSPACE_ID): CreditSnapshot {
   const automations = readAutomations();
-  const automationBurnMonthly = automations.reduce((sum, automation) => {
-    return sum + estimateMonthlyRuns(automation.cron_expression) * DEFAULT_AUTOMATION_RUN_CREDIT_COST;
-  }, 0);
+  // Scoped to the requesting workspace: an unscoped sum reported every tenant's
+  // automation burn as this workspace's, which also skewed projectedDaysLeft
+  // and topUpSuggestion below.
+  const automationBurnMonthly = automations
+    .filter((automation) => (automation.workspaceId || DEFAULT_WORKSPACE_ID) === workspaceId)
+    .reduce((sum, automation) => {
+      return sum + estimateMonthlyRuns(automation.cron_expression) * DEFAULT_AUTOMATION_RUN_CREDIT_COST;
+    }, 0);
   const workspace = getWorkspaceProfile(workspaceId);
   const billing = getBillingStatusSnapshot(workspaceId);
   const dailyBurn = automationBurnMonthly / DAYS_IN_MONTH + 8;
