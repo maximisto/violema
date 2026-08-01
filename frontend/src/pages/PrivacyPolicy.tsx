@@ -13,7 +13,7 @@ const SECTIONS = [
 
 By using VIOLEMA, you agree to the practices described in this policy. If you do not agree, please discontinue use of the Service.
 
-Last updated: March 28, 2026.`,
+Last updated: August 1, 2026.`,
   },
   {
     id: 'collect',
@@ -52,7 +52,7 @@ We do **not** use your conversation content or data to train AI models. Your dat
     title: '4. How We Share Your Information',
     content: `We do not sell your personal data. We share it only in these limited circumstances:
 
-**Service providers.** We use trusted vendors to operate the Service: Anthropic (AI inference), Stripe (payments), infrastructure providers, transactional email providers, and analytics tooling. Each vendor is expected to process data only as needed to operate the Service.
+**Service providers.** We use trusted vendors to operate the Service: Anthropic (AI inference), Stripe (payments), infrastructure providers, and transactional email providers. Each vendor is expected to process data only as needed to operate the Service.
 
 **Connected integrations.** When you instruct VIOLEMA to take an action in a third-party tool, the minimum necessary data is shared with that tool's API. You control which integrations are connected and can revoke access at any time.
 
@@ -120,13 +120,12 @@ No system is 100% secure. If you discover a security vulnerability, please repor
   {
     id: 'cookies',
     title: '9. Cookies & Tracking',
-    content: `We use cookies and similar technologies for:
+    content: `We use cookies and similar technologies only for the following purposes:
 
 • **Essential cookies:** Authentication sessions, CSRF protection, and security tokens. Required for the Service to function. Cannot be disabled.
 • **Preference cookies:** Remembering your UI preferences (theme, mode settings). Can be cleared via browser settings.
-• **Analytics cookies:** PostHog for anonymised product analytics. We do not use Google Analytics. You can opt out via our cookie preferences banner.
 
-We do not use advertising cookies, cross-site tracking pixels, or any technology designed to build advertising profiles.`,
+**We do not currently use third-party analytics, advertising cookies, or cross-site tracking pixels of any kind.** We do not run Google Analytics, PostHog, or any comparable analytics service on violema.com, and we do not build advertising profiles from your visit or use of the Service. If this changes in the future, we will update this policy before any such technology is deployed.`,
   },
   {
     id: 'children',
@@ -208,7 +207,7 @@ export default function PrivacyPolicy() {
             </div>
             <div>
               <div className="text-xs text-green-400 font-semibold tracking-wider uppercase">Legal</div>
-              <div className="text-slate-500 text-xs">Last updated March 28, 2026</div>
+              <div className="text-slate-500 text-xs">Last updated August 1, 2026</div>
             </div>
           </div>
           <h1 className="text-5xl font-bold text-white mb-4">Privacy Policy</h1>
