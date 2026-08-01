@@ -64,23 +64,62 @@ pm2 restart nexus-backend --update-env
 ```
 
 ### 3. Verify it loaded
+
+`/api/integrations/*` sits behind the beta auth gate, so an anonymous `curl` gets
+`401 {"code":"beta_session_required"}` — that is the gate working, not Composio
+failing. Verify with a real session cookie:
+
 ```bash
-curl https://nexus.purpleorange.io/api/integrations/composio/status
+curl -H "Cookie: violema_session=YOUR-SESSION-TOKEN" \
+  https://violema.com/api/integrations/composio/status
 # Expected: {"enabled":true,"workspaceId":"..."}
 ```
 
+Easiest path: sign in at https://violema.com and read `GET /api/integrations/catalog`
+from the browser devtools network tab. Its `partner` block reports `enabled`,
+`connectedApps`, and `degraded` — `degraded: true` means Composio was unreachable,
+which is deliberately distinct from "nothing is connected".
+
 ### 4. Connect your first integration via the UI
-- Visit https://nexus.purpleorange.io/integrations
+- Visit https://violema.com/integrations
 - The "One-click integrations" section will appear
-- Click any tool (Slack, GitHub, Linear, etc.) → redirects to OAuth → approve
+- Click any partner tool (Gmail, Google Calendar, Google Drive, GitHub, Linear,
+  Notion, …) → redirects to OAuth → approve
 - Returns to Violema with the integration "Connected ✓"
 
-### 5. Use it in chat
-The Claude API automatically discovers connected Composio tools (e.g., `SLACK_SEND_MESSAGE`, `GITHUB_CREATE_ISSUE`, `LINEAR_CREATE_TASK`). Just ask Violema to do something with the connected tool — it'll pick the right action.
+**Slack is not in that list.** Slack is Tier 1 — a native `SLACK_BOT_TOKEN` set
+on the server, not a per-workspace OAuth connector — so it never appears as a
+one-click partner app. Configure it via step 1 above.
 
-> "File a GitHub issue in maximisto/violema titled 'investigate streaming bug'"
+The server builds the return URL itself, as
+`https://violema.com/integrations?connected=<toolkit>`, and Composio appends
+`status=success` or `status=failed` to it. Nothing carries a status before
+Composio sets one.
 
-Violema → calls `GITHUB_CREATE_ISSUE` → Composio executes → real issue gets filed.
+### 5. How a connection actually gets used
+
+**Connected tools are not auto-discovered by the model.** There is no dynamic
+tool catalog handed to Claude. Partner data reaches a workflow one way only:
+a `query_data` step names a source, and
+`backend/src/integrationGateway/adapters/partnerComposio.ts` maps that source to
+a fixed Composio action.
+
+| Source id | Composio action(s) |
+| --- | --- |
+| `email` | `GMAIL_FETCH_EMAILS` |
+| `calendar` | `GOOGLECALENDAR_EVENTS_LIST_ALL_CALENDARS` |
+| `google_drive` | `GOOGLEDRIVE_FIND_FILE` |
+| `linear` | `LINEAR_SEARCH_ISSUES` |
+| `github` | `GITHUB_GET_A_REPOSITORY`, `GITHUB_LIST_PULL_REQUESTS`, `GITHUB_LIST_REPOSITORY_ISSUES`, `GITHUB_LIST_COMMITS` |
+
+All of these are **reads**. Connecting GitHub does not let a chat message file
+an issue — adding a write action means adding it to that adapter, behind the
+approval gate. Adding a new source means adding it to
+`backend/src/integrationGateway/partnerAppMap.ts` and the adapter together.
+
+If a source is not connected, its `query_data` step fails closed with an
+`integration_not_ready` blocker pointing at `/integrations?provider=<source>`.
+It never falls back to sample data.
 
 ### Cost
 - Free tier: ~200 tool calls/day
@@ -114,7 +153,7 @@ Use a real channel ID (starts with `C`, `G`, or `D`, ~9+ chars). To find it: in 
 - Check `pm2 logs nexus-backend` for `[composio] enabled` or `[composio] disabled`
 
 ### Composio: connection redirect 404s
-- Check that the OAuth callback URL in Composio dashboard matches `https://nexus.purpleorange.io/integrations` (or wherever you redirect users)
+- Check that the OAuth callback URL allowed in the Composio dashboard matches the one the server sends: `https://violema.com/integrations` (or the `APP_PUBLIC_ORIGIN` you configured)
 
 ---
 
@@ -122,5 +161,5 @@ Use a real channel ID (starts with `C`, `G`, or `D`, ~9+ chars). To find it: in 
 
 1. **Set Slack token** — 5 minutes, immediate "real integration" demo
 2. **Sign up for Composio + set API key** — 10 minutes, unlocks 250 tools
-3. **Connect 3 hero tools** (Slack via Composio, GitHub, Linear) — 15 minutes
+3. **Connect 3 hero tools** (Gmail, GitHub, Linear) via Composio — 15 minutes. Slack is already covered by step 1; it is not a Composio connector.
 4. **Demo the full pipeline** — ask Violema to pull GitHub issues, summarize them, post to Slack, file a Linear task. End-to-end real.

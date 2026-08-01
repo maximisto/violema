@@ -1,3 +1,10 @@
+import {
+  listPartnerConnectOptions,
+  normalizeAppName,
+  resolvePartnerToolkit,
+  sourcesForPartnerToolkit,
+} from './integrationGateway/partnerAppMap';
+
 export type IntegrationConnectionMethod = 'native' | 'partner' | 'manual' | 'internal';
 export type IntegrationReadinessStatus = 'ready' | 'next' | 'planned';
 
@@ -65,6 +72,45 @@ export const INTEGRATION_DEFINITIONS = {
     ],
     capabilities: ['Read issues and teams', 'Create approved tasks', 'Summarize blockers'],
     boundaries: ['No broad workspace edits by default', 'Team/project selection should be scoped per workflow'],
+  },
+  gmail: {
+    id: 'gmail',
+    label: 'Gmail',
+    detail: 'Inbox commitments, replies owed, and follow-up threads',
+    description: 'Let Violema read recent inbox activity so the Weekly Founder Update can cite the commitments you made by email.',
+    category: 'core',
+    status: 'ready',
+    connectionMethod: 'partner',
+    partnerAppName: 'gmail',
+    credentialFields: [],
+    capabilities: ['Read recent inbox activity', 'Extract commitments and replies owed', 'Cite the source thread in an update'],
+    boundaries: ['Read-only — Violema never sends, archives, or deletes mail through this connection', 'Raw email bodies never enter the run ledger'],
+  },
+  googlecalendar: {
+    id: 'googlecalendar',
+    label: 'Google Calendar',
+    detail: 'The week ahead: meetings, reviews, and committed time',
+    description: 'Let Violema read the coming week of events so recurring updates reflect the schedule you actually committed to.',
+    category: 'core',
+    status: 'ready',
+    connectionMethod: 'partner',
+    partnerAppName: 'googlecalendar',
+    credentialFields: [],
+    capabilities: ['Read events in the next 7 days', 'Summarize the week ahead', 'Match meetings against stated commitments'],
+    boundaries: ['Read-only — Violema never creates, moves, or cancels events', 'Only the forward 7-day window is read'],
+  },
+  googledrive: {
+    id: 'googledrive',
+    label: 'Google Drive',
+    detail: 'Recently changed documents used as update evidence',
+    description: 'Let Violema list recently modified documents so a founder update can point at the artifacts behind the work.',
+    category: 'long_tail',
+    status: 'ready',
+    connectionMethod: 'partner',
+    partnerAppName: 'googledrive',
+    credentialFields: [],
+    capabilities: ['List recently modified files', 'Report file names and modified times', 'Link documents as supporting evidence'],
+    boundaries: ['Read-only — Violema never edits, moves, or deletes files', 'File metadata only; document contents are not copied into the ledger', 'Supporting integration — a Weekly Founder Update still runs without it'],
   },
   notion: {
     id: 'notion',
@@ -229,11 +275,60 @@ export function isIntegrationProvider(value: string | undefined): value is Integ
   return Boolean(value && (INTEGRATION_PROVIDERS as readonly string[]).includes(value));
 }
 
+/**
+ * Every toolkit slug the catalog offers as a one-click connection. Wider than
+ * `partnerAppMap` on purpose: Notion and HubSpot are connectable even though no
+ * workflow reads from them yet.
+ */
+const PARTNER_APP_SLUGS: string[] = INTEGRATION_PROVIDERS.map(
+  (provider) => INTEGRATION_DEFINITIONS[provider],
+)
+  .map((definition) => ('partnerAppName' in definition ? definition.partnerAppName : undefined))
+  .filter((slug): slug is NonNullable<typeof slug> => Boolean(slug));
+
+/**
+ * Resolve whatever the client sent — a Violema source id, a toolkit slug, or a
+ * punctuated variant — to the toolkit slug the connect/disconnect endpoints
+ * should act on. Returns `null` for anything not in the catalog so the caller
+ * can 400 instead of forwarding an unknown app to Composio.
+ */
+export function resolvePartnerAppSlug(input: string | null | undefined): string | null {
+  const mapped = resolvePartnerToolkit(input);
+  if (mapped) return mapped;
+  if (typeof input !== 'string') return null;
+  const key = normalizeAppName(input);
+  if (!key) return null;
+  return PARTNER_APP_SLUGS.find((slug) => normalizeAppName(slug) === key) ?? null;
+}
+
+/** Sorted list of accepted connect/disconnect identifiers, for 400 responses. */
+export function listPartnerAppOptions(): string[] {
+  return Array.from(new Set<string>([...listPartnerConnectOptions(), ...PARTNER_APP_SLUGS])).sort();
+}
+
 export function buildIntegrationCatalog(input: {
   partnerEnabled: boolean;
   connectedPartnerApps?: string[];
+  /** True when the Composio lookup threw — "cannot tell", not "nothing connected". */
+  partnerDegraded?: boolean;
 }) {
-  const connectedPartnerApps = input.connectedPartnerApps || [];
+  const connectedPartnerApps = Array.from(
+    new Set((input.connectedPartnerApps || []).map(normalizeAppName).filter(Boolean)),
+  );
+  const partnerApps = INTEGRATION_PROVIDERS.map((provider) => INTEGRATION_DEFINITIONS[provider])
+    .filter((definition) => 'partnerAppName' in definition && definition.partnerAppName)
+    .map((definition) => {
+      const name = 'partnerAppName' in definition ? definition.partnerAppName : '';
+      return {
+        name,
+        label: definition.label,
+        detail: definition.detail,
+        status: definition.status,
+        // Which workflow data sources this toolkit feeds; [] when it is
+        // connectable but nothing reads from it yet.
+        sources: sourcesForPartnerToolkit(name) as string[],
+      };
+    });
   return {
     readiness: {
       headline: 'Workflow readiness, not connector setup',
@@ -243,6 +338,8 @@ export function buildIntegrationCatalog(input: {
     partner: {
       enabled: input.partnerEnabled,
       connectedApps: connectedPartnerApps,
+      degraded: Boolean(input.partnerDegraded),
+      apps: partnerApps,
       unavailableMessage: 'Some one-click connectors are temporarily unavailable. Violema can still run native and sample-data workflows while we finish the connector layer.',
     },
     providers: INTEGRATION_PROVIDERS.map((provider) => {
@@ -266,14 +363,8 @@ export function buildIntegrationCatalog(input: {
         })),
       };
     }),
-    partnerApps: INTEGRATION_PROVIDERS
-      .map((provider) => INTEGRATION_DEFINITIONS[provider])
-      .filter((definition) => 'partnerAppName' in definition && definition.partnerAppName)
-      .map((definition) => ({
-        name: 'partnerAppName' in definition ? definition.partnerAppName : '',
-        label: definition.label,
-        detail: definition.detail,
-        status: definition.status,
-      })),
+    // Kept alongside `partner.apps` (same array) so existing clients that read
+    // the top-level list do not break.
+    partnerApps,
   };
 }

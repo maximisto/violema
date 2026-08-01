@@ -27,12 +27,16 @@ export function isRateLimitExempt(path: string): boolean {
 }
 
 // Express path prefixes that get the stricter sensitive limiter. Scoped to the
-// genuine unauthenticated abuse targets — the admin magic login (brute force)
-// and the public waitlist (spam) — so it never false-positives on the OAuth
-// flow or session reads, which the general limiter still protects.
+// genuine abuse targets — the admin magic login (brute force), the public
+// waitlist (spam), and the Composio connect/disconnect routes (each call hits a
+// third-party API and mutates a workspace's live integration state) — so it
+// never false-positives on the OAuth flow or session reads, which the general
+// limiter still protects.
 export const SENSITIVE_RATE_LIMIT_PREFIXES: readonly string[] = [
   '/api/auth/admin',
   '/api/waitlist',
+  '/api/integrations/composio/connect',
+  '/api/integrations/composio/disconnect',
 ];
 
 export function isSensitiveRateLimitPath(path: string): boolean {

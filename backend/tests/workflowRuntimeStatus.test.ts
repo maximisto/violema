@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildWeeklyFounderRuntimeStatus } from '../src/integrationGateway/workflowRuntimeStatus';
+import { buildPartnerRuntimeStatus } from '../src/integrationGateway/workflowRuntimeStatus';
 
-test('weekly founder runtime status maps partner accounts and native services', () => {
-  const status = buildWeeklyFounderRuntimeStatus({
+test('partner runtime status maps partner accounts and native services', () => {
+  const status = buildPartnerRuntimeStatus({
     connectedPartnerApps: [
       'GMAIL',
       'googlecalendar',
@@ -30,8 +30,8 @@ test('weekly founder runtime status maps partner accounts and native services', 
   });
 });
 
-test('weekly founder runtime status exposes missing connection repair details', () => {
-  const status = buildWeeklyFounderRuntimeStatus({
+test('partner runtime status exposes missing connection repair details', () => {
+  const status = buildPartnerRuntimeStatus({
     connectedPartnerApps: ['gmail', 'google_calendar'],
     nativeStatus: {
       tavily: false,

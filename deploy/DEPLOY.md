@@ -41,6 +41,13 @@ OPENROUTER_SITE_URL=https://violema.com
 OPENROUTER_APP_NAME=VIOLEMA
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
+# Enables the one-click partner connectors (Gmail, Google Calendar, Google Drive,
+# GitHub, Linear, Notion, HubSpot). Unset = connect returns 503 and partner-reading
+# workflows stay blocked; nothing falls back to fake data.
+COMPOSIO_API_KEY=your_composio_api_key
+# Where Composio returns the user after OAuth. Server-derived on purpose — never
+# taken from a request header. Defaults to https://violema.com when NODE_ENV=production.
+APP_PUBLIC_ORIGIN=https://violema.com
 MICROSOFT_CLIENT_ID=your_microsoft_client_id
 MICROSOFT_CLIENT_SECRET=your_microsoft_client_secret
 MICROSOFT_TENANT_ID=common

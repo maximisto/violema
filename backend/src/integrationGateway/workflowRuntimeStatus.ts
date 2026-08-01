@@ -1,4 +1,10 @@
 import type { WorkflowRuntimeIntegrationStatus } from './workflowReadiness';
+import {
+  PARTNER_SOURCE_IDS,
+  normalizeAppName,
+  toolkitForPartnerSource,
+  type PartnerSourceId,
+} from './partnerAppMap';
 
 interface NativeIntegrationStatus {
   tavily: boolean;
@@ -6,21 +12,25 @@ interface NativeIntegrationStatus {
   postmark: boolean;
 }
 
-export interface BuildWeeklyFounderRuntimeStatusInput {
+export interface BuildPartnerRuntimeStatusInput {
   connectedPartnerApps: string[];
   nativeStatus: NativeIntegrationStatus;
 }
 
-function normalizeAppName(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
+const PARTNER_SOURCE_LABELS: Record<PartnerSourceId, string> = {
+  email: 'Gmail',
+  calendar: 'Google Calendar',
+  google_drive: 'Google Drive',
+  linear: 'Linear',
+  github: 'GitHub',
+};
 
 function partnerStatus(
   connected: Set<string>,
-  toolkit: string,
-  label: string,
+  source: PartnerSourceId,
 ): WorkflowRuntimeIntegrationStatus {
-  if (connected.has(normalizeAppName(toolkit))) {
+  const label = PARTNER_SOURCE_LABELS[source];
+  if (connected.has(normalizeAppName(toolkitForPartnerSource(source)))) {
     return {
       ready: true,
       detail: `${label} is connected to this workspace.`,
@@ -51,16 +61,21 @@ function nativeStatus(
       };
 }
 
-export function buildWeeklyFounderRuntimeStatus(
-  input: BuildWeeklyFounderRuntimeStatusInput,
+/**
+ * Turn a workspace's connected Composio toolkits plus the server's native
+ * integration state into the per-source readiness map the readiness report
+ * consumes. Partner slugs come from `partnerAppMap`, so a toolkit rename is a
+ * one-line change there rather than a silent mismatch here.
+ */
+export function buildPartnerRuntimeStatus(
+  input: BuildPartnerRuntimeStatusInput,
 ): Record<string, WorkflowRuntimeIntegrationStatus> {
   const connected = new Set(input.connectedPartnerApps.map(normalizeAppName));
+  const partner = Object.fromEntries(
+    PARTNER_SOURCE_IDS.map((source) => [source, partnerStatus(connected, source)]),
+  );
   return {
-    email: partnerStatus(connected, 'gmail', 'Gmail'),
-    calendar: partnerStatus(connected, 'googlecalendar', 'Google Calendar'),
-    google_drive: partnerStatus(connected, 'googledrive', 'Google Drive'),
-    linear: partnerStatus(connected, 'linear', 'Linear'),
-    github: partnerStatus(connected, 'github', 'GitHub'),
+    ...partner,
     tavily: nativeStatus(input.nativeStatus.tavily, 'Web search', ''),
     slack: nativeStatus(input.nativeStatus.slack, 'Slack', 'delivery'),
     postmark: nativeStatus(input.nativeStatus.postmark, 'Email', 'delivery'),

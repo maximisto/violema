@@ -4,6 +4,7 @@ import {
   GENERAL_RATE_LIMIT_MAX,
   RATE_LIMIT_WINDOW_MS,
   SENSITIVE_RATE_LIMIT_MAX,
+  SENSITIVE_RATE_LIMIT_PREFIXES,
   isRateLimitExempt,
   isSensitiveRateLimitPath,
 } from '../src/security';
@@ -33,6 +34,19 @@ test('normal API paths are NOT exempt from the general limiter', () => {
 test('the strict limiter targets only magic login and the public waitlist', () => {
   assert.equal(isSensitiveRateLimitPath('/api/auth/admin/magic'), true);
   assert.equal(isSensitiveRateLimitPath('/api/waitlist'), true);
+});
+
+test('the strict limiter covers the Composio connect and disconnect routes', () => {
+  // Each call hits a third-party API and mutates live integration state, so
+  // they belong on the tight ceiling rather than the general one.
+  assert.equal(isSensitiveRateLimitPath('/api/integrations/composio/connect'), true);
+  assert.equal(isSensitiveRateLimitPath('/api/integrations/composio/disconnect'), true);
+  assert.ok(SENSITIVE_RATE_LIMIT_PREFIXES.includes('/api/integrations/composio/connect'));
+  assert.ok(SENSITIVE_RATE_LIMIT_PREFIXES.includes('/api/integrations/composio/disconnect'));
+  // Read-only integration surfaces stay on the general limiter.
+  assert.equal(isSensitiveRateLimitPath('/api/integrations/catalog'), false);
+  assert.equal(isSensitiveRateLimitPath('/api/integrations/composio/status'), false);
+  assert.equal(isSensitiveRateLimitPath('/api/integrations/composio/connections'), false);
 });
 
 test('the strict limiter never catches the OAuth flow or session reads', () => {

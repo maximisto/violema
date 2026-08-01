@@ -66,7 +66,16 @@ import {
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
 import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
 import { renderChartSpecsToFiles } from './chartImage';
-import { executeComposioAction, getComposioConnectionUrl, isComposioEnabled, isComposioToolName, listConnectedApps } from './composioBridge';
+import {
+  disconnectComposioApp,
+  executeComposioAction,
+  isComposioEnabled,
+  isComposioToolName,
+  listConnectedApps,
+  listConnectedAppsDetailed,
+  startComposioConnection,
+} from './composioBridge';
+import { buildPartnerConnectCallbackUrl } from './publicOrigin';
 import {
   buildAutomationChartArtifactFromQueryPayload,
   selectReviewGateVisualArtifacts,
@@ -202,7 +211,11 @@ import {
   upsertWorkspaceSettings,
   type IntegrationProvider,
 } from './settingsStore';
-import { buildIntegrationCatalog } from './integrationRegistry';
+import {
+  buildIntegrationCatalog,
+  listPartnerAppOptions,
+  resolvePartnerAppSlug,
+} from './integrationRegistry';
 import {
   buildPendingApprovalRequestedLedgerEvent,
   finalizePendingApprovalRequestedLedgerEvents,
@@ -216,7 +229,7 @@ import {
 import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
 import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
 import { evaluateRunReadiness, type RunReadinessDecision } from './integrationGateway/runReadinessGate';
-import { buildWeeklyFounderRuntimeStatus } from './integrationGateway/workflowRuntimeStatus';
+import { buildPartnerRuntimeStatus } from './integrationGateway/workflowRuntimeStatus';
 import {
   buildAutomationExperimentAttribution,
   buildAutomationScenarioTelemetry,
@@ -4057,9 +4070,9 @@ async function executeAutomationCore(
 /**
  * Resolve readiness for one automation run.
  *
- * `buildWeeklyFounderRuntimeStatus` is named for its first caller but returns
- * the generic partner + native status map, which is exactly what the custom
- * step-source tier needs — so it is reused rather than duplicated.
+ * `buildPartnerRuntimeStatus` returns the generic partner + native status map,
+ * which is what both the Weekly Founder Update and the custom step-source tier
+ * need — so it is reused rather than duplicated.
  *
  * A Composio lookup failure is treated as "nothing connected" instead of being
  * allowed to escape: a readiness check that cannot be completed must fail
@@ -4082,6 +4095,12 @@ export async function evaluateAutomationRunReadiness(input: {
   let connectedPartnerApps: string[] = [];
   if (isComposioEnabled()) {
     try {
+      // Shares the short-lived per-workspace memo with the read-only preview
+      // surfaces (see `listConnectedApps` in composioBridge.ts). Accepted
+      // staleness for the run gate: a disconnect performed through this server
+      // invalidates the entry synchronously, so the only gap is a revocation
+      // made elsewhere within the TTL — and such a run still fails at
+      // execution when Composio rejects the dead credential.
       connectedPartnerApps = await listConnectedApps({ entityId: input.workspaceId });
     } catch (error) {
       console.warn(
@@ -4098,7 +4117,7 @@ export async function evaluateAutomationRunReadiness(input: {
     steps: input.steps,
     deliveryTarget: input.deliveryTarget,
     settingsView: getWorkspaceSettingsView(input.workspaceId),
-    runtimeStatus: buildWeeklyFounderRuntimeStatus({
+    runtimeStatus: buildPartnerRuntimeStatus({
       connectedPartnerApps,
       nativeStatus: getIntegrationStatus(),
     }),
@@ -4853,13 +4872,27 @@ app.post('/api/summarize', async (req: Request, res: Response) => {
 });
 
 // ── Composio integration endpoints ────────────────────────────────────────────
+/**
+ * Look up this workspace's connected toolkits for a UI surface.
+ *
+ * Distinguishes "Composio is off" (enabled: false) from "Composio answered with
+ * nothing" from "Composio could not be reached" — the last one is `ok: false`,
+ * which the catalog and readiness endpoints report as `degraded` so the UI never
+ * tells an operator they disconnected something they did not.
+ */
+async function readPartnerConnections(workspaceId: string) {
+  if (!isComposioEnabled()) return { apps: [] as string[], ok: true };
+  return await listConnectedAppsDetailed({ entityId: workspaceId });
+}
+
 app.get('/api/integrations/catalog', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
-  const partnerEnabled = isComposioEnabled();
-  const connectedPartnerApps = partnerEnabled
-    ? await listConnectedApps({ entityId: workspaceId })
-    : [];
-  res.json(buildIntegrationCatalog({ partnerEnabled, connectedPartnerApps }));
+  const connections = await readPartnerConnections(workspaceId);
+  res.json(buildIntegrationCatalog({
+    partnerEnabled: isComposioEnabled(),
+    connectedPartnerApps: connections.apps,
+    partnerDegraded: !connections.ok,
+  }));
 });
 
 app.get('/api/integrations/composio/status', (req: Request, res: Response) => {
@@ -4877,39 +4910,138 @@ app.get('/api/integrations/composio/connections', async (req: Request, res: Resp
   res.json({ enabled: true, apps });
 });
 
+/**
+ * Resolve the `{ appName }` body of a connect/disconnect request to a toolkit
+ * slug, answering 400 with the accepted values when it is not one Violema
+ * offers. Never forwards an unrecognised name to Composio.
+ */
+function resolveRequestedPartnerApp(req: Request, res: Response): string | null {
+  const { appName } = (req.body || {}) as { appName?: unknown };
+  if (typeof appName !== 'string' || !appName.trim()) {
+    res.status(400).json({
+      error: 'appName is required',
+      validOptions: listPartnerAppOptions(),
+    });
+    return null;
+  }
+  const toolkit = resolvePartnerAppSlug(appName);
+  if (!toolkit) {
+    res.status(400).json({
+      error: `"${appName}" is not a connectable Violema integration.`,
+      validOptions: listPartnerAppOptions(),
+    });
+    return null;
+  }
+  return toolkit;
+}
+
+/** Record a connection change in the workspace ledger. No tokens, no URLs. */
+function recordPartnerConnectionEvent(input: {
+  req: Request;
+  workspaceId: string;
+  toolkit: string;
+  action: 'connect_initiated' | 'disconnected';
+  summary: string;
+}) {
+  appendWorkflowLedgerEvent({
+    workspaceId: input.workspaceId,
+    workflowId: 'integrations',
+    type: 'external_action_executed',
+    summary: input.summary,
+    metadata: {
+      toolkit: input.toolkit,
+      action: input.action,
+      actorEmail: getAuthenticatedUser(input.req)?.email,
+    },
+  });
+}
+
 app.post('/api/integrations/composio/connect', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
-  const { appName } = (req.body || {}) as { appName?: string };
-  if (!appName || typeof appName !== 'string') {
-    res.status(400).json({ error: 'appName is required' });
-    return;
-  }
+  const toolkit = resolveRequestedPartnerApp(req, res);
+  if (!toolkit) return;
+
   if (!isComposioEnabled()) {
     res.status(503).json({ error: 'Composio is not configured on this server.' });
     return;
   }
-  const redirectUrl = await getComposioConnectionUrl(appName, { entityId: workspaceId });
-  if (!redirectUrl) {
-    res.status(500).json({ error: `Could not start OAuth flow for ${appName}` });
+
+  const connection = await startComposioConnection(
+    toolkit,
+    { entityId: workspaceId },
+    // Server-derived, never header-derived: this is a redirect target.
+    { callbackUrl: buildPartnerConnectCallbackUrl(toolkit) },
+  );
+  if (!connection.redirectUrl) {
+    res.status(502).json({ error: `Could not start the OAuth flow for ${toolkit}.` });
     return;
   }
-  res.json({ redirectUrl });
+
+  recordPartnerConnectionEvent({
+    req,
+    workspaceId,
+    toolkit,
+    action: 'connect_initiated',
+    summary: `Started a ${toolkit} connection.`,
+  });
+
+  res.json({
+    redirectUrl: connection.redirectUrl,
+    toolkit,
+    ...(connection.connectionRequestId
+      ? { connectionRequestId: connection.connectionRequestId }
+      : {}),
+  });
+});
+
+app.post('/api/integrations/composio/disconnect', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const toolkit = resolveRequestedPartnerApp(req, res);
+  if (!toolkit) return;
+
+  if (!isComposioEnabled()) {
+    res.status(503).json({ error: 'Composio is not configured on this server.' });
+    return;
+  }
+
+  const result = await disconnectComposioApp(toolkit, { entityId: workspaceId });
+  if (result.status === 'not_connected') {
+    res.status(404).json({ error: `No active ${toolkit} connection for this workspace.`, toolkit });
+    return;
+  }
+  if (result.status === 'failed') {
+    res.status(502).json({ error: `Could not disconnect ${toolkit}.`, toolkit });
+    return;
+  }
+
+  recordPartnerConnectionEvent({
+    req,
+    workspaceId,
+    toolkit,
+    action: 'disconnected',
+    summary: `Disconnected ${toolkit}.`,
+  });
+
+  res.json({ ok: true, toolkit, removed: result.removed });
 });
 
 app.get('/api/workflows/:workflowId/readiness', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const deliveryTarget = typeof req.query.deliveryTarget === 'string' ? req.query.deliveryTarget : undefined;
-  const runtimeStatus = req.params.workflowId === 'weekly-founder-update'
-    ? buildWeeklyFounderRuntimeStatus({
-        connectedPartnerApps: isComposioEnabled()
-          ? await listConnectedApps({ entityId: workspaceId })
-          : [],
-        nativeStatus: getIntegrationStatus(),
-      })
-    : undefined;
+  // Every workflow gets a live runtime status now, not just the Weekly Founder
+  // Update — a custom workflow reading Gmail deserves the same preview.
+  const connections = await readPartnerConnections(workspaceId);
+  const runtimeStatus = buildPartnerRuntimeStatus({
+    connectedPartnerApps: connections.apps,
+    nativeStatus: getIntegrationStatus(),
+  });
 
   res.json({
     ok: true,
+    // The report itself still fails closed on an unreachable Composio; this
+    // flag only lets the UI say "cannot check right now" instead of "not
+    // connected".
+    degraded: !connections.ok,
     report: checkWorkflowReadiness({
       workspaceId,
       workflowId: req.params.workflowId,
