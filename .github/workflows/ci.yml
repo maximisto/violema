@@ -71,12 +71,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Brand-bleed contract test
-        # Pure node:fs file-content assertions against the repo's own public/
-        # and src/ files -- no dev server, browser, or network involved.
-        run: npm run test:brand-bleed
-
-      - name: Integrations contract test
-        # Same shape as brand-bleed: reads local source/content files and
-        # asserts on their contents. No server, browser, or credentials.
-        run: npm run test:integrations
+      - name: Contract tests
+        # Aggregates brand-bleed, integrations, review-queue, run-timestamp,
+        # and workspace-surfaces contracts. All pure node:fs/file-content
+        # assertions -- no dev server, browser, network, or credentials.
+        run: npm test

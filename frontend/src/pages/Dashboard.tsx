@@ -55,6 +55,14 @@ import { RunLedgerPanel, type WorkflowLedgerEvent } from '../features/missions/R
 import { WorkflowTemplateGallery } from '../features/templates/WorkflowTemplateGallery';
 import { WORKFLOW_TEMPLATES, getWorkflowTemplateById } from '../content/workflowTemplates';
 import { buildMissionWorkspaceView, type MissionSourceTask } from '../features/missions/missionPresenter';
+import { formatRunTimestamp, localDayOffset } from '../features/missions/runTimestamp';
+import {
+  buildMissionReviewQueue,
+  resolveReviewQueueFocus,
+  type MissionReviewQueueEntry,
+} from '../features/missions/reviewQueue';
+import { MissionReviewQueue } from '../features/missions/MissionReviewQueue';
+import { WorkspaceSwitcher } from '../features/workspaces/WorkspaceSwitcher';
 import { mapMissionRecordToSourceTask, type MissionApiRecord } from '../features/missions/missionApi';
 import {
   applyMissionAction,
@@ -974,16 +982,12 @@ function getLocalTimeZone() {
   }
 }
 
+// Relative-day wording is recomputed against the viewer's local midnight; see
+// features/missions/runTimestamp.ts for why UTC cannot be the day boundary.
 function formatAutomationRunTime(value?: string) {
   if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
+  if (Number.isNaN(new Date(value).getTime())) return null;
+  return formatRunTimestamp(value);
 }
 
 function formatRelativeTimeFromIso(iso: string) {
@@ -1281,13 +1285,11 @@ function getReviewPolicyLabel(value: ReviewPolicy) {
 }
 
 function getConversationSectionLabel(date: Date) {
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfYesterday = new Date(startOfToday);
-  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-
-  if (date >= startOfToday) return 'Today';
-  if (date >= startOfYesterday) return 'Yesterday';
+  // Shares the run-timestamp day arithmetic so the sidebar's "Today" and a run
+  // stamp's "today" can never disagree about where the day boundary is.
+  const offset = localDayOffset(date, new Date());
+  if (offset >= 0) return 'Today';
+  if (offset === -1) return 'Yesterday';
   return 'Earlier';
 }
 
@@ -2941,6 +2943,33 @@ export default function Dashboard() {
     saveStoredMissionTarget(workspace.workspaceId, selectedTask);
   }, [selectedTask, workspace.workspaceId]);
 
+  // Every mission holding a delivery behind an approval gate -- not just the
+  // selected one. The Reviews tab used to render only `selectedMission`, so a
+  // pending approval on any other mission was invisible.
+  const missionReviewQueue = useMemo(() => buildMissionReviewQueue(taskItems), [taskItems]);
+
+  const focusReviewMission = useCallback((entry: MissionReviewQueueEntry) => {
+    setSelectedTaskId(entry.id);
+  }, []);
+
+  // Opening Reviews with an unrelated mission selected hands focus to the first
+  // pending approval, so the tab never opens on an empty gate while work waits.
+  // This fires once per visit to the area, not on every selection change --
+  // otherwise picking a different mission from inside Reviews would be yanked
+  // straight back. The "applied" flag is only set once the queue has actually
+  // loaded, so entering Reviews before /api/missions resolves still works.
+  const reviewFocusAppliedRef = useRef(false);
+  useEffect(() => {
+    if (workspaceArea !== 'reviews') {
+      reviewFocusAppliedRef.current = false;
+      return;
+    }
+    if (reviewFocusAppliedRef.current || missionReviewQueue.length === 0) return;
+    reviewFocusAppliedRef.current = true;
+    const nextFocus = resolveReviewQueueFocus(missionReviewQueue, selectedTask?.id ?? selectedTaskId);
+    if (nextFocus !== null) setSelectedTaskId(nextFocus);
+  }, [missionReviewQueue, selectedTask?.id, selectedTaskId, workspaceArea]);
+
   const selectedMissionSource = useMemo(() => {
     if (!selectedTask) return missionSourceTasks[0];
 
@@ -3740,6 +3769,11 @@ export default function Dashboard() {
 
   const renderMissionReviewsView = () => (
     <div className="space-y-4">
+      <MissionReviewQueue
+        entries={missionReviewQueue}
+        focusedId={selectedTask?.id ?? selectedTaskId}
+        onFocus={focusReviewMission}
+      />
       <MissionReviews
         mission={selectedMission}
         preflight={selectedTask?.preflight}
@@ -4145,37 +4179,57 @@ export default function Dashboard() {
     );
   };
 
+  // The mission card collection: live missions (with their Run buttons) claim
+  // their template card, and the remaining templates stay startable. Shared by
+  // the Chat/Dashboard activity surface and the Missions > Collection tab so
+  // both stay one composition, not two drifting copies.
+  const renderMissionCollection = () => (
+    <WorkflowTemplateGallery
+      templates={WORKFLOW_TEMPLATES}
+      onUse={applyFounderWorkflowTemplate}
+      userMissions={taskItems
+        .filter((item) => item.automationId)
+        .map((item) => ({
+          key: String(item.automationId),
+          title: item.title,
+          outcome: item.description,
+          cadence: item.schedule,
+          stepsCount: item.steps?.length || item.actions?.length || 0,
+        }))}
+      onOpenMission={(key) => {
+        const item = taskItems.find((entry) => String(entry.automationId) === key);
+        if (item) void handleAutomationEdit(item, 'workflow');
+      }}
+      onRunMission={(key) => {
+        const item = taskItems.find((entry) => String(entry.automationId) === key);
+        if (item) void handleAutomationRun(item);
+      }}
+    />
+  );
+
   const renderWorkspaceMain = () => {
     if (workspaceArea === 'home') {
       if (activeWorkspaceTab === 'activity') {
         return workspaceSurface(
           <>
             {renderCommandDashboard()}
-            <WorkflowTemplateGallery
-              templates={WORKFLOW_TEMPLATES}
-              onUse={applyFounderWorkflowTemplate}
-              userMissions={taskItems
-                .filter((item) => item.automationId)
-                .map((item) => ({
-                  key: String(item.automationId),
-                  title: item.title,
-                  outcome: item.description,
-                  cadence: item.schedule,
-                  stepsCount: item.steps?.length || item.actions?.length || 0,
-                }))}
-              onOpenMission={(key) => {
-                const item = taskItems.find((entry) => String(entry.automationId) === key);
-                if (item) void handleAutomationEdit(item, 'workflow');
-              }}
-              onRunMission={(key) => {
-                const item = taskItems.find((entry) => String(entry.automationId) === key);
-                if (item) void handleAutomationRun(item);
-              }}
-            />
+            {renderMissionCollection()}
           </>
         );
       }
       return renderChatSurface();
+    }
+
+    // The Missions collection is the one mission surface that is useful with no
+    // mission selected -- it is where a founder picks or starts one -- so it
+    // renders before the "nothing selected" bail-out below.
+    if (workspaceArea === 'missions' && activeWorkspaceTab === 'collection') {
+      return workspaceSurface(
+        <>
+          {selectedTask ? workspaceHeaderCard : null}
+          {renderMissionCollection()}
+        </>
+      );
     }
 
     if (!selectedTask) return renderEmptyWorkspaceMain();
@@ -5141,6 +5195,8 @@ export default function Dashboard() {
 	              <Eye className="w-3.5 h-3.5" />
 	              <span className="hidden 2xl:inline">Inspector</span>
 	            </button>
+
+	            <WorkspaceSwitcher />
 
 	            <ThemeToggle className="hidden h-8 w-8 shrink-0 rounded-lg sm:inline-flex" />
 	          </div>

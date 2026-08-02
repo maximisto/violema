@@ -11,6 +11,17 @@ import type {
   MissionWorkspaceView,
 } from './types';
 import { normalizeChartArtifactFromResult, type ChartArtifactSpec } from '../../components/artifacts/ChartArtifact';
+import {
+  deliveredTargetLabel,
+  isDeliveredReview,
+  normalizeMissionStatus,
+  readStringValue,
+} from './missionStatus';
+import { formatRunTimestamp } from './runTimestamp';
+
+// Re-exported so existing importers keep their entry point while the status
+// rules live in a leaf module the Reviews queue can share.
+export { normalizeMissionStatus };
 
 export interface MissionSourceStep {
   id?: string;
@@ -111,34 +122,6 @@ function readArtifactChart(artifact?: MissionSourceArtifact): ChartArtifactSpec 
   };
 }
 
-function isDeliveredReview(task?: MissionSourceTask | null) {
-  return (
-    readStringValue(task?.latestDelivery?.status) === 'delivered' ||
-    readStringValue(task?.reviewReceipt?.status) === 'delivered'
-  );
-}
-
-function deliveredTargetLabel(task?: MissionSourceTask | null) {
-  return (
-    readStringValue(task?.latestDelivery?.to) ||
-    readStringValue(task?.reviewReceipt?.deliveryTarget) ||
-    task?.notify ||
-    'the configured delivery target'
-  );
-}
-
-export function normalizeMissionStatus(task?: MissionSourceTask | null): MissionStatus {
-  if (!task) return 'planned';
-  if (isDeliveredReview(task)) return 'completed';
-  if (task.automationStatus === 'paused') return 'paused';
-  const status = task.runStatus || task.lastRunStatus || task.status || 'planned';
-  if (status === 'running' || status === 'retrying' || status === 'active') return 'running';
-  if (status === 'waiting_review' || status === 'review') return 'waiting_review';
-  if (status === 'failed' || status === 'alert' || status === 'error') return 'failed';
-  if (status === 'succeeded' || status === 'complete' || status === 'completed') return 'completed';
-  return 'planned';
-}
-
 function statusLabel(status: MissionStatus) {
   switch (status) {
     case 'running':
@@ -200,17 +183,11 @@ function formatCredits(value?: number) {
   return `${Math.round(value)} cr`;
 }
 
+// Relative wording ("today 2:02 PM") is computed at render time against the
+// viewer's local midnight -- see runTimestamp.ts for why UTC must not be the
+// day boundary.
 function formatMissionDateTime(value: string | undefined, fallback: string) {
-  if (!value) return fallback;
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) return value;
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(timestamp));
+  return formatRunTimestamp(value, { fallback });
 }
 
 function inferActionKind(action: string) {
@@ -283,10 +260,6 @@ function findReviewArtifact(artifacts?: MissionSourceTask['latestArtifacts']) {
 
 function readRecordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-}
-
-function readStringValue(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function readFirstString(record: Record<string, unknown>, keys: string[]) {

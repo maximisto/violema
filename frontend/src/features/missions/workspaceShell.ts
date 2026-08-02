@@ -23,6 +23,7 @@ export type WorkspaceTabId =
   | 'chat'
   | 'activity'
   | 'overview'
+  | 'collection'
   | 'artifact'
   | 'agents'
   | 'steps'
@@ -79,10 +80,13 @@ export const WORKSPACE_AREAS: WorkspaceAreaConfig[] = [
     id: 'missions',
     label: 'Missions',
     shortLabel: 'Missions',
-    description: 'See the active automation as a mission with steps, agents, evidence, and controls.',
+    description: 'Browse the mission collection, then open one as steps, agents, evidence, and controls.',
     icon: CheckSquare,
-    defaultTab: 'overview',
+    // The card collection leads: a founder opening Missions should see every
+    // mission they can run before being dropped into one mission's detail.
+    defaultTab: 'collection',
     tabs: [
+      { id: 'collection', label: 'Collection' },
       { id: 'overview', label: 'Overview' },
       { id: 'artifact', label: 'Artifact' },
       { id: 'agents', label: 'Agents' },
