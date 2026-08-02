@@ -2,7 +2,11 @@ import crypto from 'crypto';
 
 export type ParticipantType = 'founder_operator' | 'investor' | 'partner';
 export const PARTICIPANT_TYPES: ParticipantType[] = ['founder_operator', 'investor', 'partner'];
-export const CURRENT_BETA_TERMS_VERSION = '2026-07-11-beta-confidentiality-v1';
+// v2 (2026-08-02): adds explicit acknowledgment that missions can create and
+// update files in storage the user connects (the mission library in Google
+// Drive). Material change to what users consent to → version bump, so the
+// designed stale-Terms reacceptance path re-consents existing users once.
+export const CURRENT_BETA_TERMS_VERSION = '2026-08-02-beta-confidentiality-v2';
 export const BETA_TERMS_PATH = '/terms#beta-confidentiality';
 export const CURRENT_BETA_TERMS_CANONICAL_TEXT = `Beta Confidentiality and Evaluation Terms
 

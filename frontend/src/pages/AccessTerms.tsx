@@ -155,7 +155,7 @@ export default function AccessTerms() {
                 onChange={(event) => setAcceptedActionAwareness(event.target.checked)}
                 className="mt-1 h-4 w-4 rounded border-navy-700 bg-navy-950 text-violet-500"
               />
-              <span>I understand Violema can send messages, run automations, and take actions across connected tools according to the mode and permissions I choose.</span>
+              <span>I understand Violema can send messages, run automations, and take actions across connected tools according to the mode and permissions I choose — including creating and updating files in storage I connect, such as its mission library folder in my Google Drive.</span>
             </label>
           </div>
 
