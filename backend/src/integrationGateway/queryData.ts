@@ -4,6 +4,15 @@ import {
   type PartnerComposioQueryInput,
   type PartnerComposioSource,
 } from './adapters/partnerComposio';
+import {
+  ACCOUNT_LIBRARY_BACKING_SOURCE,
+  ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+  ACCOUNT_LIBRARY_SOURCE,
+  readAccountLibrarySection,
+  readLibrary,
+  type AccountLibraryDeps,
+  type AccountLibrarySnapshot,
+} from './accountLibrary';
 import type { IntegrationQueryResult, IntegrationQuerySuccess } from './types';
 import type { AutomationStepExecution } from '../platform/types';
 import { isDemoWorkspace } from '../platform/demoWorkspace';
@@ -36,6 +45,13 @@ export interface ExecuteQueryDataInput {
   clientOverrides?: {
     stripe?: StripeLikeClient;
     partner?: (input: PartnerComposioQueryInput) => Promise<IntegrationQueryResult>;
+    /** Test seam for the Drive-backed account library read. */
+    accountLibraryRead?: (
+      workspaceId: string,
+      section: string,
+      options: { limit?: number },
+      deps?: AccountLibraryDeps,
+    ) => Promise<IntegrationQueryResult<AccountLibrarySnapshot>>;
   };
   credentialOverrides?: {
     stripeSecretKey?: string;
@@ -202,6 +218,38 @@ export async function executeQueryData(
       simulated: false,
     };
     return result;
+  }
+
+  // The account intelligence library, backed by the customer's Google Drive.
+  //
+  // Only reads are reachable from here. A library WRITE is an external action
+  // with its own audit trail, executed by the automation step executor, so
+  // routing it through the read path would log it as `data_read` and hide a
+  // real write behind a query. Any non-read query type is refused rather than
+  // quietly reinterpreted.
+  if (input.source === ACCOUNT_LIBRARY_SOURCE) {
+    if (input.queryType !== ACCOUNT_LIBRARY_READ_QUERY_TYPE) {
+      return {
+        ok: false,
+        code: 'unsupported_query',
+        source: ACCOUNT_LIBRARY_BACKING_SOURCE,
+        message:
+          'The account library only answers read queries here. Recording a library entry is an approved workflow action, not a data query.',
+        can_continue: false,
+        nextAction: {
+          label: 'Review the workflow steps',
+          route: '/automations',
+        },
+      };
+    }
+
+    const readLibrarySection = input.clientOverrides?.accountLibraryRead ?? readLibrary;
+    return await readLibrarySection(
+      input.workspaceId,
+      readAccountLibrarySection(input.filters),
+      { limit: input.limit },
+      { now: () => now },
+    );
   }
 
   if (isPartnerDemoSource(input.source)) {

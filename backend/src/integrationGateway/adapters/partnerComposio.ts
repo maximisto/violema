@@ -318,7 +318,12 @@ function errorResult(
   };
 }
 
-function classifyFailure(error: unknown): IntegrationReadinessError['code'] {
+/**
+ * Exported so the account library classifies Drive failures identically. Two
+ * copies of this mapping would drift, and a partner outage misread as
+ * "not connected" sends the customer to reconnect something that is fine.
+ */
+export function classifyFailure(error: unknown): IntegrationReadinessError['code'] {
   let text = '';
   try {
     text = JSON.stringify(error).toLowerCase();

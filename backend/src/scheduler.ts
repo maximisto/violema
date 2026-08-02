@@ -7,6 +7,12 @@ import {
   PLATFORM_LEARNING_BRIEF_WORKFLOW_ID,
   PLATFORM_TELEMETRY_SOURCE,
 } from './platform/platformTelemetry';
+import {
+  ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+  ACCOUNT_LIBRARY_SOURCE,
+  ACCOUNT_LIBRARY_WRITE_QUERY_TYPE,
+  COMPETITIVE_INTELLIGENCE_SECTION,
+} from './integrationGateway/accountLibrary';
 
 export interface AutomationRoleDirective {
   mode: 'cheaper' | 'review' | 'promote';
@@ -283,6 +289,125 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
     // `usesInternalDemoRouting` treats as ours, and which resolves to
     // DEFAULT_WORKSPACE_ID at run time — the only workspace the
     // platform_telemetry source will answer for.
+  },
+  {
+    id: 'auto_competitor_monitor',
+    version: 1,
+    // Declared so the run gate resolves a stable identity instead of inferring
+    // 'custom-workflow' from the step sources. `competitor-monitor` is not on
+    // the supported-workflow readiness table, so it lands in tier 3, which
+    // derives requirements from the query steps below — exactly what we want:
+    // the library step is what makes Google Drive required.
+    workflowId: 'competitor-monitor',
+    name: 'Competitor monitor',
+    description:
+      "A weekly memo on competitor pricing, launches, and positioning shifts, written against this account's own accumulated intelligence library rather than a cold web search.",
+    authoring_mode: 'guided',
+    workflow_prompt: [
+      'Read the competitive intelligence library for what Violema already knows about this account.',
+      'Search the web for competitor pricing, launch, and positioning changes.',
+      'Report what CHANGED against the library, not what merely exists.',
+      'Record the run in the library so the next run inherits it, then deliver after approval.',
+    ].join('\n'),
+    schedule: 'every monday at 8am',
+    cron_expression: '0 8 * * 1',
+    timezone: 'America/Chicago',
+    actions: [
+      'Read prior competitive findings from the account intelligence library',
+      'Search competitor pricing, launches, and positioning changes',
+      'Compare this week against the library and isolate what actually changed',
+      'Draft the competitor memo with implications and recommended action',
+      'Record this run in the account intelligence library',
+      'Deliver latest result to #violema-demo after approval',
+    ],
+    steps: [
+      // READ FIRST. This step runs before the search so the analysis below has
+      // prior findings to compare against. On a brand-new workspace it returns
+      // an empty, explicitly-uninitialized library, and the analysis says so
+      // rather than inventing a history.
+      {
+        id: 'step_library_context',
+        kind: 'query',
+        title: 'Read the competitive library',
+        objective:
+          'Load prior competitive findings recorded for this account so this run can report changes rather than restate what is already known.',
+        inputs: {
+          source: ACCOUNT_LIBRARY_SOURCE,
+          query_type: ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+          filters: { section: COMPETITIVE_INTELLIGENCE_SECTION },
+          limit: 3,
+        },
+      },
+      {
+        id: 'step_competitor_search',
+        kind: 'search',
+        title: 'Search competitor moves',
+        objective: 'Find pricing, launch, and positioning changes from key competitors.',
+        inputs: {
+          query: 'AI agent automation platform competitor pricing launches positioning',
+          num_results: 8,
+        },
+      },
+      {
+        id: 'step_delta_analysis',
+        kind: 'analyze',
+        title: 'Extract what changed',
+        objective:
+          'Compare this run against the prior library entries and separate genuine change from noise.',
+        inputs: {
+          instruction: [
+            'Compare the search evidence against the prior library entries in the evidence block.',
+            'Report NEW (absent from the library), CHANGED (present but different — say what it was and what it is now), and UNCHANGED (confirmed still true, one line).',
+            'When the library is empty, say plainly that this run is the baseline and describe only what the evidence shows.',
+            'Never describe a change you cannot evidence from both sides of the comparison.',
+          ].join(' '),
+        },
+      },
+      {
+        id: 'step_competitor_memo',
+        kind: 'summarize',
+        title: 'Draft competitor memo',
+        objective:
+          'Create a concise founder memo leading with what changed since the last run, with implications and recommended action.',
+        inputs: {
+          instruction:
+            'Draft the competitor memo. Lead with what changed since the last run, then implications, then recommended action.',
+        },
+      },
+      // WRITE LAST, before delivery. The memo drafted above is the finding, so
+      // the library records exactly what the founder is about to read — and it
+      // is recorded whether or not the delivery is ultimately approved, because
+      // what Violema learned is true regardless of who read it.
+      {
+        id: 'step_library_record',
+        kind: 'query',
+        title: 'Record findings in the library',
+        objective:
+          "Append this run's competitive findings to the account intelligence library so the next run starts from them.",
+        inputs: {
+          source: ACCOUNT_LIBRARY_SOURCE,
+          query_type: ACCOUNT_LIBRARY_WRITE_QUERY_TYPE,
+          section: COMPETITIVE_INTELLIGENCE_SECTION,
+          entry_title: 'Competitor snapshot',
+        },
+      },
+      {
+        id: 'step_competitor_delivery',
+        kind: 'deliver',
+        title: 'Deliver competitor memo',
+        objective: 'Send the reviewed competitor memo after approval.',
+        inputs: { approval_required: true },
+        deliveryTarget: { channel: 'slack', target: '#violema-demo' },
+      },
+    ],
+    execution_policy: {
+      mode: 'recommended',
+      optimizationGoal: 'balanced',
+      reviewPolicy: 'standard',
+      maxElasticLanes: 2,
+    },
+    notify: '#violema-demo',
+    status: 'active',
   },
 ];
 

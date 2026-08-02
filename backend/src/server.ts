@@ -230,6 +230,14 @@ import {
   listWorkflowLedgerEvents,
 } from './integrationGateway/auditLog';
 import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
+import {
+  ACCOUNT_LIBRARY_BACKING_SOURCE,
+  appendLibraryEntry,
+  isAccountLibraryWriteRequest,
+  isLibraryFailure,
+  readAccountLibraryEntryTitle,
+  readAccountLibrarySection,
+} from './integrationGateway/accountLibrary';
 import { checkWorkflowReadiness, resolveTenantDefaultDeliveryTarget } from './integrationGateway/workflowReadiness';
 import { evaluateRunReadiness, type RunReadinessDecision } from './integrationGateway/runReadinessGate';
 import { buildPartnerRuntimeStatus } from './integrationGateway/workflowRuntimeStatus';
@@ -3697,6 +3705,89 @@ async function executeAutomationCore(
         stepExecution.artifactKind = 'web_search';
         stepExecution.toolCalls = 1;
         stepExecution.artifactCount = 1;
+        continue;
+      }
+
+      // Account memory: record what this run learned so the next run reasons
+      // about the delta instead of starting cold.
+      //
+      // This is a WRITE into the customer's Google Drive, so it is executed
+      // here as an audited external action rather than through the read-only
+      // query gateway — routing it through `query_data` would file a genuine
+      // write under `data_read` and hide it from the audit trail.
+      if (step.kind === 'query' && isAccountLibraryWriteRequest(step.inputs)) {
+        const section = readAccountLibrarySection(step.inputs);
+        const entryTitle = readAccountLibraryEntryTitle(step.inputs);
+        const libraryResult = await runAutomationStepWithTimeout(
+          `Library step "${step.title}"`,
+          appendLibraryEntry(workspaceId, section, {
+            title: entryTitle,
+            // The drafted memo is the finding. If drafting produced nothing,
+            // `appendLibraryEntry` fails closed rather than recording an empty
+            // entry that would poison every later run's delta context.
+            markdown: summaryText,
+          }),
+        );
+
+        if (isLibraryFailure(libraryResult)) {
+          stepExecution.status = 'failed';
+          stepExecution.summary = libraryResult.message;
+          stepExecution.error = libraryResult.message;
+          stepExecution.dataOrigin = 'none';
+          stepErrors.push(`${step.title}: ${libraryResult.message}`);
+          appendWorkflowLedgerEvent({
+            workspaceId,
+            workflowId: runContext.workflowId,
+            automationId: automation.id,
+            taskId: runContext.taskId,
+            taskRunId: runContext.taskRunId,
+            type: 'connector_failed',
+            summary: `Account library update blocked: ${libraryResult.message}`,
+            metadata: {
+              source: ACCOUNT_LIBRARY_BACKING_SOURCE,
+              section,
+              code: libraryResult.code,
+            },
+          });
+          continue;
+        }
+
+        // Ids and names only. The entry body is the customer's own competitive
+        // analysis and must never be copied into ledger metadata.
+        const libraryOutput = {
+          section: libraryResult.section,
+          fileId: libraryResult.fileId,
+          fileName: libraryResult.fileName,
+          folderId: libraryResult.folderId,
+          created: libraryResult.created,
+        };
+        artifacts.push({
+          kind: 'note',
+          title: step.title,
+          payload: libraryOutput,
+          origin: liveOrigin(ACCOUNT_LIBRARY_BACKING_SOURCE, new Date().toISOString()),
+        });
+        stepExecution.status = 'succeeded';
+        stepExecution.summary = libraryResult.created
+          ? `Recorded this run in the ${libraryResult.section} library as "${libraryResult.fileName}".`
+          : `The ${libraryResult.section} library already held "${libraryResult.fileName}" — nothing was duplicated.`;
+        stepExecution.output = libraryOutput;
+        stepExecution.artifactKind = 'note';
+        stepExecution.toolCalls = 1;
+        stepExecution.artifactCount = 1;
+        stepExecution.dataOrigin = 'live';
+        appendWorkflowLedgerEvent({
+          workspaceId,
+          workflowId: runContext.workflowId,
+          automationId: automation.id,
+          taskId: runContext.taskId,
+          taskRunId: runContext.taskRunId,
+          type: 'external_action_executed',
+          summary: libraryResult.created
+            ? `Recorded a ${libraryResult.section} entry in the account library.`
+            : `Account library already held today's ${libraryResult.section} entry.`,
+          metadata: { source: ACCOUNT_LIBRARY_BACKING_SOURCE, ...libraryOutput },
+        });
         continue;
       }
 

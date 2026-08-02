@@ -26,6 +26,7 @@
  */
 
 import type { PartnerComposioSource } from './adapters/partnerComposio';
+import { ACCOUNT_LIBRARY_BACKING_SOURCE, ACCOUNT_LIBRARY_SOURCE } from './accountLibrary';
 import {
   checkWorkflowReadiness,
   isConfigured,
@@ -166,6 +167,36 @@ export function evaluateStepSourceReadiness(input: {
 
     const label = labelIntegrationId(source);
 
+    if (source === ACCOUNT_LIBRARY_SOURCE) {
+      // The account library is a capability, not a connectable integration:
+      // it is a folder inside the customer's Google Drive. So the blocker
+      // names Drive and routes to Drive — telling a founder to "connect
+      // Account library" would send them looking for something that does not
+      // exist on the integrations page.
+      //
+      // This is also what makes Drive REQUIRED for any mission carrying a
+      // library step. Drive is merely optional for the weekly founder update,
+      // whose Drive step is supporting context; a library step is the mission's
+      // memory, and running without it would silently reset the account's
+      // accumulated knowledge.
+      const status = input.runtimeStatus?.[ACCOUNT_LIBRARY_BACKING_SOURCE];
+      const alreadyBlocked = blockers.some(
+        (blocker) => blocker.key === ACCOUNT_LIBRARY_BACKING_SOURCE,
+      );
+      if (!status?.ready && !alreadyBlocked) {
+        const driveLabel = labelIntegrationId(ACCOUNT_LIBRARY_BACKING_SOURCE);
+        blockers.push({
+          key: ACCOUNT_LIBRARY_BACKING_SOURCE,
+          label: `Connect ${driveLabel}`,
+          detail:
+            status?.detail
+            || `${driveLabel} is not connected to this workspace, so Violema cannot read or update this account's intelligence library.`,
+          route: connectRoute(ACCOUNT_LIBRARY_BACKING_SOURCE),
+        });
+      }
+      continue;
+    }
+
     if (source === 'stripe') {
       // Mirrors `getWorkspaceScopedIntegrationCredential`: the server's key is
       // Violema's own account, so only the default workspace may pass on it.
@@ -204,7 +235,11 @@ export function evaluateStepSourceReadiness(input: {
 
     if (isPartnerLiveSource(source)) {
       const status = input.runtimeStatus?.[source];
-      if (!status?.ready) {
+      // A mission may name both `google_drive` and `account_library`, which
+      // resolve to the same connection. Two identical "Connect Google Drive"
+      // blockers would read as two separate problems.
+      const alreadyBlocked = blockers.some((blocker) => blocker.key === source);
+      if (!status?.ready && !alreadyBlocked) {
         blockers.push({
           key: source,
           label: `Connect ${label}`,
