@@ -7,6 +7,10 @@ import {
   defaultParticipantType,
   normalizeParticipantType,
 } from './betaProgram';
+import {
+  normalizeAccountStageOverride,
+  type AccountStageOverride,
+} from './platform/accountStage';
 import { writeJsonFile } from './platform/jsonStore';
 
 export type AdminAccessStatus = 'requested' | 'approved' | 'revoked';
@@ -16,9 +20,15 @@ export type AdminAuditAction =
   | 'access.approved'
   | 'access.revoked'
   | 'participant.updated'
+  | 'stage.override.updated'
   | 'role.promoted'
   | 'role.demoted'
-  | 'credits.adjusted';
+  | 'credits.adjusted'
+  // Review decisions taken outside the dashboard. A Slack button click sends
+  // something real; without these the admin trail cannot answer "who approved
+  // this delivery" for anything approved from chat.
+  | 'review.approved'
+  | 'review.changes_requested';
 
 export interface AdminAccessRecord {
   email: string;
@@ -33,6 +43,14 @@ export interface AdminAccessRecord {
   status: AdminAccessStatus;
   role: AdminAccessRole;
   note?: string;
+  /**
+   * The one hand-settable input to the otherwise-derived account stage, for a
+   * real teammate who signed up through the normal funnel. It can only ever
+   * produce `internal` — no admin can assert revenue Stripe does not know about.
+   */
+  stageOverride?: AccountStageOverride;
+  stageOverrideBy?: string;
+  stageOverrideAt?: string;
   createdAt: string;
   updatedAt: string;
   updatedBy?: string;
@@ -58,9 +76,12 @@ const AUDIT_ACTIONS = new Set<AdminAuditAction>([
   'access.approved',
   'access.revoked',
   'participant.updated',
+  'stage.override.updated',
   'role.promoted',
   'role.demoted',
   'credits.adjusted',
+  'review.approved',
+  'review.changes_requested',
 ]);
 
 function getAccessFile() {
@@ -139,6 +160,13 @@ function readAccessRecords() {
     if (!optionalString(row.approvedAt)) throw new Error(`row ${index} has invalid approvedAt`);
     if (!optionalString(row.note)) throw new Error(`row ${index} has invalid note`);
     if (!optionalString(row.updatedBy)) throw new Error(`row ${index} has invalid updatedBy`);
+    // An unknown override must fail loudly rather than silently degrade: a
+    // stored `"paying"` here would be somebody trying to hand-set revenue.
+    if (row.stageOverride !== undefined && !normalizeAccountStageOverride(row.stageOverride)) {
+      throw new Error(`row ${index} has invalid stageOverride`);
+    }
+    if (!optionalString(row.stageOverrideBy)) throw new Error(`row ${index} has invalid stageOverrideBy`);
+    if (!optionalString(row.stageOverrideAt)) throw new Error(`row ${index} has invalid stageOverrideAt`);
     return { ...row, participantType } as unknown as AdminAccessRecord;
   });
 }
@@ -174,13 +202,27 @@ export function getAccessRecord(email: string) {
   return readAccessRecords().find((record) => record.email === normalized) || null;
 }
 
-export function isAccessRecordApprovalReady(record: AdminAccessRecord) {
+/**
+ * The approval-readiness rule with the consent lookup already performed.
+ *
+ * Callers that resolve consent for many accounts at once (the admin
+ * participants table) pass a set membership instead of paying a store read per
+ * row. The rule itself lives here so the two call paths cannot drift.
+ */
+export function isAccessRecordApprovalReadyGiven(
+  record: Pick<AdminAccessRecord, 'identityVerifiedAt' | 'acceptedTermsVersion' | 'acceptedTermsAt'>,
+  hasCurrentConsent: boolean,
+) {
   return Boolean(
     record.identityVerifiedAt
     && record.acceptedTermsVersion === CURRENT_BETA_TERMS_VERSION
     && record.acceptedTermsAt
-    && hasCurrentBetaConsent(record.email),
+    && hasCurrentConsent,
   );
+}
+
+export function isAccessRecordApprovalReady(record: AdminAccessRecord) {
+  return isAccessRecordApprovalReadyGiven(record, hasCurrentBetaConsent(record.email));
 }
 
 export function assertAccessRecordApprovalReady(record: AdminAccessRecord) {
@@ -280,6 +322,12 @@ export function recordAccessRequest(input: {
     status: 'requested',
     role: existing?.role || 'user',
     note: trimBounded(input.note, MAX_NOTE_LENGTH) || existing?.note,
+    // These builders assemble `next` field by field rather than spreading, so
+    // the override has to be carried forward explicitly or a later re-request
+    // would silently erase an operator's decision.
+    stageOverride: existing?.stageOverride,
+    stageOverrideBy: existing?.stageOverrideBy,
+    stageOverrideAt: existing?.stageOverrideAt,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     updatedBy: existing?.updatedBy,
@@ -332,6 +380,9 @@ export function setAccessStatus(input: {
     status: input.status,
     role: input.role || existing?.role || 'user',
     note,
+    stageOverride: existing?.stageOverride,
+    stageOverrideBy: existing?.stageOverrideBy,
+    stageOverrideAt: existing?.stageOverrideAt,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     updatedBy: input.updatedBy,
@@ -415,6 +466,9 @@ export function syncVerifiedAccessEvidence(input: {
       ? existing.role
       : projectsConfiguredApproval ? input.role : existing?.role || input.role,
     note: existing?.note,
+    stageOverride: existing?.stageOverride,
+    stageOverrideBy: existing?.stageOverrideBy,
+    stageOverrideAt: existing?.stageOverrideAt,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     updatedBy: existing?.updatedBy,
@@ -503,6 +557,60 @@ export function setAccessParticipantType(input: {
       role: existing.role,
     },
   });
+  records[index] = next;
+  writeAccessRecords(records);
+  return next;
+}
+
+/**
+ * Set or clear the `internal` account-stage override.
+ *
+ * This is the ONLY writable input to account stage, and it is deliberately
+ * one-valued: `internal`, or nothing. Every other stage stays derived from
+ * billing, access, and ledger truth, so no admin can make the dashboard claim a
+ * paying customer that Stripe has never heard of. Who set it and when are
+ * recorded on the record and in the audit log.
+ */
+export function setAccessStageOverride(input: {
+  email: string;
+  override: AccountStageOverride | null;
+  updatedBy: string;
+}) {
+  const email = normalizeEmail(input.email);
+  const records = readAccessRecords();
+  const index = records.findIndex((record) => record.email === email);
+  if (index < 0) {
+    throw new Error('existing access record required');
+  }
+
+  const override = input.override === null ? null : normalizeAccountStageOverride(input.override);
+  if (input.override !== null && !override) throw new Error('invalid stage override');
+
+  const existing = records[index];
+  if ((existing.stageOverride || null) === override) return existing;
+
+  const now = new Date().toISOString();
+  const next: AdminAccessRecord = {
+    ...existing,
+    stageOverride: override || undefined,
+    stageOverrideBy: override ? normalizeEmail(input.updatedBy) : undefined,
+    stageOverrideAt: override ? now : undefined,
+    updatedAt: now,
+    updatedBy: input.updatedBy,
+  };
+
+  recordAdminAuditEvent({
+    actorEmail: input.updatedBy,
+    action: 'stage.override.updated',
+    targetEmail: email,
+    metadata: {
+      previousStageOverride: existing.stageOverride || null,
+      stageOverride: override,
+      status: existing.status,
+      role: existing.role,
+    },
+  });
+
   records[index] = next;
   writeAccessRecords(records);
   return next;

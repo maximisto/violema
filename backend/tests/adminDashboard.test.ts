@@ -211,15 +211,19 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(workspaces[0].workspaceId, 'client-acme');
     assert.equal(workspaces[0].planId, 'pro');
     assert.equal(workspaces[0].runSuccessRate, 100);
-    assert.equal(workspaces[0].automationScope, 'global');
-    assert.equal(workspaces[0].globalAutomationCount, workspaces[0].automationCount);
+    // Automation counts are per workspace now. This fixture has no automations
+    // at all, so a scoped count of zero is the honest answer — the old global
+    // count printed the same number on every row.
+    assert.equal(workspaces[0].automationScope, 'workspace');
+    assert.equal(workspaces[0].automationCount, 0);
+    assert.equal(workspaces[0].unattributedAutomationCount, 0);
 
     // Reading a workspace that does not exist must not bring one into being.
     // Asserted as "unchanged" rather than a literal count so it keeps testing
     // that property when fixtures add workspaces.
     const workspaceCountBeforeMissingLookup = workspace.listWorkspaces().length;
     const missingWorkspaceDetail = dashboard.buildWorkspaceAdminDetail('missing-workspace');
-    assert.equal(missingWorkspaceDetail.automationScope, 'global');
+    assert.equal(missingWorkspaceDetail.automationCount, 0);
     assert.equal(workspace.listWorkspaces().length, workspaceCountBeforeMissingLookup);
     assert.equal(billing.listBillingConfigs().length, 1);
 
@@ -367,7 +371,7 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     }));
     writeFileSync(path.join(tempDir, 'platform-credit-ledger.json'), JSON.stringify(ledgerEntries, null, 2));
     const detailWithLedger = dashboard.buildWorkspaceAdminDetail('client-acme');
-    assert.equal(detailWithLedger.automationScope, 'global');
+    assert.equal(detailWithLedger.automationCount, 0);
     assert.equal(detailWithLedger.ledger.length, 100);
     assert.equal(detailWithLedger.ledger[0].id, 'ledger_104');
     assert.ok(detailWithLedger.ledger.some((entry) => entry.id === 'ledger_104'));
@@ -411,10 +415,37 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
       createFailedRun('client-older', `Older failure ${index}`, `2026-06-12T0${index}:00:00.000Z`);
     }
 
-    const overviewWithFailures = dashboard.buildAdminOverview();
-    assert.equal(overviewWithFailures.recentFailedRuns[0].id, newestFailureId);
-    assert.ok(overviewWithFailures.recentFailedRuns.some((failedRun) => failedRun.id === newestFailureId));
+    // The failure feed is windowed now. These fixtures sit in June, so the 24h
+    // default correctly reports nothing — an all-time feed made a fixed bug from
+    // six weeks ago read exactly like one from ten minutes ago.
+    const overviewWithDefaultWindow = dashboard.buildAdminOverview();
+    assert.equal(overviewWithDefaultWindow.windowHours, 24);
+    assert.equal(overviewWithDefaultWindow.recentFailedRuns.length, 0);
+
+    const overviewWithFailures = dashboard.buildAdminOverview({
+      now: new Date('2026-06-13T17:00:00.000Z'),
+      windowHours: 48,
+    });
+    assert.equal(overviewWithFailures.windowHours, 48);
+    assert.equal(overviewWithFailures.recentFailedRuns[0].runId, newestFailureId);
+    assert.ok(overviewWithFailures.recentFailedRuns.some((failedRun) => failedRun.runId === newestFailureId));
     assert.equal(overviewWithFailures.recentFailedRuns.length, 8);
+    // Metadata only: the projected row carries no run metadata at all.
+    assert.deepEqual(
+      Object.keys(overviewWithFailures.recentFailedRuns[0]).sort(),
+      [
+        'automationName',
+        'blockerKeys',
+        'failureKind',
+        'failureSummary',
+        'finishedAt',
+        'runId',
+        'startedAt',
+        'status',
+        'workspaceId',
+        'workspaceName',
+      ],
+    );
 
     workspace.upsertWorkspaceProfile('client-buried', {
       name: 'Buried Client',
@@ -450,11 +481,14 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     }
 
     const buriedDetail = dashboard.buildWorkspaceAdminDetail('client-buried');
-    assert.equal(buriedDetail.runs.some((detailRun) => detailRun.id === buriedFailure.id), false);
+    assert.equal(buriedDetail.runs.some((detailRun) => detailRun.runId === buriedFailure.id), false);
 
-    const overviewWithBuriedFailure = dashboard.buildAdminOverview();
-    assert.equal(overviewWithBuriedFailure.recentFailedRuns[0].id, buriedFailure.id);
-    assert.ok(overviewWithBuriedFailure.recentFailedRuns.some((failedRun) => failedRun.id === buriedFailure.id));
+    const overviewWithBuriedFailure = dashboard.buildAdminOverview({
+      now: new Date('2026-06-14T17:00:00.000Z'),
+      windowHours: 72,
+    });
+    assert.equal(overviewWithBuriedFailure.recentFailedRuns[0].runId, buriedFailure.id);
+    assert.ok(overviewWithBuriedFailure.recentFailedRuns.some((failedRun) => failedRun.runId === buriedFailure.id));
   } finally {
     process.chdir(originalCwd);
     if (originalApprovedEmails === undefined) {
@@ -506,12 +540,24 @@ test('admin route input validation rejects invalid access mutations', async () =
   );
   assert.equal(routes.parseRequiredAdminAccessRole('user'), 'user');
 
+  const betaProgram = await import('../src/betaProgram');
   assert.equal(routes.parseParticipantType(undefined), undefined);
-  assert.equal(routes.parseParticipantType('partner'), 'partner');
-  for (const invalidParticipantType of [null, '', 42, 'tester']) {
+  // Asserted against the canonical set rather than a hardcoded list, so adding a
+  // participant type cannot leave this test passing against a stale expectation.
+  for (const participantType of betaProgram.PARTICIPANT_TYPES) {
+    assert.equal(routes.parseParticipantType(participantType), participantType);
+  }
+  assert.ok(
+    betaProgram.PARTICIPANT_TYPES.includes('team_member')
+    && betaProgram.PARTICIPANT_TYPES.includes('advisor'),
+    'team_member and advisor are the 2026-08-02 identity additions',
+  );
+  // `tester` is deliberately NOT a participant type: "tester" describes where
+  // someone is with us, and that lives on the derived accountStage axis.
+  for (const invalidParticipantType of [null, '', 42, 'tester', 'paying_client']) {
     assert.throws(
       () => routes.parseParticipantType(invalidParticipantType),
-      /participant type must be founder_operator, investor, or partner/i,
+      /participant type must be /i,
     );
   }
 

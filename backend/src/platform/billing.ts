@@ -2,7 +2,13 @@ import path from 'path';
 import { canSpendCredits } from './ledger';
 import { readJsonFile, writeJsonFile } from './jsonStore';
 import { getWorkspaceCreditReserve, getWorkspaceLedgerSummary, listLedgerEntries, addLedgerEntry } from './store';
-import type { BillingPlanId, PlanDefinition, TopUpOffer, WorkspaceBillingConfig } from './types';
+import type {
+  BillingPlanId,
+  CreditLedgerSummary,
+  PlanDefinition,
+  TopUpOffer,
+  WorkspaceBillingConfig,
+} from './types';
 
 export type BillingPlanTier = BillingPlanId;
 export type PlanLimitKind = 'credits' | 'automations' | 'multi_agent' | 'approvals';
@@ -201,8 +207,18 @@ export function getBillingConfig(workspaceId: string): WorkspaceBillingConfig {
   return created;
 }
 
-export function getBillingConfigSnapshot(workspaceId: string): WorkspaceBillingConfig {
-  const existing = listBillingConfigs().find((item) => item.workspaceId === workspaceId);
+/**
+ * The read-only config resolution, over an already-loaded config list.
+ *
+ * Separated from `getBillingConfigSnapshot` so a caller that resolves MANY
+ * workspaces (the admin dashboard) reads the config store once instead of once
+ * per workspace. Same rules, same output.
+ */
+export function selectBillingConfigSnapshot(
+  configs: WorkspaceBillingConfig[],
+  workspaceId: string,
+): WorkspaceBillingConfig {
+  const existing = configs.find((item) => item.workspaceId === workspaceId);
   if (!existing) return getDefaultBillingConfig(workspaceId);
   if (workspaceId === 'purpleorangehq' && existing.referralCode?.startsWith('NEXUS-')) {
     return {
@@ -211,6 +227,10 @@ export function getBillingConfigSnapshot(workspaceId: string): WorkspaceBillingC
     };
   }
   return existing;
+}
+
+export function getBillingConfigSnapshot(workspaceId: string): WorkspaceBillingConfig {
+  return selectBillingConfigSnapshot(listBillingConfigs(), workspaceId);
 }
 
 export function upsertBillingConfig(workspaceId: string, patch: BillingConfigPatch): WorkspaceBillingConfig {
@@ -240,13 +260,21 @@ export function listTopUpOffers(): TopUpOffer[] {
   }));
 }
 
-export function getApplicableTopUpOffer(balanceCredits: number, requiredCredits = 0): TopUpOffer {
+/** Offer selection over an already-loaded catalog. Pure half of `getApplicableTopUpOffer`. */
+export function selectApplicableTopUpOffer(
+  offers: TopUpOffer[],
+  balanceCredits: number,
+  requiredCredits = 0,
+): TopUpOffer {
   const neededCredits = Math.max(0, requiredCredits - balanceCredits);
-  const offers = listTopUpOffers();
   return (
     offers.find((offer) => offer.credits + (offer.bonusCredits || 0) >= neededCredits) ||
     offers[offers.length - 1]
   );
+}
+
+export function getApplicableTopUpOffer(balanceCredits: number, requiredCredits = 0): TopUpOffer {
+  return selectApplicableTopUpOffer(listTopUpOffers(), balanceCredits, requiredCredits);
 }
 
 export function getBillingSourceHint(status: Pick<BillingStatus, 'summary' | 'plan'>): string {
@@ -259,23 +287,38 @@ export function getBillingSourceHint(status: Pick<BillingStatus, 'summary' | 'pl
   return 'Healthy balance.';
 }
 
-export function buildPlanSummary(workspaceId: string, options?: { seedCredits?: boolean }): BillingStatus {
-  const config = options?.seedCredits === false
-    ? getBillingConfigSnapshot(workspaceId)
-    : getBillingConfig(workspaceId);
-  const plan = DEFAULT_PLAN_CATALOG[config.planId];
-  const summary = getWorkspaceLedgerSummary(workspaceId);
-  const statusBase = { summary, plan };
-
+/**
+ * Assemble a billing status from already-resolved parts.
+ *
+ * The impure half (`buildPlanSummary`) reads the config store, the ledger, and
+ * the offer catalog; this half does the arithmetic. Callers holding preloaded
+ * stores compose directly and skip three file reads per workspace.
+ */
+export function composeBillingStatus(input: {
+  config: WorkspaceBillingConfig;
+  summary: CreditLedgerSummary;
+  offers: TopUpOffer[];
+}): BillingStatus {
+  const plan = DEFAULT_PLAN_CATALOG[input.config.planId];
   return {
-    config,
+    config: input.config,
     plan,
-    summary,
-    offers: listTopUpOffers(),
-    topUpOffer: getApplicableTopUpOffer(summary.balanceCredits),
-    sourceHint: getBillingSourceHint(statusBase),
+    summary: input.summary,
+    offers: input.offers,
+    topUpOffer: selectApplicableTopUpOffer(input.offers, input.summary.balanceCredits),
+    sourceHint: getBillingSourceHint({ summary: input.summary, plan }),
     updatedAt: new Date().toISOString(),
   };
+}
+
+export function buildPlanSummary(workspaceId: string, options?: { seedCredits?: boolean }): BillingStatus {
+  return composeBillingStatus({
+    config: options?.seedCredits === false
+      ? getBillingConfigSnapshot(workspaceId)
+      : getBillingConfig(workspaceId),
+    summary: getWorkspaceLedgerSummary(workspaceId),
+    offers: listTopUpOffers(),
+  });
 }
 
 export function calculatePlanLimitState(input: {

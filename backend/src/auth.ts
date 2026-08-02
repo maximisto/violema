@@ -91,7 +91,28 @@ function normalizeWorkspaceIds(value: unknown) {
     .filter(Boolean)));
 }
 
-function normalizeAuthUserRecord(user: AuthUserRecord): AuthUserRecord {
+/**
+ * Resolves an email's participant type from the access store.
+ *
+ * Defaults to a per-email store read. `readUsers` passes a lookup built from a
+ * single read instead: normalizing the user list otherwise re-parsed the whole
+ * access file once per user, and `listAuthUsers()` is on nearly every request.
+ */
+type AccessParticipantTypeLookup = (email: string) => ParticipantType | null;
+
+const readAccessParticipantType: AccessParticipantTypeLookup = (email) => {
+  try {
+    return getAccessRecord(email)?.participantType || null;
+  } catch {
+    // Legacy user migration must remain available if the access store is unavailable.
+    return null;
+  }
+};
+
+function normalizeAuthUserRecord(
+  user: AuthUserRecord,
+  lookupAccessParticipantType: AccessParticipantTypeLookup = readAccessParticipantType,
+): AuthUserRecord {
   const fallbackWorkspaceId = user.role === 'admin' ? DEFAULT_WORKSPACE_ID : deriveUserWorkspaceId(user.id);
   const workspaceIds = normalizeWorkspaceIds(user.workspaceIds);
   const defaultWorkspaceId =
@@ -101,12 +122,7 @@ function normalizeAuthUserRecord(user: AuthUserRecord): AuthUserRecord {
   const nextWorkspaceIds = workspaceIds.includes(defaultWorkspaceId)
     ? workspaceIds
     : [defaultWorkspaceId, ...workspaceIds];
-  let accessParticipantType: ParticipantType | null = null;
-  try {
-    accessParticipantType = getAccessRecord(user.email)?.participantType || null;
-  } catch {
-    // Legacy user migration must remain available if the access store is unavailable.
-  }
+  const accessParticipantType = lookupAccessParticipantType(user.email);
   const participantType = normalizeParticipantType(user.participantType)
     || accessParticipantType
     || defaultParticipantType();
@@ -313,7 +329,25 @@ export function assertEmailApprovedForAccess(email: string) {
 
 function readUsers() {
   const users = readJsonFile<AuthUserRecord[]>(USERS_FILE, []);
-  const normalized = users.map(normalizeAuthUserRecord);
+
+  // One access-store read for the whole list. The per-email variant is still the
+  // default for single-record normalization; here it would be one full file
+  // parse per user, on a call that runs on nearly every request.
+  let participantTypeByEmail: Map<string, ParticipantType> | null = null;
+  try {
+    participantTypeByEmail = new Map(
+      listAdminAccessRecords().map((record) => [record.email, record.participantType]),
+    );
+  } catch {
+    // Legacy user migration must remain available if the access store is
+    // unavailable — same degradation as the per-email lookup.
+  }
+  const resolved = participantTypeByEmail;
+  const lookup: AccessParticipantTypeLookup = resolved
+    ? (email) => resolved.get(email) || null
+    : () => null;
+
+  const normalized = users.map((user) => normalizeAuthUserRecord(user, lookup));
   const needsMigration = JSON.stringify(users) !== JSON.stringify(normalized);
   if (needsMigration) writeUsers(normalized);
   return normalized;
@@ -493,6 +527,13 @@ export function authUserHasCurrentTerms(user: AuthUserRecord) {
 }
 
 export function getAuthUserDefaultWorkspaceId(user: AuthUserRecord) {
+  // Records from `listAuthUsers()` are already normalized. Re-normalizing them
+  // costs an access-store read per user to recompute a value that is already
+  // resolved — which is how the admin participants table became O(users × file).
+  // Same sanitization the normalizer applies, so the answer cannot differ.
+  const stored = typeof user.defaultWorkspaceId === 'string' ? user.defaultWorkspaceId.trim() : '';
+  const sanitized = stored.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+  if (sanitized) return sanitized;
   return normalizeAuthUserRecord(user).defaultWorkspaceId;
 }
 

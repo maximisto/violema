@@ -344,6 +344,21 @@ test('an operator thread reply after Request changes applies the note and blocks
     false,
     'the prompt is consumed exactly once',
   );
+
+  // Requesting changes is a review decision taken outside the dashboard, so it
+  // belongs in the operator's audit trail — with the note itself left out.
+  const access = await import('../src/adminAccessStore');
+  const changeAudit = access.listAdminAuditEvents(20)
+    .find((event) => event.action === 'review.changes_requested');
+  assert.ok(changeAudit, 'a Slack change request must leave an admin audit row');
+  assert.equal(changeAudit.workspaceId, context.workspaceId);
+  assert.equal((changeAudit.metadata as { slackUserId?: string })?.slackUserId, OPERATOR_ID);
+  assert.equal((changeAudit.metadata as { runId?: string })?.runId, context.runId);
+  assert.equal(
+    JSON.stringify(changeAudit).includes('Tighten the revenue section'),
+    false,
+    'the reviewer note is content and must not reach the admin audit log',
+  );
 }));
 
 test('a bystander thread reply is ignored and leaves the review open', async () => withSlackEventsServer(async (context) => {

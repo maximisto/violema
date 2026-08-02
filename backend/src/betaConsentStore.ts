@@ -174,3 +174,20 @@ export function getCurrentBetaConsent(email: string): BetaConsentReceipt | null 
 export function hasCurrentBetaConsent(email: string): boolean {
   return getCurrentBetaConsent(email) !== null;
 }
+
+/**
+ * Every email holding consent to the CURRENT terms, from a single store read.
+ *
+ * `hasCurrentBetaConsent` re-reads the receipt file per email, which the admin
+ * participants table multiplies by the whole user base on every page load.
+ * Same predicate — version AND digest must both match today's terms — expressed
+ * once over the full list.
+ */
+export function listCurrentBetaConsentEmails(): Set<string> {
+  return new Set(
+    readConsentReceipts()
+      .filter((receipt) => receipt.termsVersion === CURRENT_BETA_TERMS_VERSION
+        && receipt.termsDigest === CURRENT_BETA_TERMS_DIGEST)
+      .map((receipt) => receipt.email),
+  );
+}

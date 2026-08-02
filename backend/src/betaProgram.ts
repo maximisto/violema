@@ -1,7 +1,30 @@
 import crypto from 'crypto';
 
-export type ParticipantType = 'founder_operator' | 'investor' | 'partner';
-export const PARTICIPANT_TYPES: ParticipantType[] = ['founder_operator', 'investor', 'partner'];
+/**
+ * WHO SOMEONE IS. Classification only — a participant type never grants
+ * authority and never bypasses a gate. `role` (user | admin) remains the sole
+ * authorization axis, and WHERE an account stands with us is the separate,
+ * derived `accountStage` axis (platform/accountStage.ts).
+ *
+ * `team_member` is someone on a customer's team who is not the founder.
+ * `advisor` is an outside advisor. Both were added 2026-08-02. Every value
+ * stored before that date is still a member of this set, so nothing needs
+ * migrating, and `normalizeParticipantType` keeps bucketing anything unknown to
+ * `defaultParticipantType()`.
+ */
+export type ParticipantType =
+  | 'founder_operator'
+  | 'investor'
+  | 'partner'
+  | 'team_member'
+  | 'advisor';
+export const PARTICIPANT_TYPES: ParticipantType[] = [
+  'founder_operator',
+  'investor',
+  'partner',
+  'team_member',
+  'advisor',
+];
 // v2 (2026-08-02): adds explicit acknowledgment that missions can create and
 // update files in storage the user connects (the mission library in Google
 // Drive). Material change to what users consent to → version bump, so the

@@ -36,7 +36,7 @@ import {
   upsertAuthUser,
   verifyAdminMagicLoginToken,
 } from './auth';
-import { getAccessRecord, syncVerifiedAccessEvidence } from './adminAccessStore';
+import { getAccessRecord, recordAdminAuditEvent, syncVerifiedAccessEvidence } from './adminAccessStore';
 import { registerAdminRoutes } from './adminRoutes';
 import {
   assertAuthenticatedAdminAccess,
@@ -98,10 +98,12 @@ import {
 } from './platform/provenance';
 import { buildGenerateReportResult } from './platform/reportGeneration';
 import {
+  applyRunWarningsToReviewGate,
   buildAutomationPreflightReport,
   classifyAutomationRunOutcome,
   validateAutomationDeliveryDraft,
 } from './platform/automationLifecycle';
+import { resolveAutomationStepSeverity } from './platform/stepSeverity';
 import {
   AUTOMATION_SUMMARY_MAX_TOKENS,
   AUTOMATION_SUMMARY_WORD_LIMIT,
@@ -1267,6 +1269,45 @@ function resolveSlackActor(slackUserId: string): ReviewActor {
   };
 }
 
+/**
+ * Record a Slack-originated review decision in the ADMIN audit log.
+ *
+ * The workflow ledger already records the approval for the tenant. This is the
+ * operator-side trail: approving from a Slack card sends something real, and
+ * without this the admin audit view could show every dashboard decision and
+ * none of the chat ones — the surface most decisions actually come from.
+ *
+ * Identifiers only. `actorEmail` prefers the mapped account and falls back to
+ * the Slack user id, so the row is never anonymous. No note, no body, no draft.
+ */
+function recordSlackReviewAudit(input: {
+  action: 'review.approved' | 'review.changes_requested';
+  actor: ReviewActor;
+  workspaceId: string;
+  automationId: string;
+  runId: string;
+  missionName: string;
+}) {
+  try {
+    recordAdminAuditEvent({
+      actorEmail: input.actor.email || `slack:${input.actor.slackUserId || 'unknown'}`,
+      action: input.action,
+      workspaceId: input.workspaceId,
+      metadata: {
+        surface: 'slack',
+        slackUserId: input.actor.slackUserId || null,
+        automationId: input.automationId,
+        runId: input.runId,
+        missionName: input.missionName,
+      },
+    });
+  } catch (error) {
+    // The decision already happened; a failed audit write must not be reported
+    // to the operator as a failed approval.
+    console.error('[slack] admin audit write failed', error);
+  }
+}
+
 function buildSlackOperatorConsoleData(workspaceId: string) {
   return {
     automations: listAutomations().filter((automation) => automationBelongsToWorkspace(automation, workspaceId)),
@@ -1443,6 +1484,15 @@ async function handleSlackChangeNoteReply(input: {
     await replyInSlack(input.channel, describeReviewFailureForSlack(result), input.threadTs);
     return;
   }
+
+  recordSlackReviewAudit({
+    action: 'review.changes_requested',
+    actor,
+    workspaceId: pending.workspaceId,
+    automationId: pending.automationId,
+    runId: pending.runId,
+    missionName: result.context.automation.name,
+  });
 
   await updateSlackReviewCard({
     channel: pending.channel,
@@ -3166,6 +3216,7 @@ function createAutomationStepDefinition(
       estimatedCredits: estimateAutomationStepCredits('query', 'micro', { toolCalls: 1 }),
       toolName: 'query_data',
       inputs: queryDataInput,
+      stepSeverity: resolveAutomationStepSeverity({ kind: 'query', inputs: queryDataInput }),
     };
   }
 
@@ -3290,6 +3341,7 @@ function createAutomationStepDefinitionFromPersisted(
       estimatedCredits: estimateAutomationStepCredits('query', 'micro', { toolCalls: 1 }),
       toolName: 'query_data',
       inputs: queryDataInput,
+      stepSeverity: resolveAutomationStepSeverity({ kind: 'query', inputs: queryDataInput }),
     };
   }
 
@@ -4067,6 +4119,9 @@ async function executeAutomationCore(
       modelSource: stepModelSource,
       modelSourceLabel: getModelSourceLabel(stepModelSource),
       estimatedCredits: step.estimatedCredits,
+      // Fail closed: a plan step that arrived without a severity is critical,
+      // so an unclassified failure blocks exactly as it does today.
+      stepSeverity: step.stepSeverity ?? 'critical',
       status: 'running',
       startedAt: new Date().toISOString(),
     };
@@ -5026,6 +5081,9 @@ export async function runAutomation(automation: {
       deliveryError: execution.deliveryError,
       stepExecutions: execution.stepExecutions,
     });
+    // An approver decides from the review gate, so what the run could not finish
+    // has to be on it before anything is persisted or announced.
+    applyRunWarningsToReviewGate(execution.artifacts, outcome.runWarnings);
     for (const event of finalizePendingApprovalRequestedLedgerEvents({
       outcome,
       pendingEvents: execution.pendingApprovalRequestedEvents,
@@ -5083,6 +5141,9 @@ export async function runAutomation(automation: {
         delivery: execution.delivery,
         deliveryError: execution.deliveryError,
         reviewRequired: outcome.reviewRequired,
+        // Surfaced beside reviewRequired rather than only inside runOutcome, so
+        // review surfaces can render "delivered, but not archived" directly.
+        runWarnings: outcome.runWarnings,
         runOutcome: outcome,
       },
     });
@@ -5123,6 +5184,7 @@ export async function runAutomation(automation: {
         workerTopology: applyWorkerRuntimeActivity(execution.plan.topology, execution.stepExecutions),
         deliveryError: execution.deliveryError,
         reviewRequired: outcome.reviewRequired,
+        runWarnings: outcome.runWarnings,
         runOutcome: outcome,
       },
     });
@@ -6468,6 +6530,21 @@ app.post('/api/admin/test-credits', (req: Request, res: Response) => {
       },
     });
 
+    // Granting credits is a privileged mutation of a tenant's balance. It was
+    // the one admin action leaving no trail, so the audit log could not answer
+    // "who topped this workspace up, when, and by how much".
+    recordAdminAuditEvent({
+      actorEmail: adminEmail,
+      action: 'credits.adjusted',
+      workspaceId,
+      metadata: {
+        amount,
+        ledgerEntryId: entry.id,
+        source: 'admin_test_credits',
+        testingOnly: true,
+      },
+    });
+
     res.json({
       ok: true,
       entry,
@@ -6634,6 +6711,15 @@ async function handleSlackApproveInteraction(input: {
     await replyInSlack(input.channel, detail, input.messageTs);
     return;
   }
+
+  recordSlackReviewAudit({
+    action: 'review.approved',
+    actor,
+    workspaceId: input.workspaceId,
+    automationId: input.automationId,
+    runId: input.runId,
+    missionName: result.context.automation.name,
+  });
 
   const target = typeof result.receipt.deliveryTarget === 'string' ? result.receipt.deliveryTarget : 'the configured destination';
   await updateSlackReviewCard({

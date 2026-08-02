@@ -1,5 +1,6 @@
-import { DEFAULT_WORKSPACE_ID } from './workspace';
-import { isDemoWorkspace } from './demoWorkspace';
+import { DEFAULT_WORKSPACE_ID, listWorkspaces } from './workspace';
+import { isDemoWorkspace, listDemoWorkspaceIds } from './demoWorkspace';
+import type { WorkspaceProfile } from './types';
 
 /**
  * Tenancy boundary.
@@ -53,6 +54,40 @@ export function usesInternalDemoRouting(workspaceId: string | null | undefined):
 /** Inverse of `usesInternalDemoRouting`, for call sites that read better positively. */
 export function isTenantWorkspace(workspaceId: string | null | undefined): boolean {
   return !usesInternalDemoRouting(workspaceId);
+}
+
+/**
+ * The same predicate as `usesInternalDemoRouting`, resolved ONCE for a batch.
+ *
+ * `isDemoWorkspace` re-reads the whole workspace store on every call, which is
+ * fine for a one-off check and quadratic in a loop: normalizing N automations or
+ * rendering N workspace rows meant N full file reads. Callers that ask the
+ * question repeatedly build a resolver first; callers that ask once keep using
+ * `usesInternalDemoRouting`.
+ *
+ * The rule stays defined in exactly one module — this one — so the batch and
+ * single-shot answers cannot drift.
+ */
+export function createInternalDemoRoutingResolver(
+  /** Already-loaded profiles, for a caller that has read the store anyway. */
+  workspaces?: WorkspaceProfile[],
+): (workspaceId: string | null | undefined) => boolean {
+  const demoIds = new Set(listDemoWorkspaceIds());
+  try {
+    for (const profile of workspaces ?? listWorkspaces()) {
+      if (profile.metadata?.demo === true) demoIds.add(profile.id);
+    }
+  } catch {
+    // Mirrors `isDemoWorkspace`, which treats an unreadable store as "not a demo
+    // workspace" rather than failing the caller.
+  }
+
+  return (workspaceId) => {
+    const id = normalizeWorkspaceId(workspaceId);
+    if (!id) return true;
+    if (id === DEFAULT_WORKSPACE_ID) return true;
+    return demoIds.has(id);
+  };
 }
 
 /**

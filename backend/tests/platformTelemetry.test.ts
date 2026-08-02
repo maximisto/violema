@@ -297,6 +297,53 @@ function poisonedLedgerEvents() {
   ];
 }
 
+/**
+ * An account record carries two things a workspace record does not: an email
+ * address, and an operator-written rationale for its stage. Both are poisoned
+ * here, alongside slug-shaped unknowns on each closed-set axis, so the
+ * projection has to prove it reads neither and buckets rather than echoes.
+ */
+function poisonedAccounts() {
+  return [
+    {
+      email: SENTINEL_EMAIL,
+      workspaceId: DEFAULT_WORKSPACE,
+      role: 'user',
+      participantType: 'team_member',
+      accountStage: { stage: 'paying', reason: SENTINEL_TEXT, derivedFrom: [SENTINEL_TEXT] },
+      activated: true,
+      hasTrialGrant: true,
+      stageOverride: null,
+      stageOverrideBy: SENTINEL_EMAIL,
+      stageOverrideAt: '2026-07-29T00:00:00.000Z',
+    },
+    {
+      email: SENTINEL_EMAIL,
+      workspaceId: 'workspace_acme',
+      role: 'user',
+      participantType: SENTINEL_SLUG,
+      accountStage: { stage: SENTINEL_SLUG, reason: SENTINEL_TEXT, derivedFrom: [SENTINEL_SLUG] },
+      activated: false,
+      hasTrialGrant: true,
+      stageOverride: null,
+      stageOverrideBy: null,
+      stageOverrideAt: null,
+    },
+    {
+      email: SENTINEL_EMAIL,
+      workspaceId: 'workspace_stalled',
+      role: 'user',
+      participantType: 'advisor',
+      accountStage: { stage: 'applicant', reason: SENTINEL_TEXT, derivedFrom: [SENTINEL_TEXT] },
+      activated: false,
+      hasTrialGrant: false,
+      stageOverride: null,
+      stageOverrideBy: null,
+      stageOverrideAt: null,
+    },
+  ];
+}
+
 async function buildPoisonedSnapshot() {
   const telemetry = await import('../src/platform/platformTelemetry');
   const { buildFabricatedEvidenceDeliveryError } = await import('../src/platform/provenance');
@@ -312,6 +359,7 @@ async function buildPoisonedSnapshot() {
     taskRuns: poisonedTaskRuns(fabricatedError) as never,
     ledger: poisonedCreditLedger() as never,
     ledgerEvents: poisonedLedgerEvents() as never,
+    accounts: poisonedAccounts() as never,
     now: NOW,
   });
 }
@@ -336,6 +384,17 @@ test('poisoned store records cannot leak into the telemetry snapshot', async () 
     snapshot.reliability.topBlockers.some((blocker) => blocker.key === 'unrecognized_blocker'),
     'Expected an unknown blocker key to bucket.',
   );
+  const stages = snapshot.stageFunnel.byStage.map((bucket) => bucket.stage);
+  assert.ok(stages.includes('unrecognized_stage'), 'Expected an unknown account stage to bucket.');
+  assert.ok(
+    snapshot.stageFunnel.byParticipantType.some(
+      (bucket) => bucket.participantType === 'unrecognized_participant_type',
+    ),
+    'Expected an unknown participant type to bucket.',
+  );
+  // The account fixtures were counted, not dropped — the sentinel is absent
+  // because only three allowlisted fields crossed the boundary.
+  assert.equal(snapshot.stageFunnel.totalAccounts, 3);
 });
 
 test('telemetry snapshot aggregates the window into a well-formed shape', async () => {
@@ -366,6 +425,40 @@ test('telemetry snapshot aggregates the window into a well-formed shape', async 
   // 58 days plus 4 minutes, rounded to one decimal.
   assert.equal(snapshot.activation.medianHoursToFirstDelivery, 1392.1);
   assert.deepEqual(snapshot.activation.stalledWorkspaceIds, ['workspace_acme', 'workspace_stalled']);
+
+  // Stage funnel. Every known stage is emitted, including zeroes, so the weekly
+  // brief keeps a stable shape; the bucket appears only because a fixture
+  // carried an unknown stage.
+  assert.deepEqual(
+    snapshot.stageFunnel.byStage.map((bucket) => bucket.stage),
+    ['internal', 'applicant', 'trial', 'paying', 'lapsed', 'unrecognized_stage'],
+  );
+  const payingBucket = snapshot.stageFunnel.byStage.find((bucket) => bucket.stage === 'paying');
+  // The paying account sits on the default workspace, which has a succeeded run.
+  assert.deepEqual(payingBucket, { stage: 'paying', accounts: 1, activated: 1, activationRatePct: 100 });
+  const applicantBucket = snapshot.stageFunnel.byStage.find((bucket) => bucket.stage === 'applicant');
+  // workspace_stalled never ran, so its account is in-stage but not activated.
+  assert.deepEqual(applicantBucket, { stage: 'applicant', accounts: 1, activated: 0, activationRatePct: 0 });
+  assert.deepEqual(
+    snapshot.stageFunnel.byStage.find((bucket) => bucket.stage === 'trial'),
+    { stage: 'trial', accounts: 0, activated: 0, activationRatePct: 0 },
+  );
+  // Activation is recomputed from run status, not trusted from the account
+  // record: the acme fixture claims `activated: false` while its workspace has
+  // a succeeded run, and the funnel follows the run.
+  assert.deepEqual(
+    snapshot.stageFunnel.byStage.find((bucket) => bucket.stage === 'unrecognized_stage'),
+    { stage: 'unrecognized_stage', accounts: 1, activated: 1, activationRatePct: 100 },
+  );
+
+  // Two accounts hold a trial grant; one of them is now paying.
+  assert.equal(snapshot.stageFunnel.trialGranted, 2);
+  assert.equal(snapshot.stageFunnel.trialConvertedToPaying, 1);
+  assert.equal(snapshot.stageFunnel.trialToPayingConversionPct, 50);
+  assert.deepEqual(
+    [...snapshot.stageFunnel.byParticipantType].map((bucket) => bucket.participantType).sort(),
+    ['advisor', 'team_member', 'unrecognized_participant_type'],
+  );
 
   const founder = snapshot.reliability.byWorkflowId.find(
     (entry) => entry.workflowId === 'weekly-founder-update',

@@ -410,6 +410,30 @@ test('an operator approval delivers, updates the card, and records the actor wit
       'ledger metadata must never carry the brief body',
     );
   }
+
+  // The workflow ledger is the TENANT's record. The admin audit log is the
+  // operator's, and a Slack approval used to leave nothing in it at all — so
+  // the audit view could show every dashboard decision and none of the chat
+  // ones, which is where most decisions are actually made.
+  const access = await import('../src/adminAccessStore');
+  const approvalAudit = await waitFor(
+    () => access.listAdminAuditEvents(20).find((event) => event.action === 'review.approved'),
+    'the admin audit event for a Slack approval',
+  );
+  assert.equal(approvalAudit.workspaceId, context.workspaceId);
+  assert.equal(
+    (approvalAudit.metadata as { slackUserId?: string })?.slackUserId,
+    OPERATOR_ID,
+    'the audit row names the Slack operator who clicked',
+  );
+  assert.equal((approvalAudit.metadata as { runId?: string })?.runId, context.runId);
+  assert.equal((approvalAudit.metadata as { surface?: string })?.surface, 'slack');
+  assert.ok(approvalAudit.actorEmail, 'an audit row is never anonymous');
+  assert.equal(
+    JSON.stringify(approvalAudit).includes(BRIEF_MARKER),
+    false,
+    'the admin audit row must never carry the brief body',
+  );
 }));
 
 test('a second approval reports the review as already resolved and does not resend', async () => withSlackReviewServer(async (context) => {

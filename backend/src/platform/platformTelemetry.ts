@@ -43,7 +43,10 @@
 
 import { getPlatformState } from './store';
 import { listWorkspaces } from './workspace';
+import { listAccountStageRecords } from '../accountStageDirectory';
 import { readAllWorkflowLedgerEvents } from '../integrationGateway/auditLog';
+import { ACCOUNT_STAGES, isActivatingRunStatus } from './accountStage';
+import { PARTICIPANT_TYPES } from '../betaProgram';
 import { isFabricatedEvidenceDeliveryError } from './provenance';
 import type { CreditLedgerEntry, TaskRecord, TaskRunRecord, WorkspaceProfile } from './types';
 import type { WorkflowLedgerEvent } from '../integrationGateway/types';
@@ -103,7 +106,7 @@ const UNRECOGNIZED_WORKFLOW = 'unrecognized_workflow';
  * gate's own synthetic keys. Blocker labels and details are generated prose
  * about the workspace's setup and are never read.
  */
-const KNOWN_BLOCKER_KEYS = new Set<string>([
+export const KNOWN_READINESS_BLOCKER_KEYS: ReadonlySet<string> = new Set<string>([
   ...KNOWN_SOURCE_SLUGS,
   'unknown_source',
   'slack',
@@ -112,7 +115,18 @@ const KNOWN_BLOCKER_KEYS = new Set<string>([
   'delivery_target',
   'model_provider',
 ]);
+const KNOWN_BLOCKER_KEYS = KNOWN_READINESS_BLOCKER_KEYS;
 const UNRECOGNIZED_BLOCKER = 'unrecognized_blocker';
+
+/**
+ * Closed allowlists for the two account axes. Both are already closed sets in
+ * their own modules; re-resolving them here means a value that somehow reached
+ * the store outside those sets buckets instead of riding out in the brief.
+ */
+const KNOWN_ACCOUNT_STAGES = new Set<string>(ACCOUNT_STAGES);
+const UNRECOGNIZED_STAGE = 'unrecognized_stage';
+const KNOWN_PARTICIPANT_TYPES = new Set<string>(PARTICIPANT_TYPES);
+const UNRECOGNIZED_PARTICIPANT_TYPE = 'unrecognized_participant_type';
 
 // ───────────────────────────────────────────────────────────── output shape ──
 
@@ -217,6 +231,25 @@ export interface TelemetryCreditBurn {
   byWorkflowId: TelemetryCreditBurnBucket[];
 }
 
+export interface TelemetryStageBucket {
+  stage: string;
+  accounts: number;
+  /** Accounts in this stage whose workspace has completed at least one run. */
+  activated: number;
+  activationRatePct: number;
+}
+
+export interface TelemetryStageFunnel {
+  totalAccounts: number;
+  byStage: TelemetryStageBucket[];
+  byParticipantType: Array<{ participantType: string; accounts: number }>;
+  /** Accounts that ever received the one-time beta trial grant. */
+  trialGranted: number;
+  /** Of those, the ones now on an active subscription. */
+  trialConvertedToPaying: number;
+  trialToPayingConversionPct: number;
+}
+
 export interface TelemetryDelta {
   metric: string;
   current: number;
@@ -230,6 +263,7 @@ export interface PlatformTelemetrySnapshot {
   window: TelemetryWindow;
   workspaces: TelemetryWorkspaceCounts;
   activation: TelemetryActivationFunnel;
+  stageFunnel: TelemetryStageFunnel;
   reliability: TelemetryReliability;
   review: TelemetryReviewOutcomes;
   creditBurn: TelemetryCreditBurn;
@@ -288,6 +322,13 @@ interface CreditEntryFacts {
   workspaceId: string;
   deltaCredits: number;
   createdAtMs: number;
+}
+
+interface AccountFacts {
+  workspaceId: string;
+  stage: string;
+  participantType: string;
+  hasTrialGrant: boolean;
 }
 
 // ─────────────────────────────────────────────────────────── typed readers ──
@@ -450,6 +491,32 @@ function projectLedgerEvent(event: WorkflowLedgerEvent): LedgerEventFacts | null
   };
 }
 
+/**
+ * An account carries the two things a workspace record does not: an email and an
+ * operator-written stage rationale. Neither is read. Exactly four fields cross
+ * this boundary — an opaque workspace handle, two closed-set enums, and a
+ * boolean — so `email`, `accountStage.reason`, `accountStage.derivedFrom`, and
+ * `stageOverrideBy` cannot reach the brief even though they sit on the record.
+ */
+function projectAccount(value: unknown): AccountFacts | null {
+  const account = readRecord(value);
+  if (!account) return null;
+  const workspaceId = readIdentifier(account.workspaceId);
+  if (!workspaceId) return null;
+
+  const stage = readRecord(account.accountStage);
+  return {
+    workspaceId,
+    stage: readEnum(stage?.stage, KNOWN_ACCOUNT_STAGES, UNRECOGNIZED_STAGE),
+    participantType: readEnum(
+      account.participantType,
+      KNOWN_PARTICIPANT_TYPES,
+      UNRECOGNIZED_PARTICIPANT_TYPE,
+    ),
+    hasTrialGrant: readBoolean(account.hasTrialGrant) === true,
+  };
+}
+
 function projectCreditEntry(entry: CreditLedgerEntry): CreditEntryFacts | null {
   const workspaceId = readIdentifier(entry?.workspaceId);
   if (!workspaceId) return null;
@@ -499,12 +566,24 @@ function delta(metric: string, current: number, prior: number): TelemetryDelta {
 
 // ──────────────────────────────────────────────────────────────── composer ──
 
+/**
+ * Only the fields the funnel reads are declared. The collector returns a wider
+ * record; the projection below is what decides what may be seen.
+ */
+export interface TelemetryAccountInput {
+  workspaceId: string;
+  accountStage: { stage: string };
+  participantType: string;
+  hasTrialGrant: boolean;
+}
+
 export interface PlatformTelemetryComposeInput {
   workspaces: WorkspaceProfile[];
   tasks: TaskRecord[];
   taskRuns: TaskRunRecord[];
   ledger: CreditLedgerEntry[];
   ledgerEvents: WorkflowLedgerEvent[];
+  accounts?: TelemetryAccountInput[];
   now?: Date;
 }
 
@@ -532,6 +611,9 @@ export function composePlatformTelemetrySnapshot(
   const creditEntries = input.ledger
     .map(projectCreditEntry)
     .filter((item): item is CreditEntryFacts => Boolean(item));
+  const accounts = (input.accounts || [])
+    .map(projectAccount)
+    .filter((item): item is AccountFacts => Boolean(item));
 
   const runsInWindow = runs.filter((run) => inWindow(run.startedAtMs, fromMs, toMs));
   const runsInPriorWindow = runs.filter((run) => inWindow(run.startedAtMs, priorFromMs, fromMs));
@@ -609,6 +691,65 @@ export function composePlatformTelemetrySnapshot(
     medianHoursToFirstDelivery: medianHours === null ? null : round(medianHours),
     stalledWorkspaceIds: stalledWorkspaceIds.slice(0, MAX_LISTED_WORKSPACES),
     stalledWorkspaceCount: stalledWorkspaceIds.length,
+  };
+
+  // ── account stage funnel
+  //
+  // Activation is recomputed here from run status rather than trusted from the
+  // account record, so the brief and the admin filter cannot drift apart: both
+  // resolve through `isActivatingRunStatus`.
+  const activatedWorkspaces = new Set(
+    runs.filter((run) => isActivatingRunStatus(run.status)).map((run) => run.workspaceId),
+  );
+
+  const stageAccountCounts = new Map<string, number>();
+  const stageActivatedCounts = new Map<string, number>();
+  const participantTypeCounts = new Map<string, number>();
+  let trialGranted = 0;
+  let trialConvertedToPaying = 0;
+
+  for (const account of accounts) {
+    stageAccountCounts.set(account.stage, (stageAccountCounts.get(account.stage) || 0) + 1);
+    if (activatedWorkspaces.has(account.workspaceId)) {
+      stageActivatedCounts.set(account.stage, (stageActivatedCounts.get(account.stage) || 0) + 1);
+    }
+    participantTypeCounts.set(
+      account.participantType,
+      (participantTypeCounts.get(account.participantType) || 0) + 1,
+    );
+    // Conversion is measured against the trial grant that actually happened, not
+    // against a remembered stage transition — there is no stage history store,
+    // and inventing one would be the fabrication this module exists to avoid.
+    if (account.hasTrialGrant) {
+      trialGranted += 1;
+      if (account.stage === 'paying') trialConvertedToPaying += 1;
+    }
+  }
+
+  // Every known stage is emitted, including zeroes, so the weekly brief has a
+  // stable shape and a stage emptying out reads as a change rather than a gap.
+  const stageKeys = [
+    ...ACCOUNT_STAGES.map((stage) => String(stage)),
+    ...(stageAccountCounts.has(UNRECOGNIZED_STAGE) ? [UNRECOGNIZED_STAGE] : []),
+  ];
+  const stageFunnel: TelemetryStageFunnel = {
+    totalAccounts: accounts.length,
+    byStage: stageKeys.map((stage) => {
+      const stageAccounts = stageAccountCounts.get(stage) || 0;
+      const stageActivated = stageActivatedCounts.get(stage) || 0;
+      return {
+        stage,
+        accounts: stageAccounts,
+        activated: stageActivated,
+        activationRatePct: ratePct(stageActivated, stageAccounts),
+      };
+    }),
+    byParticipantType: [...participantTypeCounts.entries()]
+      .map(([participantType, count]) => ({ participantType, accounts: count }))
+      .sort((left, right) => right.accounts - left.accounts),
+    trialGranted,
+    trialConvertedToPaying,
+    trialToPayingConversionPct: ratePct(trialConvertedToPaying, trialGranted),
   };
 
   // ── reliability by workflow
@@ -813,6 +954,7 @@ export function composePlatformTelemetrySnapshot(
     },
     workspaces: workspaceCounts,
     activation,
+    stageFunnel,
     reliability: { byWorkflowId, bySource, byStepKind, topBlockers },
     review,
     creditBurn,
@@ -821,8 +963,9 @@ export function composePlatformTelemetrySnapshot(
       'Operational metadata only. No artifact contents, drafts, summaries, integration result data, or user-authored text is aggregated here.',
       'A workspace counts as connected once it produces at least one successful LIVE data read — a working connection, not merely a saved credential.',
       'A delivery is an externally executed send after approval, not a prepared draft.',
-      `Source slugs, workflow ids, and blocker keys resolve against a closed allowlist; unrecognized values bucket to "${UNRECOGNIZED_SOURCE}" / "${UNRECOGNIZED_WORKFLOW}" / "${UNRECOGNIZED_BLOCKER}" rather than being echoed.`,
-      'Reliability, credit burn, and review counts cover the trailing window; activation counts are cumulative.',
+      `Source slugs, workflow ids, blocker keys, account stages, and participant types resolve against a closed allowlist; unrecognized values bucket to "${UNRECOGNIZED_SOURCE}" / "${UNRECOGNIZED_WORKFLOW}" / "${UNRECOGNIZED_BLOCKER}" / "${UNRECOGNIZED_STAGE}" / "${UNRECOGNIZED_PARTICIPANT_TYPE}" rather than being echoed.`,
+      'Account stage is derived from billing, access, and ledger truth, never hand-set. Trial-to-paying conversion counts accounts that received the one-time trial grant and now hold an active subscription; there is no stage-transition history, so it is a current-state measure, not a cohort.',
+      'Reliability, credit burn, and review counts cover the trailing window; activation and stage-funnel counts are cumulative.',
     ],
   };
 }
@@ -840,6 +983,7 @@ export function buildPlatformTelemetrySnapshot(input?: { now?: Date }): Platform
     taskRuns: state.taskRuns,
     ledger: state.ledger,
     ledgerEvents: readAllWorkflowLedgerEvents(),
+    accounts: listAccountStageRecords(),
     now: input?.now,
   });
 }

@@ -45,6 +45,15 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 # GitHub, Linear, Notion, HubSpot). Unset = connect returns 503 and partner-reading
 # workflows stay blocked; nothing falls back to fake data.
 COMPOSIO_API_KEY=your_composio_api_key
+# Optional, one per toolkit: pin which auth config new connections are opened
+# against. A Composio account can hold several auth configs for the same toolkit,
+# and a stale or read-only one silently cripples every connection made through it
+# — the UI still says "connected", but the workflow has no permission to read what
+# it needs. Connections normally pick the Composio-managed config automatically;
+# set this only to force a specific one. A set-but-unknown id fails the connect
+# outright rather than falling back: a silently-wrong auth config is the bug this
+# variable exists to prevent, not one it should reintroduce.
+# COMPOSIO_AUTH_CONFIG_GOOGLEDRIVE=ac_your_auth_config_id
 # Where Composio returns the user after OAuth. Server-derived on purpose — never
 # taken from a request header. Defaults to https://violema.com when NODE_ENV=production.
 APP_PUBLIC_ORIGIN=https://violema.com
