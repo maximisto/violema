@@ -112,6 +112,27 @@ export const INTEGRATION_DEFINITIONS = {
     capabilities: ['List recently modified files', 'Report file names and modified times', 'Link documents as supporting evidence'],
     boundaries: ['Read-only — Violema never edits, moves, or deletes files', 'File metadata only; document contents are not copied into the ledger', 'Supporting integration — a Weekly Founder Update still runs without it'],
   },
+  slack: {
+    id: 'slack',
+    label: 'Slack',
+    detail: 'Where your recurring updates get delivered',
+    description: 'Connect your own Slack so Violema delivers approved updates into your workspace, posting as an app you authorized.',
+    category: 'core',
+    status: 'ready',
+    // Composio ships `slack` (posts as the connected user) and `slackbot`
+    // (posts as the connected app). Violema delivers as an app, so the connect
+    // flow offers `slackbot`; `slackDelivery` still accepts either if a
+    // workspace already connected one.
+    connectionMethod: 'partner',
+    partnerAppName: 'slackbot',
+    credentialFields: [],
+    capabilities: ['Deliver approved updates to a channel you choose', 'Thread long briefs under one message'],
+    boundaries: [
+      'Delivery only — Violema never reads your Slack history through this connection',
+      'Violema never posts from its own Slack workspace on your behalf',
+      'Nothing is sent until the run is approved',
+    ],
+  },
   notion: {
     id: 'notion',
     label: 'Notion',
@@ -287,6 +308,21 @@ const PARTNER_APP_SLUGS: string[] = INTEGRATION_PROVIDERS.map(
   .filter((slug): slug is NonNullable<typeof slug> => Boolean(slug));
 
 /**
+ * Catalog id → toolkit slug, for providers whose public id differs from the
+ * Composio toolkit behind it. `slack` is the first: the product says "Slack",
+ * Composio wants `slackbot`. For every other provider the two coincide, so this
+ * lookup is a no-op that keeps `resolvePartnerAppSlug` honest as they diverge.
+ */
+const PARTNER_APP_SLUG_BY_PROVIDER_ID = new Map<string, string>(
+  INTEGRATION_PROVIDERS.map((provider) => INTEGRATION_DEFINITIONS[provider])
+    .filter((definition) => 'partnerAppName' in definition && definition.partnerAppName)
+    .map((definition) => [
+      normalizeAppName(definition.id),
+      ('partnerAppName' in definition ? definition.partnerAppName : '') as string,
+    ]),
+);
+
+/**
  * Resolve whatever the client sent — a Violema source id, a toolkit slug, or a
  * punctuated variant — to the toolkit slug the connect/disconnect endpoints
  * should act on. Returns `null` for anything not in the catalog so the caller
@@ -298,12 +334,22 @@ export function resolvePartnerAppSlug(input: string | null | undefined): string 
   if (typeof input !== 'string') return null;
   const key = normalizeAppName(input);
   if (!key) return null;
+  // A catalog id wins over a raw slug match so `slack` connects the `slackbot`
+  // toolkit Violema actually delivers through.
+  const byProviderId = PARTNER_APP_SLUG_BY_PROVIDER_ID.get(key);
+  if (byProviderId) return byProviderId;
   return PARTNER_APP_SLUGS.find((slug) => normalizeAppName(slug) === key) ?? null;
 }
 
 /** Sorted list of accepted connect/disconnect identifiers, for 400 responses. */
 export function listPartnerAppOptions(): string[] {
-  return Array.from(new Set<string>([...listPartnerConnectOptions(), ...PARTNER_APP_SLUGS])).sort();
+  return Array.from(
+    new Set<string>([
+      ...listPartnerConnectOptions(),
+      ...PARTNER_APP_SLUGS,
+      ...PARTNER_APP_SLUG_BY_PROVIDER_ID.keys(),
+    ]),
+  ).sort();
 }
 
 export function buildIntegrationCatalog(input: {

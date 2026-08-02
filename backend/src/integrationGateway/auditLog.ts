@@ -103,6 +103,18 @@ export function appendIntegrationQueryLedgerEvent(
   });
 }
 
+/**
+ * Every ledger event, across every workspace.
+ *
+ * Deliberately narrow in its callers: only platform self-observation
+ * (`platform/platformTelemetry`) may cross workspace boundaries, and it reads
+ * an allowlist of metadata fields rather than the events themselves. Everything
+ * tenant-facing must use `listWorkflowLedgerEvents`, which is workspace-scoped.
+ */
+export function readAllWorkflowLedgerEvents(): WorkflowLedgerEvent[] {
+  return readEvents();
+}
+
 export function listWorkflowLedgerEvents(input: {
   workspaceId: string;
   workflowId?: string;

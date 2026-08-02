@@ -107,7 +107,16 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
 
     const overview = dashboard.buildAdminOverview();
     assert.equal(overview.metrics.approvedUsers, 1);
-    assert.equal(overview.metrics.workspaces, 1);
+    // Two: 'client-acme' from the run fixtures, plus the signup workspace that
+    // upsertAuthUser now records for the user. A tester's workspace used to be
+    // materialized lazily on first access, so a tester who had signed up but
+    // not yet run anything was invisible here.
+    assert.equal(overview.metrics.workspaces, 2);
+    const signupWorkspace = dashboard
+      .buildAdminWorkspaces()
+      .find((item) => item.workspaceId === investorAuthUser.defaultWorkspaceId);
+    assert.ok(signupWorkspace, 'the signup workspace should be listed');
+    assert.equal(signupWorkspace.ownerEmail, 'client@example.com');
     assert.equal(overview.metrics.totalRuns, 1);
     assert.equal(overview.metrics.runSuccessRate, 100);
 
@@ -205,9 +214,13 @@ test('admin dashboard summarizes users, workspaces, and run performance', async 
     assert.equal(workspaces[0].automationScope, 'global');
     assert.equal(workspaces[0].globalAutomationCount, workspaces[0].automationCount);
 
+    // Reading a workspace that does not exist must not bring one into being.
+    // Asserted as "unchanged" rather than a literal count so it keeps testing
+    // that property when fixtures add workspaces.
+    const workspaceCountBeforeMissingLookup = workspace.listWorkspaces().length;
     const missingWorkspaceDetail = dashboard.buildWorkspaceAdminDetail('missing-workspace');
     assert.equal(missingWorkspaceDetail.automationScope, 'global');
-    assert.equal(workspace.listWorkspaces().length, 1);
+    assert.equal(workspace.listWorkspaces().length, workspaceCountBeforeMissingLookup);
     assert.equal(billing.listBillingConfigs().length, 1);
 
     process.env.VIOLEMA_APPROVED_EMAILS = 'allowlisted@example.com';

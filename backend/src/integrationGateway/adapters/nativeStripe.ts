@@ -1,4 +1,4 @@
-import { getIntegrationCredential } from '../../settingsStore';
+import { getWorkspaceScopedIntegrationCredential } from '../../settingsStore';
 import type { IntegrationQueryResult, IntegrationReadinessError } from '../types';
 
 type StripeInterval = 'day' | 'week' | 'month' | 'year';
@@ -198,7 +198,13 @@ export async function queryStripeRevenue(
     return unsupportedQuery(input.queryType);
   }
 
-  const secretKey = input.secretKey || getIntegrationCredential(input.workspaceId, 'stripe', 'secretKey');
+  // Workspace-scoped on purpose: the server's STRIPE_SECRET_KEY is Violema's
+  // own account, so only the default workspace may fall back to it. A tenant —
+  // or a demo workspace — without its own key gets the readiness error and the
+  // connect route, never a live read of our revenue relabeled as theirs.
+  const secretKey =
+    input.secretKey
+    || getWorkspaceScopedIntegrationCredential(input.workspaceId, 'stripe', 'secretKey');
   if (!secretKey && !input.client) return readinessError();
 
   const startedAt = Date.now();

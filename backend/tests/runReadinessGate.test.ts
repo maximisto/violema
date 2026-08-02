@@ -7,8 +7,20 @@ import {
   isSupportedReadinessWorkflow,
 } from '../src/integrationGateway/runReadinessGate';
 
-const CONNECTED_STRIPE = { integrations: { stripe: { configured: true } } };
+// These fixtures describe a tenant workspace ('workspace_real'), so "connected"
+// has to mean the TENANT connected Stripe. A server-configured key is Violema's
+// own account and no longer satisfies readiness for anyone but the default
+// workspace — see SERVER_ONLY_STRIPE below.
+const CONNECTED_STRIPE = {
+  integrations: { stripe: { configured: true, workspaceConfigured: true } },
+};
 const DISCONNECTED_STRIPE = { integrations: { stripe: { configured: false } } };
+/** What a tenant sees when only Violema's env STRIPE_SECRET_KEY is set. */
+const SERVER_ONLY_STRIPE = {
+  integrations: {
+    stripe: { configured: true, workspaceConfigured: false, serverConfigured: true },
+  },
+};
 
 function partnerReady(...sources: string[]) {
   const status: Record<string, { ready: boolean; detail?: string }> = {};
@@ -117,6 +129,51 @@ test('custom automation with only stripe steps is blocked when Stripe is not con
   assert.equal(decision.allowed, false);
   assert.deepEqual(decision.blockers.map((blocker) => blocker.key), ['stripe']);
   assert.equal(decision.blockers[0].route, '/integrations?provider=stripe');
+});
+
+test('a tenant automation is blocked when only Violema\'s own Stripe key is configured', () => {
+  const decision = evaluateRunReadiness({
+    workflowId: 'custom-workflow',
+    workspaceId: 'workspace_real',
+    isDemoWorkspace: false,
+    settingsView: SERVER_ONLY_STRIPE,
+    steps: [{ kind: 'query', title: 'Revenue', inputs: { source: 'stripe' } }],
+  });
+
+  // The server key is OUR Stripe account. A tenant reading it would be shown
+  // Violema's revenue as their own, so readiness must fail closed and ask them
+  // to connect their own account.
+  assert.equal(decision.allowed, false);
+  assert.deepEqual(decision.blockers.map((blocker) => blocker.key), ['stripe']);
+  assert.equal(decision.blockers[0].route, '/integrations?provider=stripe');
+});
+
+test('the default workspace may still satisfy Stripe readiness with the server key', () => {
+  const decision = evaluateRunReadiness({
+    workflowId: 'custom-workflow',
+    workspaceId: 'purpleorangehq',
+    isDemoWorkspace: false,
+    settingsView: SERVER_ONLY_STRIPE,
+    runtimeStatus: partnerReady(),
+    steps: [{ kind: 'query', title: 'Revenue', inputs: { source: 'stripe' } }],
+  });
+
+  // The server key IS the default workspace's own account — Max's internal
+  // missions must keep running exactly as before.
+  assert.equal(decision.allowed, true);
+  assert.deepEqual(decision.blockers, []);
+});
+
+test('a demo workspace may not satisfy Stripe readiness with the server key', () => {
+  const blockers = evaluateStepSourceReadiness({
+    workspaceId: 'workspace_demo',
+    settingsView: SERVER_ONLY_STRIPE,
+    steps: [{ kind: 'query', title: 'Revenue', inputs: { source: 'stripe' } }],
+  });
+
+  // Demo workspaces may render labeled sample data, never a real read against
+  // Violema's Stripe account.
+  assert.deepEqual(blockers.map((blocker) => blocker.key), ['stripe']);
 });
 
 test('custom automation with zero query steps passes', () => {

@@ -115,7 +115,23 @@ export function findFabricatedEvidence(input: {
   return null;
 }
 
+/**
+ * Stable marker inside the fabricated-evidence delivery error. Kept beside the
+ * builder so the message and its detector cannot drift apart.
+ */
+const FABRICATED_EVIDENCE_ERROR_MARKER = 'does not send simulated data to a live workspace';
+
 /** Human-readable delivery failure message for a fabricated-evidence finding. */
 export function buildFabricatedEvidenceDeliveryError(finding: FabricatedEvidenceFinding): string {
-  return `Delivery blocked: ${finding.detail}. Connect the required integration and rerun — Violema does not send simulated data to a live workspace.`;
+  return `Delivery blocked: ${finding.detail}. Connect the required integration and rerun — Violema ${FABRICATED_EVIDENCE_ERROR_MARKER}.`;
+}
+
+/**
+ * Whether a recorded step error is the fabricated-evidence block.
+ *
+ * Platform telemetry uses this to COUNT these blocks without emitting the error
+ * text, which names the workspace's own artifacts.
+ */
+export function isFabricatedEvidenceDeliveryError(message: string | null | undefined): boolean {
+  return typeof message === 'string' && message.includes(FABRICATED_EVIDENCE_ERROR_MARKER);
 }

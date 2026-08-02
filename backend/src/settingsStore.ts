@@ -7,6 +7,7 @@ import {
   INTEGRATION_PROVIDERS,
   type IntegrationProvider,
 } from './integrationRegistry';
+import { canUseServerIntegrationCredentials } from './platform/tenancy';
 
 type Provider = 'anthropic' | 'openai' | 'openrouter' | 'mistral' | 'minimax';
 export type { IntegrationProvider } from './integrationRegistry';
@@ -177,12 +178,16 @@ export function getWorkspaceSettingsView(workspaceId: string): WorkspaceSettings
     integrations: Object.fromEntries(
       INTEGRATION_PROVIDERS.map((provider) => {
         const storedFields = record?.integrationCredentials?.[provider] || {};
+        // Server credentials belong to Violema. Only the default workspace may
+        // count them as "configured" — a tenant's settings page must not show
+        // an integration green that readiness and execution will refuse.
+        const serverCredentialsApply = canUseServerIntegrationCredentials(workspaceId);
         const fields = Object.fromEntries(
           getIntegrationFields(provider).map((field) => {
             const encrypted = storedFields[field];
             const decrypted = encrypted ? decryptSecret(encrypted) : undefined;
             const workspaceConfigured = Boolean(encrypted);
-            const serverConfigured = Boolean(getServerIntegrationCredential(provider, field));
+            const serverConfigured = serverCredentialsApply && Boolean(getServerIntegrationCredential(provider, field));
             return [field, {
               configured: workspaceConfigured || serverConfigured,
               workspaceConfigured,
@@ -245,6 +250,31 @@ export function getIntegrationCredential(
   field: string,
 ): string | undefined {
   return getWorkspaceIntegrationCredential(workspaceId, provider, field) || getServerIntegrationCredential(provider, field);
+}
+
+/**
+ * Same lookup, but the server-configured fallback is reserved for the default
+ * workspace.
+ *
+ * Server credentials are Violema's own accounts. `getIntegrationCredential`
+ * hands them to whichever workspace asks, which was harmless when there was one
+ * workspace and is a cross-tenant data leak now: a tenant's "revenue" would
+ * silently be ours. Demo workspaces are excluded too — they may render labeled
+ * sample data, never a real read against our account.
+ *
+ * Callers that read customer-owned data must use this. `getIntegrationCredential`
+ * remains for surfaces where falling back to a server credential is the
+ * intended, operator-configured behavior.
+ */
+export function getWorkspaceScopedIntegrationCredential(
+  workspaceId: string,
+  provider: IntegrationProvider,
+  field: string,
+): string | undefined {
+  const workspaceCredential = getWorkspaceIntegrationCredential(workspaceId, provider, field);
+  if (workspaceCredential) return workspaceCredential;
+  if (!canUseServerIntegrationCredentials(workspaceId)) return undefined;
+  return getServerIntegrationCredential(provider, field);
 }
 
 export function upsertWorkspaceSettings(input: {

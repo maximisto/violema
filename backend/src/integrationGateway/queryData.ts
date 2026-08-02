@@ -7,6 +7,12 @@ import {
 import type { IntegrationQueryResult, IntegrationQuerySuccess } from './types';
 import type { AutomationStepExecution } from '../platform/types';
 import { isDemoWorkspace } from '../platform/demoWorkspace';
+import { canUseServerIntegrationCredentials } from '../platform/tenancy';
+import {
+  PLATFORM_TELEMETRY_SOURCE,
+  buildPlatformTelemetrySnapshot,
+  type PlatformTelemetrySnapshot,
+} from '../platform/platformTelemetry';
 
 export interface LegacyQueryDataSuccess<T = unknown>
   extends Omit<IntegrationQuerySuccess<T>, 'live' | 'cache_hit'> {
@@ -160,6 +166,42 @@ export async function executeQueryData(
       client: input.clientOverrides?.stripe,
       secretKey: input.credentialOverrides?.stripeSecretKey,
     });
+  }
+
+  // Violema's own cross-workspace operating metadata. This is the only source
+  // that reads past a workspace boundary, so it is not a connectable
+  // integration at all: it is refused for every workspace except the default
+  // one, including demo workspaces, which get no sample stand-in either.
+  if (input.source === PLATFORM_TELEMETRY_SOURCE) {
+    if (!canUseServerIntegrationCredentials(input.workspaceId)) {
+      return {
+        ok: false,
+        code: 'integration_not_connected',
+        source: PLATFORM_TELEMETRY_SOURCE,
+        message:
+          'Platform telemetry is Violema\'s own internal operating data, not a workspace integration. It is not available to this workspace, and there is nothing to connect.',
+        can_continue: false,
+        nextAction: {
+          label: 'See available integrations',
+          route: '/integrations',
+        },
+      };
+    }
+
+    const startedAt = Date.now();
+    const snapshot = buildPlatformTelemetrySnapshot({ now });
+    const result: IntegrationQuerySuccess<PlatformTelemetrySnapshot> & { simulated: false } = {
+      ok: true,
+      source: PLATFORM_TELEMETRY_SOURCE,
+      query_type: input.queryType || 'platform_learning_snapshot',
+      data: snapshot,
+      fetched_at: now.toISOString(),
+      latency_ms: Math.max(0, Date.now() - startedAt),
+      cache_hit: false,
+      live: true,
+      simulated: false,
+    };
+    return result;
   }
 
   if (isPartnerDemoSource(input.source)) {

@@ -116,5 +116,12 @@ test('integration registry remains the credential field source of truth', async 
   assert.deepEqual(registry.getIntegrationFields('linear'), ['apiKey']);
   assert.deepEqual(registry.getIntegrationEnvKeys('stripe', 'secretKey'), ['STRIPE_SECRET_KEY']);
   assert.equal(registry.isIntegrationProvider('hubspot'), true);
-  assert.equal(registry.isIntegrationProvider('slack'), false);
+  // Slack became a connectable provider when tenants gained their own Slack
+  // delivery. It is a partner connection, so it must still add no manual
+  // credential surface — a tenant never pastes a bot token into Violema.
+  assert.equal(registry.isIntegrationProvider('slack'), true);
+  assert.deepEqual(registry.getIntegrationFields('slack'), []);
+  assert.equal(registry.resolvePartnerAppSlug('slack'), 'slackbot');
+  assert.equal(registry.resolvePartnerAppSlug('Slack'), 'slackbot');
+  assert.equal(registry.resolvePartnerAppSlug('slackbot'), 'slackbot');
 });

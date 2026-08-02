@@ -109,3 +109,32 @@ test('delivery target resolution falls back from notify to the deliver step targ
     { channel: 'slack', target: '#ops' },
   );
 });
+
+test('a tenant workspace default fills in only when the mission names no destination', () => {
+  assert.deepEqual(
+    resolveWorkflowDeliveryTarget({
+      notify: '',
+      step: { kind: 'deliver', title: 'Deliver', objective: 'Deliver the brief.' },
+      workspaceDefaultTarget: 'founder@example.com',
+    }),
+    { channel: 'email', target: 'founder@example.com' },
+  );
+
+  assert.deepEqual(
+    resolveWorkflowDeliveryTarget({
+      notify: '#their-channel',
+      step: { kind: 'deliver', title: 'Deliver', objective: 'Deliver the brief.' },
+      workspaceDefaultTarget: 'founder@example.com',
+    }),
+    { channel: 'slack', target: '#their-channel' },
+  );
+
+  assert.equal(
+    resolveWorkflowDeliveryTarget({
+      notify: '',
+      step: { kind: 'deliver', title: 'Deliver', objective: 'Deliver the brief.' },
+      workspaceDefaultTarget: undefined,
+    }),
+    null,
+  );
+});

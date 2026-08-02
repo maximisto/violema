@@ -2,6 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import type { ScheduledTask } from 'node-cron';
 import type { AutomationExecutionPolicy, AutomationStepKind, PersistedAutomationStep } from './platform/types';
+import { usesInternalDemoRouting } from './platform/tenancy';
+import {
+  PLATFORM_LEARNING_BRIEF_WORKFLOW_ID,
+  PLATFORM_TELEMETRY_SOURCE,
+} from './platform/platformTelemetry';
 
 export interface AutomationRoleDirective {
   mode: 'cheaper' | 'review' | 'promote';
@@ -77,6 +82,10 @@ function shouldScheduleAutomationTasks() {
 const LEGACY_DELIVERY_TARGETS: Record<string, string> = {
   // Raise-period reroute: stored automations pointing at the old founder
   // channels are rewritten on read so demos land in #violema-demo.
+  //
+  // Scoped to internal and demo workspaces only — see `usesInternalDemoRouting`.
+  // Applied globally, this rewrites a TENANT's delivery into our own channel,
+  // which is a cross-tenant leak rather than a demo convenience.
   '#founders': '#violema-demo',
   '#all-purple-orange': '#violema-demo',
 };
@@ -194,6 +203,87 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
     notify: '#violema-demo',
     status: 'active',
   },
+  {
+    id: 'auto_platform_learning_brief',
+    version: 1,
+    // Internal identity. Deliberately not in SUPPORTED_READINESS_WORKFLOW_IDS,
+    // so readiness runs through tier 3 and the platform_telemetry source gate
+    // decides whether this automation may run at all.
+    workflowId: PLATFORM_LEARNING_BRIEF_WORKFLOW_ID,
+    name: 'Platform learning brief',
+    description: 'Violema observing itself: a weekly read of platform operating metadata — what improved, what is blocking activation, what operators keep correcting — ending in the three changes worth building next.',
+    authoring_mode: 'guided',
+    workflow_prompt: [
+      'Read Violema\'s own operating metadata for the trailing week.',
+      'Identify what improved, what is blocking activation, and what users correct most.',
+      'Recommend the three highest-leverage platform changes for the coming week, each cited to a metric.',
+    ].join('\n'),
+    schedule: 'every friday at 4pm',
+    cron_expression: '0 16 * * 5',
+    timezone: 'UTC',
+    actions: [
+      'Aggregate platform operating metadata across all workspaces',
+      'Assess activation, reliability, review, and credit-burn movement against the prior week',
+      'Draft the platform learning brief with the three changes worth building next',
+      'Deliver latest result to #violema-demo after approval',
+    ],
+    steps: [
+      {
+        id: 'step_platform_telemetry',
+        kind: 'query',
+        title: 'Read platform telemetry',
+        objective: 'Aggregate operational metadata across every workspace: activation funnel, per-workflow and per-source reliability, top readiness blockers, review outcomes, and credit burn.',
+        inputs: { source: PLATFORM_TELEMETRY_SOURCE, query_type: 'platform_learning_snapshot' },
+      },
+      {
+        id: 'step_platform_analysis',
+        kind: 'analyze',
+        title: 'Analyze the week',
+        objective: 'Turn the telemetry snapshot into an evidence-cited read of what changed and what to do about it.',
+        inputs: {
+          instruction: [
+            'Analyze the platform telemetry snapshot and answer four questions, in this order:',
+            '1. WHAT IMPROVED — which metrics moved favorably versus the prior week, and by how much.',
+            '2. WHAT IS BLOCKING ACTIVATION — where workspaces stall between signing up, connecting a source, running, and delivering; name the top readiness blockers by count.',
+            '3. WHAT USERS CORRECT MOST — read changes-requested, rejected, and fabricated-evidence blocks against approvals; say which workflows and step kinds attract the most correction.',
+            '4. TOP 3 RECOMMENDED PLATFORM CHANGES for the coming week, ranked by leverage.',
+            'Every claim must cite the specific metric it rests on, including the numbers. If the snapshot does not support a claim, say the data is insufficient instead of inferring.',
+            'This is operational metadata only — it contains no customer content, so do not speculate about what any individual workspace was working on.',
+          ].join('\n'),
+        },
+      },
+      {
+        id: 'step_platform_brief',
+        kind: 'summarize',
+        title: 'Draft the learning brief',
+        objective: 'Write the operator-ready brief: what improved, what is blocking activation, what gets corrected most, and the three changes to build next with their supporting numbers.',
+        inputs: { instruction: 'Draft the platform learning brief with metric-cited findings and three ranked, concrete recommendations for the coming week.' },
+      },
+      {
+        id: 'step_platform_delivery',
+        kind: 'deliver',
+        title: 'Deliver to Slack',
+        objective: 'Send the reviewed platform learning brief to the operator channel after approval.',
+        inputs: { approval_required: true },
+        deliveryTarget: { channel: 'slack', target: '#violema-demo' },
+      },
+    ],
+    execution_policy: {
+      // quality_first, unlike the founder update's 'balanced': this brief runs
+      // once a week and feeds the orchestrator's build queue, so a wrong read
+      // costs far more than the extra model spend on a single run.
+      mode: 'recommended',
+      optimizationGoal: 'quality_first',
+      reviewPolicy: 'standard',
+      maxElasticLanes: 2,
+    },
+    notify: '#violema-demo',
+    status: 'active',
+    // No workspaceId on purpose: internal and unattributed, which
+    // `usesInternalDemoRouting` treats as ours, and which resolves to
+    // DEFAULT_WORKSPACE_ID at run time — the only workspace the
+    // platform_telemetry source will answer for.
+  },
 ];
 
 function readAutomations(): AutomationRecord[] {
@@ -302,31 +392,42 @@ function updateAutomationRecord(id: string, updater: (record: AutomationRecord) 
   return next;
 }
 
-function normalizeDeliveryTargetText(value: string | undefined): string | undefined {
+function normalizeDeliveryTargetText(value: string | undefined, reroute: boolean): string | undefined {
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
+  if (!reroute) return trimmed;
   return LEGACY_DELIVERY_TARGETS[trimmed.toLowerCase()] || trimmed;
 }
 
-function normalizeAutomationText(value: string) {
+function normalizeAutomationText(value: string, reroute: boolean) {
+  if (!reroute) return value;
   return value
     .replace(/#founders\b/gi, '#violema-demo')
     .replace(/#all-purple-orange\b/gi, '#violema-demo');
 }
 
 function normalizeAutomationRecord(record: AutomationRecord): AutomationRecord {
+  // Whose automation this is decides whether the raise-period reroute applies.
+  // A tenant's stored channel is theirs and is left exactly as written; only
+  // Max's internal workspace and demo workspaces get rewritten.
+  const reroute = usesInternalDemoRouting(record.workspaceId);
+
   return {
     ...record,
-    actions: record.actions.map(normalizeAutomationText),
-    workflow_prompt: record.workflow_prompt ? normalizeAutomationText(record.workflow_prompt) : record.workflow_prompt,
-    notify: normalizeDeliveryTargetText(record.notify),
+    actions: record.actions.map((action) => normalizeAutomationText(action, reroute)),
+    workflow_prompt: record.workflow_prompt
+      ? normalizeAutomationText(record.workflow_prompt, reroute)
+      : record.workflow_prompt,
+    notify: normalizeDeliveryTargetText(record.notify, reroute),
     steps: record.steps?.map((step) => ({
       ...step,
-      objective: normalizeAutomationText(step.objective),
+      objective: normalizeAutomationText(step.objective, reroute),
       deliveryTarget: step.deliveryTarget
         ? {
             ...step.deliveryTarget,
-            target: normalizeDeliveryTargetText(step.deliveryTarget.target) || step.deliveryTarget.target,
+            target:
+              normalizeDeliveryTargetText(step.deliveryTarget.target, reroute)
+              || step.deliveryTarget.target,
           }
         : step.deliveryTarget,
     })),
@@ -564,6 +665,70 @@ export function loadPersistedAutomations(
   return items;
 }
 
+/**
+ * Apply a newer seed version to an automation the operator already has.
+ *
+ * Seed propagation used to be `{ ...stored, ...seed }` with a handful of
+ * exceptions. That reversed the ownership question: every field defaulted to
+ * seed-owned, and any operator edit the exception list did not happen to
+ * mention was silently reverted at the next deploy. The v3→4 bump reverted an
+ * operator-chosen schedule and delivery channel in production that way.
+ *
+ * So ownership is now explicit and total. Every field of `AutomationRecord`
+ * belongs to exactly one side:
+ *
+ * SEED-OWNED — what the automation DOES. Violema maintains these, and a
+ * version bump is how improvements reach existing installs:
+ *   version, workflowId, name, description, authoring_mode, workflow_prompt,
+ *   actions, steps, execution_policy
+ *
+ * OPERATOR-OWNED — when it runs, where it delivers, and whose it is. Never
+ * overwritten by a seed, because the console is the authority on these and a
+ * silent revert is indistinguishable from a bug:
+ *   status, schedule, cron_expression, timezone, notify, condition,
+ *   workspaceId, owner_user_id, studio_state, created_at, and the run history
+ *   (last_run_at, last_run_status, consecutive_failures, next_run_at)
+ *
+ * Consequence worth stating plainly: a seed can no longer change the cadence or
+ * delivery target of an automation someone already has. That is deliberate — if
+ * a future seed must move an existing install's schedule, do it as an explicit
+ * migration, not as a side effect of shipping new steps.
+ */
+function mergeSeedIntoStoredAutomation(
+  stored: AutomationRecord,
+  seed: AutomationSeed,
+): AutomationRecord {
+  return {
+    // ── seed-owned: the definition of the work
+    version: seed.version,
+    workflowId: seed.workflowId,
+    name: seed.name,
+    description: seed.description,
+    authoring_mode: seed.authoring_mode,
+    workflow_prompt: seed.workflow_prompt,
+    actions: seed.actions,
+    steps: seed.steps,
+    execution_policy: seed.execution_policy,
+
+    // ── operator-owned: identity, cadence, destination, and history
+    id: stored.id,
+    workspaceId: stored.workspaceId,
+    owner_user_id: stored.owner_user_id,
+    status: stored.status,
+    schedule: stored.schedule,
+    cron_expression: stored.cron_expression,
+    timezone: stored.timezone,
+    notify: stored.notify,
+    condition: stored.condition,
+    studio_state: stored.studio_state,
+    created_at: stored.created_at,
+    last_run_at: stored.last_run_at,
+    last_run_status: stored.last_run_status,
+    consecutive_failures: stored.consecutive_failures,
+    next_run_at: stored.next_run_at,
+  };
+}
+
 export function ensureCoreAutomationSeeds(
   onTrigger: (record: AutomationRecord) => Promise<{ ok: boolean; error?: string } | void>
 ) {
@@ -577,16 +742,7 @@ export function ensureCoreAutomationSeeds(
     const seed = seedsById.get(item.id);
     if (!seed || (item.version || 0) >= (seed.version || 0)) return item;
     changed = true;
-    return withAutomationDefaults({
-      ...item,
-      ...seed,
-      status: item.status,
-      created_at: item.created_at,
-      last_run_at: item.last_run_at,
-      last_run_status: item.last_run_status,
-      consecutive_failures: item.consecutive_failures,
-      next_run_at: item.next_run_at,
-    });
+    return withAutomationDefaults(mergeSeedIntoStoredAutomation(item, seed));
   });
   const additions = CORE_AUTOMATION_SEEDS
     .filter((seed) => !existingIds.has(seed.id))

@@ -22,6 +22,7 @@ import {
   createAuthSession,
   assertAuthUserCanAccessWorkspace,
   getAuthUserDefaultWorkspaceId,
+  getAuthUserWorkspaceIds,
   getAuthUserByToken,
   listAuthUsers,
   isEmailAdminForAccess,
@@ -171,6 +172,8 @@ import {
   updateTaskRun,
   upsertBillingConfig,
   upsertWorkspaceProfile,
+  getDefaultWorkspaceProfile,
+  listWorkspaces,
   listTopUpOffers,
   createSubscriptionCheckoutSession,
   createTopUpCheckoutSession,
@@ -205,7 +208,7 @@ import {
   stripSlackMentions,
 } from './slackIncoming';
 import {
-  getIntegrationCredential,
+  getWorkspaceScopedIntegrationCredential,
   getWorkspaceProviderToken,
   getWorkspaceSettingsView,
   upsertWorkspaceSettings,
@@ -227,7 +230,7 @@ import {
   listWorkflowLedgerEvents,
 } from './integrationGateway/auditLog';
 import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
-import { checkWorkflowReadiness } from './integrationGateway/workflowReadiness';
+import { checkWorkflowReadiness, resolveTenantDefaultDeliveryTarget } from './integrationGateway/workflowReadiness';
 import { evaluateRunReadiness, type RunReadinessDecision } from './integrationGateway/runReadinessGate';
 import { buildPartnerRuntimeStatus } from './integrationGateway/workflowRuntimeStatus';
 import {
@@ -759,7 +762,10 @@ function getIntegrationTestCredential(input: {
   provider: IntegrationProvider;
   credentials?: Record<string, string>;
 }, field: string) {
-  return input.credentials?.[field]?.trim() || getIntegrationCredential(input.workspaceId, input.provider, field);
+  // Workspace-scoped on purpose: a tenant "verify connection" must never
+  // succeed against the server's own credentials and report our account as
+  // theirs. Same boundary as readiness and execution.
+  return input.credentials?.[field]?.trim() || getWorkspaceScopedIntegrationCredential(input.workspaceId, input.provider, field);
 }
 
 async function assertJsonIntegrationResponse(response: globalThis.Response, label: string) {
@@ -2018,6 +2024,9 @@ async function executeToolCall(
         subject: toolInput.subject ? String(toolInput.subject) : undefined,
         body: String(toolInput.body || ''),
         channel: toolInput.channel ? String(toolInput.channel) : undefined,
+        // Scopes channel aliases and picks the Slack transport, so a tenant's
+        // send never resolves through our demo aliases or our bot token.
+        workspaceId: ctx?.workspaceId || DEFAULT_WORKSPACE_ID,
       }));
     }
 
@@ -3887,6 +3896,9 @@ async function executeAutomationCore(
         const deliveryTarget = resolveWorkflowDeliveryTarget({
           step,
           notify: automation.notify,
+          // Tenants with no explicit target deliver to their owner email —
+          // the same default the readiness report advertises.
+          workspaceDefaultTarget: resolveTenantDefaultDeliveryTarget(workspaceId),
         });
         const sourceLinks = collectAutomationSourceLinks(artifacts);
         const deliveryChartImages = renderChartSpecsToFiles({
@@ -3985,6 +3997,9 @@ async function executeAutomationCore(
           channel: deliveryTarget.channel,
           evidenceLinks: sourceLinks,
           attachedImages: deliveryChartImages,
+          // A tenant's delivery routes through their own Slack connection, and
+          // fails naming "Connect Slack" rather than sending from our bot.
+          workspaceId,
         }));
         artifacts.push({
           kind: 'delivery',
@@ -4120,6 +4135,7 @@ export async function evaluateAutomationRunReadiness(input: {
     runtimeStatus: buildPartnerRuntimeStatus({
       connectedPartnerApps,
       nativeStatus: getIntegrationStatus(),
+      workspaceId: input.workspaceId,
     }),
   });
 }
@@ -5034,6 +5050,7 @@ app.get('/api/workflows/:workflowId/readiness', async (req: Request, res: Respon
   const runtimeStatus = buildPartnerRuntimeStatus({
     connectedPartnerApps: connections.apps,
     nativeStatus: getIntegrationStatus(),
+    workspaceId,
   });
 
   res.json({
@@ -5760,6 +5777,50 @@ registerAdminRoutes(app, {
   getAdminActor: getAuthenticatedAdminActor,
 });
 
+/**
+ * Every workspace this session can act in — the workspace switcher's source.
+ *
+ * Deliberately workspace-context-free: it does not call
+ * `resolveWorkspaceContext`, because the caller is asking WHICH workspaces
+ * exist for them, not acting inside one. Sending an `X-Workspace-Id` header
+ * therefore cannot change the answer.
+ *
+ * Read-only by construction: names come from `listWorkspaces()` rather than
+ * `getWorkspaceProfile()`, which would create and persist a profile as a side
+ * effect of a GET. A workspace with no stored profile falls back to its derived
+ * display name without being written.
+ */
+app.get('/api/workspaces/mine', (req: Request, res: Response) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    res.status(401).json({
+      error: 'Approved Violema beta session required.',
+      code: 'beta_session_required',
+    });
+    return;
+  }
+
+  const profilesById = new Map(listWorkspaces().map((profile) => [profile.id, profile]));
+  const defaultWorkspaceId = getAuthUserDefaultWorkspaceId(authUser);
+  const workspaceIds = [...getAuthUserWorkspaceIds(authUser)];
+
+  // Admins operate Violema's own workspace alongside whatever they own. A
+  // member only ever sees the workspaces recorded on their user record.
+  if (authUser.role === 'admin' && !workspaceIds.includes(DEFAULT_WORKSPACE_ID)) {
+    workspaceIds.push(DEFAULT_WORKSPACE_ID);
+  }
+
+  res.json({
+    items: workspaceIds.map((id) => ({
+      id,
+      name: profilesById.get(id)?.name || getDefaultWorkspaceProfile(id).name,
+      role: authUser.role === 'admin' ? 'admin' as const : 'member' as const,
+      // "The workspace this session opens in", not "Violema's own workspace".
+      isDefault: id === defaultWorkspaceId,
+    })),
+  });
+});
+
 app.get('/api/workspace', (req: Request, res: Response) => {
   const { workspaceId, workspaceName, workspace } = resolveWorkspaceContext(req);
   res.json({
@@ -6453,6 +6514,8 @@ app.post('/api/automations/:id/reviews/:runId/approve', async (req: Request, res
             attachedImages: chartSpecs?.length
               ? renderChartSpecsToFiles({ specs: chartSpecs, dir: BRIEF_CHARTS_DIR, baseUrl: PUBLIC_APP_BASE_URL })
               : undefined,
+            // The approved send is the tenant's, so it uses the tenant's Slack.
+            workspaceId,
           }),
     });
     const workflowId = inferWorkflowIdFromAutomation(context.automation);

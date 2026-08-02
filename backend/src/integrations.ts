@@ -1,5 +1,7 @@
 import { buildSlackMessagePayload, chunkSlackBlocks } from './slackBlocks';
 import { collectLinkImageBlocks } from './linkPreviews';
+import { usesInternalDemoRouting } from './platform/tenancy';
+import { sendTenantSlackMessage, type TenantSlackDeps } from './integrationGateway/slackDelivery';
 
 interface SendMessageInput {
   to: string;
@@ -9,6 +11,21 @@ interface SendMessageInput {
   threadTs?: string;
   evidenceLinks?: Array<{ url: string; label: string }>;
   attachedImages?: Array<{ url: string; alt: string }>;
+  /**
+   * Whose workspace this send belongs to.
+   *
+   * Two cross-tenant safety properties depend on it:
+   *   - the raise-period `#violema-demo` channel aliases apply only to our own
+   *     and demo workspaces, never to a tenant's channel names;
+   *   - a tenant's Slack delivery routes through THEIR Composio connection
+   *     rather than Violema's bot token.
+   *
+   * Omitted means "unattributed / internal", which preserves the behavior every
+   * existing call site had before multi-tenancy.
+   */
+  workspaceId?: string;
+  /** Test seam for the tenant Composio Slack path; never set in production. */
+  tenantSlackDeps?: TenantSlackDeps;
 }
 
 // Teams stays out of this union until a real connector exists — the enum is
@@ -40,6 +57,10 @@ interface SlackConversationListResponse {
 const DEFAULT_SLACK_CHANNEL_ALIASES: Record<string, string> = {
   // Raise-period reroute: every founder-report send lands in the demo channel
   // until the pre-seed closes. Revert both entries to '#all-purple-orange' after.
+  //
+  // Applied only to our own and demo workspaces — see `usesInternalDemoRouting`.
+  // A tenant's '#founders' means THEIR channel, and must never be rewritten
+  // into ours.
   '#founders': '#violema-demo',
   '#all-purple-orange': '#violema-demo',
 };
@@ -160,8 +181,13 @@ function normalizeSlackChannelName(target: string) {
   return target.trim().replace(/^#/, '').toLowerCase();
 }
 
-function readSlackAliasMap() {
-  const defaults = { ...DEFAULT_SLACK_CHANNEL_ALIASES };
+function readSlackAliasMap(workspaceId?: string) {
+  // The hardcoded raise-period reroutes are ours; the SLACK_CHANNEL_ALIASES env
+  // var is an admin escape hatch and stays server-wide, since the error text
+  // below tells admins to set it.
+  const defaults = usesInternalDemoRouting(workspaceId)
+    ? { ...DEFAULT_SLACK_CHANNEL_ALIASES }
+    : {};
   const raw = process.env.SLACK_CHANNEL_ALIASES?.trim();
   if (!raw) return defaults;
 
@@ -226,7 +252,7 @@ async function findSlackChannelIdByName(target: string) {
   return null;
 }
 
-async function resolveSlackTarget(target: string) {
+async function resolveSlackTarget(target: string, workspaceId?: string) {
   const normalizedTarget = target.trim();
   if (!normalizedTarget) {
     throw new Error('Slack target is required.');
@@ -237,7 +263,7 @@ async function resolveSlackTarget(target: string) {
   }
 
   const aliasKey = normalizedTarget.startsWith('#') ? normalizedTarget.toLowerCase() : `#${normalizedTarget.toLowerCase()}`;
-  const aliasMap = readSlackAliasMap();
+  const aliasMap = readSlackAliasMap(workspaceId);
   const mappedTarget = aliasMap[aliasKey];
   if (mappedTarget) {
     if (isSlackChannelId(mappedTarget) || isSlackUserId(mappedTarget)) {
@@ -266,7 +292,11 @@ async function resolveSlackTarget(target: string) {
   );
 }
 
-export async function validateMessageTarget(input: { to: string; channel?: string }) {
+export async function validateMessageTarget(input: {
+  to: string;
+  channel?: string;
+  workspaceId?: string;
+}) {
   const channel = inferMessageChannel({ ...input, body: '' });
   const target = input.to.trim();
 
@@ -290,7 +320,7 @@ export async function validateMessageTarget(input: { to: string; channel?: strin
     return {
       channel,
       target,
-      normalizedTarget: await resolveSlackTarget(target),
+      normalizedTarget: await resolveSlackTarget(target, input.workspaceId),
     } satisfies ValidatedMessageTarget;
   }
 
@@ -321,7 +351,11 @@ async function sendSlackMessage(input: SendMessageInput) {
       payload.blocks.splice(payload.blocks.length - 1, 0, ...extraBlocks);
     }
   }
-  const validated = await validateMessageTarget({ to: input.to, channel: 'slack' });
+  const validated = await validateMessageTarget({
+    to: input.to,
+    channel: 'slack',
+    workspaceId: input.workspaceId,
+  });
 
   const post = async (body: Record<string, unknown>) => {
     const response = await fetch('https://slack.com/api/chat.postMessage', {
@@ -410,6 +444,24 @@ export async function sendMessage(input: SendMessageInput) {
   const channel = inferMessageChannel(input);
 
   if (channel === 'slack') {
+    // A tenant's Slack delivery goes through the tenant's own Composio
+    // connection. There is no fallback to `SLACK_BOT_TOKEN`: our bot is not in
+    // their Slack, and using it would either misdeliver into our workspace or
+    // post under an identity they never authorized. No connection means the
+    // send fails and names "Connect Slack".
+    if (!usesInternalDemoRouting(input.workspaceId)) {
+      return sendTenantSlackMessage(
+        {
+          workspaceId: input.workspaceId as string,
+          to: input.to,
+          body: input.body,
+          subject: input.subject,
+          threadTs: input.threadTs,
+        },
+        input.tenantSlackDeps ?? {},
+      );
+    }
+
     return sendSlackMessage({ ...input, channel });
   }
 

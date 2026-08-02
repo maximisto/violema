@@ -68,8 +68,14 @@ export function inferWorkflowIdFromAutomation(automation: WorkflowAutomationLike
 export function resolveWorkflowDeliveryTarget(input: {
   step: WorkflowStepLike;
   notify?: string | null;
+  /** Workspace-level fallback (tenant owner email) applied only when the
+   *  mission itself names no destination — keeps execution consistent with
+   *  the readiness report's advertised default. */
+  workspaceDefaultTarget?: string | null;
 }) {
-  const target = readString(input.step.deliveryTarget?.target) || readString(input.notify);
+  const target = readString(input.step.deliveryTarget?.target)
+    || readString(input.notify)
+    || readString(input.workspaceDefaultTarget);
   if (!target) return null;
 
   return {

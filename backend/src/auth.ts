@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import path from 'path';
 import { readJsonFile, writeJsonFile } from './platform/jsonStore';
-import { DEFAULT_WORKSPACE_ID } from './platform/workspace';
+import { DEFAULT_WORKSPACE_ID, listWorkspaces, upsertWorkspaceProfile } from './platform/workspace';
 import {
   getAccessRecord,
   listAdminAccessRecords,
@@ -373,6 +373,32 @@ function hashToken(token: string) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+/**
+ * Record who owns a workspace, so tenant-facing defaults have somewhere honest
+ * to point.
+ *
+ * Nothing used to write `ownerEmail` at signup — the profile was materialized
+ * lazily with just an id, slug, and name — which left every tenant workspace
+ * without a delivery destination. Running on each upsert makes this
+ * backfill-tolerant: existing workspaces gain an owner the next time that user
+ * signs in.
+ *
+ * Deliberately never overwrites. A workspace can have several members, and the
+ * most recent person to log in must not silently become its owner.
+ *
+ * Failures are swallowed: the workspace store being unavailable is not a reason
+ * to fail a login.
+ */
+function ensureWorkspaceOwnerEmail(workspaceId: string, email: string) {
+  try {
+    const existing = listWorkspaces().find((item) => item.id === workspaceId);
+    if (existing?.ownerEmail?.trim()) return;
+    upsertWorkspaceProfile(workspaceId, { ownerEmail: email });
+  } catch (error) {
+    console.error('[auth] could not record workspace owner email', error);
+  }
+}
+
 export function upsertAuthUser(input: {
   email: string;
   name: string;
@@ -457,6 +483,7 @@ export function upsertAuthUser(input: {
     users.unshift(next);
   }
   writeUsers(users);
+  ensureWorkspaceOwnerEmail(defaultWorkspaceId, email);
   return next;
 }
 

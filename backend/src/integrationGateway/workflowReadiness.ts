@@ -1,4 +1,9 @@
 import { getWorkspaceSettingsView, type WorkspaceSettingsView } from '../settingsStore';
+import {
+  canUseServerIntegrationCredentials,
+  usesInternalDemoRouting,
+} from '../platform/tenancy';
+import { listWorkspaces } from '../platform/workspace';
 
 export interface WorkflowReadinessBlocker {
   key: string;
@@ -15,6 +20,16 @@ export interface WorkflowReadinessReport {
   requiredIntegrationIds: string[];
   optionalIntegrationIds: string[];
   firstRunRequiresApproval: boolean;
+  /**
+   * Where this workflow would actually deliver: the caller's explicit target,
+   * or the resolved default for this workspace — the demo channel for internal
+   * and demo workspaces, the workspace owner's email for a tenant. `null` when
+   * there is none, which is always accompanied by a delivery blocker.
+   *
+   * Surfaced so the destination is inspectable rather than implicit; a tenant
+   * should be able to see that their brief goes to their own address.
+   */
+  deliveryTarget: string | null;
   blockers: WorkflowReadinessBlocker[];
   warnings: WorkflowReadinessBlocker[];
 }
@@ -57,8 +72,85 @@ interface WorkflowRequirements {
 
 // Raise-period reroute: founder-report defaults land in the demo channel
 // until the pre-seed closes. Revert to '#all-purple-orange' after.
+//
+// These are OUR channels, so they default only for our own and demo workspaces.
+// A tenant defaults to their owner's email instead — see `defaultDeliveryTarget`.
 const REVENUE_WATCH_DEFAULT_DELIVERY_TARGET = '#violema-demo';
 const WEEKLY_FOUNDER_UPDATE_DEFAULT_DELIVERY_TARGET = '#violema-demo';
+
+/**
+ * Where a workspace's report goes when the automation names no destination.
+ *
+ * Internal and demo workspaces keep the demo channel. A tenant has no Slack
+ * story until they connect one, so the honest default is the address we already
+ * know reaches them: the workspace owner's email. With no owner on file we
+ * return nothing, and the caller raises the delivery-target blocker rather than
+ * inventing a destination.
+ *
+ * Read-only lookup on purpose — `getWorkspaceProfile` would create and persist a
+ * missing profile, and a readiness check must never write.
+ */
+function defaultDeliveryTarget(workspaceId: string, internalDefault: string): string | undefined {
+  if (usesInternalDemoRouting(workspaceId)) return internalDefault;
+  return resolveTenantDefaultDeliveryTarget(workspaceId);
+}
+
+/**
+ * The delivery destination a tenant workspace falls back to when a mission has
+ * no explicit target: the workspace owner's email. Exported because EXECUTION
+ * must apply the same default the readiness report advertises — a mission that
+ * reads "delivers to founder@…" and then silently skips delivery is a lie.
+ * Internal/demo workspaces return nothing here; their defaults are workflow-
+ * specific and stay in this module's requirements table.
+ */
+export function resolveTenantDefaultDeliveryTarget(workspaceId: string): string | undefined {
+  if (usesInternalDemoRouting(workspaceId)) return undefined;
+
+  try {
+    const ownerEmail = listWorkspaces().find((item) => item.id === workspaceId)?.ownerEmail;
+    return ownerEmail?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Configured by THIS workspace, ignoring anything the server provides.
+ *
+ * `isConfigured` accepts `envConfigured`/`serverConfigured`, which are Violema's
+ * own credentials. For a tenant that is the difference between "you connected
+ * Stripe" and "we connected Stripe", and only the first may satisfy readiness.
+ */
+export function isWorkspaceConfigured(
+  settingsView: WorkspaceSettingsView | MinimalSettingsView,
+  id: string,
+): boolean {
+  const integrations = settingsView.integrations as Record<string, MinimalIntegrationReadiness | undefined> | undefined;
+  const integration = integrations?.[id];
+
+  if (!integration) return false;
+  if (typeof integration === 'boolean') return integration;
+  if (integration.workspaceConfigured) return true;
+
+  return Object.values(integration.fields || {}).some((field) => Boolean(field.workspaceConfigured));
+}
+
+/**
+ * Whether Stripe may be read for this workspace.
+ *
+ * The default workspace may use the server's key; everyone else — tenants and
+ * demo workspaces alike — must have connected their own. This mirrors
+ * `getWorkspaceScopedIntegrationCredential`, so readiness and execution cannot
+ * disagree about whose Stripe account is in play.
+ */
+function isStripeReadable(
+  settingsView: WorkspaceSettingsView | MinimalSettingsView,
+  workspaceId: string,
+): boolean {
+  return canUseServerIntegrationCredentials(workspaceId)
+    ? isConfigured(settingsView, 'stripe')
+    : isWorkspaceConfigured(settingsView, 'stripe');
+}
 
 const INTEGRATION_LABELS: Record<string, string> = {
   stripe: 'Stripe',
@@ -125,14 +217,14 @@ export function isConfigured(
   return Object.values(integration.fields).some((field) => readConfiguredFlag(field));
 }
 
-function readWorkflowRequirements(workflowId: string): WorkflowRequirements {
+function readWorkflowRequirements(workflowId: string, workspaceId: string): WorkflowRequirements {
   if (workflowId === 'revenue-watch') {
     return {
       supported: true,
       requiredIntegrationIds: ['stripe'],
       optionalIntegrationIds: [],
       firstRunRequiresApproval: true,
-      defaultDeliveryTarget: REVENUE_WATCH_DEFAULT_DELIVERY_TARGET,
+      defaultDeliveryTarget: defaultDeliveryTarget(workspaceId, REVENUE_WATCH_DEFAULT_DELIVERY_TARGET),
     };
   }
 
@@ -150,7 +242,10 @@ function readWorkflowRequirements(workflowId: string): WorkflowRequirements {
       ],
       optionalIntegrationIds: ['google_drive', 'postmark'],
       firstRunRequiresApproval: true,
-      defaultDeliveryTarget: WEEKLY_FOUNDER_UPDATE_DEFAULT_DELIVERY_TARGET,
+      defaultDeliveryTarget: defaultDeliveryTarget(
+        workspaceId,
+        WEEKLY_FOUNDER_UPDATE_DEFAULT_DELIVERY_TARGET,
+      ),
     };
   }
 
@@ -162,6 +257,37 @@ function readWorkflowRequirements(workflowId: string): WorkflowRequirements {
   };
 }
 
+/**
+ * Require the transport that will actually carry the delivery.
+ *
+ * `weekly-founder-update` hardcodes Slack as required, which was right when
+ * every delivery went to a Violema channel. A tenant now defaults to their
+ * owner's email, and blocking them on a Slack connection their delivery never
+ * touches would make the workflow unrunnable for no reason.
+ *
+ * Slack stays required whenever the destination really is a Slack target, which
+ * covers the internal and demo workspaces unchanged.
+ */
+function applyDeliveryChannelRequirements(
+  requirements: WorkflowRequirements,
+  deliveryTarget: string | undefined,
+): WorkflowRequirements {
+  const target = deliveryTarget?.trim();
+  if (!requirements.supported || !target) return requirements;
+  if (!target.includes('@') || target.startsWith('@')) return requirements;
+  if (!requirements.requiredIntegrationIds.includes('slack')) return requirements;
+
+  return {
+    ...requirements,
+    requiredIntegrationIds: Array.from(
+      new Set(requirements.requiredIntegrationIds.map((id) => (id === 'slack' ? 'postmark' : id))),
+    ),
+    // Email delivery promotes Postmark from supporting to required, so it must
+    // not also be reported as an optional warning.
+    optionalIntegrationIds: requirements.optionalIntegrationIds.filter((id) => id !== 'postmark'),
+  };
+}
+
 export function checkWorkflowReadiness(input: {
   workflowId: string;
   workspaceId: string;
@@ -170,13 +296,14 @@ export function checkWorkflowReadiness(input: {
   runtimeStatus?: Record<string, WorkflowRuntimeIntegrationStatus>;
 }): WorkflowReadinessReport {
   const settingsView = input.settingsView || getWorkspaceSettingsView(input.workspaceId);
-  const requirements = readWorkflowRequirements(input.workflowId);
+  const baseRequirements = readWorkflowRequirements(input.workflowId, input.workspaceId);
   const blockers: WorkflowReadinessBlocker[] = [];
   const warnings: WorkflowReadinessBlocker[] = [];
   const deliveryTarget =
     input.deliveryTarget === undefined || input.deliveryTarget === null
-      ? requirements.defaultDeliveryTarget
+      ? baseRequirements.defaultDeliveryTarget
       : input.deliveryTarget;
+  const requirements = applyDeliveryChannelRequirements(baseRequirements, deliveryTarget);
 
   if (!requirements.supported) {
     blockers.push({
@@ -186,7 +313,10 @@ export function checkWorkflowReadiness(input: {
     });
   }
 
-  if (requirements.requiredIntegrationIds.includes('stripe') && !isConfigured(settingsView, 'stripe')) {
+  if (
+    requirements.requiredIntegrationIds.includes('stripe')
+    && !isStripeReadable(settingsView, input.workspaceId)
+  ) {
     blockers.push({
       key: 'stripe',
       label: 'Connect Stripe',
@@ -225,12 +355,29 @@ export function checkWorkflowReadiness(input: {
     }
   }
 
-  if (requirements.supported && input.workflowId === 'revenue-watch' && !deliveryTarget?.trim()) {
-    blockers.push({
-      key: 'slack_target',
-      label: 'Add Slack destination',
-      detail: 'Revenue Watch needs a Slack target before it can be promoted to live delivery.',
-    });
+  if (requirements.supported && !deliveryTarget?.trim()) {
+    if (usesInternalDemoRouting(input.workspaceId)) {
+      // Internal/demo workspaces only reach here for Revenue Watch, since the
+      // other supported workflow always has a channel default.
+      if (input.workflowId === 'revenue-watch') {
+        blockers.push({
+          key: 'slack_target',
+          label: 'Add Slack destination',
+          detail: 'Revenue Watch needs a Slack target before it can be promoted to live delivery.',
+        });
+      }
+    } else {
+      // A tenant with no destination and no owner email on file. Ask, rather
+      // than defaulting into one of our own channels.
+      blockers.push({
+        key: 'delivery_target',
+        label: 'Add a delivery destination',
+        detail:
+          'This workflow has nowhere to deliver. Add an email address, or connect Slack to '
+          + 'deliver into your own workspace.',
+        route: '/integrations?provider=slack',
+      });
+    }
   }
 
   return {
@@ -249,6 +396,7 @@ export function checkWorkflowReadiness(input: {
     requiredIntegrationIds: requirements.requiredIntegrationIds,
     optionalIntegrationIds: requirements.optionalIntegrationIds,
     firstRunRequiresApproval: requirements.firstRunRequiresApproval,
+    deliveryTarget: deliveryTarget?.trim() || null,
     blockers,
     warnings,
   };

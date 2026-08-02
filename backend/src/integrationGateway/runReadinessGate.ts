@@ -29,12 +29,16 @@ import type { PartnerComposioSource } from './adapters/partnerComposio';
 import {
   checkWorkflowReadiness,
   isConfigured,
+  isWorkspaceConfigured,
   labelIntegrationId,
   type MinimalSettingsView,
   type WorkflowReadinessBlocker,
   type WorkflowRuntimeIntegrationStatus,
 } from './workflowReadiness';
 import type { WorkspaceSettingsView } from '../settingsStore';
+import { canUseServerIntegrationCredentials } from '../platform/tenancy';
+import { DEFAULT_WORKSPACE_ID } from '../platform/workspace';
+import { PLATFORM_TELEMETRY_SOURCE } from '../platform/platformTelemetry';
 
 /** Workflow ids `readWorkflowRequirements` actually has a requirements table for. */
 export const SUPPORTED_READINESS_WORKFLOW_IDS = ['revenue-watch', 'weekly-founder-update'] as const;
@@ -58,6 +62,31 @@ export const LIVE_CAPABLE_QUERY_SOURCES: string[] = [
   'stripe',
   ...Object.keys(PARTNER_LIVE_QUERY_SOURCES),
 ];
+
+/**
+ * Sources that are live-capable for Violema itself and for nobody else.
+ *
+ * `platform_telemetry` aggregates operating metadata ACROSS workspaces, so it
+ * is not a connectable integration: it is absent from the integrations catalog
+ * and from the chat agent's `query_data` enum, and `executeQueryData` refuses
+ * it for every workspace but the default one. It is kept out of
+ * `LIVE_CAPABLE_QUERY_SOURCES` on purpose — that constant describes what a
+ * TENANT can reach, and widening it would make this source look connectable.
+ */
+const INTERNAL_ONLY_QUERY_SOURCES: string[] = [PLATFORM_TELEMETRY_SOURCE];
+
+/**
+ * The live-capable set as seen by one workspace. Identical to
+ * `LIVE_CAPABLE_QUERY_SOURCES` for every workspace except the default one,
+ * which additionally reaches Violema's internal telemetry.
+ */
+export function listLiveCapableQuerySourcesForWorkspace(
+  workspaceId: string | null | undefined,
+): string[] {
+  return canUseServerIntegrationCredentials(workspaceId)
+    ? [...LIVE_CAPABLE_QUERY_SOURCES, ...INTERNAL_ONLY_QUERY_SOURCES]
+    : [...LIVE_CAPABLE_QUERY_SOURCES];
+}
 
 export interface RunReadinessStepLike {
   kind?: string;
@@ -110,6 +139,12 @@ export function evaluateStepSourceReadiness(input: {
   steps?: RunReadinessStepLike[];
   settingsView?: WorkspaceSettingsView | MinimalSettingsView;
   runtimeStatus?: Record<string, WorkflowRuntimeIntegrationStatus>;
+  /**
+   * Whose automation this is. Stripe readiness depends on it: only the default
+   * workspace may satisfy it with the server's own key. Omitted means internal,
+   * preserving the pre-multi-tenant behavior.
+   */
+  workspaceId?: string;
 }): WorkflowReadinessBlocker[] {
   const querySteps = (input.steps || []).filter((step) => step.kind === 'query');
   const blockers: WorkflowReadinessBlocker[] = [];
@@ -132,12 +167,36 @@ export function evaluateStepSourceReadiness(input: {
     const label = labelIntegrationId(source);
 
     if (source === 'stripe') {
-      if (!input.settingsView || !isConfigured(input.settingsView, 'stripe')) {
+      // Mirrors `getWorkspaceScopedIntegrationCredential`: the server's key is
+      // Violema's own account, so only the default workspace may pass on it.
+      const stripeReadable = input.settingsView
+        ? (canUseServerIntegrationCredentials(input.workspaceId ?? DEFAULT_WORKSPACE_ID)
+            ? isConfigured(input.settingsView, 'stripe')
+            : isWorkspaceConfigured(input.settingsView, 'stripe'))
+        : false;
+
+      if (!stripeReadable) {
         blockers.push({
           key: 'stripe',
           label: 'Connect Stripe',
           detail: 'Stripe read access is required before this automation can query live revenue data.',
           route: connectRoute('stripe'),
+        });
+      }
+      continue;
+    }
+
+    if (source === PLATFORM_TELEMETRY_SOURCE) {
+      // Internal-only, and there is nothing to connect: a tenant automation
+      // naming this source is blocked with an honest explanation rather than a
+      // connect link that would go nowhere. Mirrors `executeQueryData`, so the
+      // gate and the data layer cannot disagree about who may read it.
+      if (!canUseServerIntegrationCredentials(input.workspaceId ?? DEFAULT_WORKSPACE_ID)) {
+        blockers.push({
+          key: source,
+          label: 'Platform telemetry is internal to Violema',
+          detail:
+            'Platform telemetry is Violema\'s own cross-workspace operating data. It is not a workspace integration and cannot be connected, so this automation would have no data to report.',
         });
       }
       continue;
@@ -213,6 +272,7 @@ export function evaluateRunReadiness(input: {
     steps: input.steps,
     settingsView: input.settingsView,
     runtimeStatus: input.runtimeStatus,
+    workspaceId: input.workspaceId,
   });
 
   return {

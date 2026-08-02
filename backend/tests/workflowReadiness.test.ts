@@ -5,7 +5,7 @@ import { checkWorkflowReadiness } from '../src/integrationGateway/workflowReadin
 test('Revenue Watch readiness blocks missing Stripe and missing Slack target', () => {
   const report = checkWorkflowReadiness({
     workflowId: 'revenue-watch',
-    workspaceId: 'workspace_test',
+    workspaceId: 'purpleorangehq',
     deliveryTarget: '',
     settingsView: {
       integrations: {
@@ -24,7 +24,7 @@ test('Revenue Watch readiness blocks missing Stripe and missing Slack target', (
 test('Revenue Watch readiness passes with Stripe and Slack target', () => {
   const report = checkWorkflowReadiness({
     workflowId: 'revenue-watch',
-    workspaceId: 'workspace_test',
+    workspaceId: 'purpleorangehq',
     deliveryTarget: '#all-purple-orange',
     settingsView: {
       integrations: {
@@ -41,7 +41,7 @@ test('Revenue Watch readiness passes with Stripe and Slack target', () => {
 test('Revenue Watch readiness uses the backend default Slack target when deliveryTarget is omitted', () => {
   const report = checkWorkflowReadiness({
     workflowId: 'revenue-watch',
-    workspaceId: 'workspace_test',
+    workspaceId: 'purpleorangehq',
     settingsView: {
       integrations: {
         stripe: { configured: true },
@@ -57,7 +57,7 @@ test('Revenue Watch readiness uses the backend default Slack target when deliver
 test('Revenue Watch readiness still blocks an explicit empty delivery target', () => {
   const report = checkWorkflowReadiness({
     workflowId: 'revenue-watch',
-    workspaceId: 'workspace_test',
+    workspaceId: 'purpleorangehq',
     deliveryTarget: '',
     settingsView: {
       integrations: {
@@ -73,7 +73,7 @@ test('Revenue Watch readiness still blocks an explicit empty delivery target', (
 test('unsupported workflow IDs are never reported as ready', () => {
   const report = checkWorkflowReadiness({
     workflowId: 'revenue-watch-typo',
-    workspaceId: 'workspace_test',
+    workspaceId: 'purpleorangehq',
     settingsView: {
       integrations: {
         stripe: { configured: true },

@@ -5,6 +5,8 @@ import {
   toolkitForPartnerSource,
   type PartnerSourceId,
 } from './partnerAppMap';
+import { SLACK_PARTNER_TOOLKITS } from './slackDelivery';
+import { usesInternalDemoRouting } from '../platform/tenancy';
 
 interface NativeIntegrationStatus {
   tavily: boolean;
@@ -15,6 +17,15 @@ interface NativeIntegrationStatus {
 export interface BuildPartnerRuntimeStatusInput {
   connectedPartnerApps: string[];
   nativeStatus: NativeIntegrationStatus;
+  /**
+   * Whose workspace this status describes. Omitted means internal, which keeps
+   * the pre-multi-tenant behavior for every existing caller.
+   *
+   * Slack readiness depends on it: our own and demo workspaces deliver through
+   * the server bot token, while a tenant delivers through their own Composio
+   * Slack connection, so "is Slack ready" is a different question for each.
+   */
+  workspaceId?: string;
 }
 
 const PARTNER_SOURCE_LABELS: Record<PartnerSourceId, string> = {
@@ -62,6 +73,26 @@ function nativeStatus(
 }
 
 /**
+ * Slack readiness for a tenant workspace.
+ *
+ * A tenant never delivers through `SLACK_BOT_TOKEN`, so the server's own Slack
+ * configuration says nothing about whether their delivery can land. What
+ * matters is whether they connected either Slack toolkit through Composio.
+ */
+function tenantSlackStatus(connected: Set<string>): WorkflowRuntimeIntegrationStatus {
+  const hasSlack = SLACK_PARTNER_TOOLKITS.some((slug) => connected.has(normalizeAppName(slug)));
+  return hasSlack
+    ? { ready: true, detail: 'Slack is connected to this workspace.' }
+    : {
+        ready: false,
+        code: 'integration_not_ready',
+        detail:
+          'Slack is not connected to this workspace. Violema delivers through your own Slack, '
+          + 'never from its own workspace on your behalf.',
+      };
+}
+
+/**
  * Turn a workspace's connected Composio toolkits plus the server's native
  * integration state into the per-source readiness map the readiness report
  * consumes. Partner slugs come from `partnerAppMap`, so a toolkit rename is a
@@ -77,7 +108,9 @@ export function buildPartnerRuntimeStatus(
   return {
     ...partner,
     tavily: nativeStatus(input.nativeStatus.tavily, 'Web search', ''),
-    slack: nativeStatus(input.nativeStatus.slack, 'Slack', 'delivery'),
+    slack: usesInternalDemoRouting(input.workspaceId)
+      ? nativeStatus(input.nativeStatus.slack, 'Slack', 'delivery')
+      : tenantSlackStatus(connected),
     postmark: nativeStatus(input.nativeStatus.postmark, 'Email', 'delivery'),
   };
 }
