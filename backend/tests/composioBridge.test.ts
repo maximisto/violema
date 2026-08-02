@@ -61,7 +61,13 @@ test('Composio bridge uses the current SDK surfaces for execution and connection
   );
   assert.deepEqual(
     await bridge.startConnection('GitHub', { entityId: 'workspace-123' }),
-    { redirectUrl: 'https://auth.example/connect', connectionRequestId: 'conn_req_1' },
+    {
+      redirectUrl: 'https://auth.example/connect',
+      connectionRequestId: 'conn_req_1',
+      // Reported back so the caller can record *which* auth config a user
+      // authorised against rather than inferring it later from a scope error.
+      authConfig: { id: 'auth-github', name: null, managed: false, reason: 'first_available' },
+    },
   );
   assert.deepEqual(
     await bridge.listConnectedApps({ entityId: 'workspace-123' }),
@@ -144,6 +150,7 @@ test('Composio bridge forwards a server-derived callback URL to link()', async (
   assert.deepEqual(connection, {
     redirectUrl: 'https://auth.example/gmail',
     connectionRequestId: 'conn_req_2',
+    authConfig: { id: 'auth-gmail', name: null, managed: false, reason: 'first_available' },
   });
   assert.deepEqual(linkOptions, {
     allowMultiple: true,
@@ -187,13 +194,146 @@ test('Composio bridge creates a managed auth config when a toolkit has none', as
   assert.deepEqual(
     await bridge.startConnection('Slack', { entityId: 'workspace-123' }),
     // No ConnectionRequest id came back, so none is invented.
-    { redirectUrl: 'https://auth.example/new' },
+    {
+      redirectUrl: 'https://auth.example/new',
+      // Managed by construction — `use_composio_managed_auth` is what we asked for.
+      authConfig: {
+        id: 'auth-created',
+        name: 'slack Auth Config',
+        managed: true,
+        reason: 'created',
+      },
+    },
   );
   assert.deepEqual(calls, [
     'list',
     'create:slack:use_composio_managed_auth',
     'link:auth-created',
   ]);
+});
+
+/**
+ * The founder's real Google Drive account, as diagnosed in production: a custom
+ * auth config on his own Google Cloud OAuth client — `drive.metadata.readonly`,
+ * so no file contents and no writes — sorts ahead of the Composio-managed one.
+ * `credentials` is included because the SDK genuinely returns it on list items.
+ */
+function googleDriveClient(record: { linkedAuthConfigId?: string }): ComposioClientAdapter {
+  return {
+    tools: {
+      async execute() {
+        return {};
+      },
+    },
+    authConfigs: {
+      async list() {
+        return {
+          items: [
+            {
+              id: 'ac_custom_readonly',
+              name: 'Google Drive TechChicago Read Only',
+              isComposioManaged: false,
+              status: 'ENABLED',
+              credentials: {
+                client_id: 'SHOULD-NEVER-BE-LOGGED',
+                client_secret: 'SHOULD-NEVER-BE-LOGGED',
+              },
+            },
+            {
+              id: 'ac_managed',
+              name: 'googledrive-ksbv93',
+              isComposioManaged: true,
+              status: 'ENABLED',
+            },
+          ],
+        };
+      },
+      async create() {
+        throw new Error('must not create an auth config when usable ones exist');
+      },
+    },
+    connectedAccounts: {
+      async link(_userId, authConfigId) {
+        record.linkedAuthConfigId = authConfigId;
+        return { id: 'conn_req_drive', redirectUrl: 'https://auth.example/drive' };
+      },
+      async list() {
+        return { items: [] };
+      },
+      async delete() {
+        return {};
+      },
+    },
+  };
+}
+
+test('Composio bridge links Google Drive against the managed config, not the read-only one', async () => {
+  // The production defect verbatim: items[0] was the read-only custom config,
+  // so every new connection could list filenames but never read or write files.
+  const record: { linkedAuthConfigId?: string } = {};
+
+  const connection = await createComposioBridge(googleDriveClient(record)).startConnection(
+    'googledrive',
+    { entityId: 'workspace-123' },
+  );
+
+  assert.equal(record.linkedAuthConfigId, 'ac_managed');
+  assert.deepEqual(connection.authConfig, {
+    id: 'ac_managed',
+    name: 'googledrive-ksbv93',
+    managed: true,
+    reason: 'composio_managed',
+  });
+});
+
+test('Composio bridge logs the chosen auth config and never its credentials', async () => {
+  const record: { linkedAuthConfigId?: string } = {};
+  const logged: unknown[][] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  try {
+    await createComposioBridge(googleDriveClient(record)).startConnection('googledrive', {
+      entityId: 'workspace-123',
+    });
+  } finally {
+    console.log = originalLog;
+  }
+
+  const selectionLog = logged.find((args) => args[0] === '[composio] auth config selected');
+  assert.ok(selectionLog, 'the chosen auth config must be observable in the logs');
+  assert.deepEqual(selectionLog[1], {
+    toolkit: 'googledrive',
+    authConfigId: 'ac_managed',
+    authConfigName: 'googledrive-ksbv93',
+    composioManaged: true,
+    reason: 'composio_managed',
+  });
+  // Nothing anywhere in the log stream may carry the OAuth client secret that
+  // rode along on the sibling auth config's `credentials`.
+  assert.ok(!JSON.stringify(logged).includes('SHOULD-NEVER-BE-LOGGED'));
+});
+
+test('Composio bridge fails closed when the pinned auth config is missing', async () => {
+  const record: { linkedAuthConfigId?: string } = {};
+  const original = process.env.COMPOSIO_AUTH_CONFIG_GOOGLEDRIVE;
+  process.env.COMPOSIO_AUTH_CONFIG_GOOGLEDRIVE = 'ac_wrong';
+  try {
+    // Falling back to some other auth config is exactly the bug being fixed, so
+    // a bad override must break the connect rather than quietly succeed.
+    await assert.rejects(
+      createComposioBridge(googleDriveClient(record)).startConnection('googledrive', {
+        entityId: 'workspace-123',
+      }),
+      /COMPOSIO_AUTH_CONFIG_GOOGLEDRIVE/,
+    );
+  } finally {
+    if (typeof original === 'string') process.env.COMPOSIO_AUTH_CONFIG_GOOGLEDRIVE = original;
+    else delete process.env.COMPOSIO_AUTH_CONFIG_GOOGLEDRIVE;
+  }
+
+  assert.equal(record.linkedAuthConfigId, undefined, 'nothing may be linked on a failed override');
 });
 
 test('Composio bridge disconnects every active account for a toolkit', async () => {

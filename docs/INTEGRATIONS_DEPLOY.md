@@ -96,6 +96,46 @@ The server builds the return URL itself, as
 `status=success` or `status=failed` to it. Nothing carries a status before
 Composio sets one.
 
+### 4b. Which auth config a connection is opened against
+
+One Composio account can hold **several auth configs for the same toolkit** —
+typically Composio's own managed one plus any custom ones you created against
+your own OAuth client. They are not interchangeable, and the difference is
+invisible in the UI: both end in "Connected ✓".
+
+Violema picks deterministically, in this order:
+
+1. `COMPOSIO_AUTH_CONFIG_<TOOLKIT>` (e.g. `COMPOSIO_AUTH_CONFIG_GOOGLEDRIVE=ac_…`)
+   if set. A set-but-unknown id **fails the connect** instead of falling back.
+2. A **Composio-managed** config (`isComposioManaged: true`) — Composio's verified
+   OAuth app, carrying the toolkit's full default scopes.
+3. Otherwise the first available, for toolkits that only have custom configs.
+4. None at all → one managed config is created.
+
+The chosen config is logged on every connect as
+`[composio] auth config selected { toolkit, authConfigId, authConfigName, composioManaged, reason }`
+— ids and names only, never credentials. Check that line first when a connection
+authorises but the workflow still reports missing permissions.
+
+**Two failure modes a custom Google auth config causes.** Both were observed in
+production on a `googledrive` connection:
+
+- **Scopes.** A custom config scoped to `drive.metadata.readonly` can list file
+  names and nothing else — it cannot read file contents and cannot create files.
+  The connection looks healthy; the workflow fails later with a permissions
+  error. Composio's managed Drive config carries the full `drive`, `drive.file`,
+  `drive.readonly` set.
+- **Testing mode.** A custom config points at *your* Google Cloud OAuth client.
+  While that client's consent screen is in **Testing**, only the accounts on its
+  test-user allowlist can authorise at all — every other user, including every
+  beta tester, is refused at Google's consent screen. Publishing the consent
+  screen (or using the Composio-managed config) is the fix.
+
+If a workspace already connected through the wrong config, the connection keeps
+the scopes it was granted — selection only applies when a connection is created,
+so it does not upgrade an existing one. Disconnect that toolkit in Violema and
+connect again so a fresh consent runs against the right auth config.
+
 ### 5. How a connection actually gets used
 
 **Connected tools are not auto-discovered by the model.** There is no dynamic

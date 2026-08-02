@@ -8,6 +8,13 @@
  * See docs/INTEGRATIONS_ARCHITECTURE.md for the full strategy.
  */
 
+import {
+  describeAuthConfigChoice,
+  selectComposioAuthConfig,
+  type ComposioAuthConfigChoice,
+  type ComposioAuthConfigSummary,
+} from './composioAuthConfig';
+
 export interface ComposioClientAdapter {
   tools: {
     execute(
@@ -20,7 +27,12 @@ export interface ComposioClientAdapter {
     ): Promise<unknown>;
   };
   authConfigs: {
-    list(query: { toolkit: string }): Promise<{ items: Array<{ id: string }> }>;
+    /**
+     * Items carry more than an id: the SDK returns `name`, `status`, and the
+     * camelCase `isComposioManaged` that decides which config a connection is
+     * opened against. See `composioAuthConfig.ts` for why that choice matters.
+     */
+    list(query: { toolkit: string }): Promise<{ items: ComposioAuthConfigSummary[] }>;
     create(
       toolkitSlug: string,
       options: {
@@ -60,6 +72,13 @@ export interface ComposioConnectedAccount {
 export interface ComposioConnectionInit {
   redirectUrl: string | null;
   connectionRequestId?: string;
+  /**
+   * Which auth config this connection was opened against. Ids, names and flags
+   * only — never credentials. Present so an operator can tell from the response
+   * (or the ledger) *which* of an account's several auth configs a user just
+   * authorised against, instead of discovering it days later as a scope error.
+   */
+  authConfig?: ComposioAuthConfigChoice;
 }
 
 /**
@@ -181,17 +200,28 @@ export function createComposioBridge(
 
       const toolkitSlug = toToolkitSlug(appName);
       const authConfigs = await client.authConfigs.list({ toolkit: toolkitSlug });
-      let authConfigId = authConfigs.items[0]?.id;
 
-      if (!authConfigId) {
-        const authConfig = await client.authConfigs.create(toolkitSlug, {
+      // Never `items[0]`: an account can hold several auth configs per toolkit,
+      // and picking the wrong one silently yields a connection with the wrong
+      // scopes — or one only allowlisted accounts can authorise against.
+      let choice = selectComposioAuthConfig(toolkitSlug, authConfigs.items);
+
+      if (!choice) {
+        const createdName = `${toolkitSlug} Auth Config`;
+        const created = await client.authConfigs.create(toolkitSlug, {
           type: 'use_composio_managed_auth',
-          name: `${toolkitSlug} Auth Config`,
+          name: createdName,
         });
-        authConfigId = authConfig.id;
+        // Managed by construction — that is the type we ask for above.
+        choice = { id: created.id, name: createdName, managed: true, reason: 'created' };
       }
 
-      const connection = await client.connectedAccounts.link(ctx.entityId, authConfigId, {
+      // Ids, names and flags only. The SDK's list items carry a `credentials`
+      // object (OAuth client id/secret for custom configs), so the payload is
+      // built field by field in `describeAuthConfigChoice`, never spread.
+      console.log('[composio] auth config selected', describeAuthConfigChoice(toolkitSlug, choice));
+
+      const connection = await client.connectedAccounts.link(ctx.entityId, choice.id, {
         allowMultiple: true,
         // Where Composio returns the user after their OAuth round trip. Always
         // a server-derived origin — never anything taken from the request.
@@ -200,6 +230,7 @@ export function createComposioBridge(
       return {
         redirectUrl: connection.redirectUrl ?? null,
         ...(connection.id ? { connectionRequestId: connection.id } : {}),
+        authConfig: choice,
       };
     },
 
