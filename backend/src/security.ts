@@ -20,6 +20,10 @@ export const RATE_LIMIT_EXEMPT_PATHS: ReadonlySet<string> = new Set([
   '/api/platform/stream',
   '/api/billing/stripe/webhook',
   '/api/slack/events',
+  // Slack interactivity shares the events path's protection model: every
+  // request is signature-verified before it is read, and a burst of button
+  // clicks during a review sweep is legitimate traffic.
+  '/api/slack/interactions',
 ]);
 
 export function isRateLimitExempt(path: string): boolean {

@@ -65,7 +65,8 @@ import {
   isSensitiveRateLimitPath,
 } from './security';
 import { takeBrowserScreenshot } from './tools/browserScreenshot';
-import { getIntegrationStatus, searchWeb, sendMessage } from './integrations';
+import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } from './integrations';
+import { usesInternalDemoRouting } from './platform/tenancy';
 import { renderChartSpecsToFiles } from './chartImage';
 import {
   disconnectComposioApp,
@@ -97,10 +98,8 @@ import {
 } from './platform/provenance';
 import { buildGenerateReportResult } from './platform/reportGeneration';
 import {
-  approveAutomationReview,
   buildAutomationPreflightReport,
   classifyAutomationRunOutcome,
-  requestAutomationChanges,
   validateAutomationDeliveryDraft,
 } from './platform/automationLifecycle';
 import {
@@ -207,6 +206,40 @@ import {
   buildSlackIncomingReply,
   stripSlackMentions,
 } from './slackIncoming';
+import { verifySlackRequestSignature } from './slack/signature';
+import { SLACK_READ_ONLY_NOTICE, isSlackOperator } from './slack/operators';
+import { matchAutomationByName, parseSlackOperatorIntent } from './slack/intents';
+import {
+  consumePendingChangeRequest,
+  hasPendingChangeRequest,
+  registerPendingChangeRequest,
+} from './slack/pendingChangeRequests';
+import {
+  SLACK_APPROVE_ACTION_ID,
+  SLACK_REQUEST_CHANGES_ACTION_ID,
+  buildReviewFallbackText,
+  buildReviewRequestBlocks,
+  buildReviewResolvedBlocks,
+  parseReviewActionValue,
+  type ReviewResolvedOutcome,
+} from './slack/reviewCard';
+import { resolveSlackOperatorTransport } from './slack/transport';
+import {
+  buildAmbiguousRunReply,
+  buildHelpReply,
+  buildReviewsReply,
+  buildStatusReply,
+  buildUnknownMissionReply,
+} from './slack/operatorConsole';
+import {
+  executeReviewApproval,
+  executeReviewChangeRequest,
+  findAutomationReviewContext,
+  reviewFailureStatusCode,
+  type ReviewActionContext,
+  type ReviewActor,
+  type ReviewSendInput,
+} from './reviewActions';
 import {
   getWorkspaceScopedIntegrationCredential,
   getWorkspaceProviderToken,
@@ -1175,26 +1208,16 @@ function assertAdminAccess(req: Request) {
   return assertAuthenticatedAdminAccess(req);
 }
 
+// Both Slack routes verify through the same extracted implementation, so the
+// action-executing interactions path can never drift to a weaker check than the
+// events path. Throws on failure; callers answer 401.
 function verifySlackSignature(rawBody: Buffer, signature: string, timestamp: string) {
-  const signingSecret = getRequiredEnv('SLACK_SIGNING_SECRET');
-  const requestTime = Number(timestamp);
-  if (!Number.isFinite(requestTime)) {
-    throw new Error('Invalid Slack request timestamp');
-  }
-
-  const ageSeconds = Math.abs(Math.floor(Date.now() / 1000) - requestTime);
-  if (ageSeconds > 60 * 5) {
-    throw new Error('Slack request timestamp is too old');
-  }
-
-  const base = `v0:${timestamp}:${rawBody.toString('utf8')}`;
-  const digest = `v0=${crypto.createHmac('sha256', signingSecret).update(base).digest('hex')}`;
-  const expected = Buffer.from(digest, 'utf8');
-  const actual = Buffer.from(signature, 'utf8');
-
-  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
-    throw new Error('Invalid Slack signature');
-  }
+  verifySlackRequestSignature({
+    rawBody,
+    signature,
+    timestamp,
+    signingSecret: process.env.SLACK_SIGNING_SECRET || '',
+  });
 }
 
 function pruneHandledSlackEvents(now = Date.now()) {
@@ -1211,6 +1234,225 @@ function markSlackEventHandled(eventId: string) {
   if (handledSlackEvents.has(eventId)) return false;
   handledSlackEvents.set(eventId, now);
   return true;
+}
+
+/**
+ * Replies on the internal operating surface.
+ *
+ * Deliberately passes no workspaceId, exactly like the existing conversational
+ * reply path: that routes through our own bot token rather than a tenant's
+ * Composio connection. Phase A is our workspace only, and an internal control
+ * message must never leave through a customer's Slack.
+ */
+async function replyInSlack(channel: string, body: string, threadTs?: string) {
+  await sendMessage({ to: channel, channel: 'slack', threadTs, body });
+}
+
+/**
+ * A Slack member id is not a Violema session, so the actor is built from the
+ * allowlisted id plus an email only when one can actually be mapped. Nothing is
+ * guessed — an unmappable operator is recorded by id alone.
+ */
+function resolveSlackActor(slackUserId: string): ReviewActor {
+  const match = listAuthUsers().find((user) =>
+    typeof user.slackDisplayTarget === 'string' &&
+    user.slackDisplayTarget.trim().toUpperCase() === slackUserId.trim().toUpperCase()
+  );
+
+  return {
+    surface: 'slack',
+    label: match?.name || match?.email || `Slack operator ${slackUserId}`,
+    slackUserId,
+    ...(match?.email ? { email: match.email } : {}),
+  };
+}
+
+function buildSlackOperatorConsoleData(workspaceId: string) {
+  return {
+    automations: listAutomations().filter((automation) => automationBelongsToWorkspace(automation, workspaceId)),
+    tasks: listTasks(workspaceId),
+    taskRuns: listTaskRuns(workspaceId),
+  };
+}
+
+/**
+ * `triggerAutomationNow` starts the run asynchronously and hands back the
+ * automation, not the run. The run id appears once `runAutomation` creates the
+ * task run, so this waits briefly for it rather than inventing one — and gives
+ * up honestly instead of blocking the reply.
+ */
+async function resolveStartedRunId(workspaceId: string, automationId: string, sinceMs: number) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const run = listTaskRuns(workspaceId)
+      .filter((item) =>
+        item.metadata?.automationId === automationId &&
+        Date.parse(item.startedAt) >= sinceMs
+      )
+      .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))[0];
+    if (run) return run.id;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return null;
+}
+
+async function handleSlackRunIntent(input: {
+  missionQuery: string;
+  channel: string;
+  threadTs?: string;
+  workspaceId: string;
+}) {
+  const automations = listAutomations().filter((automation) =>
+    automationBelongsToWorkspace(automation, input.workspaceId)
+  );
+  const match = matchAutomationByName(input.missionQuery, automations);
+
+  if (match.kind === 'none') {
+    await replyInSlack(input.channel, buildUnknownMissionReply(input.missionQuery, automations), input.threadTs);
+    return;
+  }
+  if (match.kind === 'ambiguous') {
+    await replyInSlack(input.channel, buildAmbiguousRunReply(input.missionQuery, match.options), input.threadTs);
+    return;
+  }
+
+  const automation = match.automation;
+
+  // The same gate the HTTP run endpoint applies. A blocked mission reports its
+  // blockers here instead of starting and failing out of sight.
+  try {
+    const readiness = await evaluateAutomationRunReadiness({
+      workspaceId: automation.workspaceId || input.workspaceId,
+      workflowId: inferWorkflowIdFromAutomation(automation),
+      steps: automation.steps,
+      deliveryTarget: automation.notify,
+    });
+    if (!readiness.allowed) {
+      const blockers = readiness.blockers.map((blocker) => `• ${blocker.label} — ${blocker.detail}`);
+      await replyInSlack(
+        input.channel,
+        [`*${automation.name}* is not ready to run.`, readiness.summary, ...blockers].filter(Boolean).join('\n'),
+        input.threadTs,
+      );
+      return;
+    }
+  } catch (error) {
+    console.error('[slack] readiness check failed before run', error);
+    await replyInSlack(
+      input.channel,
+      'I could not verify whether that mission is ready to run. Nothing was started — try again.',
+      input.threadTs,
+    );
+    return;
+  }
+
+  const startedAt = Date.now();
+  const record = triggerAutomationNow(automation.id, runAutomation);
+  if (!record) {
+    await replyInSlack(input.channel, `I could not start ${automation.name}.`, input.threadTs);
+    return;
+  }
+
+  broadcastTaskPanelEvent(input.workspaceId, { type: 'automation_triggered', automationId: record.id });
+
+  const runId = await resolveStartedRunId(input.workspaceId, automation.id, startedAt);
+  await replyInSlack(
+    input.channel,
+    runId
+      ? `Started *${record.name}* — run \`${runId}\`. I'll post the review card here when it needs approval.`
+      : `Started *${record.name}*. I'll post the review card here when it needs approval.`,
+    input.threadTs,
+  );
+}
+
+async function handleSlackOperatorIntent(input: {
+  intent: NonNullable<ReturnType<typeof parseSlackOperatorIntent>>;
+  channel: string;
+  threadTs?: string;
+  slackUserId: string;
+  workspaceId: string;
+}) {
+  const canOperate = isSlackOperator(input.slackUserId);
+
+  if (input.intent.kind === 'help') {
+    await replyInSlack(input.channel, buildHelpReply(canOperate), input.threadTs);
+    return;
+  }
+
+  // Reading is open to the workspace; executing is not.
+  if (input.intent.kind === 'status') {
+    await replyInSlack(input.channel, buildStatusReply(buildSlackOperatorConsoleData(input.workspaceId)), input.threadTs);
+    return;
+  }
+  if (input.intent.kind === 'reviews') {
+    await replyInSlack(input.channel, buildReviewsReply(buildSlackOperatorConsoleData(input.workspaceId)), input.threadTs);
+    return;
+  }
+
+  if (!canOperate) {
+    await replyInSlack(input.channel, SLACK_READ_ONLY_NOTICE, input.threadTs);
+    return;
+  }
+
+  await handleSlackRunIntent({
+    missionQuery: input.intent.missionQuery,
+    channel: input.channel,
+    threadTs: input.threadTs,
+    workspaceId: input.workspaceId,
+  });
+}
+
+async function handleSlackChangeNoteReply(input: {
+  channel: string;
+  threadTs: string;
+  slackUserId: string;
+  note: string;
+}) {
+  // Re-checked at consume time, not just at click time: the pending ask is
+  // keyed by thread, and anyone can type in a thread.
+  if (!isSlackOperator(input.slackUserId)) return;
+
+  const pending = consumePendingChangeRequest({
+    channel: input.channel,
+    threadTs: input.threadTs,
+    // Only the operator who asked for changes may supply the note. Another
+    // operator typing in the same thread must not have their words recorded
+    // as someone else's review decision.
+    slackUserId: input.slackUserId,
+  });
+  if (!pending) return;
+
+  const note = input.note.trim();
+  if (!note) {
+    await replyInSlack(input.channel, 'I need a short note describing the change. Click Request changes again when ready.', input.threadTs);
+    return;
+  }
+
+  const actor = resolveSlackActor(input.slackUserId);
+  const result = executeReviewChangeRequest({
+    workspaceId: pending.workspaceId,
+    automationId: pending.automationId,
+    runId: pending.runId,
+    actor,
+    note,
+    onBroadcast: (context, eventType) => {
+      broadcastAutomationReviewUpdate(pending.workspaceId, context.automation.id, context.taskRun.id, eventType);
+    },
+  });
+
+  if (result.status !== 'ok') {
+    await replyInSlack(input.channel, describeReviewFailureForSlack(result), input.threadTs);
+    return;
+  }
+
+  await updateSlackReviewCard({
+    channel: pending.channel,
+    ts: pending.reviewMessageTs,
+    missionName: result.context.automation.name,
+    outcome: 'changes_requested',
+    detail: 'Changes requested before delivery. Nothing was sent.',
+    actorLabel: `<@${input.slackUserId}>`,
+  });
+  await replyInSlack(input.channel, 'Noted — changes requested, nothing was sent.', input.threadTs);
 }
 
 async function handleSlackIncomingEvent(payload: {
@@ -1231,9 +1473,41 @@ async function handleSlackIncomingEvent(payload: {
   if (!channel) return;
   if (event.bot_id || typeof event.subtype === 'string') return;
   const isDm = eventType === 'message' && event.channel_type === 'im';
+  const slackUserId = typeof event.user === 'string' ? event.user : '';
+  const parentThreadTs = typeof event.thread_ts === 'string' ? event.thread_ts : '';
+
+  // A "Request changes" click leaves its thread waiting for a note. That reply
+  // is an ordinary threaded message rather than a mention, so it is claimed
+  // here — before the mention filter below would discard it.
+  if (parentThreadTs && hasPendingChangeRequest({ channel, threadTs: parentThreadTs })) {
+    await handleSlackChangeNoteReply({
+      channel,
+      threadTs: parentThreadTs,
+      slackUserId,
+      note: stripSlackMentions(eventText),
+    });
+    return;
+  }
+
   if (eventType !== 'app_mention' && !isDm) return;
 
   const prompt = stripSlackMentions(eventText);
+
+  // Deterministic operating verbs are handled before any model call, and before
+  // the credit gate below: reading status and operating Violema must not depend
+  // on a model being reachable or on the workspace having balance.
+  const intent = parseSlackOperatorIntent(prompt);
+  if (intent) {
+    await handleSlackOperatorIntent({
+      intent,
+      channel,
+      threadTs,
+      slackUserId,
+      workspaceId: payload.workspaceId,
+    });
+    return;
+  }
+
   const billing = getBillingStatus(payload.workspaceId);
   if (billing.summary.balanceCredits <= 0) {
     await sendMessage({
@@ -1272,6 +1546,123 @@ async function handleSlackIncomingEvent(payload: {
       threadTs,
       body: 'I ran into an issue processing that request. Please try again, or rephrase your question.',
     });
+  }
+}
+
+/**
+ * Turns a shared-core failure into something an operator can act on.
+ *
+ * The `invalid` case is the synchronization case that matters: the dashboard
+ * already consumed this review, so the honest answer names who closed it and
+ * when rather than reporting a generic error.
+ */
+function describeReviewFailureForSlack(failure: { status: string; error: string; resolved?: { status: string; reviewer: string; reviewedAt: string } }) {
+  if (failure.status === 'fabricated_evidence') {
+    return `I stopped this delivery: ${failure.error}`;
+  }
+  if (failure.status === 'scan_failed') {
+    return 'I could not verify the stored evidence for this run, so nothing was sent. Try again.';
+  }
+  if (failure.resolved) {
+    const when = failure.resolved.reviewedAt ? ` at ${failure.resolved.reviewedAt}` : '';
+    const what = failure.resolved.status === 'delivered' ? 'approved' : 'sent back for changes';
+    return `This review was already ${what} by ${failure.resolved.reviewer}${when}.`;
+  }
+  return failure.error;
+}
+
+/**
+ * Rewrites the review card in place so Slack can never show buttons for a
+ * decision that has already been made — on either surface.
+ */
+async function updateSlackReviewCard(input: {
+  channel: string;
+  ts: string;
+  missionName: string;
+  outcome: ReviewResolvedOutcome;
+  detail: string;
+  actorLabel: string;
+}) {
+  const transport = resolveSlackOperatorTransport();
+  if (!transport) return;
+
+  const resolvedAt = new Date().toISOString();
+  try {
+    await transport.updateMessage({
+      channel: input.channel,
+      ts: input.ts,
+      text: `${input.missionName}: ${input.detail}`,
+      blocks: buildReviewResolvedBlocks({
+        missionName: input.missionName,
+        outcome: input.outcome,
+        detail: input.detail,
+        actorLabel: input.actorLabel,
+        resolvedAt,
+      }),
+    });
+  } catch (error) {
+    // A failed card update must never undo a completed decision. The dashboard
+    // is already correct; Slack is the stale surface, and says so on next click.
+    console.error('[slack] could not update review card', error);
+  }
+}
+
+/**
+ * Posts the interactive review card for a run that parked at approval, and
+ * records where it landed on the run.
+ *
+ * Internal workspace only, and through our own bot transport — never the
+ * tenant Composio delivery path, which belongs to customer sends.
+ */
+async function postSlackReviewCard(input: {
+  workspaceId: string;
+  automationId: string;
+  missionName: string;
+  runId: string;
+  deliveryTarget: string;
+  summary?: string;
+}) {
+  if (!usesInternalDemoRouting(input.workspaceId)) return;
+
+  // The card carries the drafted brief, so it must not land in the channel the
+  // approved brief ships to — an unapproved draft appearing at the destination
+  // reads as a delivery. Without a dedicated review channel, no card: the
+  // dashboard remains the review surface.
+  const channel = (process.env.SLACK_REVIEW_CHANNEL || '').trim();
+  if (!channel) return;
+
+  const transport = resolveSlackOperatorTransport();
+  if (!transport) return;
+
+  try {
+    const resolved = await validateMessageTarget({ to: channel, channel: 'slack' });
+    const result = await transport.postMessage({
+      channel: resolved.normalizedTarget,
+      text: buildReviewFallbackText({ missionName: input.missionName, deliveryTarget: input.deliveryTarget }),
+      blocks: buildReviewRequestBlocks({
+        missionName: input.missionName,
+        deliveryTarget: input.deliveryTarget,
+        summary: input.summary,
+        automationId: input.automationId,
+        runId: input.runId,
+        workspaceId: input.workspaceId,
+      }),
+    });
+
+    if (!result.ok || !result.ts) {
+      console.error('[slack] review card post failed', { runId: input.runId, error: result.error });
+      return;
+    }
+
+    // Stored so an interaction can find its run, and so chat.update targets the
+    // exact message. Identifiers only.
+    updateTaskRun(input.runId, {
+      metadata: {
+        slackReviewMessage: { channel: result.channel || resolved.normalizedTarget, ts: result.ts },
+      },
+    });
+  } catch (error) {
+    console.error('[slack] could not post review card', error);
   }
 }
 
@@ -4764,6 +5155,28 @@ export async function runAutomation(automation: {
     if (completedSnapshot) {
       broadcastTaskPanelEvent(workspaceId, completedSnapshot);
     }
+
+    // A run that parks at approval announces itself in Slack with its own
+    // buttons, so an operator never has to poll the dashboard to discover that
+    // something is waiting on them. Fail-soft: the dashboard is the source of
+    // truth, and a card that cannot be posted must not fail the run.
+    if (outcome.reviewRequired) {
+      const reviewGate = execution.artifacts.find((artifact) =>
+        (artifact as { kind?: string }).kind === 'review_gate'
+      ) as { payload?: { deliveryTarget?: string } } | undefined;
+      const reviewTarget = reviewGate?.payload?.deliveryTarget || deliveryTarget || '';
+      if (reviewTarget) {
+        await postSlackReviewCard({
+          workspaceId,
+          automationId: automation.id,
+          missionName: automation.name,
+          runId: taskRun.id,
+          deliveryTarget: reviewTarget,
+          summary,
+        });
+      }
+    }
+
     return {
       ok: outcome.schedulerOk,
       deliveryError: execution.deliveryError || undefined,
@@ -6149,11 +6562,212 @@ app.post('/api/slack/events', async (req: Request, res: Response) => {
     return;
   }
 
+  // Slack has already been acknowledged, so a failure here can only be logged —
+  // but it must never surface as an unhandled rejection, which would take the
+  // process down and stop every scheduled mission.
   void handleSlackIncomingEvent({
     eventId: body.event_id,
     event: body.event,
     workspaceId: slackWorkspace.workspaceId,
+  }).catch((error) => console.error('[slack] event handling failed', error));
+});
+
+/**
+ * Slack interactivity (the review card's buttons).
+ *
+ * Scoped body parser: Slack posts this endpoint as
+ * `application/x-www-form-urlencoded` with a single `payload` field holding
+ * JSON, which the global `express.json()` will not touch. Mounting the parser
+ * on this route only means no other route's body handling changes, and the
+ * `verify` hook captures the exact bytes the signature must be checked against.
+ */
+const slackInteractionsBodyParser = express.urlencoded({
+  extended: false,
+  verify: (req, _res, buf) => {
+    (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+  },
+});
+
+interface SlackInteractionPayload {
+  type?: string;
+  user?: { id?: string };
+  team?: { id?: string };
+  channel?: { id?: string };
+  message?: { ts?: string };
+  container?: { channel_id?: string; message_ts?: string };
+  actions?: Array<{ action_id?: string; value?: string }>;
+}
+
+async function handleSlackApproveInteraction(input: {
+  workspaceId: string;
+  automationId: string;
+  runId: string;
+  slackUserId: string;
+  channel: string;
+  messageTs: string;
+}) {
+  const actor = resolveSlackActor(input.slackUserId);
+  const result = await executeReviewApproval({
+    workspaceId: input.workspaceId,
+    automationId: input.automationId,
+    runId: input.runId,
+    actor,
+    // A Slack approval is a real approval. There is no dry-run button.
+    send: buildApprovalSend(input.workspaceId, false),
+    onBroadcast: (context, eventType) => {
+      broadcastAutomationReviewUpdate(input.workspaceId, context.automation.id, context.taskRun.id, eventType);
+    },
   });
+
+  if (result.status !== 'ok') {
+    const detail = describeReviewFailureForSlack(result);
+    // The card is rewritten even on failure, so a consumed review stops
+    // offering buttons that cannot work.
+    await updateSlackReviewCard({
+      channel: input.channel,
+      ts: input.messageTs,
+      missionName: result.missionName || 'this review',
+      outcome: result.status === 'invalid' && result.resolved ? 'already_resolved' : 'blocked',
+      detail,
+      actorLabel: `<@${input.slackUserId}>`,
+    });
+    await replyInSlack(input.channel, detail, input.messageTs);
+    return;
+  }
+
+  const target = typeof result.receipt.deliveryTarget === 'string' ? result.receipt.deliveryTarget : 'the configured destination';
+  await updateSlackReviewCard({
+    channel: input.channel,
+    ts: input.messageTs,
+    missionName: result.context.automation.name,
+    outcome: 'approved',
+    detail: `Delivered to ${target}.`,
+    actorLabel: `<@${input.slackUserId}>`,
+  });
+}
+
+async function handleSlackRequestChangesInteraction(input: {
+  workspaceId: string;
+  automationId: string;
+  runId: string;
+  slackUserId: string;
+  channel: string;
+  messageTs: string;
+}) {
+  registerPendingChangeRequest({
+    automationId: input.automationId,
+    runId: input.runId,
+    workspaceId: input.workspaceId,
+    channel: input.channel,
+    threadTs: input.messageTs,
+    reviewMessageTs: input.messageTs,
+    requestedBySlackUserId: input.slackUserId,
+  });
+
+  await replyInSlack(
+    input.channel,
+    `<@${input.slackUserId}> what should change? Reply in this thread within 15 minutes and I'll send it back with your note. Nothing has been delivered.`,
+    input.messageTs,
+  );
+}
+
+app.post('/api/slack/interactions', slackInteractionsBodyParser, async (req: Request, res: Response) => {
+  const signature = req.header('x-slack-signature');
+  const timestamp = req.header('x-slack-request-timestamp');
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+
+  if (!signature || !timestamp || !rawBody) {
+    res.status(400).json({ error: 'Missing Slack signature, timestamp, or raw request body' });
+    return;
+  }
+
+  // Identical verification to the events path — this one executes actions, so
+  // it can never be the weaker of the two.
+  try {
+    verifySlackSignature(rawBody, signature, timestamp);
+  } catch (error) {
+    res.status(401).json({ error: error instanceof Error ? error.message : 'Slack signature verification failed' });
+    return;
+  }
+
+  let payload: SlackInteractionPayload;
+  try {
+    payload = JSON.parse(String((req.body as { payload?: unknown })?.payload ?? '')) as SlackInteractionPayload;
+  } catch {
+    res.status(400).json({ error: 'Malformed Slack interaction payload' });
+    return;
+  }
+
+  const action = payload.actions?.[0];
+  const actionId = action?.action_id || '';
+  if (payload.type !== 'block_actions' || !actionId) {
+    res.json({ ok: true });
+    return;
+  }
+
+  const routing = parseReviewActionValue(action?.value);
+  const slackUserId = payload.user?.id || '';
+  const channel = payload.container?.channel_id || payload.channel?.id || '';
+  const messageTs = payload.container?.message_ts || payload.message?.ts || '';
+
+  if (!routing || !channel || !messageTs) {
+    res.json({ ok: true });
+    return;
+  }
+
+  // The signing secret is app-wide, so a signature alone does not prove which
+  // Slack team a click came from. Phase A serves exactly one workspace: verify
+  // the click's team resolves to the same workspace the button was minted for,
+  // so a second installation can never act on this one's reviews.
+  const interactionWorkspace = resolveSlackEventWorkspace({
+    teamId: payload.team?.id,
+    channelId: channel,
+  });
+  // Refuse only on a positive mismatch. An unmapped channel is normal — a
+  // dedicated review channel need not appear in the alias map — and the button
+  // value was already minted by this server and HMAC-verified on arrival. But
+  // if the click DOES resolve to a different workspace, a second installation
+  // is reaching for this one's reviews.
+  if (interactionWorkspace && interactionWorkspace.workspaceId !== routing.workspaceId) {
+    console.warn('[slack] interaction workspace mismatch — refusing to act');
+    res.json({ ok: true });
+    return;
+  }
+
+  // Authorization before anything executes. A non-operator who can see the card
+  // still cannot act on it.
+  if (!isSlackOperator(slackUserId)) {
+    res.json({ ok: true });
+    void replyInSlack(channel, SLACK_READ_ONLY_NOTICE, messageTs)
+      .catch((error) => console.error('[slack] read-only notice failed', error));
+    return;
+  }
+
+  // Slack requires a response within 3 seconds; approving performs a real
+  // delivery, so the work continues after the ack.
+  res.json({ ok: true });
+
+  const context = {
+    workspaceId: routing.workspaceId,
+    automationId: routing.automationId,
+    runId: routing.runId,
+    slackUserId,
+    channel,
+    messageTs,
+  };
+
+  if (actionId === SLACK_APPROVE_ACTION_ID) {
+    void handleSlackApproveInteraction(context).catch((error) => {
+      console.error('[slack] approve interaction failed', error);
+    });
+    return;
+  }
+
+  if (actionId === SLACK_REQUEST_CHANGES_ACTION_ID) {
+    void handleSlackRequestChangesInteraction(context).catch((error) => {
+      console.error('[slack] request-changes interaction failed', error);
+    });
+  }
 });
 
 app.get('/api/billing/stripe/config', (req: Request, res: Response) => {
@@ -6346,38 +6960,9 @@ function readDryRunFlag(value: unknown) {
   return value === true || value === 'true' || value === 1 || value === '1';
 }
 
-function findAutomationReviewContext(workspaceId: string, automationId: string, runId: string) {
-  const automation = getAutomationById(automationId);
-  if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
-    return { error: 'Automation not found' as const };
-  }
-
-  const taskRun = listTaskRuns(workspaceId).find((run) =>
-    run.id === runId &&
-    typeof run.metadata?.automationId === 'string' &&
-    run.metadata.automationId === automationId
-  );
-  if (!taskRun) return { error: 'Automation run not found' as const };
-
-  const task = listTasks(workspaceId).find((item) => item.id === taskRun.taskId);
-  if (!task) return { error: 'Mission task not found' as const };
-
-  return { automation, task, taskRun };
-}
-
-function applyReviewTaskPatch(taskId: string, currentMetadata: Record<string, unknown> | undefined, patch: {
-  status: 'completed' | 'blocked';
-  delegationState: 'completed' | 'review';
-  metadata?: Record<string, unknown>;
-}) {
-  return updateTask(taskId, {
-    ...patch,
-    metadata: {
-      ...(currentMetadata || {}),
-      ...(patch.metadata || {}),
-    },
-  });
-}
+// `findAutomationReviewContext` and the review task patch now live in
+// `./reviewActions`, shared with the Slack interactive card so both surfaces
+// resolve and mutate a review through exactly one implementation.
 
 function broadcastAutomationReviewUpdate(workspaceId: string, automationId: string, taskRunId: string, type: string) {
   const snapshotEvent = buildTaskRunSnapshotEvent(workspaceId, taskRunId, 'progress');
@@ -6533,174 +7118,130 @@ app.post('/api/automations/:id/run', async (req: Request, res: Response) => {
   res.json({ ok: true, item: record, message: `Triggered ${record.name}` });
 });
 
+/**
+ * The live delivery used by an approval. A dry run substitutes a no-op sender
+ * so the whole path — including the provenance re-scan — is exercised without
+ * anything leaving the building.
+ */
+function buildApprovalSend(workspaceId: string, dryRun: boolean) {
+  if (dryRun) {
+    return async ({ to, subject, channel }: ReviewSendInput) => ({
+      success: true,
+      dryRun: true,
+      skippedExternalDelivery: true,
+      status: 'dry_run',
+      channel: channel || (to.includes('@') ? 'email' : 'slack'),
+      to,
+      subject,
+    });
+  }
+
+  return ({ to, body, subject, channel, evidenceLinks, chartSpecs }: ReviewSendInput) => sendMessage({
+    to,
+    body,
+    subject,
+    channel,
+    evidenceLinks,
+    attachedImages: chartSpecs?.length
+      ? renderChartSpecsToFiles({ specs: chartSpecs, dir: BRIEF_CHARTS_DIR, baseUrl: PUBLIC_APP_BASE_URL })
+      : undefined,
+    // The approved send is the tenant's, so it uses the tenant's Slack.
+    workspaceId,
+  });
+}
+
+function respondReviewFailure(res: Response, failure: Exclude<Awaited<ReturnType<typeof executeReviewApproval>>, { status: 'ok' }>) {
+  if (failure.status === 'fabricated_evidence') {
+    res.status(409).json({
+      ok: false,
+      error: failure.error,
+      message: failure.error,
+      code: 'fabricated_evidence',
+    });
+    return;
+  }
+  res.status(reviewFailureStatusCode(failure)).json({ error: failure.error });
+}
+
 app.post('/api/automations/:id/reviews/:runId/approve', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
-  const context = findAutomationReviewContext(workspaceId, req.params.id, req.params.runId);
-  if ('error' in context) {
-    res.status(context.error === 'Automation not found' ? 404 : 400).json({ error: context.error });
+  const dryRun = readDryRunFlag(req.body?.dryRun);
+  const result = await executeReviewApproval({
+    workspaceId,
+    automationId: req.params.id,
+    runId: req.params.runId,
+    actor: { surface: 'dashboard', label: readBodyString(req.body?.reviewer, 'Violema reviewer') },
+    dryRun,
+    send: buildApprovalSend(workspaceId, dryRun),
+    onBroadcast: (context, eventType) => {
+      broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, eventType);
+    },
+  });
+
+  if (result.status !== 'ok') {
+    respondReviewFailure(res, result);
     return;
   }
 
-  // Provenance re-scan at the approval gate. The run-time scan fires at
-  // delivery, but an approval is a second, later decision against evidence
-  // stored on disk — so what is about to be sent is checked again here, using
-  // the same artifact resolution order the delivery path itself uses.
-  if (!isDemoWorkspace(workspaceId)) {
-    try {
-      const storedArtifacts = (Array.isArray(context.taskRun.metadata?.artifacts)
-        ? context.taskRun.metadata.artifacts
-        : Array.isArray(context.task.metadata?.latestArtifacts)
-          ? context.task.metadata.latestArtifacts
-          : []) as Parameters<typeof findFabricatedEvidence>[0]['artifacts'];
-      const storedStepExecutions = (Array.isArray(context.taskRun.metadata?.stepExecutions)
-        ? context.taskRun.metadata.stepExecutions
-        : Array.isArray(context.task.metadata?.latestStepExecutions)
-          ? context.task.metadata.latestStepExecutions
-          : []) as Parameters<typeof findFabricatedEvidence>[0]['stepExecutions'];
-      const fabricated = findFabricatedEvidence({
-        artifacts: storedArtifacts,
-        stepExecutions: storedStepExecutions,
-      });
-      if (fabricated) {
-        const detail = buildFabricatedEvidenceDeliveryError(fabricated);
-        res.status(409).json({
-          ok: false,
-          error: detail,
-          message: detail,
-          code: 'fabricated_evidence',
-        });
-        return;
-      }
-    } catch (error) {
-      // A scan that cannot complete must fail closed: nothing sends until the
-      // stored evidence can actually be verified.
-      console.error('[automation] provenance re-scan failed at approval', error);
-      res.status(500).json({ error: 'Could not verify stored run evidence before sending. Try again.' });
-      return;
-    }
-  }
-
-  try {
-    const dryRun = readDryRunFlag(req.body?.dryRun);
-    const result = await approveAutomationReview({
-      task: context.task,
-      taskRun: context.taskRun,
-      reviewer: readBodyString(req.body?.reviewer, 'Violema reviewer'),
-      send: dryRun
-        ? async ({ to, subject, channel }) => ({
-            success: true,
-            dryRun: true,
-            skippedExternalDelivery: true,
-            status: 'dry_run',
-            channel: channel || (to.includes('@') ? 'email' : 'slack'),
-            to,
-            subject,
-          })
-        : ({ to, body, subject, channel, evidenceLinks, chartSpecs }) => sendMessage({
-            to,
-            body,
-            subject,
-            channel,
-            evidenceLinks,
-            attachedImages: chartSpecs?.length
-              ? renderChartSpecsToFiles({ specs: chartSpecs, dir: BRIEF_CHARTS_DIR, baseUrl: PUBLIC_APP_BASE_URL })
-              : undefined,
-            // The approved send is the tenant's, so it uses the tenant's Slack.
-            workspaceId,
-          }),
+  if (result.dryRun) {
+    res.json({
+      ok: true,
+      dryRun: true,
+      receipt: result.receipt,
+      delivery: result.delivery,
+      wouldPatchTask: result.taskPatch,
+      wouldPatchTaskRun: result.runPatch,
+      wouldAppendLedgerEvents: result.ledgerEvents,
     });
-    const workflowId = inferWorkflowIdFromAutomation(context.automation);
-    const approvalLedgerEvent = {
-      workspaceId,
-      workflowId,
-      automationId: context.automation.id,
-      taskId: context.task.id,
-      taskRunId: context.taskRun.id,
-      type: 'approval_granted' as const,
-      summary: `Approved delivery to ${result.receipt.deliveryTarget || 'configured destination'}.`,
-      metadata: { receipt: result.receipt },
-    };
-    const deliveryLedgerEvent = {
-      workspaceId,
-      workflowId,
-      automationId: context.automation.id,
-      taskId: context.task.id,
-      taskRunId: context.taskRun.id,
-      type: 'external_action_executed' as const,
-      summary: `Delivered approved workflow output to ${result.receipt.deliveryTarget || 'configured destination'}.`,
-      metadata: { delivery: result.delivery },
-    };
-    if (dryRun) {
-      res.json({
-        ok: true,
-        dryRun: true,
-        receipt: result.receipt,
-        delivery: result.delivery,
-        wouldPatchTask: result.taskPatch,
-        wouldPatchTaskRun: result.runPatch,
-        wouldAppendLedgerEvents: [approvalLedgerEvent, deliveryLedgerEvent],
-      });
-      return;
-    }
-
-    const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
-    const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
-    appendWorkflowLedgerEvent(approvalLedgerEvent);
-    appendWorkflowLedgerEvent(deliveryLedgerEvent);
-    broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_approved');
-    res.json({ ok: true, receipt: result.receipt, delivery: result.delivery, task, taskRun });
-  } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not approve delivery' });
+    return;
   }
+
+  res.json({
+    ok: true,
+    receipt: result.receipt,
+    delivery: result.delivery,
+    task: result.task,
+    taskRun: result.taskRun,
+  });
 });
 
 app.post('/api/automations/:id/reviews/:runId/request-changes', (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
-  const context = findAutomationReviewContext(workspaceId, req.params.id, req.params.runId);
-  if ('error' in context) {
-    res.status(context.error === 'Automation not found' ? 404 : 400).json({ error: context.error });
+  const result = executeReviewChangeRequest({
+    workspaceId,
+    automationId: req.params.id,
+    runId: req.params.runId,
+    actor: { surface: 'dashboard', label: readBodyString(req.body?.reviewer, 'Violema reviewer') },
+    note: readBodyString(req.body?.note, 'Changes requested before delivery.'),
+    dryRun: readDryRunFlag(req.body?.dryRun),
+    onBroadcast: (context, eventType) => {
+      broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, eventType);
+    },
+  });
+
+  if (result.status !== 'ok') {
+    respondReviewFailure(res, result);
     return;
   }
 
-  try {
-    const dryRun = readDryRunFlag(req.body?.dryRun);
-    const result = requestAutomationChanges({
-      task: context.task,
-      taskRun: context.taskRun,
-      reviewer: readBodyString(req.body?.reviewer, 'Violema reviewer'),
-      note: readBodyString(req.body?.note, 'Changes requested before delivery.'),
+  if (result.dryRun) {
+    res.json({
+      ok: true,
+      dryRun: true,
+      reviewRequest: result.reviewRequest,
+      wouldPatchTask: result.taskPatch,
+      wouldPatchTaskRun: result.runPatch,
+      wouldAppendLedgerEvents: result.ledgerEvents,
     });
-    const workflowId = inferWorkflowIdFromAutomation(context.automation);
-    const deniedLedgerEvent = {
-      workspaceId,
-      workflowId,
-      automationId: context.automation.id,
-      taskId: context.task.id,
-      taskRunId: context.taskRun.id,
-      type: 'approval_denied' as const,
-      summary: 'Reviewer requested changes before delivery.',
-      metadata: { reviewRequest: result.reviewRequest },
-    };
-    if (dryRun) {
-      res.json({
-        ok: true,
-        dryRun: true,
-        reviewRequest: result.reviewRequest,
-        wouldPatchTask: result.taskPatch,
-        wouldPatchTaskRun: result.runPatch,
-        wouldAppendLedgerEvents: [deniedLedgerEvent],
-      });
-      return;
-    }
-
-    const task = applyReviewTaskPatch(context.task.id, context.task.metadata, result.taskPatch);
-    const taskRun = updateTaskRun(context.taskRun.id, result.runPatch);
-    appendWorkflowLedgerEvent(deniedLedgerEvent);
-    broadcastAutomationReviewUpdate(workspaceId, context.automation.id, context.taskRun.id, 'automation_review_changes_requested');
-    res.json({ ok: true, reviewRequest: result.reviewRequest, task, taskRun });
-  } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not request changes' });
+    return;
   }
+
+  res.json({
+    ok: true,
+    reviewRequest: result.reviewRequest,
+    task: result.task,
+    taskRun: result.taskRun,
+  });
 });
 
 app.post('/api/automations/:id/reviews/:runId/rerun', async (req: Request, res: Response) => {
@@ -7068,6 +7609,13 @@ app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
 });
 
 export function startServer() {
+  // A backend that dies takes every scheduled mission with it. Nothing here is
+  // recoverable enough to justify an unhandled rejection killing the process,
+  // so the last-resort handler logs loudly and keeps the operator running.
+  process.on('unhandledRejection', (reason) => {
+    console.error('[server] unhandled rejection — investigate, process kept alive', reason);
+  });
+
   const orphaned = sweepOrphanedTaskRuns(new Date());
   if (orphaned.length > 0) {
     console.log(`Swept ${orphaned.length} task run(s) orphaned by the previous shutdown.`);

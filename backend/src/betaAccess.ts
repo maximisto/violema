@@ -18,6 +18,11 @@ export function isPublicBetaApiPath(method: string, path: string) {
     path === '/api/waitlist' ||
     path === '/api/billing/stripe/webhook' ||
     path === '/api/slack/events' ||
+    // Slack cannot present a Violema session cookie. Both Slack paths are
+    // authenticated by request signature instead, and the interactions path
+    // additionally checks the Slack member id against the operator allowlist
+    // before it will execute anything.
+    path === '/api/slack/interactions' ||
     isPublicAuthApiPath(method, path)
   );
 }
