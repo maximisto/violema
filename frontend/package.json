@@ -8,13 +8,15 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "test": "npm run test:brand-bleed && npm run test:integrations && npm run test:review-queue && npm run test:run-timestamp && npm run test:workspace-surfaces && npm run test:guided-start",
+    "test": "npm run test:brand-bleed && npm run test:integrations && npm run test:review-queue && npm run test:run-timestamp && npm run test:workspace-surfaces && npm run test:guided-start && npm run test:admin-surface && npm run test:run-warnings",
     "test:brand-bleed": "node tests/pageEdgeBrandBleed.contract.mjs",
     "test:integrations": "node tests/demoIntegrations.contract.mjs",
     "test:review-queue": "node tests/missionReviewQueue.contract.mjs",
     "test:run-timestamp": "node tests/runTimestamp.contract.mjs",
     "test:workspace-surfaces": "node tests/workspaceSurfaces.contract.mjs",
-    "test:guided-start": "node tests/guidedStart.contract.mjs"
+    "test:guided-start": "node tests/guidedStart.contract.mjs",
+    "test:admin-surface": "node tests/adminSurface.contract.mjs",
+    "test:run-warnings": "node tests/runWarnings.contract.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",

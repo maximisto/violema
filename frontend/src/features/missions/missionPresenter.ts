@@ -6,6 +6,7 @@ import type {
   MissionIntegrationView,
   MissionLessonView,
   MissionMetricView,
+  MissionRunWarning,
   MissionStatus,
   MissionStepView,
   MissionWorkspaceView,
@@ -108,6 +109,11 @@ export interface MissionSourceTask {
   workerTopology?: { summary?: string; workers?: MissionSourceAgent[] };
   latestDelivery?: Record<string, unknown>;
   reviewReceipt?: Record<string, unknown>;
+  /**
+   * Auxiliary failures from the backend severity lane. Optional on purpose:
+   * this build must work against a server that does not send it yet.
+   */
+  runWarnings?: unknown;
 }
 
 type MissionSourceArtifact = NonNullable<MissionSourceTask['latestArtifacts']>[number];
@@ -255,6 +261,53 @@ function findReviewArtifact(artifacts?: MissionSourceTask['latestArtifacts']) {
       readStringValue(payload.deliveryTarget) ||
       payload.approvalRequired === true
     );
+  });
+}
+
+/**
+ * Read `runWarnings` from whatever shape arrived, or nothing at all.
+ *
+ * Every field is validated rather than trusted: a partial record from an older
+ * or newer server must not put an empty amber banner above an approve button.
+ * A row survives only if it carries both a title and a message.
+ */
+export function readMissionRunWarnings(value: unknown): MissionRunWarning[] {
+  if (!Array.isArray(value)) return [];
+  const warnings: MissionRunWarning[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const title = readStringValue(record.title);
+    const message = readStringValue(record.message);
+    if (!title || !message) continue;
+    warnings.push({
+      stepId: readStringValue(record.stepId) || `${title}:${warnings.length}`,
+      title,
+      message,
+    });
+  }
+  return warnings;
+}
+
+/**
+ * The mission's warnings, from the task record and from the review-gate
+ * artifact the approver is actually looking at. Deduped by step and title so a
+ * warning written to both places is shown once.
+ */
+function collectRunWarnings(task?: MissionSourceTask | null): MissionRunWarning[] {
+  if (!task) return [];
+  const reviewArtifact = findReviewArtifact(task.latestArtifacts);
+  const merged = [
+    ...readMissionRunWarnings(task.runWarnings),
+    ...readMissionRunWarnings(reviewArtifact?.payload?.runWarnings),
+  ];
+
+  const seen = new Set<string>();
+  return merged.filter((warning) => {
+    const key = `${warning.stepId}::${warning.title}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 
@@ -879,6 +932,7 @@ export function buildMissionWorkspaceView(task?: MissionSourceTask | null): Miss
     integrations: CORE_MISSION_INTEGRATIONS,
     artifact,
     lessons,
+    runWarnings: collectRunWarnings(task),
     reviewSummary: task?.failureReason || (isDeliveredReview(task)
       ? `Delivered to ${deliveredTargetLabel(task)}. Approval receipt is stored with this run.`
       : status === 'waiting_review'

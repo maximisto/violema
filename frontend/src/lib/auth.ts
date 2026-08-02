@@ -2,7 +2,43 @@ import { adoptAuthWorkspace, isFounderWorkspace } from './workspace';
 
 export type AccessRole = 'user' | 'admin';
 export type AuthMethod = 'email' | 'google' | 'microsoft';
-export type ParticipantType = 'founder_operator' | 'investor' | 'partner';
+/**
+ * Who someone is. Classification only — `role` remains the sole authorization
+ * axis. Mirrors `backend/src/betaProgram.ts`; `team_member` and `advisor` were
+ * added 2026-08-02.
+ */
+export type ParticipantType =
+  | 'founder_operator'
+  | 'investor'
+  | 'partner'
+  | 'team_member'
+  | 'advisor';
+
+export const PARTICIPANT_TYPES: ParticipantType[] = [
+  'founder_operator',
+  'investor',
+  'partner',
+  'team_member',
+  'advisor',
+];
+
+const PARTICIPANT_TYPE_LABELS: Record<ParticipantType, string> = {
+  founder_operator: 'Founder / operator',
+  investor: 'Investor',
+  partner: 'Partner',
+  team_member: 'Team member',
+  advisor: 'Advisor',
+};
+
+/**
+ * A readable label for any participant value, including one this build does not
+ * know about yet — the backend is the catalog's owner and may ship a new type
+ * first.
+ */
+export function participantTypeLabel(value: string): string {
+  return PARTICIPANT_TYPE_LABELS[value as ParticipantType]
+    || value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 export interface AuthSession {
   email: string;
@@ -82,9 +118,21 @@ function normalizeSessionRole(role?: string): AccessRole {
   return 'user';
 }
 
+/**
+ * A missing participant type still invalidates the session — that field is part
+ * of the contract and its absence means the payload is not a session.
+ *
+ * An UNRECOGNIZED one does not. The backend owns this catalog and can ship a new
+ * type before the frontend knows it (exactly what happened when `team_member`
+ * and `advisor` landed), and the old strict check turned that into a silent
+ * logout for those accounts. Bucketing to the default matches the backend's own
+ * `defaultParticipantType()` and is safe: this axis is classification only.
+ */
 function normalizeParticipantType(value?: string): ParticipantType | null {
-  if (value === 'founder_operator' || value === 'investor' || value === 'partner') return value;
-  return null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  return PARTICIPANT_TYPES.includes(value as ParticipantType)
+    ? value as ParticipantType
+    : 'founder_operator';
 }
 
 function hydrateSession(value: Partial<AuthSession>): AuthSession | null {

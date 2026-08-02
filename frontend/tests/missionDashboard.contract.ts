@@ -102,6 +102,7 @@ const mission: MissionWorkspaceView = {
     sections: [],
   },
   lessons: [],
+  runWarnings: [],
   reviewSummary: 'Review before delivery.',
   analyticsSummary: 'Tracked at 44 credits.',
 };

@@ -91,6 +91,7 @@ const mission: MissionWorkspaceView = {
     sections: [],
   },
   lessons: [],
+  runWarnings: [],
   reviewSummary: 'Review before delivery.',
   analyticsSummary: 'No credits logged.',
 };

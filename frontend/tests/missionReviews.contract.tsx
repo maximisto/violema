@@ -38,6 +38,7 @@ const mission: MissionWorkspaceView = {
     sections: [],
   },
   lessons: [],
+  runWarnings: [],
   reviewSummary: 'Run completed and prepared the draft. Approving will send it to #all-purple-orange; requesting changes keeps delivery held.',
   analyticsSummary: 'Tracked at 42 credits.',
 };

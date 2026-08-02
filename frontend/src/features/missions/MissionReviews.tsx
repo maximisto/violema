@@ -37,6 +37,8 @@ export function MissionReviews({
     /^Delivered to\b/i.test(mission.reviewSummary);
   const hasBlockers = Boolean(preflight && !preflight.ready && preflight.blockers.length > 0);
   const warnings = preflight?.warnings || [];
+  // Absent on a server that has not shipped the severity lane yet.
+  const runWarnings = mission.runWarnings || [];
   const canApprove = canAct && !deliveryComplete && !hasBlockers && (!reviewRequired || reviewAcknowledged);
   const deliveryTarget = mission.deliveryLabel || 'configured target';
 
@@ -146,6 +148,43 @@ export function MissionReviews({
             </div>
           ))}
         </div>
+        {/*
+          Auxiliary failures, immediately above the approve controls.
+          Feature-detected: `runWarnings` is empty when the backend does not
+          send the field, and this block then renders nothing at all.
+        */}
+        {runWarnings.length > 0 ? (
+          <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-amber-200/80">
+                  Part of this run did not complete
+                </p>
+                <h4 className="mt-1 text-sm font-semibold text-white">
+                  {runWarnings.length === 1
+                    ? '1 step reported a problem'
+                    : `${runWarnings.length} steps reported a problem`}
+                </h4>
+              </div>
+              <span className="w-fit shrink-0 rounded-full border border-amber-300/25 bg-amber-300/10 px-2 py-0.5 text-[10px] font-semibold text-amber-100">
+                Read before approving
+              </span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {runWarnings.map((warning) => (
+                <div key={warning.stepId} className="rounded-md border border-amber-300/20 bg-navy-950/45 p-3">
+                  <p className="text-[11px] font-semibold text-amber-100">{warning.title}</p>
+                  <p className="mt-1 text-[10px] leading-4 text-slate-400">{warning.message}</p>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[10px] leading-4 text-amber-200/70">
+              The delivery itself is still ready. Approving sends it as prepared and does not retry
+              the steps listed above.
+            </p>
+          </div>
+        ) : null}
+
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
           {deliveryComplete ? (
             <>

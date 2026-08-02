@@ -123,6 +123,20 @@ export interface MissionArtifactView {
   sections: MissionArtifactSectionView[];
 }
 
+/**
+ * An auxiliary failure inside an otherwise successful run — "delivered, but the
+ * Drive archive write failed". The run did its job; something beside it did not.
+ *
+ * Emitted by the backend severity lane onto run/task metadata and onto the
+ * review-gate artifact. FEATURE-DETECTED: when the field is absent the list is
+ * simply empty and nothing renders.
+ */
+export interface MissionRunWarning {
+  stepId: string;
+  title: string;
+  message: string;
+}
+
 export type MissionLessonStatus = 'saved' | 'proposed' | 'waiting';
 
 export interface MissionLessonView {
@@ -156,6 +170,8 @@ export interface MissionWorkspaceView {
   integrations: MissionIntegrationView[];
   artifact: MissionArtifactView;
   lessons: MissionLessonView[];
+  /** Auxiliary failures an approver must see before deciding. Empty when absent. */
+  runWarnings: MissionRunWarning[];
   reviewSummary: string;
   analyticsSummary: string;
 }

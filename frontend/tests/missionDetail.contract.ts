@@ -80,6 +80,7 @@ const mission: MissionWorkspaceView = {
   lessons: [
     { id: 'lesson_1', title: 'Keep Stripe first', detail: 'Revenue signal should lead the brief.', status: 'proposed', sourceLabel: 'Run review' },
   ],
+  runWarnings: [],
   reviewSummary: 'Review before Slack delivery.',
   analyticsSummary: '84 credits for the last run.',
 };

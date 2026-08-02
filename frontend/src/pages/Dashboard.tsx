@@ -516,6 +516,12 @@ interface DashboardTaskItem {
   actualCredits?: number;
   estimatedCredits?: number;
   preflight?: AutomationPreflightReport;
+  /**
+   * Auxiliary step failures from the backend severity lane, passed through
+   * unvalidated — `readMissionRunWarnings` in the presenter is the one place
+   * that decides what is a usable warning. Absent on servers without the lane.
+   */
+  runWarnings?: unknown;
 }
 
 interface DashboardTaskArtifact {
@@ -1549,6 +1555,18 @@ function getTaskReviewReceipt(task?: PlatformTaskRecord, run?: PlatformTaskRunRe
   );
 }
 
+/**
+ * Auxiliary step failures, run record first — it describes the execution the
+ * approver is about to sign off on; the task record carries the last known set.
+ * Feature-detected: absent on a server without the severity lane, in which case
+ * nothing downstream renders.
+ */
+function getTaskRunWarnings(task?: PlatformTaskRecord, run?: PlatformTaskRunRecord) {
+  if (Array.isArray(run?.metadata?.runWarnings)) return run.metadata.runWarnings;
+  if (Array.isArray(task?.metadata?.runWarnings)) return task.metadata.runWarnings;
+  return undefined;
+}
+
 function applyTaskRunSnapshot(item: DashboardTaskItem, task?: PlatformTaskRecord, run?: PlatformTaskRunRecord): DashboardTaskItem {
   const latestStepExecutions = getTaskStepExecutions(task, run);
   const taskStatus = task?.status || item.taskStatus;
@@ -1588,6 +1606,7 @@ function applyTaskRunSnapshot(item: DashboardTaskItem, task?: PlatformTaskRecord
     latestDelivery,
     reviewReceipt,
     workerTopology: getTaskWorkerTopology(task, run) || item.workerTopology,
+    runWarnings: getTaskRunWarnings(task, run) || item.runWarnings,
     failureReason: getTaskFailureReason(task, run) || undefined,
     taskUpdatedAt: task?.updatedAt || item.taskUpdatedAt,
     actualCredits: typeof run?.actualCredits === 'number' ? run.actualCredits : item.actualCredits,
@@ -1942,6 +1961,9 @@ export default function Dashboard() {
   const [taskPanelRefreshing, setTaskPanelRefreshing] = useState(false);
   const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | 'delete' | 'grant' | 'review-approve' | 'review-change' | 'review-rerun' | null>(null);
+  // Two-step confirmation for the founder test-credit grant: it writes a real
+  // ledger entry, so it must not fire on a single stray click.
+  const [confirmGrantCredits, setConfirmGrantCredits] = useState(false);
   const [automationEditor, setAutomationEditor] = useState<AutomationEditorDraft | null>(null);
   const [automationEditorError, setAutomationEditorError] = useState<string | null>(null);
   const [automationEditorSection, setAutomationEditorSection] = useState<AutomationEditorSection>('setup');
@@ -5216,16 +5238,50 @@ export default function Dashboard() {
 	                </button>
 	              </div>
 	              {canLoadTestCredits ? (
-	                <div className="mt-2 flex items-center justify-between gap-2 border-t border-navy-800/70 pt-2">
-	                  <p className="truncate text-[10px] font-medium text-emerald-300/80">Founder testing</p>
-	                  <button
-	                    type="button"
-	                    onClick={() => { void grantTestCredits(); }}
-	                    disabled={actionBusy === 'grant'}
-	                    className="rounded-md border border-emerald-500/25 bg-emerald-500/8 px-2 py-1 text-[10px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/14 disabled:cursor-not-allowed disabled:opacity-60"
-	                  >
-	                    {actionBusy === 'grant' ? 'Loading...' : 'Load 5k'}
-	                  </button>
+	                <div className="mt-2 border-t border-navy-800/70 pt-2">
+	                  {confirmGrantCredits ? (
+	                    <div className="rounded-md border border-emerald-500/25 bg-emerald-500/[0.06] px-2 py-1.5">
+	                      <p className="text-[10px] font-medium leading-4 text-emerald-200">
+	                        Grant 5,000 credits to this workspace?
+	                      </p>
+	                      <p className="mt-0.5 text-[10px] leading-4 text-slate-400">
+	                        Writes a real ledger entry against {workspace.workspaceName}.
+	                      </p>
+	                      <div className="mt-1.5 flex items-center gap-3">
+	                        <button
+	                          type="button"
+	                          onClick={() => {
+	                            setConfirmGrantCredits(false);
+	                            void grantTestCredits();
+	                          }}
+	                          disabled={actionBusy === 'grant'}
+	                          className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+	                        >
+	                          {actionBusy === 'grant' ? 'Loading...' : 'Confirm'}
+	                        </button>
+	                        <button
+	                          type="button"
+	                          onClick={() => setConfirmGrantCredits(false)}
+	                          className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-slate-300"
+	                        >
+	                          Cancel
+	                        </button>
+	                      </div>
+	                    </div>
+	                  ) : (
+	                    <div className="flex items-center justify-between gap-2">
+	                      <p className="truncate text-[10px] font-medium text-emerald-300/80">Founder testing</p>
+	                      <button
+	                        type="button"
+	                        onClick={() => setConfirmGrantCredits(true)}
+	                        disabled={actionBusy === 'grant'}
+	                        title="Grant 5,000 test credits to this workspace."
+	                        className="rounded-md border border-emerald-500/25 bg-emerald-500/8 px-2 py-1 text-[10px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/14 disabled:cursor-not-allowed disabled:opacity-60"
+	                      >
+	                        {actionBusy === 'grant' ? 'Loading...' : 'Load 5k'}
+	                      </button>
+	                    </div>
+	                  )}
 	                </div>
 	              ) : null}
 	            </div>
