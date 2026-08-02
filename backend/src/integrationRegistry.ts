@@ -352,11 +352,36 @@ export function listPartnerAppOptions(): string[] {
   ).sort();
 }
 
+/**
+ * Library provisioning state for the connect surface.
+ *
+ * `status` exists beside `provisioned` because a boolean cannot distinguish
+ * "no library yet" from "we could not look". The first invites the founder to
+ * provision; the second must not, because the button would fail.
+ */
+export interface IntegrationCatalogLibrary {
+  provisioned: boolean;
+  status: 'provisioned' | 'not_provisioned' | 'unavailable' | 'unknown';
+  folderId?: string;
+  entryCount?: number;
+  lastEntryAt?: string;
+  entryCountCapped?: boolean;
+}
+
 export function buildIntegrationCatalog(input: {
   partnerEnabled: boolean;
   connectedPartnerApps?: string[];
   /** True when the Composio lookup threw — "cannot tell", not "nothing connected". */
   partnerDegraded?: boolean;
+  /**
+   * Per-toolkit capability, derived from granted scopes. Empty when Composio is
+   * off or unreachable — in which case the UI must fall back to presence and
+   * say it cannot verify capability, rather than claim there is none.
+   */
+  partnerCapabilities?: unknown[];
+  /** Connections the user started and never finished. */
+  partnerPending?: unknown[];
+  library?: IntegrationCatalogLibrary;
 }) {
   const connectedPartnerApps = Array.from(
     new Set((input.connectedPartnerApps || []).map(normalizeAppName).filter(Boolean)),
@@ -386,8 +411,17 @@ export function buildIntegrationCatalog(input: {
       connectedApps: connectedPartnerApps,
       degraded: Boolean(input.partnerDegraded),
       apps: partnerApps,
+      // What each connected toolkit can actually DO, not merely that it exists.
+      // A Drive connection with only `drive.metadata.readonly` appears in
+      // `connectedApps` above and still cannot write the library — that gap is
+      // what this array closes.
+      capabilities: input.partnerCapabilities || [],
+      // OAuth flows the user abandoned. Surfaced so a stranded connection can be
+      // cancelled and retried instead of silently accumulating.
+      pending: input.partnerPending || [],
       unavailableMessage: 'Some one-click connectors are temporarily unavailable. Violema can still run native and sample-data workflows while we finish the connector layer.',
     },
+    library: input.library || { provisioned: false, status: 'unknown' },
     providers: INTEGRATION_PROVIDERS.map((provider) => {
       const definition = INTEGRATION_DEFINITIONS[provider];
       return {

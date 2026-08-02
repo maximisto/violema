@@ -29,8 +29,13 @@
  * not verify a coercion for.
  */
 
-import { executeComposioAction, listConnectedAppsDetailed } from '../composioBridge';
+import { executeComposioAction, listConnectedAppsDetailed, readConnectionInventory } from '../composioBridge';
 import { normalizeAppName } from './partnerAppMap';
+import {
+  buildPartnerCapabilityReport,
+  hasCapability,
+  PARTNER_CAPABILITIES,
+} from './partnerCapability';
 
 /**
  * Composio ships two Slack toolkits and both can send. They differ only in
@@ -98,6 +103,91 @@ export interface TenantSlackDeps {
     input: Record<string, unknown>,
     ctx: { entityId: string },
   ) => Promise<unknown>;
+  /** Injected in tests. Defaults to the cached Composio inventory read. */
+  readIdentityCapability?: (workspaceId: string) => Promise<'yes' | 'no' | 'unknown'>;
+  /** Injected in tests. Defaults to `resolveSlackIconUrl()`. */
+  iconUrl?: string;
+}
+
+// ── Posting as Violema ────────────────────────────────────────────────────────
+//
+// Tenant messages were arriving in customers' Slack under Composio's app name
+// and icon. `SLACKBOT_SEND_MESSAGE` accepts `username`, `icon_url` and
+// `icon_emoji`, but Slack only honours them when the token carries
+// `chat:write.customize`. Without that scope Slack rejects the call outright —
+// so a naive override would convert working deliveries into failures.
+//
+// The rule here is therefore: brand the message when we can, and never let
+// branding be the reason a customer's update did not arrive.
+
+export const VIOLEMA_SLACK_USERNAME = 'Violema';
+
+/**
+ * Default Slack avatar.
+ *
+ * `violema-mark.png` does not exist; the real square assets under
+ * `frontend/public/brand/` are `violema-slack-avatar.png` (512×512, added for
+ * exactly this purpose) and `purple-orange-hero-mark.png` (430×430). Slack
+ * renders the icon at 48px and wants a square, so a wordmark would not do.
+ *
+ * Override with `VIOLEMA_SLACK_ICON_URL` — which is also the escape hatch if
+ * the avatar has not shipped to production yet, since an unreachable icon just
+ * falls back to the app's default rather than failing the send.
+ */
+export const DEFAULT_VIOLEMA_SLACK_ICON_URL =
+  'https://violema.com/brand/violema-slack-avatar.png';
+
+/**
+ * Resolve the icon URL, refusing anything that is not plain `https`.
+ *
+ * A misconfigured env must not put an arbitrary scheme or an internal address
+ * into an outbound payload; an empty result simply omits the icon.
+ */
+export function resolveSlackIconUrl(raw = process.env.VIOLEMA_SLACK_ICON_URL): string | undefined {
+  const candidate = raw?.trim() || DEFAULT_VIOLEMA_SLACK_ICON_URL;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === 'https:' ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Does this workspace's Slack connection carry `chat:write.customize`?
+ *
+ * `unknown` is a real and common answer — a connection that does not expose its
+ * scopes tells us nothing — and it is treated optimistically: we attempt the
+ * branded send and fall back if Slack objects. Guessing "no" would silently
+ * strip Violema's identity from every such workspace.
+ */
+async function readIdentityCapability(workspaceId: string): Promise<'yes' | 'no' | 'unknown'> {
+  const inventory = await readConnectionInventory({ entityId: workspaceId });
+  if (!inventory.ok) return 'unknown';
+
+  const report = buildPartnerCapabilityReport(inventory.connections);
+  for (const toolkit of SLACK_PARTNER_TOOLKITS) {
+    const verdict = hasCapability(report, toolkit, PARTNER_CAPABILITIES.SLACK_CUSTOMIZE_IDENTITY);
+    if (verdict !== 'no') return verdict;
+  }
+  return 'no';
+}
+
+/**
+ * Did Slack reject this call *because* of the identity override?
+ *
+ * Deliberately narrow. Slack validates scope before delivering, so retrying
+ * these is safe; retrying a generic failure could double-post a message that
+ * actually went out.
+ */
+function isIdentityScopeRejection(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('missing_scope')
+    || normalized.includes('chat:write.customize')
+    || normalized.includes('cannot_customize')
+    || normalized.includes('not_allowed_token_type')
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -249,23 +339,64 @@ export async function sendTenantSlackMessage(
     composeTenantSlackText({ subject: input.subject, body: input.body }),
   ).slice(0, MAX_MESSAGES_PER_DELIVERY);
 
+  // Decided once per delivery, not per chunk: a multi-part brief must not
+  // change identity halfway through.
+  const readCapability = deps.readIdentityCapability ?? readIdentityCapability;
+  let identityVerdict: 'yes' | 'no' | 'unknown';
+  try {
+    identityVerdict = await readCapability(input.workspaceId);
+  } catch {
+    // Capability is a nicety; delivery is not. An unreadable verdict behaves
+    // like `unknown` — attempt branding, fall back if Slack objects.
+    identityVerdict = 'unknown';
+  }
+
+  const iconUrl = deps.iconUrl ?? resolveSlackIconUrl();
+  let applyIdentity = identityVerdict !== 'no';
+  const identityFields = () =>
+    applyIdentity
+      ? { username: VIOLEMA_SLACK_USERNAME, ...(iconUrl ? { icon_url: iconUrl } : {}) }
+      : {};
+
   let rootTs: string | null = input.threadTs ?? null;
   let firstTs: string | null = null;
+  let identityDowngraded = false;
 
   for (const [index, markdownText] of chunks.entries()) {
-    const response = await execute(
-      connection.actionName,
-      {
-        channel,
-        markdown_text: markdownText,
-        // Continuations thread under the first message so a long brief stays
-        // one conversation rather than N top-level posts.
-        ...(rootTs ? { thread_ts: rootTs } : {}),
-      },
-      { entityId: input.workspaceId },
-    );
+    const payload = () => ({
+      channel,
+      markdown_text: markdownText,
+      // Continuations thread under the first message so a long brief stays
+      // one conversation rather than N top-level posts.
+      ...(rootTs ? { thread_ts: rootTs } : {}),
+      ...identityFields(),
+    });
 
-    const data = readEnvelope(response, connection.actionName);
+    let response: unknown;
+    try {
+      response = await execute(connection.actionName, payload(), { entityId: input.workspaceId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // The one retry we allow, and only for a scope rejection Slack raises
+      // before the message is delivered. Branding must never cost a send.
+      if (!applyIdentity || !isIdentityScopeRejection(message)) throw error;
+      applyIdentity = false;
+      identityDowngraded = true;
+      response = await execute(connection.actionName, payload(), { entityId: input.workspaceId });
+    }
+
+    let data: Record<string, unknown>;
+    try {
+      data = readEnvelope(response, connection.actionName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!applyIdentity || !isIdentityScopeRejection(message)) throw error;
+      applyIdentity = false;
+      identityDowngraded = true;
+      const retry = await execute(connection.actionName, payload(), { entityId: input.workspaceId });
+      data = readEnvelope(retry, connection.actionName);
+    }
+
     if (index === 0) {
       firstTs = readTimestamp(data);
       if (!rootTs) rootTs = firstTs;
@@ -282,6 +413,12 @@ export async function sendTenantSlackMessage(
     slack_ts: firstTs,
     transport: 'composio' as const,
     partner_toolkit: connection.toolkit,
+    // Reported so a run's record shows whether the message actually carried
+    // Violema's identity, rather than leaving it to be guessed from Slack.
+    posted_as_violema: applyIdentity,
+    ...(identityDowngraded
+      ? { identity_downgraded: true as const, identity_downgrade_reason: 'chat:write.customize' }
+      : {}),
     ...(chunks.length > 1 ? { slack_parts: chunks.length } : {}),
   };
 }

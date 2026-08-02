@@ -93,6 +93,7 @@ import {
   type PartnerComposioExecutor,
 } from './adapters/partnerComposio';
 import { executeComposioAction } from '../composioBridge';
+import { toolkitForPartnerSource } from './partnerAppMap';
 import type { IntegrationQuerySuccess, IntegrationReadinessError } from './types';
 
 /** The query-step source name a mission uses to reach the library. */
@@ -242,9 +243,35 @@ function libraryFailure(
 }
 
 export function isLibraryFailure(
-  value: EnsureLibraryFolderResult | AccountLibraryAppendResult | LibraryFailure,
+  value:
+    | EnsureLibraryFolderResult
+    | AccountLibraryAppendResult
+    | ProvisionLibraryResult
+    | LibraryStatus
+    | LibraryFailure,
 ): value is LibraryFailure {
-  return value.ok === false;
+  return (value as { ok?: unknown }).ok === false;
+}
+
+/**
+ * The Composio toolkit the library is actually stored in.
+ *
+ * `ACCOUNT_LIBRARY_BACKING_SOURCE` is the Violema *source id* (`google_drive`);
+ * this is the *toolkit slug* (`googledrive`) that Composio and the capability
+ * report speak. Resolved through `partnerAppMap` rather than written twice.
+ */
+export const ACCOUNT_LIBRARY_DRIVE_TOOLKIT = toolkitForPartnerSource('google_drive');
+
+/**
+ * The same honest refusal the run path produces, available to surfaces that
+ * refuse *before* touching Drive — so "Connect Google Drive" and "Reauthorize
+ * Google Drive" are worded identically wherever a founder meets them.
+ */
+export function buildLibraryAccessFailure(
+  code: IntegrationReadinessError['code'],
+  detail?: string,
+): LibraryFailure {
+  return libraryFailure(code, detail);
 }
 
 /**
@@ -299,12 +326,15 @@ function readDriveFiles(payload: unknown): Record<string, unknown>[] {
  * FIND_FOLDER's name matching is looser, and "loose" is the wrong property for
  * the lookup that decides where we are about to write.
  */
-async function findFolderByName(
+async function findFolderRecord(
   execute: PartnerComposioExecutor,
   workspaceId: string,
   name: string,
   parentId?: string,
-): Promise<{ ok: true; folderId: string | null } | { ok: false; failure: LibraryFailure }> {
+): Promise<
+  | { ok: true; folder: { id: string; webViewLink?: string } | null }
+  | { ok: false; failure: LibraryFailure }
+> {
   const clauses = [
     `mimeType = '${FOLDER_MIME_TYPE}'`,
     `name = '${escapeDriveQueryValue(name)}'`,
@@ -314,7 +344,10 @@ async function findFolderByName(
 
   const result = await runDriveAction(execute, workspaceId, FIND_FILE_ACTION, {
     q: clauses.join(' and '),
-    fields: 'files(id,name,createdTime)',
+    // `webViewLink` rides along so provisioning can deep-link the customer
+    // straight to the folder in Drive without a second lookup. Metadata only —
+    // no file contents are requested here.
+    fields: 'files(id,name,createdTime,webViewLink)',
     // Oldest first: if a customer ever ends up with two same-named folders,
     // every run must keep choosing the same one.
     orderBy: 'createdTime',
@@ -323,11 +356,28 @@ async function findFolderByName(
   });
   if (!result.ok) return result;
 
-  const folderId = readDriveFiles(result.data)
-    .map((file) => asString(file.id))
-    .find((id): id is string => Boolean(id));
+  const folder = readDriveFiles(result.data)
+    .map((file) => {
+      const id = asString(file.id);
+      if (!id) return null;
+      const webViewLink = asString(file.webViewLink);
+      return { id, ...(webViewLink ? { webViewLink } : {}) };
+    })
+    .find((entry): entry is { id: string; webViewLink?: string } => entry !== null);
 
-  return { ok: true, folderId: folderId ?? null };
+  return { ok: true, folder: folder ?? null };
+}
+
+/** Id-only wrapper, for the callers that never needed the link. */
+async function findFolderByName(
+  execute: PartnerComposioExecutor,
+  workspaceId: string,
+  name: string,
+  parentId?: string,
+): Promise<{ ok: true; folderId: string | null } | { ok: false; failure: LibraryFailure }> {
+  const result = await findFolderRecord(execute, workspaceId, name, parentId);
+  if (!result.ok) return result;
+  return { ok: true, folderId: result.folder?.id ?? null };
 }
 
 async function createFolder(
@@ -414,6 +464,143 @@ export async function ensureLibraryFolder(
     rootFolderId: root.folderId,
     folderId: sectionFolder.folderId,
     createdFolder: root.created || sectionFolder.created,
+  };
+}
+
+/**
+ * Provision the library during setup instead of on first write.
+ *
+ * The folder used to appear lazily, the first time a mission wrote an entry.
+ * That made setup feel like nothing had happened, and it meant the first sign a
+ * Drive connection lacked write access was a failed run. Creating the folders
+ * during connect turns that into an immediate, visible, checkable outcome — the
+ * founder can open the folder in Drive and rename it before any mission runs.
+ *
+ * Idempotent: existing folders are reused, never duplicated. `createdFolder`
+ * reports whether this call actually made anything.
+ */
+export interface ProvisionLibraryResult {
+  ok: true;
+  /** The `Violema Library` root — what the UI deep-links to. */
+  folderId: string;
+  folderName: string;
+  webViewLink?: string;
+  /** True when this call created the root or the section. */
+  createdFolder: boolean;
+  section: {
+    name: string;
+    folderId: string;
+    webViewLink?: string;
+  };
+}
+
+export async function provisionLibrarySection(
+  workspaceId: string,
+  section: string = COMPETITIVE_INTELLIGENCE_SECTION,
+  deps: AccountLibraryDeps = {},
+): Promise<ProvisionLibraryResult | LibraryFailure> {
+  const ensured = await ensureLibraryFolder(workspaceId, section, deps);
+  // Fail closed: `ensureLibraryFolder` stops at the first failure rather than
+  // reporting a folder it did not create, and its message already names
+  // "Connect Google Drive" or "Reauthorize Google Drive".
+  if (isLibraryFailure(ensured)) return ensured;
+
+  const execute = deps.execute ?? executeComposioAction;
+  const normalizedSection = normalizeSection(section);
+
+  // Best-effort links. The folders exist either way, so a link lookup that
+  // fails must not turn a successful provision into an error — the UI simply
+  // renders no deep link rather than a fabricated one.
+  const [rootRecord, sectionRecord] = await Promise.all([
+    findFolderRecord(execute, workspaceId, LIBRARY_ROOT_FOLDER_NAME),
+    findFolderRecord(execute, workspaceId, normalizedSection, ensured.rootFolderId),
+  ]);
+
+  const rootLink = rootRecord.ok ? rootRecord.folder?.webViewLink : undefined;
+  const sectionLink = sectionRecord.ok ? sectionRecord.folder?.webViewLink : undefined;
+
+  return {
+    ok: true,
+    folderId: ensured.rootFolderId,
+    folderName: LIBRARY_ROOT_FOLDER_NAME,
+    ...(rootLink ? { webViewLink: rootLink } : {}),
+    createdFolder: ensured.createdFolder,
+    section: {
+      name: normalizedSection,
+      folderId: ensured.folderId,
+      ...(sectionLink ? { webViewLink: sectionLink } : {}),
+    },
+  };
+}
+
+/**
+ * How many entries the library holds and when the last one landed.
+ *
+ * Metadata only. `readLibrary` downloads each entry's body to build model
+ * context, which is right for a mission and completely wrong for a status
+ * badge: it would pull customer documents through the server every time the
+ * connect page loaded. This lists file metadata and stops.
+ *
+ * `entryCount` is bounded by `LIBRARY_STATUS_MAX_ENTRIES`; `entryCountCapped`
+ * says so, rather than reporting a capped number as if it were the total.
+ */
+export const LIBRARY_STATUS_MAX_ENTRIES = 50;
+
+export interface LibraryStatus {
+  provisioned: boolean;
+  folderId?: string;
+  entryCount?: number;
+  lastEntryAt?: string;
+  /** True when the library holds at least `LIBRARY_STATUS_MAX_ENTRIES` entries. */
+  entryCountCapped?: boolean;
+}
+
+export async function summarizeLibrarySection(
+  workspaceId: string,
+  section: string = COMPETITIVE_INTELLIGENCE_SECTION,
+  deps: AccountLibraryDeps = {},
+): Promise<LibraryStatus | LibraryFailure> {
+  const normalizedSection = normalizeSection(section);
+  if (!workspaceId.trim()) return libraryFailure('integration_not_connected');
+  if (!normalizedSection) return libraryFailure('unsupported_query', 'No library section was named.');
+
+  const execute = deps.execute ?? executeComposioAction;
+
+  const root = await findFolderByName(execute, workspaceId, LIBRARY_ROOT_FOLDER_NAME);
+  if (!root.ok) return root.failure;
+  if (!root.folderId) return { provisioned: false };
+
+  const sectionFolder = await findFolderByName(
+    execute,
+    workspaceId,
+    normalizedSection,
+    root.folderId,
+  );
+  if (!sectionFolder.ok) return sectionFolder.failure;
+  if (!sectionFolder.folderId) return { provisioned: false };
+
+  const listing = await runDriveAction(execute, workspaceId, FIND_FILE_ACTION, {
+    q: `'${escapeDriveQueryValue(sectionFolder.folderId)}' in parents and trashed = false`,
+    // Note the absence of any content field, and no DOWNLOAD_FILE call below.
+    fields: 'files(id,name,modifiedTime,createdTime)',
+    orderBy: 'createdTime desc',
+    pageSize: LIBRARY_STATUS_MAX_ENTRIES,
+    spaces: 'drive',
+  });
+  if (!listing.ok) return listing.failure;
+
+  const files = readDriveFiles(listing.data);
+  const newest = files[0];
+  const lastEntryAt = newest
+    ? asString(newest.createdTime) || asString(newest.modifiedTime)
+    : undefined;
+
+  return {
+    provisioned: true,
+    folderId: sectionFolder.folderId,
+    entryCount: files.length,
+    ...(lastEntryAt ? { lastEntryAt } : {}),
+    ...(files.length >= LIBRARY_STATUS_MAX_ENTRIES ? { entryCountCapped: true } : {}),
   };
 }
 

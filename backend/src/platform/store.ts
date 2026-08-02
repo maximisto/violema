@@ -492,6 +492,109 @@ export function settleCreditHold(
   return settledEntryRef.value;
 }
 
+/** What `settleCreditHoldWithOverrun` did, so the caller can report it honestly. */
+export interface CreditHoldOverrunSettlement {
+  entry: CreditLedgerEntry;
+  /** What was actually debited — never more than the workspace could cover. */
+  settledCredits: number;
+  /** What the run's work actually cost. */
+  requestedCredits: number;
+  /** `requestedCredits - settledCredits`; 0 on a normal settlement. */
+  overrunCredits: number;
+  /** True when the run cost more than the workspace could pay for. */
+  overran: boolean;
+}
+
+/**
+ * Settle a hold that may have overrun its estimate, without throwing.
+ *
+ * `settleCreditHold` refuses an actual cost above the spendable balance. That is
+ * the right rule for a caller that can still choose not to do the work — but
+ * `runAutomation` calls it *after* the run has already spent the money on model
+ * and tool calls, so a throw there bought nothing and cost everything: the
+ * exception unwound into a catch block that re-finalised the run and replaced
+ * its artifacts with a bare error note, erasing completed work the customer had
+ * already paid for.
+ *
+ * So this variant debits `min(actualCredits, spendable)` and reports the
+ * shortfall instead of rejecting. The workspace is never over-debited into a
+ * negative balance, the hold is always closed exactly once, and the caller
+ * still learns the run overran so it can mark it failed and say why.
+ *
+ * The spendable calculation stays inside `updateJsonFile` so it is read and
+ * written atomically — computing it in the caller would race another hold.
+ */
+export function settleCreditHoldWithOverrun(
+  holdId: string,
+  input: {
+    workspaceId: string;
+    actualCredits: number;
+    source: Exclude<CreditSource, 'credit_hold'>;
+    referenceType?: CreditLedgerEntry['referenceType'];
+    referenceId?: string;
+    note?: string;
+    metadata?: Record<string, unknown>;
+    now?: Date;
+  },
+): CreditHoldOverrunSettlement {
+  const requestedCredits = Math.max(0, normalizeCreditDelta(input.actualCredits));
+  const now = input.now || new Date();
+  const resultRef: { value?: CreditHoldOverrunSettlement } = {};
+
+  updateJsonFile<CreditLedgerEntry[]>(LEDGER_FILE, [], (entries) => {
+    const workspaceEntries = entries.filter((entry) => entry.workspaceId === input.workspaceId);
+    const hold = findCreditHold(workspaceEntries, holdId);
+    assertCreditHoldOpen(workspaceEntries, holdId);
+    const heldCredits = readCreditHoldCredits(hold);
+    const summary = summarizeCreditLedger(workspaceEntries);
+    const reservedForOtherHolds = listActiveHoldEntries(workspaceEntries, now)
+      .filter((entry) => readCreditHoldId(entry) !== holdId)
+      .reduce((total, entry) => total + readCreditHoldCredits(entry), 0);
+    const spendableCredits = Math.max(0, summary.balanceCredits - reservedForOtherHolds);
+    const settledCredits = Math.min(requestedCredits, spendableCredits);
+    const overrunCredits = requestedCredits - settledCredits;
+
+    const entry = createCreditLedgerEntry({
+      workspaceId: input.workspaceId,
+      direction: settledCredits > 0 ? 'debit' : 'grant',
+      source: input.source,
+      deltaCredits: -settledCredits,
+      balanceAfterCredits: summary.balanceCredits - settledCredits,
+      referenceType: input.referenceType || hold.referenceType,
+      referenceId: input.referenceId || hold.referenceId,
+      note:
+        input.note
+        || (overrunCredits > 0
+          ? `Settled ${settledCredits} of ${requestedCredits} credits from hold (overran by ${overrunCredits})`
+          : `Settled ${settledCredits} credits from hold`),
+      metadata: {
+        ...(input.metadata || {}),
+        holdId,
+        holdStatus: 'settled',
+        heldCredits,
+        actualCredits: settledCredits,
+        requestedCredits,
+        overrunCredits,
+        settledAt: now.toISOString(),
+      },
+      createdAt: now.toISOString(),
+    });
+
+    resultRef.value = {
+      entry,
+      settledCredits,
+      requestedCredits,
+      overrunCredits,
+      overran: overrunCredits > 0,
+    };
+
+    return [...entries, entry];
+  });
+
+  if (!resultRef.value) throw new Error(`Could not settle credit hold: ${holdId}`);
+  return resultRef.value;
+}
+
 export function getWorkspaceLedgerSummary(workspaceId: string) {
   const state = getPlatformState();
   const entries = state.ledger.filter((entry) => entry.workspaceId === workspaceId);

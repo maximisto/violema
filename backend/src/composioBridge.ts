@@ -49,17 +49,73 @@ export interface ComposioClientAdapter {
     ): Promise<{ id?: string | null; redirectUrl?: string | null }>;
     list(query: {
       userIds: string[];
-      statuses: Array<'ACTIVE'>;
+      statuses: ComposioConnectionStatus[];
       /** Page token from the previous response's `nextCursor`. Omit for page 1. */
       cursor?: string;
     }): Promise<{
-      items: Array<{ id?: string | null; toolkit?: { slug?: string } | null }>;
+      items: Array<{
+        id?: string | null;
+        toolkit?: { slug?: string } | null;
+        status?: string | null;
+        createdAt?: string | null;
+        /**
+         * The live credential blob. It carries `access_token`, `refresh_token`,
+         * `api_key`, and friends alongside `scope`, so it is NEVER spread or
+         * logged — `readGrantedScopes` lifts the one field we need by name.
+         */
+        state?: unknown;
+      }>;
       /** Present while more pages remain (`ConnectedAccountListResponseSchema`). */
       nextCursor?: string | null;
       totalPages?: number;
     }>;
     delete(nanoid: string): Promise<unknown>;
   };
+}
+
+/**
+ * Composio's connected-account lifecycle, verified against the installed SDK
+ * (`ConnectedAccountListParamsSchema.statuses`) rather than documentation.
+ *
+ * Only `ACTIVE` means usable. `EXPIRED`, `FAILED`, `INACTIVE`, and `REVOKED` are
+ * all "not connected" — a workspace holding one of those can no more run a
+ * mission than one holding nothing.
+ */
+export const COMPOSIO_CONNECTION_STATUSES = [
+  'INITIALIZING',
+  'INITIATED',
+  'ACTIVE',
+  'FAILED',
+  'EXPIRED',
+  'INACTIVE',
+  'REVOKED',
+] as const;
+
+export type ComposioConnectionStatus = (typeof COMPOSIO_CONNECTION_STATUSES)[number];
+
+/**
+ * Statuses that mean "the user started an OAuth flow and never finished it".
+ *
+ * A tenant abandoned a Drive consent tab twice and left two connections parked
+ * here forever. The UI showed nothing at all, so they had no way to tell that a
+ * retry would just add a third.
+ */
+export const COMPOSIO_PENDING_STATUSES: ComposioConnectionStatus[] = ['INITIATED', 'INITIALIZING'];
+
+/** One connection as Composio reports it, with credentials deliberately absent. */
+export interface ComposioConnectionRecord {
+  id: string;
+  toolkit: string;
+  status: ComposioConnectionStatus;
+  /** When Composio created the connection record. Used as `initiatedAt`. */
+  createdAt?: string;
+  /**
+   * OAuth scopes the provider actually granted, or `null` when the connection
+   * does not expose them. `null` means "cannot tell" and must never be rendered
+   * as "no scopes" — the difference decides whether we can honestly claim a
+   * capability is missing.
+   */
+  grantedScopes: string[] | null;
 }
 
 /** A workspace's live connection to one toolkit, as Composio reports it. */
@@ -98,6 +154,21 @@ export type ComposioDisconnectResult =
 
 export interface ComposioBridge {
   isEnabled(): boolean;
+  /**
+   * Every connection this entity holds, in any lifecycle state, with granted
+   * scopes where the provider exposes them. Superset of
+   * `listConnectedAccounts`, which only ever reports `ACTIVE`.
+   */
+  listConnectionInventory(ctx: ComposioExecutionContext): Promise<ComposioConnectionRecord[]>;
+  /**
+   * Delete this entity's stranded (INITIATED / INITIALIZING) connections for one
+   * toolkit. Never touches an ACTIVE connection — cancelling a half-finished
+   * OAuth attempt must not disconnect a working integration.
+   */
+  deletePendingConnections(
+    appName: string,
+    ctx: ComposioExecutionContext,
+  ): Promise<{ toolkit: string; removed: number }>;
   executeAction(
     actionName: string,
     input: Record<string, unknown>,
@@ -134,6 +205,69 @@ function toToolkitSlug(appName: string): string {
  * thrown lookup as fail-closed (degraded / `failed` / no connections).
  */
 const MAX_CONNECTED_ACCOUNT_PAGES = 25;
+
+/**
+ * Lift the granted OAuth scopes out of a connection's `state`, and nothing else.
+ *
+ * `state` is the live credential blob. On an ACTIVE OAuth2 connection the SDK's
+ * `Oauth2ActiveConnectionDataSchema` puts `access_token`, `refresh_token`,
+ * `id_token`, `api_key`, `bearer_token` and `proxy_password` right next to
+ * `scope`. So this reads `scope` by name and returns strings — the object is
+ * never spread, copied, returned, or logged, the same rule
+ * `describeAuthConfigChoice` follows for auth configs.
+ *
+ * Two shapes are accepted because two are real: the SDK normalises to
+ * `state.scope`, while the raw REST wire wraps credentials as
+ * `state.val.scope`. Slack also reports the *user* grant separately under
+ * `authed_user.scope`, which is where a user-token connection's scopes live.
+ *
+ * Returns `null` — never `[]` — when no scope field is present. "The provider
+ * did not tell us" and "the provider granted nothing" are different facts, and
+ * only the second one justifies telling a customer a capability is missing.
+ */
+export function readGrantedScopes(state: unknown): string[] | null {
+  if (!state || typeof state !== 'object') return null;
+  const container = state as Record<string, unknown>;
+  const nested = container.val && typeof container.val === 'object'
+    ? (container.val as Record<string, unknown>)
+    : container;
+
+  const authedUser = nested.authed_user && typeof nested.authed_user === 'object'
+    ? (nested.authed_user as Record<string, unknown>)
+    : undefined;
+
+  const scopes = new Set<string>();
+  let sawScopeField = false;
+
+  for (const raw of [nested.scope, authedUser?.scope]) {
+    if (raw === undefined || raw === null) continue;
+    sawScopeField = true;
+    // Providers are inconsistent: Google returns a space-delimited string,
+    // Slack a comma-delimited one, and some connections an array.
+    const parts = Array.isArray(raw)
+      ? raw.filter((item): item is string => typeof item === 'string')
+      : typeof raw === 'string'
+        ? raw.split(/[\s,]+/)
+        : [];
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (trimmed) scopes.add(trimmed);
+    }
+  }
+
+  if (!sawScopeField) return null;
+  return Array.from(scopes);
+}
+
+/** Coerce Composio's status string, defaulting unknown values to fail-closed. */
+function readConnectionStatus(raw: unknown): ComposioConnectionStatus {
+  const value = typeof raw === 'string' ? raw.toUpperCase() : '';
+  return (COMPOSIO_CONNECTION_STATUSES as readonly string[]).includes(value)
+    ? (value as ComposioConnectionStatus)
+    // An unrecognised status is treated as failed rather than active: a new
+    // Composio lifecycle state must never silently count as "connected".
+    : 'FAILED';
+}
 
 export function createComposioBridge(
   client: ComposioClientAdapter | null,
@@ -176,9 +310,83 @@ export function createComposioBridge(
     );
   }
 
+  /**
+   * The same paginated walk, but across every lifecycle state and keeping the
+   * status, creation time, and granted scopes. Separate from
+   * `readConnectedAccounts` so the hot readiness path keeps asking Composio the
+   * narrow `ACTIVE`-only question it always has.
+   */
+  async function readConnectionInventoryPages(
+    ctx: ComposioExecutionContext,
+  ): Promise<ComposioConnectionRecord[]> {
+    if (!client) return [];
+
+    const records: ComposioConnectionRecord[] = [];
+    let cursor: string | undefined;
+
+    for (let page = 0; page < MAX_CONNECTED_ACCOUNT_PAGES; page += 1) {
+      const connections = await client.connectedAccounts.list({
+        userIds: [ctx.entityId],
+        statuses: [...COMPOSIO_CONNECTION_STATUSES],
+        ...(cursor ? { cursor } : {}),
+      });
+
+      for (const connection of connections.items) {
+        const toolkit = connection.toolkit?.slug ?? '';
+        if (!toolkit) continue;
+        records.push({
+          id: connection.id ?? '',
+          toolkit,
+          status: readConnectionStatus(connection.status),
+          ...(connection.createdAt ? { createdAt: connection.createdAt } : {}),
+          grantedScopes: readGrantedScopes(connection.state),
+        });
+      }
+
+      const nextCursor = connections.nextCursor ?? undefined;
+      if (!nextCursor) return records;
+      cursor = nextCursor;
+    }
+
+    throw new Error(
+      `Composio returned more than ${MAX_CONNECTED_ACCOUNT_PAGES} pages of connected accounts; refusing to act on a partial list.`,
+    );
+  }
+
   return {
     isEnabled() {
       return client !== null;
+    },
+
+    listConnectionInventory: readConnectionInventoryPages,
+
+    async deletePendingConnections(appName, ctx) {
+      const toolkit = toToolkitSlug(appName);
+      if (!client) return { toolkit, removed: 0 };
+
+      const stranded = (await readConnectionInventoryPages(ctx)).filter(
+        (connection) =>
+          connection.toolkit === toolkit
+          && connection.id
+          && COMPOSIO_PENDING_STATUSES.includes(connection.status),
+      );
+
+      let removed = 0;
+      for (const connection of stranded) {
+        // One failure must not strand the rest — a half-cleaned list is still
+        // better than none, and the count reported stays truthful either way.
+        try {
+          await client.connectedAccounts.delete(connection.id);
+          removed += 1;
+        } catch (err) {
+          console.error(
+            `[composio] could not delete pending ${toolkit} connection:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+
+      return { toolkit, removed };
     },
 
     async executeAction(actionName, input, ctx) {
@@ -351,10 +559,13 @@ export async function startComposioConnection(
     console.error(`[composio] connection init failed for ${appName}:`, err);
     return { redirectUrl: null };
   } finally {
-    // The workspace's connection set is about to change. Drop the memo now so
+    // The workspace's connection set is about to change. Drop the memos now so
     // the refetch that follows the OAuth round trip reads Composio, not a
-    // snapshot taken before the user ever left for the consent screen.
+    // snapshot taken before the user ever left for the consent screen. The
+    // inventory memo matters most here: a connection is about to appear as
+    // INITIATED, and that is exactly what the pending list needs to show.
     invalidatePartnerConnectionCache(ctx.entityId);
+    invalidateConnectionInventoryCache(ctx.entityId);
   }
 }
 
@@ -457,6 +668,87 @@ export async function readConnectedAppsWithCache(
 }
 
 /**
+ * Full connection inventory for one workspace: every toolkit, every lifecycle
+ * state, with granted scopes where exposed.
+ *
+ * `ok: false` means Composio could not be reached — the caller must render that
+ * as "cannot check right now", never as "nothing connected". Uses the same
+ * short-lived memo as the connected-apps read (`COMPOSIO_STATUS_CACHE_MS`), so
+ * a catalog load costs one upstream call rather than one per surface.
+ */
+export interface ComposioConnectionInventoryResult {
+  connections: ComposioConnectionRecord[];
+  ok: boolean;
+}
+
+type InventoryCacheEntry = { connections: ComposioConnectionRecord[]; expiresAt: number };
+
+const connectionInventoryCache = new Map<string, InventoryCacheEntry>();
+
+/** Drop one workspace's inventory memo, or every workspace's when called bare. */
+export function invalidateConnectionInventoryCache(entityId?: string): void {
+  if (entityId === undefined) connectionInventoryCache.clear();
+  else connectionInventoryCache.delete(entityId);
+}
+
+export async function readConnectionInventory(
+  ctx: ComposioExecutionContext,
+): Promise<ComposioConnectionInventoryResult> {
+  const ttlMs = partnerConnectionCacheTtlMs();
+  const cached = ttlMs > 0 ? connectionInventoryCache.get(ctx.entityId) : undefined;
+  if (cached && cached.expiresAt > Date.now()) {
+    return { connections: cached.connections.map((record) => ({ ...record })), ok: true };
+  }
+
+  try {
+    const bridge = createComposioBridge(await getClient());
+    const connections = await bridge.listConnectionInventory(ctx);
+    if (ttlMs > 0) {
+      connectionInventoryCache.set(ctx.entityId, {
+        connections: connections.map((record) => ({ ...record })),
+        expiresAt: Date.now() + ttlMs,
+      });
+    }
+    return { connections, ok: true };
+  } catch (err) {
+    console.error('[composio] connection inventory read failed:', err);
+    // An outage is never memoised — a cached "unreachable" would keep the UI
+    // degraded after Composio recovered.
+    invalidateConnectionInventoryCache(ctx.entityId);
+    return { connections: [], ok: false };
+  }
+}
+
+/**
+ * Delete this workspace's stranded OAuth attempts for one toolkit so the user
+ * can retry from a clean slate. ACTIVE connections are never touched.
+ */
+export async function cancelPendingComposioConnections(
+  appName: string,
+  ctx: ComposioExecutionContext,
+): Promise<{ ok: boolean; toolkit: string; removed: number; message?: string }> {
+  const toolkit = toToolkitSlug(appName);
+  try {
+    const bridge = createComposioBridge(await getClient());
+    const result = await bridge.deletePendingConnections(appName, ctx);
+    return { ok: true, ...result };
+  } catch (err) {
+    console.error(`[composio] cancel-pending failed for ${toolkit}:`, err);
+    return {
+      ok: false,
+      toolkit,
+      removed: 0,
+      message: err instanceof Error ? err.message : 'Composio cancel failed.',
+    };
+  } finally {
+    // The connection set just changed (or may have partially changed), so both
+    // memos are stale either way.
+    invalidateConnectionInventoryCache(ctx.entityId);
+    invalidatePartnerConnectionCache(ctx.entityId);
+  }
+}
+
+/**
  * Revoke this entity's active connection(s) to one toolkit. Reports
  * `not_connected` and `failed` distinctly so the caller can answer 404 vs 502
  * rather than claiming a disconnect that never happened.
@@ -477,7 +769,8 @@ export async function disconnectComposioApp(
     };
   } finally {
     // Unconditional: even a failed disconnect may have deleted some accounts
-    // before it threw, so the memo can no longer be trusted either way.
+    // before it threw, so the memos can no longer be trusted either way.
     invalidatePartnerConnectionCache(ctx.entityId);
+    invalidateConnectionInventoryCache(ctx.entityId);
   }
 }

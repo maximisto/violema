@@ -69,12 +69,14 @@ import { getIntegrationStatus, searchWeb, sendMessage, validateMessageTarget } f
 import { usesInternalDemoRouting } from './platform/tenancy';
 import { renderChartSpecsToFiles } from './chartImage';
 import {
+  cancelPendingComposioConnections,
   disconnectComposioApp,
   executeComposioAction,
   isComposioEnabled,
   isComposioToolName,
   listConnectedApps,
   listConnectedAppsDetailed,
+  readConnectionInventory,
   startComposioConnection,
 } from './composioBridge';
 import { buildPartnerConnectCallbackUrl } from './publicOrigin';
@@ -137,6 +139,12 @@ import {
   type AutomationStepKind,
   type PersistedAutomationStep,
   buildCreditSnapshot,
+  buildCreditOverrunReason,
+  buildInsufficientCreditsBlock,
+  checkRunAffordability,
+  type CreditBlockDescriptor,
+  INSUFFICIENT_CREDITS_CODE,
+  settleCreditHoldWithOverrun,
   buildMissionRecords,
   buildDelegationRuntimeContext,
   buildWorkerTopologySnapshot,
@@ -251,6 +259,7 @@ import {
 } from './settingsStore';
 import {
   buildIntegrationCatalog,
+  type IntegrationCatalogLibrary,
   listPartnerAppOptions,
   resolvePartnerAppSlug,
 } from './integrationRegistry';
@@ -267,12 +276,23 @@ import {
 import { applyQueryStepPayloadToExecution, executeQueryData } from './integrationGateway/queryData';
 import {
   ACCOUNT_LIBRARY_BACKING_SOURCE,
+  ACCOUNT_LIBRARY_DRIVE_TOOLKIT,
   appendLibraryEntry,
+  buildLibraryAccessFailure,
+  COMPETITIVE_INTELLIGENCE_SECTION,
   isAccountLibraryWriteRequest,
   isLibraryFailure,
+  provisionLibrarySection,
   readAccountLibraryEntryTitle,
   readAccountLibrarySection,
+  summarizeLibrarySection,
 } from './integrationGateway/accountLibrary';
+import {
+  buildPartnerCapabilityReport,
+  hasCapability,
+  PARTNER_CAPABILITIES,
+} from './integrationGateway/partnerCapability';
+import { listSlackChannels } from './integrationGateway/slackChannels';
 import { checkWorkflowReadiness, resolveTenantDefaultDeliveryTarget } from './integrationGateway/workflowReadiness';
 import { evaluateRunReadiness, type RunReadinessDecision } from './integrationGateway/runReadinessGate';
 import { buildPartnerRuntimeStatus } from './integrationGateway/workflowRuntimeStatus';
@@ -4685,7 +4705,20 @@ export async function evaluateAutomationRunReadiness(input: {
  * connect Stripe" next to the automation instead of silence. Charges stay at
  * zero on both records, which keeps credit ledger metrics undistorted.
  */
-function recordBlockedAutomationRun(input: {
+/**
+ * Record a run that was refused before it did anything, as a visible,
+ * zero-credit failed run rather than a silent scheduler no-op.
+ *
+ * Shared by both pre-execution gates — "not connected" and "cannot afford it".
+ * They differ only in which metadata key carries the block and what the note is
+ * titled; everything else about how a blocked run must look to an operator is
+ * identical, and keeping one implementation is what guarantees that stays true.
+ *
+ * `blockKey` is the metadata field the UI reads (`readinessBlock` /
+ * `creditBlock`), kept distinct so a surface can tell the two apart without
+ * parsing the summary.
+ */
+function recordPreExecutionBlockedRun(input: {
   automationId: string;
   automationName: string;
   automationDescription?: string;
@@ -4693,28 +4726,26 @@ function recordBlockedAutomationRun(input: {
   steps?: PersistedAutomationStep[];
   workspaceId: string;
   workflowId: string;
-  decision: RunReadinessDecision;
+  summary: string;
+  noteTitle: string;
+  noteCode: string;
+  blockers: unknown[];
+  blockKey: 'readinessBlock' | 'creditBlock';
+  block: Record<string, unknown>;
 }) {
-  const { workspaceId, decision } = input;
+  const { workspaceId, summary } = input;
   const artifacts = [
     {
       kind: 'note',
-      title: `${input.automationName} is not ready to run`,
+      title: input.noteTitle,
       payload: {
-        note: decision.summary,
-        code: 'workflow_not_ready',
-        blockers: decision.blockers,
+        note: summary,
+        code: input.noteCode,
+        blockers: input.blockers,
       },
     },
   ];
-  const readinessBlock = {
-    code: 'workflow_not_ready' as const,
-    tier: decision.tier,
-    workflowId: decision.workflowId,
-    summary: decision.summary,
-    blockers: decision.blockers,
-    blockedAt: new Date().toISOString(),
-  };
+  const blockMetadata = { [input.blockKey]: input.block };
 
   const task = createTask({
     workspaceId,
@@ -4726,7 +4757,7 @@ function recordBlockedAutomationRun(input: {
       automationId: input.automationId,
       notify: input.notify || null,
       sourceSteps: input.steps,
-      readinessBlock,
+      ...blockMetadata,
     },
   });
   const taskRun = createTaskRun({
@@ -4741,7 +4772,7 @@ function recordBlockedAutomationRun(input: {
       title: input.automationName,
       sourceSteps: input.steps,
       stepExecutions: [],
-      readinessBlock,
+      ...blockMetadata,
     },
   });
 
@@ -4755,11 +4786,11 @@ function recordBlockedAutomationRun(input: {
   finalizeTaskRun(taskRun.id, {
     status: 'failed',
     actualCredits: 0,
-    error: decision.summary,
+    error: summary,
     metadata: {
-      summary: decision.summary,
+      summary,
       artifacts,
-      readinessBlock,
+      ...blockMetadata,
     },
   });
   updateTask(task.id, {
@@ -4769,10 +4800,10 @@ function recordBlockedAutomationRun(input: {
       automationId: input.automationId,
       notify: input.notify || null,
       sourceSteps: input.steps,
-      latestSummary: decision.summary,
+      latestSummary: summary,
       latestArtifacts: artifacts,
       latestStepExecutions: [],
-      readinessBlock,
+      ...blockMetadata,
     },
   });
 
@@ -4782,9 +4813,12 @@ function recordBlockedAutomationRun(input: {
     automationId: input.automationId,
     taskId: task.id,
     taskRunId: taskRun.id,
+    // A credit block is a readiness check too — it is the last question asked
+    // before a run is allowed to spend. Reusing the existing event type keeps
+    // `WorkflowLedgerEventType` (and every projection over it) unchanged.
     type: 'workflow_readiness_checked',
-    summary: decision.summary,
-    metadata: { readinessBlock },
+    summary,
+    metadata: blockMetadata,
   });
 
   const blockedSnapshot = buildTaskRunSnapshotEvent(workspaceId, taskRun.id, 'failed');
@@ -4793,6 +4827,92 @@ function recordBlockedAutomationRun(input: {
   }
 
   return { task, taskRun };
+}
+
+function recordBlockedAutomationRun(input: {
+  automationId: string;
+  automationName: string;
+  automationDescription?: string;
+  notify?: string | null;
+  steps?: PersistedAutomationStep[];
+  workspaceId: string;
+  workflowId: string;
+  decision: RunReadinessDecision;
+}) {
+  const { decision } = input;
+  return recordPreExecutionBlockedRun({
+    ...input,
+    summary: decision.summary,
+    noteTitle: `${input.automationName} is not ready to run`,
+    noteCode: 'workflow_not_ready',
+    blockers: decision.blockers,
+    blockKey: 'readinessBlock',
+    block: {
+      code: 'workflow_not_ready',
+      tier: decision.tier,
+      workflowId: decision.workflowId,
+      summary: decision.summary,
+      blockers: decision.blockers,
+      blockedAt: new Date().toISOString(),
+    },
+  });
+}
+
+/**
+ * The credit twin of `recordBlockedAutomationRun`.
+ *
+ * A run refused for cost must be exactly as visible as one refused for a
+ * missing connection — the incident that motivated this had the run disappear
+ * from the UI, which is the one outcome a founder cannot act on.
+ */
+function recordCreditBlockedAutomationRun(input: {
+  automationId: string;
+  automationName: string;
+  automationDescription?: string;
+  notify?: string | null;
+  steps?: PersistedAutomationStep[];
+  workspaceId: string;
+  workflowId: string;
+  block: CreditBlockDescriptor;
+}) {
+  return recordPreExecutionBlockedRun({
+    ...input,
+    summary: input.block.summary,
+    noteTitle: `${input.automationName} did not run — not enough credits`,
+    noteCode: INSUFFICIENT_CREDITS_CODE,
+    blockers: input.block.blockers,
+    blockKey: 'creditBlock',
+    block: { ...input.block },
+  });
+}
+
+/**
+ * Read back whatever a run has already persisted through `persistProgress`.
+ *
+ * `finalizeTaskRun` shallow-merges metadata, so any failure path that names
+ * `artifacts` or `stepExecutions` *replaces* them. A run that failed at its last
+ * step therefore used to end up looking like it had produced nothing at all —
+ * the customer lost every artifact the run had genuinely completed and paid for.
+ *
+ * Failure paths use this to append to what exists instead of overwriting it.
+ * Returns empty arrays when the run genuinely has no progress yet, which is the
+ * correct answer for a run that failed before its first step.
+ */
+function readPersistedRunProgress(workspaceId: string, taskRunId: string): {
+  artifacts: unknown[];
+  stepExecutions: unknown[];
+} {
+  try {
+    const run = listTaskRuns(workspaceId).find((candidate) => candidate.id === taskRunId);
+    const metadata = (run?.metadata || {}) as Record<string, unknown>;
+    return {
+      artifacts: Array.isArray(metadata.artifacts) ? metadata.artifacts : [],
+      stepExecutions: Array.isArray(metadata.stepExecutions) ? metadata.stepExecutions : [],
+    };
+  } catch {
+    // Never let the recovery read turn a failing run into a crashing one.
+    return { artifacts: [], stepExecutions: [] };
+  }
 }
 
 /**
@@ -4811,6 +4931,65 @@ function respondWorkflowNotReady(res: Response, decision: RunReadinessDecision) 
     message: decision.summary,
     code: 'workflow_not_ready',
     blockers: decision.blockers,
+  });
+}
+
+/**
+ * The affordability twin of the readiness pre-check on operator-initiated runs.
+ *
+ * `runAutomation` blocks unaffordable runs on its own, but a manual trigger
+ * deserves the answer on the request rather than as a failed run discovered
+ * later — the same reasoning that put the readiness check on these routes.
+ *
+ * Returns the block when the run cannot be afforded, `null` when it can. A
+ * throw is deliberately swallowed to `null`: a broken ledger read must not
+ * prevent a run that `runAutomation`'s own gate and `acquireCreditHold` will
+ * still evaluate.
+ */
+function checkManualRunAffordability(
+  automation: Parameters<typeof buildAutomationExecutionPlan>[0] & { name: string },
+  workspaceId: string,
+): CreditBlockDescriptor | null {
+  try {
+    ensureWorkspaceCredits(workspaceId);
+    const plan = buildAutomationExecutionPlan(automation);
+    const estimate = estimateCreditCost({
+      taskKind: 'automation',
+      modelTier: plan.suggestedModelTier,
+      automationRuns: 1,
+      toolCalls: plan.estimatedToolCalls,
+      complexity: plan.complexity,
+    });
+    const affordability = checkRunAffordability({
+      workspaceId,
+      estimatedCredits: Math.max(estimate.estimatedCredits, plan.estimatedCredits),
+    });
+    if (affordability.affordable) return null;
+    return buildInsufficientCreditsBlock({ automationName: automation.name, affordability });
+  } catch (error) {
+    console.error('[automation] affordability pre-check failed; deferring to the run gate', error);
+    return null;
+  }
+}
+
+/**
+ * The 409 an operator-initiated run gets when the workspace cannot afford it.
+ *
+ * Mirrors `respondWorkflowNotReady` field for field so the dashboard's existing
+ * error handling renders it without changes, and carries the three numbers so
+ * the UI can show the shortfall instead of a bare "insufficient credits".
+ */
+function respondInsufficientCredits(res: Response, block: CreditBlockDescriptor) {
+  res.status(409).json({
+    ok: false,
+    error: block.summary,
+    message: block.summary,
+    code: INSUFFICIENT_CREDITS_CODE,
+    blockers: block.blockers,
+    availableCredits: block.availableCredits,
+    requiredCredits: block.requiredCredits,
+    shortfallCredits: block.shortfallCredits,
+    ...(block.suggestedTopUpCredits ? { suggestedTopUpCredits: block.suggestedTopUpCredits } : {}),
   });
 }
 
@@ -4869,6 +5048,48 @@ export async function runAutomation(automation: {
   const complexity = executionPlan.complexity;
   const toolCallCount = executionPlan.estimatedToolCalls;
   const executionRole = executionPlan.primaryRole;
+
+  // ── Affordability gate ──────────────────────────────────────────────────────
+  // Deliberately here: the plan is built (so the estimate is real) but nothing
+  // has been recorded, held, or sent to a model yet, so refusing costs nothing.
+  //
+  // `acquireCreditHold` below is still the authority — it re-checks atomically
+  // and a concurrent run can still beat us to the balance. But the hold is taken
+  // after the task and run records exist, and settlement happens after the work,
+  // so leaving this to the hold alone is what let a tenant burn a full run and
+  // then lose it at `settleCreditHold`.
+  const estimate = estimateCreditCost({
+    taskKind: 'automation',
+    modelTier,
+    automationRuns: 1,
+    toolCalls: toolCallCount,
+    complexity,
+  });
+  const estimatedCredits = Math.max(estimate.estimatedCredits, executionPlan.estimatedCredits);
+  const affordability = checkRunAffordability({ workspaceId, estimatedCredits });
+  if (!affordability.affordable) {
+    const creditBlock = buildInsufficientCreditsBlock({
+      automationName: automation.name,
+      affordability,
+    });
+    recordCreditBlockedAutomationRun({
+      automationId: automation.id,
+      automationName: automation.name,
+      automationDescription: automation.description,
+      notify: automation.notify,
+      steps: automation.steps,
+      workspaceId,
+      workflowId,
+      block: creditBlock,
+    });
+    console.warn(`[automation] ${automation.id} blocked before execution: ${creditBlock.summary}`);
+    return {
+      ok: false as const,
+      error: creditBlock.summary,
+      deliveryError: creditBlock.summary,
+    };
+  }
+
   const delegation = buildDelegationRuntimeContext({
     workspaceId,
     taskKind: 'automation',
@@ -4915,14 +5136,8 @@ export async function runAutomation(automation: {
       workerTopology: executionPlan.topology,
     },
   });
-  const estimate = estimateCreditCost({
-    taskKind: 'automation',
-    modelTier,
-    automationRuns: 1,
-    toolCalls: toolCallCount,
-    complexity,
-  });
-  const estimatedCredits = Math.max(estimate.estimatedCredits, executionPlan.estimatedCredits);
+  // `estimatedCredits` is computed above, before the affordability gate — the
+  // run record and the hold must both quote the number the gate actually judged.
   const taskRun = createTaskRun({
     workspaceId,
     taskId: task.id,
@@ -5188,7 +5403,12 @@ export async function runAutomation(automation: {
         runOutcome: outcome,
       },
     });
-    settleCreditHold(creditHold.holdId, {
+    // Overrun-tolerant on purpose. The strict `settleCreditHold` throws when the
+    // actual cost exceeds what the workspace can cover — but by this line the
+    // run has already spent the money and written its artifacts, so throwing
+    // destroyed completed work instead of protecting anything. Charge what can
+    // be charged, keep the run, and say so.
+    const settlement = settleCreditHoldWithOverrun(creditHold.holdId, {
       workspaceId,
       source: 'automation_run',
       actualCredits,
@@ -5213,7 +5433,43 @@ export async function runAutomation(automation: {
       },
     });
     creditHoldSettled = true;
-    const completedSnapshot = buildTaskRunSnapshotEvent(workspaceId, taskRun.id, outcome.runStatus === 'failed' ? 'failed' : 'completed');
+
+    if (settlement.overran) {
+      const overrunReason = buildCreditOverrunReason({
+        automationName: automation.name,
+        settledCredits: settlement.settledCredits,
+        requestedCredits: settlement.requestedCredits,
+        overrunCredits: settlement.overrunCredits,
+      });
+      const creditOverrun = {
+        code: INSUFFICIENT_CREDITS_CODE,
+        settledCredits: settlement.settledCredits,
+        requestedCredits: settlement.requestedCredits,
+        overrunCredits: settlement.overrunCredits,
+        reason: overrunReason,
+        detectedAt: new Date().toISOString(),
+      };
+
+      // This patch deliberately omits `artifacts` and `stepExecutions`.
+      // `finalizeTaskRun` shallow-merges metadata, so naming them here would
+      // replace the run's real output — which is exactly how the incident made
+      // a completed run look empty. Only the failure framing is layered on top.
+      finalizeTaskRun(taskRun.id, {
+        status: 'failed',
+        actualCredits: settlement.settledCredits,
+        error: overrunReason,
+        metadata: { summary: `${summary}\n\n${overrunReason}`, creditOverrun },
+      });
+      updateTask(task.id, {
+        status: 'blocked',
+        delegationState: 'review',
+        metadata: { latestSummary: `${summary}\n\n${overrunReason}`, creditOverrun },
+      });
+      console.warn(`[automation] ${automation.id} overran its credits: ${overrunReason}`);
+    }
+
+    const settledRunStatus = settlement.overran || outcome.runStatus === 'failed' ? 'failed' : 'completed';
+    const completedSnapshot = buildTaskRunSnapshotEvent(workspaceId, taskRun.id, settledRunStatus);
     if (completedSnapshot) {
       broadcastTaskPanelEvent(workspaceId, completedSnapshot);
     }
@@ -5240,7 +5496,9 @@ export async function runAutomation(automation: {
     }
 
     return {
-      ok: outcome.schedulerOk,
+      // An overrun run is a failed run for scheduling purposes even when the
+      // work itself succeeded — the next run needs credits before it fires.
+      ok: settlement.overran ? false : outcome.schedulerOk,
       deliveryError: execution.deliveryError || undefined,
     };
   } catch (error) {
@@ -5266,6 +5524,12 @@ export async function runAutomation(automation: {
       ? `Automation could not start because the workspace does not have enough credits for this run.\n\n${errorMessage}`
       : `Automation failed before it could finish cleanly.\n\n${errorMessage}`;
 
+    // Whatever the run already completed stays. The failure note is appended to
+    // its artifacts rather than substituted for them — a run that died on its
+    // last step still produced everything before it, and erasing that is how a
+    // real customer's completed work disappeared from the dashboard.
+    const priorProgress = readPersistedRunProgress(workspaceId, taskRun.id);
+
     finalizeTaskRun(taskRun.id, {
       status: 'failed',
       actualCredits: 0,
@@ -5276,7 +5540,7 @@ export async function runAutomation(automation: {
         modelSource: runModelSource,
         modelSourceLabel: getModelSourceLabel(runModelSource),
         plannedSteps: executionPlan.steps,
-        stepExecutions: [],
+        stepExecutions: priorProgress.stepExecutions,
         executionPolicy: automation.execution_policy,
         studioState: automation.studio_state,
         experimentAttribution,
@@ -5291,6 +5555,7 @@ export async function runAutomation(automation: {
         workerTopology: applyWorkerRuntimeActivity(executionPlan.topology, []),
         sourceSteps: automation.steps,
         artifacts: [
+          ...priorProgress.artifacts,
           {
             kind: 'note',
             title: `${automation.name} execution status`,
@@ -5317,7 +5582,7 @@ export async function runAutomation(automation: {
         experimentAttribution,
         scenarioTelemetry,
         latestSummary: failureSummary,
-        latestStepExecutions: [],
+        latestStepExecutions: priorProgress.stepExecutions,
         automationPlan: executionPlan,
         plannedSteps: executionPlan.steps,
         rolePlan: {
@@ -5329,6 +5594,7 @@ export async function runAutomation(automation: {
         },
         workerTopology: applyWorkerRuntimeActivity(executionPlan.topology, []),
         latestArtifacts: [
+          ...priorProgress.artifacts,
           {
             kind: 'note',
             title: `${automation.name} execution status`,
@@ -5467,13 +5733,89 @@ async function readPartnerConnections(workspaceId: string) {
   return await listConnectedAppsDetailed({ entityId: workspaceId });
 }
 
+/**
+ * Capability + pending report for a workspace, or empty when Composio is off or
+ * unreachable.
+ *
+ * `ok: false` is the honest "cannot tell" case: the catalog keeps reporting
+ * presence via `connectedApps` and leaves `capabilities` empty, so the UI says
+ * it cannot verify capability rather than claiming a connection has none.
+ */
+/**
+ * The refusal the provision endpoint returns before touching Drive.
+ *
+ * `integration_not_connected` and `integration_scope_insufficient` are the two
+ * codes the run path already produces, so a founder blocked at setup and a
+ * founder blocked mid-run read the identical sentence and get the identical
+ * next action.
+ */
+function buildLibraryProvisionRefusal(connected: boolean) {
+  return buildLibraryAccessFailure(
+    connected ? 'integration_scope_insufficient' : 'integration_not_connected',
+  );
+}
+
+async function readPartnerCapabilityReport(workspaceId: string) {
+  if (!isComposioEnabled()) {
+    return { report: buildPartnerCapabilityReport([]), ok: true };
+  }
+  const inventory = await readConnectionInventory({ entityId: workspaceId });
+  return { report: buildPartnerCapabilityReport(inventory.connections), ok: inventory.ok };
+}
+
+/**
+ * Library status for the connect surface.
+ *
+ * Only attempted when Drive is connected AND not known to lack write access —
+ * three Drive round trips on every catalog load would be wasteful, and asking a
+ * connection we already know cannot write is guaranteed to fail. Everything
+ * else degrades to a status the UI can render without lying.
+ */
+async function readLibraryStatusForCatalog(
+  workspaceId: string,
+  capability: Awaited<ReturnType<typeof readPartnerCapabilityReport>>,
+): Promise<IntegrationCatalogLibrary> {
+  if (!isComposioEnabled() || !capability.ok) return { provisioned: false, status: 'unknown' };
+
+  const driveWrite = hasCapability(
+    capability.report,
+    ACCOUNT_LIBRARY_DRIVE_TOOLKIT,
+    PARTNER_CAPABILITIES.DRIVE_WRITE,
+  );
+  // Not connected at all — nothing to report, and nothing to offer yet.
+  if (!capability.report.connectedApps.includes(ACCOUNT_LIBRARY_DRIVE_TOOLKIT)) {
+    return { provisioned: false, status: 'unknown' };
+  }
+  // Connected but demonstrably read-only: the folder read would fail, and
+  // offering "provision" would hand the founder a button that cannot work.
+  if (driveWrite === 'no') return { provisioned: false, status: 'unavailable' };
+
+  try {
+    const status = await summarizeLibrarySection(workspaceId, COMPETITIVE_INTELLIGENCE_SECTION);
+    if (isLibraryFailure(status)) return { provisioned: false, status: 'unavailable' };
+    return {
+      ...status,
+      status: status.provisioned ? 'provisioned' : 'not_provisioned',
+    };
+  } catch (error) {
+    console.error('[library] status read failed', error);
+    return { provisioned: false, status: 'unavailable' };
+  }
+}
+
 app.get('/api/integrations/catalog', async (req: Request, res: Response) => {
   const { workspaceId } = resolveWorkspaceContext(req);
   const connections = await readPartnerConnections(workspaceId);
+  const capability = await readPartnerCapabilityReport(workspaceId);
+  const library = await readLibraryStatusForCatalog(workspaceId, capability);
+
   res.json(buildIntegrationCatalog({
     partnerEnabled: isComposioEnabled(),
     connectedPartnerApps: connections.apps,
     partnerDegraded: !connections.ok,
+    partnerCapabilities: capability.report.capabilities,
+    partnerPending: capability.report.pending,
+    library,
   }));
 });
 
@@ -5522,7 +5864,7 @@ function recordPartnerConnectionEvent(input: {
   req: Request;
   workspaceId: string;
   toolkit: string;
-  action: 'connect_initiated' | 'disconnected';
+  action: 'connect_initiated' | 'disconnected' | 'pending_cancelled';
   summary: string;
 }) {
   appendWorkflowLedgerEvent({
@@ -5605,6 +5947,127 @@ app.post('/api/integrations/composio/disconnect', async (req: Request, res: Resp
   });
 
   res.json({ ok: true, toolkit, removed: result.removed });
+});
+
+/**
+ * Clear a stranded OAuth attempt so the user can retry cleanly.
+ *
+ * A tenant abandoned two Drive consent tabs; both connections sat INITIATED
+ * forever, invisible, and every retry added another. This deletes only the
+ * unfinished ones — an ACTIVE connection is never touched, so cancelling a
+ * half-finished attempt can never disconnect a working integration.
+ *
+ * Workspace-scoped and audited like connect/disconnect, but deliberately not
+ * admin-gated: cleaning up your own abandoned OAuth tab is self-service, and
+ * requiring an admin would leave the exact dead end this fixes.
+ */
+app.post('/api/integrations/composio/cancel-pending', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const toolkit = resolveRequestedPartnerApp(req, res);
+  if (!toolkit) return;
+
+  if (!isComposioEnabled()) {
+    res.status(503).json({ error: 'Composio is not configured on this server.' });
+    return;
+  }
+
+  const result = await cancelPendingComposioConnections(toolkit, { entityId: workspaceId });
+  if (!result.ok) {
+    res.status(502).json({ error: `Could not cancel the pending ${toolkit} connection.`, toolkit });
+    return;
+  }
+
+  if (result.removed > 0) {
+    recordPartnerConnectionEvent({
+      req,
+      workspaceId,
+      toolkit,
+      action: 'pending_cancelled',
+      summary: `Cancelled ${result.removed} unfinished ${toolkit} connection attempt(s).`,
+    });
+  }
+
+  res.json({ ok: true, toolkit, removed: result.removed });
+});
+
+/**
+ * Channels this workspace can deliver to, with membership.
+ *
+ * Answers 200 even when the lookup failed: the body carries `ok:false` and a
+ * reason the UI renders in place of the picker. A 5xx here would be read as
+ * "Violema is broken" when the honest answer is usually "Slack is not
+ * connected" or "invite the bot".
+ */
+app.get('/api/integrations/slack/channels', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json(await listSlackChannels(workspaceId));
+});
+
+/**
+ * Create the library folders during setup rather than on first write.
+ *
+ * Fails closed and early: a Drive connection that demonstrably cannot write is
+ * refused with the same honest "Reauthorize Google Drive" message the run path
+ * uses, before any folder is created. `unknown` capability proceeds — Drive
+ * itself is then the authority, and its refusal is classified the same way.
+ */
+app.post('/api/integrations/library/provision', async (req: Request, res: Response) => {
+  const { workspaceId } = resolveWorkspaceContext(req);
+
+  if (!isComposioEnabled()) {
+    res.status(503).json({ error: 'Composio is not configured on this server.' });
+    return;
+  }
+
+  const capability = await readPartnerCapabilityReport(workspaceId);
+  if (!capability.ok) {
+    res.status(503).json({
+      ok: false,
+      code: 'integration_lookup_unavailable',
+      error: "Violema could not verify this workspace's Google Drive connection. Try again in a moment.",
+    });
+    return;
+  }
+
+  const driveWrite = hasCapability(
+    capability.report,
+    ACCOUNT_LIBRARY_DRIVE_TOOLKIT,
+    PARTNER_CAPABILITIES.DRIVE_WRITE,
+  );
+  const connected = capability.report.connectedApps.includes(ACCOUNT_LIBRARY_DRIVE_TOOLKIT);
+  if (!connected || driveWrite === 'no') {
+    // Reuses the library's own wording so the connect surface and a failed run
+    // say the same thing about the same problem.
+    // The failure already carries `ok: false`, plus `code`, `message`, and the
+    // `nextAction` the readiness panel renders.
+    res.status(409).json(buildLibraryProvisionRefusal(connected));
+    return;
+  }
+
+  const result = await provisionLibrarySection(workspaceId, COMPETITIVE_INTELLIGENCE_SECTION);
+  if (isLibraryFailure(result)) {
+    res.status(409).json(result);
+    return;
+  }
+
+  appendWorkflowLedgerEvent({
+    workspaceId,
+    workflowId: 'integrations',
+    type: 'external_action_executed',
+    summary: result.createdFolder
+      ? `Created the ${result.folderName} folder in Google Drive.`
+      : `Confirmed the ${result.folderName} folder in Google Drive.`,
+    metadata: {
+      toolkit: ACCOUNT_LIBRARY_DRIVE_TOOLKIT,
+      action: 'library_provisioned',
+      folderId: result.folderId,
+      sectionFolderId: result.section.folderId,
+      createdFolder: result.createdFolder,
+      actorEmail: getAuthenticatedUser(req)?.email,
+    },
+  });
+
+  res.json(result);
 });
 
 app.get('/api/workflows/:workflowId/readiness', async (req: Request, res: Response) => {
@@ -7191,6 +7654,17 @@ app.post('/api/automations/:id/run', async (req: Request, res: Response) => {
     return;
   }
 
+  // Connected but unaffordable is still a refusal the operator should see now,
+  // with the numbers, rather than as a blocked run they have to go find.
+  const creditBlock = checkManualRunAffordability(
+    automation,
+    automation.workspaceId || workspaceId,
+  );
+  if (creditBlock) {
+    respondInsufficientCredits(res, creditBlock);
+    return;
+  }
+
   const record = triggerAutomationNow(req.params.id, runAutomation);
   if (!record) {
     res.status(404).json({ error: 'Automation not found' });
@@ -7358,6 +7832,21 @@ app.post('/api/automations/:id/reviews/:runId/rerun', async (req: Request, res: 
   const reviewer = readBodyString(req.body?.reviewer, 'Violema reviewer');
   const note = readBodyString(req.body?.note, 'Reviewer requested a fresh run.');
   const dryRun = readDryRunFlag(req.body?.dryRun);
+
+  // A live rerun spends exactly like a first run, so it gets the same refusal.
+  // A dry run spends nothing and triggers nothing — blocking it would hide the
+  // very validation an operator uses to decide whether the rerun is worth
+  // buying credits for.
+  if (!dryRun) {
+    const rerunCreditBlock = checkManualRunAffordability(
+      context.automation,
+      context.automation.workspaceId || workspaceId,
+    );
+    if (rerunCreditBlock) {
+      respondInsufficientCredits(res, rerunCreditBlock);
+      return;
+    }
+  }
   const taskPatch = {
     status: 'running',
     delegationState: 'in_progress',

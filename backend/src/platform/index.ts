@@ -1,6 +1,7 @@
 export * from './billing';
 export * from './delegation';
 export * from './cost';
+export * from './creditPreflight';
 export * from './jsonStore';
 export * from './ledger';
 export * from './missions';

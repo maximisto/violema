@@ -604,3 +604,102 @@ test('readiness still fails closed on partner integrations that are not connecte
     assert.equal(email?.detail, 'Gmail is not connected to this workspace.');
   });
 });
+
+// ── Connect-surface additions ─────────────────────────────────────────────────
+//
+// The HTTP contract the connect UI is built against. Composio stays off for all
+// of these, which is the honest "nothing connected, nothing pending" baseline.
+
+test('catalog carries capability, pending and library sections', async () => {
+  await withIntegrationServer(async (context) => {
+    const response = await authedFetch(context, '/api/integrations/catalog');
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+      partner: { capabilities: unknown[]; pending: unknown[]; connectedApps: string[] };
+      library: { provisioned: boolean; status: string };
+    };
+
+    // Present and empty rather than absent: the UI can render the sections
+    // without existence checks, and empty here genuinely means "none".
+    assert.deepEqual(body.partner.capabilities, []);
+    assert.deepEqual(body.partner.pending, []);
+    assert.deepEqual(body.partner.connectedApps, []);
+
+    // Drive is not connected, so the library was never inspected. `unknown` is
+    // the truthful status — not `not_provisioned`, which would invite a
+    // provision the workspace cannot complete.
+    assert.equal(body.library.provisioned, false);
+    assert.equal(body.library.status, 'unknown');
+  });
+});
+
+test('cancel-pending validates the app before it can reach Composio', async () => {
+  await withIntegrationServer(async (context) => {
+    const unknownApp = await authedFetch(context, '/api/integrations/composio/cancel-pending', {
+      method: 'POST',
+      body: JSON.stringify({ appName: 'definitely-not-an-app' }),
+    });
+    assert.equal(unknownApp.status, 400);
+    const body = (await unknownApp.json()) as { error: string; validOptions: string[] };
+    assert.match(body.error, /not a connectable Violema integration/);
+    assert.ok(body.validOptions.includes('google_drive'));
+
+    // A known app with Composio switched off is a configuration fact, and must
+    // not be reported as a failed cancellation.
+    const disabled = await authedFetch(context, '/api/integrations/composio/cancel-pending', {
+      method: 'POST',
+      body: JSON.stringify({ appName: 'google_drive' }),
+    });
+    assert.equal(disabled.status, 503);
+  });
+});
+
+test('the slack channel picker degrades honestly instead of returning a fake list', async () => {
+  await withIntegrationServer(async (context) => {
+    const response = await authedFetch(context, '/api/integrations/slack/channels');
+    // 200 with `ok:false`: "Slack is not connected" is an answer, not a server
+    // error, and a 5xx would read as "Violema is broken".
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { ok: boolean; code?: string; channels?: unknown[] };
+
+    assert.equal(body.ok, false);
+    assert.ok(
+      ['slack_not_connected', 'slack_not_configured', 'slack_lookup_unavailable'].includes(
+        String(body.code),
+      ),
+      `unexpected failure code: ${body.code}`,
+    );
+    // Above all: no invented channels.
+    assert.equal(body.channels, undefined);
+  });
+});
+
+test('library provisioning refuses before touching Drive when Composio is off', async () => {
+  await withIntegrationServer(async (context) => {
+    const response = await authedFetch(context, '/api/integrations/library/provision', {
+      method: 'POST',
+    });
+    assert.equal(response.status, 503);
+    const body = (await response.json()) as { error: string };
+    assert.match(body.error, /Composio is not configured/);
+  });
+});
+
+test('the new connect-surface routes require a session', async () => {
+  await withIntegrationServer(async (context) => {
+    const routes: Array<[string, string]> = [
+      ['GET', '/api/integrations/slack/channels'],
+      ['POST', '/api/integrations/composio/cancel-pending'],
+      ['POST', '/api/integrations/library/provision'],
+    ];
+
+    for (const [method, route] of routes) {
+      const response = await fetch(`${context.baseUrl}${route}`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        ...(method === 'POST' ? { body: JSON.stringify({ appName: 'google_drive' }) } : {}),
+      });
+      assert.equal(response.status, 401, `${method} ${route} must require a session`);
+    }
+  });
+});
