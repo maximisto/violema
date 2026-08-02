@@ -26,6 +26,7 @@ interface ReviewArtifact {
     approvalRequired?: boolean;
     sourceLinks?: Array<{ url: string; label: string }>;
     visualArtifacts?: Array<{ title?: string; payload?: unknown }>;
+    runWarnings?: AutomationRunWarning[];
   };
 }
 
@@ -41,6 +42,12 @@ export interface AutomationRunReceipt {
   artifactTitle?: string;
   note?: string;
   delivery?: Record<string, unknown>;
+  /**
+   * What the run could not finish, as shown on the review gate the approver
+   * acted on. Present so a delivered receipt can still read "delivered, but not
+   * archived" rather than implying everything succeeded.
+   */
+  runWarnings?: AutomationRunWarning[];
 }
 
 export interface AutomationPreflightBlocker {
@@ -62,6 +69,25 @@ export interface AutomationDeliveryDraftValidation {
   warnings: AutomationPreflightBlocker[];
 }
 
+/**
+ * A step failure the run was allowed to survive.
+ *
+ * This is the honesty half of step severity: tolerating an auxiliary failure
+ * must never mean hiding it. Every warning here corresponds to a step execution
+ * still recorded as `failed`, with its error intact, and — for connector
+ * failures — a `connector_failed` ledger event. The warning is the thing a UI
+ * renders next to the delivery ("Delivered, but not archived: …") so nobody has
+ * to open the step timeline to discover what did not happen.
+ */
+export interface AutomationRunWarning {
+  /** The step whose failure was tolerated. */
+  stepId: string;
+  /** The step title, matching the run timeline. */
+  title: string;
+  /** Why it failed, verbatim from the step where one was recorded. */
+  message: string;
+}
+
 export interface AutomationRunOutcome {
   taskStatus: TaskStatus;
   runStatus: TaskRunStatus;
@@ -69,6 +95,8 @@ export interface AutomationRunOutcome {
   schedulerOk: boolean;
   reviewRequired: boolean;
   reviewSummary?: string;
+  /** Tolerated failures. Always present; empty on a clean run. */
+  runWarnings: AutomationRunWarning[];
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {
@@ -98,8 +126,55 @@ function readArtifacts(task: TaskRecord, taskRun: TaskRunRecord): ReviewArtifact
         markdown: readString(readRecord(item.payload)?.markdown),
         deliveryTarget: readString(readRecord(item.payload)?.deliveryTarget),
         approvalRequired: Boolean(readRecord(item.payload)?.approvalRequired),
+        // The evidence travels with the draft. The run stores these on the
+        // review gate; rebuilding the payload without them silently stripped
+        // every approved send of its source links and charts — the opposite of
+        // what this product promises.
+        sourceLinks: readSourceLinks(readRecord(item.payload)?.sourceLinks),
+        visualArtifacts: readVisualArtifacts(readRecord(item.payload)?.visualArtifacts),
+        // What the run could not finish travels with the thing being approved,
+        // so the receipt can record that the approver was shown it.
+        runWarnings: readRunWarnings(readRecord(item.payload)?.runWarnings),
       } : undefined,
     }));
+}
+
+/** Re-read persisted evidence links defensively — this crosses a JSON boundary. */
+function readSourceLinks(value: unknown): Array<{ url: string; label: string }> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const links = value
+    .map((item) => readRecord(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => ({ url: readString(item.url), label: readString(item.label) }))
+    .filter((item): item is { url: string; label: string } => Boolean(item.url));
+  return links.length > 0 ? links : undefined;
+}
+
+/** Re-read persisted chart artifacts defensively — this crosses a JSON boundary. */
+function readVisualArtifacts(value: unknown): Array<{ title?: string; payload?: unknown }> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const visuals = value
+    .map((item) => readRecord(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => ({ title: readString(item.title), payload: item.payload }))
+    .filter((item) => item.payload !== undefined);
+  return visuals.length > 0 ? visuals : undefined;
+}
+
+/** Re-read persisted warnings defensively — this crosses a JSON boundary. */
+function readRunWarnings(value: unknown): AutomationRunWarning[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const warnings = value
+    .map((item) => readRecord(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => ({
+      stepId: readString(item.stepId),
+      title: readString(item.title),
+      message: readString(item.message),
+    }))
+    .filter((item) => item.stepId || item.title || item.message);
+
+  return warnings.length > 0 ? warnings : undefined;
 }
 
 function readAutomationId(task: TaskRecord, taskRun: TaskRunRecord) {
@@ -140,6 +215,7 @@ function buildReceipt(input: {
   artifactTitle?: string;
   note?: string;
   delivery?: Record<string, unknown>;
+  runWarnings?: AutomationRunWarning[];
 }): AutomationRunReceipt {
   return {
     id: `receipt_${input.taskRun.id}_${input.status}`,
@@ -153,6 +229,7 @@ function buildReceipt(input: {
     artifactTitle: input.artifactTitle,
     note: input.note,
     delivery: input.delivery,
+    ...(input.runWarnings?.length ? { runWarnings: input.runWarnings } : {}),
   };
 }
 
@@ -214,6 +291,7 @@ export async function approveAutomationReview(input: {
     deliveryTarget,
     artifactTitle: artifact.title,
     delivery,
+    runWarnings: artifact.payload?.runWarnings,
   });
 
   return {
@@ -375,21 +453,94 @@ export function validateAutomationDeliveryDraft(input: {
   return { ok: true, warnings };
 }
 
+type ClassifiableStep = Pick<
+  AutomationStepExecution,
+  'status' | 'title' | 'error' | 'kind' | 'stepId' | 'stepSeverity'
+>;
+
+/**
+ * The system's own end-of-run summary step, which degrades to a deterministic
+ * fallback when a model route is down. It has never blocked a run, because its
+ * failure costs presentation rather than evidence.
+ */
+function isSystemSummaryStep(step: ClassifiableStep) {
+  return (
+    step.kind === 'summarize' &&
+    step.title === 'Generate automation summary' &&
+    /^auto_step_/.test(step.stepId)
+  );
+}
+
+/**
+ * Fail closed: only a failure explicitly marked `auxiliary` is tolerated.
+ * A missing severity — an older persisted record, an unclassified step — blocks
+ * exactly as it always has.
+ */
+function isBlockingStepFailure(step: ClassifiableStep) {
+  if (step.status !== 'failed') return false;
+  if (isSystemSummaryStep(step)) return false;
+  return step.stepSeverity !== 'auxiliary';
+}
+
+/**
+ * The tolerated failures of a run, in step order.
+ *
+ * Note this reports auxiliary failures even on a run that ends up blocked for
+ * an unrelated critical reason. Two things went wrong, and the operator gets
+ * told about both.
+ */
+export function collectAutomationRunWarnings(
+  stepExecutions: ClassifiableStep[],
+): AutomationRunWarning[] {
+  return stepExecutions
+    .filter((step) => step.status === 'failed' && step.stepSeverity === 'auxiliary')
+    .map((step) => ({
+      stepId: step.stepId,
+      title: step.title,
+      message: readString(step.error) || `${step.title || 'A workflow step'} did not complete.`,
+    }));
+}
+
+function describeRunWarnings(warnings: AutomationRunWarning[]) {
+  return warnings.map((item) => `${item.title} — ${item.message}`).join('; ');
+}
+
+/**
+ * Stamp the run's warnings onto the review gate artifact.
+ *
+ * An approver decides from the review gate, so the gate has to carry what did
+ * not happen. Applied after the run finishes rather than when the gate is built
+ * so the list is complete regardless of step ordering — a mission that archives
+ * after delivering still shows the approver the same facts as one that archives
+ * before. Mutates in place, because the caller persists these exact artifact
+ * objects into both the task and the run.
+ */
+export function applyRunWarningsToReviewGate(
+  artifacts: unknown[] | undefined | null,
+  warnings: AutomationRunWarning[],
+) {
+  if (!Array.isArray(artifacts) || warnings.length === 0) return;
+
+  for (const artifact of artifacts) {
+    const record = readRecord(artifact);
+    if (!record || readString(record.kind) !== 'review_gate') continue;
+    const payload = readRecord(record.payload);
+    if (!payload) continue;
+    payload.runWarnings = warnings;
+  }
+}
+
 export function classifyAutomationRunOutcome(input: {
   deliveryWaitingForReview?: boolean;
   deliveryError?: string | null;
-  stepExecutions: Array<Pick<AutomationStepExecution, 'status' | 'title' | 'error' | 'kind' | 'stepId'>>;
+  stepExecutions: ClassifiableStep[];
 }): AutomationRunOutcome {
-  const failedStep = input.stepExecutions.find((step) => {
-    if (step.status !== 'failed') return false;
+  const runWarnings = collectAutomationRunWarnings(input.stepExecutions);
+  const warningDetail = runWarnings.length > 0 ? ` Not everything completed: ${describeRunWarnings(runWarnings)}` : '';
 
-    const isSystemSummary =
-      step.kind === 'summarize' &&
-      step.title === 'Generate automation summary' &&
-      /^auto_step_/.test(step.stepId);
-
-    return !isSystemSummary;
-  });
+  // Evidence integrity first. A critical failure means the output's truth is in
+  // question, and nothing may be delivered — unchanged from day one.
+  const failedStep = input.stepExecutions.find(isBlockingStepFailure);
   if (input.deliveryError || failedStep) {
     const detail = input.deliveryError || failedStep?.error || `${failedStep?.title || 'A workflow step'} failed.`;
     return {
@@ -399,9 +550,12 @@ export function classifyAutomationRunOutcome(input: {
       schedulerOk: false,
       reviewRequired: false,
       reviewSummary: `Run needs attention before it can be trusted or delivered. ${detail}`,
+      runWarnings,
     };
   }
 
+  // Past this point only auxiliary steps failed, so the drafted output is still
+  // fully evidenced. It stays deliverable and review-gated as normal.
   if (input.deliveryWaitingForReview) {
     return {
       taskStatus: 'waiting_review',
@@ -409,7 +563,8 @@ export function classifyAutomationRunOutcome(input: {
       delegationState: 'review',
       schedulerOk: true,
       reviewRequired: true,
-      reviewSummary: 'Delivery is prepared and waiting for approval.',
+      reviewSummary: `Delivery is prepared and waiting for approval.${warningDetail}`,
+      runWarnings,
     };
   }
 
@@ -419,7 +574,10 @@ export function classifyAutomationRunOutcome(input: {
     delegationState: 'completed',
     schedulerOk: true,
     reviewRequired: false,
-    reviewSummary: 'Run completed cleanly.',
+    reviewSummary: runWarnings.length > 0
+      ? `Run completed and delivered.${warningDetail}`
+      : 'Run completed cleanly.',
+    runWarnings,
   };
 }
 

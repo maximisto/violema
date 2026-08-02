@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { ScheduledTask } from 'node-cron';
 import type { AutomationExecutionPolicy, AutomationStepKind, PersistedAutomationStep } from './platform/types';
-import { usesInternalDemoRouting } from './platform/tenancy';
+import { createInternalDemoRoutingResolver, usesInternalDemoRouting } from './platform/tenancy';
 import {
   PLATFORM_LEARNING_BRIEF_WORKFLOW_ID,
   PLATFORM_TELEMETRY_SOURCE,
@@ -531,11 +531,23 @@ function normalizeAutomationText(value: string, reroute: boolean) {
     .replace(/#all-purple-orange\b/gi, '#violema-demo');
 }
 
-function normalizeAutomationRecord(record: AutomationRecord): AutomationRecord {
+/**
+ * Answers "does the raise-period reroute apply to this automation's workspace".
+ *
+ * Defaults to the single-shot predicate. `listAutomations` passes a batch
+ * resolver instead, because the default re-reads the entire workspace store per
+ * record — invisible with four automations, a full file read per row at scale.
+ */
+type InternalRoutingResolver = (workspaceId: string | null | undefined) => boolean;
+
+function normalizeAutomationRecord(
+  record: AutomationRecord,
+  usesInternalRouting: InternalRoutingResolver = usesInternalDemoRouting,
+): AutomationRecord {
   // Whose automation this is decides whether the raise-period reroute applies.
   // A tenant's stored channel is theirs and is left exactly as written; only
   // Max's internal workspace and demo workspaces get rewritten.
-  const reroute = usesInternalDemoRouting(record.workspaceId);
+  const reroute = usesInternalRouting(record.workspaceId);
 
   return {
     ...record,
@@ -559,8 +571,11 @@ function normalizeAutomationRecord(record: AutomationRecord): AutomationRecord {
   };
 }
 
-function withAutomationDefaults(record: AutomationRecord): AutomationRecord {
-  const normalized = normalizeAutomationRecord(record);
+function withAutomationDefaults(
+  record: AutomationRecord,
+  usesInternalRouting?: InternalRoutingResolver,
+): AutomationRecord {
+  const normalized = normalizeAutomationRecord(record, usesInternalRouting);
   const timezone = normalizeTimeZone(normalized.timezone);
   return {
     ...normalized,
@@ -777,7 +792,7 @@ function scheduleAutomationTask(
 export function loadPersistedAutomations(
   onTrigger: (record: AutomationRecord) => Promise<{ ok: boolean; error?: string } | void>
 ) {
-  const items = readAutomations().map(withAutomationDefaults);
+  const items = readAutomations().map((record) => withAutomationDefaults(record));
   writeAutomations(items);
   for (const item of items) {
     if (item.status !== 'paused') {
@@ -882,7 +897,7 @@ export function ensureCoreAutomationSeeds(
   }
 
   const seeded = readAutomations()
-    .map(withAutomationDefaults)
+    .map((record) => withAutomationDefaults(record))
     .filter((item) => CORE_AUTOMATION_SEEDS.some((seed) => seed.id === item.id));
 
   for (const item of seeded) {
@@ -895,8 +910,10 @@ export function ensureCoreAutomationSeeds(
 }
 
 export function listAutomations() {
+  // One workspace-store read for the whole list, not one per automation.
+  const usesInternalRouting = createInternalDemoRoutingResolver();
   return readAutomations()
-    .map(withAutomationDefaults)
+    .map((record) => withAutomationDefaults(record, usesInternalRouting))
     .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
 }
 

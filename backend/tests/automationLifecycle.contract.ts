@@ -109,6 +109,87 @@ test('approveAutomationReview delivers waiting review content and records a run 
   assert.equal(runDeliveryStep?.output?.status, 'delivered');
 });
 
+test('an approved run that was not archived says so on its receipt', async () => {
+  // The competitor-monitor incident, at the approval surface: the library write
+  // failed, the memo is still fully evidenced, and the founder approves it. The
+  // receipt must not imply everything succeeded.
+  const runWarnings = [
+    {
+      stepId: 'step_library_record',
+      title: 'Record findings in the library',
+      message: 'Google Drive is connected but needs file read and write access to maintain the intelligence library.',
+    },
+  ];
+  const notArchivedTask = {
+    ...task,
+    id: 'task_competitor',
+    metadata: {
+      ...task.metadata,
+      latestArtifacts: [
+        {
+          kind: 'review_gate',
+          title: 'Ready for review: Competitor monitor',
+          payload: {
+            markdown: '## Competitor monitor\nTwo competitors moved on pricing.',
+            deliveryTarget: '#violema-demo',
+            approvalRequired: true,
+            runWarnings,
+          },
+        },
+      ],
+      runWarnings,
+    },
+  } satisfies TaskRecord;
+  const notArchivedRun = {
+    ...run,
+    id: 'run_competitor',
+    taskId: 'task_competitor',
+    metadata: {
+      ...run.metadata,
+      artifacts: notArchivedTask.metadata.latestArtifacts,
+      runWarnings,
+    },
+  } satisfies TaskRunRecord;
+
+  const result = await approveAutomationReview({
+    task: notArchivedTask,
+    taskRun: notArchivedRun,
+    reviewer: 'max@purpleorange.io',
+    now: () => '2026-08-02T08:04:00.000Z',
+    send: async ({ to, body }: { to: string; body: string }) => ({
+      success: true,
+      channel: 'slack',
+      to,
+      body,
+      status: 'delivered',
+    }),
+  });
+
+  // Approval still works — that is the whole fix.
+  assert.equal(result.taskPatch.status, 'completed');
+  assert.match(String(result.delivery.body), /Two competitors moved on pricing/);
+  // And the record of it stays honest.
+  assert.deepEqual(result.receipt.runWarnings, runWarnings);
+});
+
+test('a receipt for a clean run carries no warnings at all', async () => {
+  const result = await approveAutomationReview({
+    task,
+    taskRun: run,
+    reviewer: 'max@purpleorange.io',
+    now: () => '2026-06-18T15:00:00.000Z',
+    send: async ({ to, body }: { to: string; body: string }) => ({
+      success: true,
+      channel: 'slack',
+      to,
+      body,
+      status: 'delivered',
+    }),
+  });
+
+  assert.equal('runWarnings' in result.receipt, false);
+});
+
 test('requestAutomationChanges keeps delivery held and records reviewer instructions', () => {
   const result = requestAutomationChanges({
     task,
@@ -287,4 +368,46 @@ test('classifyAutomationRunOutcome lets system summary degradation wait for revi
   assert.equal(outcome.runStatus, 'succeeded');
   assert.equal(outcome.schedulerOk, true);
   assert.equal(outcome.reviewRequired, true);
+});
+
+test('an approved send carries the evidence links and charts the run gathered', async () => {
+  // Regression: the review payload was rebuilt with only markdown/target/flag,
+  // so sourceLinks and visualArtifacts arrived undefined at send time and every
+  // approved delivery silently shipped without its evidence.
+  const evidencedTask = {
+    ...task,
+    metadata: {
+      ...task.metadata,
+      latestArtifacts: [
+        {
+          kind: 'review_gate',
+          title: 'Ready for review: Weekly founder update',
+          payload: {
+            markdown: '## Weekly founder update\nRevenue is steady.',
+            deliveryTarget: '#founders',
+            approvalRequired: true,
+            sourceLinks: [{ url: 'https://example.com/report', label: 'Source report' }],
+            visualArtifacts: [{ title: 'Revenue', payload: { type: 'bar', data: [1, 2] } }],
+          },
+        },
+      ],
+    },
+  } as unknown as typeof task;
+
+  let sentEvidence: unknown;
+  let sentCharts: unknown;
+  await approveAutomationReview({
+    task: evidencedTask,
+    taskRun: { ...run, metadata: { ...run.metadata, artifacts: evidencedTask.metadata.latestArtifacts } },
+    reviewer: 'max@purpleorange.io',
+    now: () => '2026-06-18T15:00:00.000Z',
+    send: async (input: { to: string; body: string; evidenceLinks?: unknown; chartSpecs?: unknown }) => {
+      sentEvidence = input.evidenceLinks;
+      sentCharts = input.chartSpecs;
+      return { success: true, channel: 'slack', to: input.to, body: input.body, status: 'delivered' };
+    },
+  });
+
+  assert.deepEqual(sentEvidence, [{ url: 'https://example.com/report', label: 'Source report' }]);
+  assert.deepEqual(sentCharts, [{ type: 'bar', data: [1, 2] }]);
 });

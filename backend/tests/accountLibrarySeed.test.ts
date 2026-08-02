@@ -136,6 +136,33 @@ test('the competitor seed is blocked on Google Drive until the library is reacha
   assert.equal(ready.allowed, true);
 });
 
+test('only the library WRITE step of the shipped competitor seed is auxiliary', async () => {
+  const scheduler = await import('../src/scheduler');
+  const { resolveAutomationStepSeverity } = await import('../src/platform/stepSeverity');
+
+  scheduler.ensureCoreAutomationSeeds(async () => ({ ok: true }));
+  const competitor = scheduler.listAutomations().find((item) => item.id === COMPETITOR_SEED_ID);
+  assert.ok(competitor);
+
+  // Classified against the real shipped step inputs, not a hand-written double,
+  // so a seed edit that renames a source or drops a query type is caught here.
+  assert.deepEqual(
+    competitor.steps?.map((step) => [step.id, resolveAutomationStepSeverity(step)]),
+    [
+      // The delta baseline. A run that cannot read the library cannot claim
+      // what CHANGED, so its failure still blocks delivery.
+      ['step_library_context', 'critical'],
+      ['step_competitor_search', 'critical'],
+      ['step_delta_analysis', 'critical'],
+      ['step_competitor_memo', 'critical'],
+      // Archival bookkeeping, run after the memo is already drafted from
+      // evidence that stands on its own. This is the incident step.
+      ['step_library_record', 'auxiliary'],
+      ['step_competitor_delivery', 'critical'],
+    ],
+  );
+});
+
 test('upgrading the competitor seed preserves operator-owned cadence and destination', async () => {
   const scheduler = await import('../src/scheduler');
 

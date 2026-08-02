@@ -165,6 +165,26 @@ export interface AutomationExecutionPolicy {
 export type AutomationStepKind = 'search' | 'query' | 'summarize' | 'deliver' | 'capture' | 'analyze' | 'note';
 export type AutomationStepStatus = 'planned' | 'running' | 'succeeded' | 'failed' | 'skipped';
 
+/**
+ * How much a step's failure costs the run.
+ *
+ * `critical` — the step carries the run's evidence integrity. A required source
+ * failed, a required query failed, or the delivery itself failed. If the truth
+ * of the output is compromised, nothing may be delivered. This is the trust
+ * floor and it does not move.
+ *
+ * `auxiliary` — the step is a side effect whose failure does not make the
+ * output less true. The archival library WRITE is the canonical case: the memo
+ * was drafted from live reads that succeeded, so failing to file a copy of it
+ * is bookkeeping lost, not evidence lost. The run stays deliverable and the
+ * failure is surfaced as a run warning instead of a block.
+ *
+ * The default everywhere is `critical`. A step earns `auxiliary` by being named
+ * explicitly in `resolveAutomationStepSeverity`; anything unrecognised — an
+ * older persisted record, a step kind nobody has classified yet — blocks.
+ */
+export type AutomationStepSeverity = 'critical' | 'auxiliary';
+
 export interface AutomationStepDeliveryTarget {
   channel: 'slack' | 'email';
   target: string;
@@ -193,6 +213,8 @@ export interface AutomationStepDefinition {
   toolName?: 'web_search' | 'query_data' | 'browser_screenshot' | 'send_message' | 'generate_text';
   inputs?: Record<string, unknown>;
   deliveryTarget?: AutomationStepDeliveryTarget | null;
+  /** Omitted means `critical`. Set by `resolveAutomationStepSeverity` at plan time. */
+  stepSeverity?: AutomationStepSeverity;
 }
 
 export interface AutomationStepExecution {
@@ -206,6 +228,11 @@ export interface AutomationStepExecution {
   modelSource?: 'server_default' | 'workspace_override' | 'workspace_token';
   modelSourceLabel?: string;
   status: AutomationStepStatus;
+  /**
+   * Stamped by the executor from the step definition, defaulting to `critical`.
+   * Records written before severity existed omit it and are read as critical.
+   */
+  stepSeverity?: AutomationStepSeverity;
   startedAt?: string;
   finishedAt?: string;
   summary?: string;
