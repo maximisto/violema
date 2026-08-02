@@ -675,7 +675,7 @@ export default function Billing() {
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                     <a
-                      href="mailto:max@violema.com?subject=Violema%20Enterprise"
+                      href="mailto:hello@violema.com?subject=Violema%20Enterprise"
                       className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-5 py-2.5 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/16"
                     >
                       Contact sales

@@ -29,7 +29,7 @@ We reserve the right to modify, suspend, or discontinue any aspect of the Servic
 
 **One account per person.** You may not create multiple accounts for the purpose of circumventing usage limits, bans, or other restrictions.
 
-**Account security.** Notify us immediately at security@purpleorange.io if you suspect unauthorised access to your account. We are not liable for losses arising from compromised credentials.
+**Account security.** Notify us immediately at security@violema.com if you suspect unauthorised access to your account. We are not liable for losses arising from compromised credentials.
 
 **Termination.** We may suspend or terminate your account if you violate these Terms, with or without prior notice depending on the severity of the violation.`,
   },
@@ -115,7 +115,7 @@ By connecting an integration, you authorise VIOLEMA to interact with that servic
 
 **Cancellation.** You may cancel your subscription at any time from account settings. Cancellation takes effect at the end of the current billing period. We do not provide refunds for partial periods except where required by law.
 
-**Disputed charges.** Contact billing@purpleorange.io within 30 days of a charge to dispute it. We will investigate and respond within 5 business days.`,
+**Disputed charges.** Contact billing@violema.com within 30 days of a charge to dispute it. We will investigate and respond within 5 business days.`,
   },
   {
     id: 'disclaimer',
@@ -159,11 +159,11 @@ For minor changes (e.g., typo corrections, clarifications that don't change your
     title: '16. Contact',
     content: `For questions about these Terms:
 
-**Email:** legal@purpleorange.io
+**Email:** legal@violema.com
 **Post:** Violema, Inc., Attn: Legal, [Address]
 
-For security issues: security@purpleorange.io
-For billing issues: billing@purpleorange.io`,
+For security issues: security@violema.com
+For billing issues: billing@violema.com`,
   },
 ];
 
@@ -294,7 +294,7 @@ export default function TermsOfService() {
               <FileText className="w-8 h-8 text-blue-400 mx-auto mb-3" />
               <h3 className="text-white font-semibold mb-2">Legal questions?</h3>
               <p className="text-slate-400 text-sm mb-4">Our legal team is happy to clarify anything in these Terms.</p>
-              <a href="mailto:legal@purpleorange.io" className="btn-primary">
+              <a href="mailto:legal@violema.com" className="btn-primary">
                 Contact Legal Team
               </a>
             </div>

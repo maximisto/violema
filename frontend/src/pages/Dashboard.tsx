@@ -79,6 +79,14 @@ import {
   type WorkspaceTabId,
 } from '../features/missions/workspaceShell';
 import {
+  buildGuidedStartState,
+  getGuidedStartDismissalKey,
+  resolveGuidedStartVisibility,
+  type GuidedStartActionKind,
+  type GuidedStartConnections,
+} from '../features/onboarding/guidedStart';
+import { GuidedStartPanel } from '../features/onboarding/GuidedStartPanel';
+import {
   getDefaultMissionSelection,
   isMissionSelectionAvailable,
   type MissionSelection,
@@ -94,7 +102,7 @@ import {
   type MissionSelectableTask,
 } from '../features/missions/missionSelectionState';
 import { fetchCreditEstimate, formatCredits, getSuggestedUpgradePlanId, useCreditSnapshot } from '../lib/credits';
-import { isFounderWorkspace, resolveWorkspaceContext } from '../lib/workspace';
+import { getWorkspaceRequest, isFounderWorkspace, resolveWorkspaceContext } from '../lib/workspace';
 import { useTheme } from '../lib/useTheme';
 import ThemeToggle from '../components/ThemeToggle';
 import { fetchBackendAuthSession, isAdminSession, type AuthSession } from '../lib/auth';
@@ -1946,6 +1954,10 @@ export default function Dashboard() {
   const [runLedgerEvents, setRunLedgerEvents] = useState<WorkflowLedgerEvent[]>([]);
   const [draggedStepIndex, setDraggedStepIndex] = useState<number | null>(null);
   const [backendAuthSession, setBackendAuthSession] = useState<AuthSession | null>(null);
+  // Guided start. `unknown` is the honest starting point: until the catalog
+  // answers, the checklist must not imply the workspace has nothing connected.
+  const [guidedStartConnections, setGuidedStartConnections] = useState<GuidedStartConnections>({ kind: 'unknown' });
+  const [guidedStartDismissed, setGuidedStartDismissed] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const { snapshot, status: creditsStatus, refresh: refreshCredits } = useCreditSnapshot();
   const canLoadTestCredits = isAdminSession(backendAuthSession);
@@ -2013,6 +2025,53 @@ export default function Dashboard() {
       active = false;
     };
   }, []);
+
+  // Guided start reads live connection state from the same catalog contract the
+  // /integrations connect page consumes. Every failure path resolves to
+  // `unknown` rather than to zero connections -- a checklist that tells a
+  // connected operator they are disconnected is worse than one that says
+  // nothing, and `degraded` is the server's own "cannot tell right now".
+  useEffect(() => {
+    let active = true;
+    const request = getWorkspaceRequest('/api/integrations/catalog');
+
+    const resolveConnections = async (): Promise<GuidedStartConnections> => {
+      try {
+        const response = await fetch(request.url, {
+          credentials: 'same-origin',
+          headers: request.headers,
+        });
+        if (!response.ok) return { kind: 'unknown' };
+        const data = await response.json() as {
+          partner?: { connectedApps?: string[]; degraded?: boolean };
+        };
+        if (data.partner?.degraded === true) return { kind: 'degraded' };
+        const connectedApps = data.partner?.connectedApps;
+        if (!Array.isArray(connectedApps)) return { kind: 'unknown' };
+        return { kind: 'ready', connectedCount: connectedApps.length };
+      } catch {
+        return { kind: 'unknown' };
+      }
+    };
+
+    void resolveConnections().then((connections) => {
+      if (active) setGuidedStartConnections(connections);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [workspace.workspaceId]);
+
+  useEffect(() => {
+    try {
+      setGuidedStartDismissed(
+        localStorage.getItem(getGuidedStartDismissalKey(workspace.workspaceId)) === '1'
+      );
+    } catch {
+      setGuidedStartDismissed(false);
+    }
+  }, [workspace.workspaceId]);
 
   useEffect(() => {
     const onResize = () => {
@@ -2948,6 +3007,94 @@ export default function Dashboard() {
   // pending approval on any other mission was invisible.
   const missionReviewQueue = useMemo(() => buildMissionReviewQueue(taskItems), [taskItems]);
 
+  // --- Guided start ---------------------------------------------------------
+  // Slack connects natively, outside the partner catalog, so a workspace whose
+  // delivery channel is live already holds a real connection whatever the
+  // catalog can or cannot report. `Math.max(_, 1)` rather than `+ 1` because
+  // Slack is also a partner toolkit -- what matters is "at least one", not a
+  // total, and double-counting would be its own small lie.
+  const guidedStartConnectionState = useMemo<GuidedStartConnections>(() => {
+    if (!hasBackendSlackConnection) return guidedStartConnections;
+    const catalogCount = guidedStartConnections.kind === 'ready' ? guidedStartConnections.connectedCount : 0;
+    return { kind: 'ready', connectedCount: Math.max(catalogCount, 1) };
+  }, [guidedStartConnections, hasBackendSlackConnection]);
+
+  // Every row derives from data already on this surface, so the checklist can
+  // never report progress the workspace has not actually made.
+  const guidedStartState = useMemo(
+    () => buildGuidedStartState({
+      missionsLoaded: taskPanelLoaded,
+      missions: taskItems,
+      connections: guidedStartConnectionState,
+    }),
+    [guidedStartConnectionState, taskItems, taskPanelLoaded]
+  );
+
+  // A workspace that had already closed the loop before this surface mounted is
+  // never shown the panel -- not the checklist, not the closing line. Only a
+  // loop that closes while the operator is watching earns "You're operating."
+  // Tracked in a ref and set during render because an effect would land a frame
+  // late, after the visibility decision it is meant to inform.
+  const guidedStartEverIncomplete = useRef(false);
+  // Only latch once every step's data has actually resolved. The connection
+  // fetch lands after the mission feed, so latching earlier would mark a mature
+  // workspace "incomplete" on the strength of a step that had not loaded yet —
+  // and then show it the first-run checklist forever.
+  if (
+    guidedStartState
+    && !guidedStartState.complete
+    && !guidedStartState.steps.some((step) => step.statusUnknown)
+  ) {
+    guidedStartEverIncomplete.current = true;
+  }
+
+  const guidedStartVisibility = resolveGuidedStartVisibility({
+    state: guidedStartState,
+    dismissed: guidedStartDismissed,
+    everIncomplete: guidedStartEverIncomplete.current,
+  });
+
+  const dismissGuidedStart = useCallback(() => {
+    setGuidedStartDismissed(true);
+    try {
+      localStorage.setItem(getGuidedStartDismissalKey(workspace.workspaceId), '1');
+    } catch {
+      // Ignore localStorage write failures -- the dismissal still holds for this session.
+    }
+  }, [workspace.workspaceId]);
+
+  // Each row deep-links to the surface that does the work rather than doing it
+  // in place. The one exception is Run, which calls the exact handler the
+  // mission card's Run button calls -- same live send, same confirmation path,
+  // no second implementation to drift.
+  const handleGuidedStartAction = useCallback((kind: GuidedStartActionKind) => {
+    if (kind === 'integrations') {
+      navigate('/integrations');
+      return;
+    }
+    if (kind === 'collection') {
+      openWorkspaceTarget('missions', 'collection');
+      return;
+    }
+    if (kind === 'reviews') {
+      openWorkspaceTarget('reviews', 'approvals');
+      return;
+    }
+    const runnable = selectedTask?.automationId
+      ? selectedTask
+      : taskItems.find((task) => task.automationId);
+    if (runnable) void handleAutomationRun(runnable);
+  }, [handleAutomationRun, navigate, openWorkspaceTarget, selectedTask, taskItems]);
+
+  const guidedStartPanel = guidedStartState && guidedStartVisibility !== 'hidden' ? (
+    <GuidedStartPanel
+      variant={guidedStartVisibility === 'operating' ? 'operating' : 'checklist'}
+      state={guidedStartState}
+      onAction={handleGuidedStartAction}
+      onDismiss={dismissGuidedStart}
+    />
+  ) : null;
+
   const focusReviewMission = useCallback((entry: MissionReviewQueueEntry) => {
     setSelectedTaskId(entry.id);
   }, []);
@@ -3642,7 +3789,7 @@ export default function Dashboard() {
     }
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
-      window.location.assign('mailto:max@violema.com?subject=Violema%20Enterprise');
+      window.location.assign('mailto:hello@violema.com?subject=Violema%20Enterprise');
       return;
     }
     navigate(`/plans?plan=${nextPlanId}`);
@@ -5291,6 +5438,18 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* Guided start: the first-run checklist an operator lands on. It sits
+            above the workspace body rather than inside the chat column so it is
+            visible without scrolling and can never cover the composer, and it
+            retires itself once the loop closes. */}
+        {workspaceArea === 'home' && guidedStartPanel ? (
+          <div className="flex-shrink-0 border-b border-navy-800/70 bg-navy-950/35 px-3 py-3 sm:px-5">
+            <div className="mx-auto w-full max-w-[72rem]">
+              {guidedStartPanel}
+            </div>
+          </div>
+        ) : null}
 
         {/* Workspace body */}
         <div className="flex flex-1 min-h-0">

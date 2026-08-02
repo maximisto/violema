@@ -334,7 +334,7 @@ export default function FAQ() {
               Apply for beta
             </button>
             <a
-              href="mailto:hello@purpleorange.io"
+              href="mailto:hello@violema.com"
               className="btn-secondary"
             >
               Email us

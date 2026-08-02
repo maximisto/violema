@@ -81,9 +81,9 @@ const footerLinks = {
     { label: 'Agent vs automation', path: '/blog/ai-agent-vs-workflow-automation/' },
   ],
   Company: [
-    { label: 'Contact', path: 'mailto:hello@purpleorange.io' },
+    { label: 'Contact', path: 'mailto:hello@violema.com' },
     { label: 'Workflow audit', path: consultationUrl },
-    { label: 'Security', path: 'mailto:security@purpleorange.io' },
+    { label: 'Security', path: 'mailto:security@violema.com' },
   ],
   Support: [
     { label: 'FAQ', path: '/faq' },

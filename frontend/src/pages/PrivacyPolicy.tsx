@@ -81,7 +81,7 @@ You can delete your conversation history at any time from the dashboard. Deleted
 • **Usage logs:** Aggregated and anonymised after 90 days; raw logs deleted after 1 year.
 • **Payment records:** Retained for 7 years as required by financial regulations.
 
-You can request deletion of your account and all associated data at any time via Settings → Account → Delete Account, or by emailing privacy@purpleorange.io.`,
+You can request deletion of your account and all associated data at any time via Settings → Account → Delete Account, or by emailing privacy@violema.com.`,
   },
   {
     id: 'rights',
@@ -96,7 +96,7 @@ You can request deletion of your account and all associated data at any time via
 • **Objection** — object to processing based on legitimate interests.
 • **Withdraw consent** — where processing is based on consent, withdraw it at any time.
 
-To exercise any of these rights, contact us at privacy@purpleorange.io. We will respond within 30 days. We may need to verify your identity before fulfilling a request.
+To exercise any of these rights, contact us at privacy@violema.com. We will respond within 30 days. We may need to verify your identity before fulfilling a request.
 
 **EU/EEA residents:** You have the right to lodge a complaint with your local data protection authority (DPA).
 
@@ -115,7 +115,7 @@ To exercise any of these rights, contact us at privacy@purpleorange.io. We will 
 • Employee access controls and least-privilege policies
 • Automated anomaly detection and alerting
 
-No system is 100% secure. If you discover a security vulnerability, please report it responsibly to security@purpleorange.io. We offer a responsible disclosure program and will respond within 24 hours.`,
+No system is 100% secure. If you discover a security vulnerability, please report it responsibly to security@violema.com. We offer a responsible disclosure program and will respond within 24 hours.`,
   },
   {
     id: 'cookies',
@@ -130,7 +130,7 @@ No system is 100% secure. If you discover a security vulnerability, please repor
   {
     id: 'children',
     title: '10. Children\'s Privacy',
-    content: `VIOLEMA is not directed to children under 16. We do not knowingly collect personal data from anyone under 16. If you believe we have inadvertently collected data from a minor, please contact us immediately at privacy@purpleorange.io and we will delete it promptly.`,
+    content: `VIOLEMA is not directed to children under 16. We do not knowingly collect personal data from anyone under 16. If you believe we have inadvertently collected data from a minor, please contact us immediately at privacy@violema.com and we will delete it promptly.`,
   },
   {
     id: 'changes',
@@ -144,12 +144,12 @@ The "last updated" date at the top of this page reflects the most recent revisio
     title: '12. Contact Us',
     content: `For privacy-related questions, requests, or concerns:
 
-**Email:** privacy@purpleorange.io
+**Email:** privacy@violema.com
 **Post:** Violema, Inc., Attn: Privacy Team, [Address]
 
-For EU/EEA-specific queries, our EU representative can be reached at eu-privacy@purpleorange.io.
+For EU/EEA-specific queries, our EU representative can be reached at eu-privacy@violema.com.
 
-For security disclosures: security@purpleorange.io`,
+For security disclosures: security@violema.com`,
   },
 ];
 
@@ -269,7 +269,7 @@ export default function PrivacyPolicy() {
               <Shield className="w-8 h-8 text-green-400 mx-auto mb-3" />
               <h3 className="text-white font-semibold mb-2">Questions about your privacy?</h3>
               <p className="text-slate-400 text-sm mb-4">Our team typically responds within 24 hours.</p>
-              <a href="mailto:privacy@purpleorange.io" className="btn-primary">
+              <a href="mailto:privacy@violema.com" className="btn-primary">
                 Contact Privacy Team
               </a>
             </div>

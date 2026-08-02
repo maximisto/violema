@@ -736,7 +736,7 @@ export default function IntegrationsPage() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a
-                href="mailto:hello@purpleorange.io?subject=Violema%20Integrations"
+                href="mailto:hello@violema.com?subject=Violema%20Integrations"
                 className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/16"
               >
                 Talk about custom integrations

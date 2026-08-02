@@ -1164,7 +1164,7 @@ export default function ChatInterface({
     }
     const nextPlanId = getSuggestedUpgradePlanId(snapshot.planName);
     if (!nextPlanId) {
-      window.location.assign('mailto:max@violema.com?subject=Violema%20Enterprise');
+      window.location.assign('mailto:hello@violema.com?subject=Violema%20Enterprise');
       return;
     }
     window.location.assign(`/plans?plan=${nextPlanId}`);
