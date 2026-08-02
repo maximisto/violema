@@ -27,8 +27,47 @@ const CATEGORY_TONE: Record<string, string> = {
   Relationships: 'border-sky-300/25 bg-sky-300/10 text-sky-100',
 };
 
-/** Couture accents per category: the top seam, the collection numeral, and the
- * hover aura each carry the mission family's signature color. */
+/**
+ * Every mission in the collection wears its own color. Accents are keyed by
+ * mission id — six missions, six hues — because two missions sharing a
+ * category (both investor loops are 'Relationships') must still be
+ * distinguishable at a glance. The category chip keeps the category tone;
+ * the seam, numeral, and hover aura are the mission's own signature.
+ */
+const MISSION_ACCENT: Record<string, { seam: string; numeral: string; aura: string }> = {
+  'weekly-founder-brief': {
+    seam: 'from-violet-400 via-violet-400/70 to-transparent',
+    numeral: 'text-violet-300/55',
+    aura: 'hover:border-violet-400/45 hover:shadow-[0_22px_48px_-20px_rgba(124,58,237,0.42)]',
+  },
+  'revenue-watch': {
+    seam: 'from-emerald-400 via-emerald-400/70 to-transparent',
+    numeral: 'text-emerald-300/55',
+    aura: 'hover:border-emerald-400/45 hover:shadow-[0_22px_48px_-20px_rgba(16,185,129,0.38)]',
+  },
+  'competitor-monitor': {
+    seam: 'from-cyan-400 via-cyan-400/70 to-transparent',
+    numeral: 'text-cyan-300/55',
+    aura: 'hover:border-cyan-400/45 hover:shadow-[0_22px_48px_-20px_rgba(34,211,238,0.38)]',
+  },
+  'customer-risk-digest': {
+    seam: 'from-amber-400 via-amber-400/70 to-transparent',
+    numeral: 'text-amber-300/55',
+    aura: 'hover:border-amber-400/45 hover:shadow-[0_22px_48px_-20px_rgba(245,158,11,0.36)]',
+  },
+  'investor-follow-up': {
+    seam: 'from-sky-400 via-sky-400/70 to-transparent',
+    numeral: 'text-sky-300/55',
+    aura: 'hover:border-sky-400/45 hover:shadow-[0_22px_48px_-20px_rgba(56,189,248,0.38)]',
+  },
+  'monthly-investor-update': {
+    seam: 'from-rose-400 via-rose-400/70 to-transparent',
+    numeral: 'text-rose-300/55',
+    aura: 'hover:border-rose-400/45 hover:shadow-[0_22px_48px_-20px_rgba(251,113,133,0.36)]',
+  },
+};
+
+/** Category fallback for future templates that haven't earned a signature yet. */
 const CATEGORY_ACCENT: Record<string, { seam: string; numeral: string; aura: string }> = {
   'Operating cadence': {
     seam: 'from-violet-400 via-violet-400/70 to-transparent',
@@ -114,10 +153,10 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
         <Layers3 className="hidden h-5 w-5 flex-shrink-0 text-violet-300/80 sm:block" aria-hidden="true" />
       </header>
 
-      <div className="relative mt-5 grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="relative mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {templates.map((template, index) => {
           const toneClass = CATEGORY_TONE[template.category] ?? 'border-white/15 bg-white/5 text-slate-200';
-          const accent = CATEGORY_ACCENT[template.category] ?? DEFAULT_ACCENT;
+          const accent = MISSION_ACCENT[template.id] ?? CATEGORY_ACCENT[template.category] ?? DEFAULT_ACCENT;
           const numeral = String(index + 1).padStart(2, '0');
           const liveMission = liveByTitle.get(normalizeMissionTitle(template.title));
           return (
@@ -128,10 +167,10 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
               {/* signature seam */}
               <span aria-hidden className={`h-[2.5px] w-full bg-gradient-to-r ${accent.seam}`} />
 
-              <div className="flex flex-1 flex-col p-4">
+              <div className="flex flex-1 flex-col p-5">
                 <span
                   aria-hidden
-                  className={`pointer-events-none absolute right-3.5 top-2.5 font-display text-[1.7rem] font-semibold leading-none tracking-tight ${accent.numeral}`}
+                  className={`pointer-events-none absolute right-4 top-3 font-display text-[1.85rem] font-semibold leading-none tracking-tight ${accent.numeral}`}
                 >
                   {numeral}
                 </span>
@@ -148,40 +187,48 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
                   ) : null}
                 </span>
 
-                <h3 className="mt-3 pr-10 text-[15px] font-semibold tracking-[-0.01em] text-white">{template.title}</h3>
-                <p className="mt-1.5 text-[12.5px] leading-5 text-slate-300">{template.outcome}</p>
+                <h3 className="mt-3.5 pr-11 text-base font-semibold tracking-[-0.01em] text-white">{template.title}</h3>
+                <p className="mt-2 text-[13px] leading-[1.45rem] text-slate-300">{template.outcome}</p>
 
                 {template.integrations.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {template.integrations.map((integration) => (
+                  <div className="mt-3.5 flex flex-nowrap items-center gap-1.5 overflow-hidden">
+                    {template.integrations.slice(0, 4).map((integration) => (
                       <span
                         key={integration}
-                        className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-slate-400"
+                        className="whitespace-nowrap rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-slate-400"
                       >
                         {integration}
                       </span>
                     ))}
+                    {template.integrations.length > 4 ? (
+                      <span
+                        title={template.integrations.slice(4).join(', ')}
+                        className="whitespace-nowrap rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-slate-300"
+                      >
+                        +{template.integrations.length - 4} more
+                      </span>
+                    ) : null}
                   </div>
                 ) : null}
 
-                <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/5 pt-3">
-                  <span className="inline-flex items-center gap-2.5 text-[10px] font-medium text-slate-500">
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3 w-3" aria-hidden="true" />
+                <div className="mt-auto flex items-center justify-between gap-3 border-t border-white/5 pt-3.5">
+                  <span className="inline-flex min-w-0 items-center gap-2.5 text-[10px] font-medium text-slate-500">
+                    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                      <Clock className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
                       {template.cadence}
                     </span>
-                    <span className="inline-flex items-center gap-1">
-                      <Layers3 className="h-3 w-3" aria-hidden="true" />
+                    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                      <Layers3 className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
                       {template.steps.length} steps
                     </span>
                   </span>
-                  <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex flex-shrink-0 items-center gap-1.5">
                     {liveMission && onRunMission ? (
                       <button
                         type="button"
                         onClick={() => onRunMission(liveMission.key)}
                         aria-label={`Run the ${template.title} mission now`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-100 transition-all hover:border-emerald-300/50 hover:bg-emerald-500/20"
+                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-100 transition-all hover:border-emerald-300/50 hover:bg-emerald-500/20"
                       >
                         <Play className="h-3 w-3" aria-hidden="true" />
                         Run
@@ -191,9 +238,9 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
                       type="button"
                       onClick={() => (liveMission && onOpenMission ? onOpenMission(liveMission.key) : onUse(template.id))}
                       aria-label={liveMission ? `Open the ${template.title} mission` : `Start the ${template.title} mission`}
-                      className="inline-flex items-center gap-1 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100 transition-all group-hover:border-violet-300/50 group-hover:bg-violet-500/20 hover:gap-1.5"
+                      className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100 transition-all group-hover:border-violet-300/50 group-hover:bg-violet-500/20 hover:gap-1.5"
                     >
-                      {liveMission ? 'Open mission' : 'Start mission'}
+                      {liveMission ? 'Open' : 'Start mission'}
                       <ArrowRight className="h-3 w-3" aria-hidden="true" />
                     </button>
                   </span>
@@ -211,7 +258,7 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
             <span className="h-px flex-1 bg-white/8" />
             <p className="text-[10px] text-slate-500">The collection grows with every mission you create</p>
           </div>
-          <div className="relative mt-3.5 grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="relative mt-3.5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {customMissions.map((mission, index) => {
               const numeral = String(templates.length + index + 1).padStart(2, '0');
               return (
@@ -221,21 +268,21 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
                 >
                   {/* your missions wear the house colors */}
                   <span aria-hidden className="h-[2.5px] w-full bg-gradient-to-r from-violet-400 via-[#f59e0b]/70 to-transparent" />
-                  <div className="flex flex-1 flex-col p-4">
+                  <div className="flex flex-1 flex-col p-5">
                     <span
                       aria-hidden
-                      className="pointer-events-none absolute right-3.5 top-2.5 font-display text-[1.7rem] font-semibold leading-none tracking-tight text-violet-300/45"
+                      className="pointer-events-none absolute right-4 top-3 font-display text-[1.85rem] font-semibold leading-none tracking-tight text-violet-300/45"
                     >
                       {numeral}
                     </span>
                     <span className="inline-flex w-fit items-center rounded-full border border-violet-300/25 bg-violet-300/10 px-2 py-0.5 text-[10px] font-semibold text-violet-100">
                       Your mission
                     </span>
-                    <h3 className="mt-3 pr-10 text-[15px] font-semibold tracking-[-0.01em] text-white">{mission.title}</h3>
+                    <h3 className="mt-3.5 pr-11 text-base font-semibold tracking-[-0.01em] text-white">{mission.title}</h3>
                     {mission.outcome ? (
-                      <p className="mt-1.5 text-[12.5px] leading-5 text-slate-300">{mission.outcome}</p>
+                      <p className="mt-2 text-[13px] leading-[1.45rem] text-slate-300">{mission.outcome}</p>
                     ) : null}
-                    <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/5 pt-3">
+                    <div className="mt-auto flex items-center justify-between gap-3 border-t border-white/5 pt-3.5">
                       <span className="inline-flex items-center gap-2.5 text-[10px] font-medium text-slate-500">
                         {mission.cadence ? (
                           <span className="inline-flex items-center gap-1">
@@ -252,9 +299,9 @@ export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], o
                         type="button"
                         onClick={() => onOpenMission?.(mission.key)}
                         aria-label={`Open the ${mission.title} mission`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100 transition-all group-hover:border-violet-300/50 group-hover:bg-violet-500/20 hover:gap-1.5"
+                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100 transition-all group-hover:border-violet-300/50 group-hover:bg-violet-500/20 hover:gap-1.5"
                       >
-                        Open mission
+                        Open
                         <ArrowRight className="h-3 w-3" aria-hidden="true" />
                       </button>
                     </div>
