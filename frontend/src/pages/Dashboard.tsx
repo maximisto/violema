@@ -44,6 +44,8 @@ import { MissionDetailView } from '../features/missions/MissionDetailView';
 import { MissionCreditDrawer } from '../features/missions/MissionCreditDrawer';
 import { DashboardGuardian } from '../features/guardian/DimaDashboardGuardian';
 import { DimaSidebarNote } from '../features/guardian/DimaSidebarNote';
+import { IntegrationsCommandCenter } from '../features/integrations/IntegrationsCommandCenter';
+import { SlackChannelPicker } from '../features/integrations/SlackChannelPicker';
 import { WorkflowReadinessPanel, type WorkflowReadinessReport } from '../features/integrations/WorkflowReadinessPanel';
 import {
   getDashboardReadinessBlockerAction,
@@ -4324,16 +4326,14 @@ export default function Dashboard() {
       );
     }
 
+    // Connections belong to the workspace, not to a mission, so this surface is
+    // fully usable with nothing selected — it must not sit behind the
+    // "no mission selected" bail-out card.
     if (workspaceArea === 'integrations') {
-      const title = activeWorkspaceTab === 'suites'
-        ? 'Google and Microsoft suites'
-        : activeWorkspaceTab === 'mcp'
-          ? 'Custom MCP tools'
-          : 'Core founder stack';
-      return renderEmptyWorkspaceSurface(
+      return workspaceSurface(
         <>
-          <MissionIntegrationsStrip integrations={selectedMission.integrations} />
-          {tabFocusCard(title, 'Slack, Stripe, GitHub, Google, Microsoft, email, calendar, and MCP integrations stay visible here as activation comes online.', 'cyan')}
+          {workspaceHeaderCard}
+          {renderIntegrationsCommandCenter()}
         </>
       );
     }
@@ -4373,6 +4373,26 @@ export default function Dashboard() {
         const item = taskItems.find((entry) => String(entry.automationId) === key);
         if (item) void handleAutomationRun(item);
       }}
+    />
+  );
+
+  // The integrations surface: one live composition shared by both branches
+  // (mission selected or not) so they cannot drift apart the way the two copies
+  // of the old static chip strip did. Connections are workspace-scoped, not
+  // mission-scoped, so this renders with nothing selected too.
+  const renderIntegrationsCommandCenter = () => (
+    <IntegrationsCommandCenter
+      workspaceId={workspace.workspaceId}
+      workspaceName={workspace.workspaceName}
+      templates={WORKFLOW_TEMPLATES}
+      liveMissions={taskItems
+        .filter((item) => item.automationId)
+        .map((item) => ({
+          key: String(item.automationId),
+          title: item.title,
+          steps: item.steps,
+          notify: item.notify,
+        }))}
     />
   );
 
@@ -4662,34 +4682,10 @@ export default function Dashboard() {
     }
 
     if (workspaceArea === 'integrations') {
-      if (activeWorkspaceTab === 'suites') {
-        return workspaceSurface(
-          <>
-            {workspaceHeaderCard}
-            {tabFocusCard('Google and Microsoft suites', 'Email, calendar, Drive, Docs, Outlook, and Teams belong in the same clean integration line as the core founder stack.', 'cyan')}
-            <MissionIntegrationsStrip integrations={selectedMission.integrations} />
-          </>
-        );
-      }
-      if (activeWorkspaceTab === 'mcp') {
-        return workspaceSurface(
-          <>
-            {workspaceHeaderCard}
-            {tabFocusCard('Custom MCP tools', 'Founder-specific systems can become Violema tools without waiting for a first-party integration.', 'amber')}
-            {openScheduleControls}
-          </>
-        );
-      }
       return workspaceSurface(
         <>
           {workspaceHeaderCard}
-          <MissionIntegrationsStrip integrations={selectedMission.integrations} />
-          <div className="rounded-2xl border border-navy-800/80 bg-navy-900/45 p-4">
-            <p className="text-sm font-semibold text-white">Core founder stack</p>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
-              Keep the list elegant in the app now; activate Slack, Stripe, GitHub, Google, Microsoft, email, calendar, and custom MCP tools as their connectors come online.
-            </p>
-          </div>
+          {renderIntegrationsCommandCenter()}
         </>
       );
     }
@@ -6347,16 +6343,24 @@ export default function Dashboard() {
                         </button>
                       ))}
                     </div>
-                    <div className="ui-input-shell mt-2">
-                      <input
-                        value={automationEditor.notify}
-                        onChange={(event) => updateAutomationDestination(automationEditor.destinationType, event.target.value)}
-	                        aria-label="Result destination"
-	                        className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none disabled:text-slate-600"
-	                        placeholder={automationEditor.destinationType === 'email' ? emailTargetHint : 'Slack channel name or ID'}
-	                        disabled={automationEditor.destinationType === 'none'}
-	                      />
-	                    </div>
+                    {/* Real channel picker when the server can list channels;
+                        falls back to this exact input when it cannot. */}
+                    <SlackChannelPicker
+                      value={automationEditor.notify}
+                      onChange={(next) => updateAutomationDestination(automationEditor.destinationType, next)}
+                      active={automationEditor.destinationType === 'slack'}
+                    >
+                      <div className="ui-input-shell mt-2">
+                        <input
+                          value={automationEditor.notify}
+                          onChange={(event) => updateAutomationDestination(automationEditor.destinationType, event.target.value)}
+                          aria-label="Result destination"
+                          className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none disabled:text-slate-600"
+                          placeholder={automationEditor.destinationType === 'email' ? emailTargetHint : 'Slack channel name or ID'}
+                          disabled={automationEditor.destinationType === 'none'}
+                        />
+                      </div>
+                    </SlackChannelPicker>
 	                    {automationEditor.destinationType === 'slack' && automationEditor.notify && !isLikelySlackTarget(automationEditor.notify) ? (
 	                      <p className="mt-2 px-1 text-xs leading-5 text-amber-300">
 	                        Use a Slack channel name like <span className="font-mono">{slackTargetExample}</span> or an ID like <span className="font-mono">{slackChannelIdExample}</span>.

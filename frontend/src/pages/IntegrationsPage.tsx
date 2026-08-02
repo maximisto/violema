@@ -14,6 +14,8 @@ import { Link } from 'react-router-dom';
 import BrandIcon from '../components/BrandIcon';
 import PublicHeader from '../components/PublicHeader';
 import { DEMO_INTEGRATIONS, IDENTITY_INTEGRATIONS, DEFERRED_INTEGRATIONS } from '../content/demoIntegrations';
+import { fetchConnectState, type ConnectState, type PartnerApp } from '../features/integrations/catalogState';
+import { postIntegrationAction } from '../features/integrations/connectionActions';
 import {
   getPartnerAppSlugs,
   isPartnerAppConnected,
@@ -21,29 +23,18 @@ import {
   resolveToolkitSlug,
 } from '../features/integrations/partnerToolkits';
 import { useTheme } from '../lib/useTheme';
-import { getWorkspaceRequest } from '../lib/workspace';
-
-interface PartnerApp {
-  name: string;
-  label: string;
-  detail: string;
-  status?: string;
-  /** Present on the newer catalog shape; absent on already-deployed servers. */
-  partnerAppName?: string;
-  sources?: string[];
-}
 
 /**
  * The connect surface has four honest states instead of one catch-all banner.
  * `anonymous` exists because /integrations is a public route while the catalog
  * endpoint sits behind the beta session gate — a signed-out visitor used to be
  * told connections "live inside approved workspaces" with no way to act on it.
+ *
+ * The state shape and its reader moved to `features/integrations/catalogState`
+ * so the in-workspace command center reads the same catalog the same way. A
+ * second parser is how one surface ends up claiming a connection the other
+ * denies.
  */
-type ConnectState =
-  | { kind: 'loading' }
-  | { kind: 'anonymous' }
-  | { kind: 'unavailable' }
-  | { kind: 'ready'; enabled: boolean; degraded: boolean; connectedApps: string[]; apps: PartnerApp[] };
 
 /** Focus/visibility refetches are throttled so tab-flipping cannot become a poll. */
 const REFRESH_THROTTLE_MS = 4000;
@@ -56,39 +47,6 @@ const JUST_CONNECTED_MS = 6000;
 const CONNECT_FAILED_MESSAGE = 'Connection didn’t complete — try again';
 /** Shown per card when live connection state could not be read at all. */
 const STATUS_UNAVAILABLE_LABEL = 'Status unavailable';
-
-async function fetchConnectState(): Promise<ConnectState> {
-  try {
-    // Workspace-scoped: a multi-workspace operator must see the catalog for the
-    // workspace they are actually in, not their default one.
-    const request = getWorkspaceRequest('/api/integrations/catalog');
-    const response = await fetch(request.url, { credentials: 'same-origin', headers: request.headers });
-    if (response.status === 401 || response.status === 403) return { kind: 'anonymous' };
-    if (!response.ok) return { kind: 'unavailable' };
-
-    const data = await response.json() as {
-      partner?: { enabled?: boolean; connectedApps?: string[]; degraded?: boolean; apps?: PartnerApp[] };
-      partnerApps?: PartnerApp[];
-    };
-
-    // Feature-detect: the newer contract nests apps under `partner`, while
-    // already-deployed servers return a top-level `partnerApps` array.
-    const partner = data.partner;
-    const apps = Array.isArray(partner?.apps)
-      ? partner.apps
-      : Array.isArray(data.partnerApps) ? data.partnerApps : [];
-
-    return {
-      kind: 'ready',
-      enabled: Boolean(partner?.enabled),
-      degraded: partner?.degraded === true,
-      connectedApps: Array.isArray(partner?.connectedApps) ? partner.connectedApps : [],
-      apps,
-    };
-  } catch {
-    return { kind: 'unavailable' };
-  }
-}
 
 const CUSTOM = [
   { name: 'Custom MCP tools', body: 'Internal APIs and private systems' },
@@ -279,64 +237,59 @@ function ComposioConnectSection() {
     setBusyApp(app.name);
     setError(null);
     setFailedSlug('');
-    try {
-      const request = getWorkspaceRequest('/api/integrations/composio/connect');
-      const res = await fetch(request.url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...request.headers },
-        credentials: 'same-origin',
-        body: JSON.stringify({ appName: app.name }),
-      });
-      if (res.status === 401 || res.status === 403) {
-        setState({ kind: 'anonymous' });
-        setBusyApp(null);
-        return;
-      }
-      const data = await res.json().catch(() => ({})) as { redirectUrl?: string; error?: string };
-      if (!res.ok || !data.redirectUrl) {
-        throw new Error(typeof data.error === 'string' && data.error.trim()
-          ? data.error.trim()
-          : 'Could not open this connector. Try again or use native setup for now.');
-      }
-      window.location.assign(data.redirectUrl);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not connect');
+    // Workspace scoping, session credentials, and the server's own error text
+    // all live in postIntegrationAction, shared with the in-workspace surface.
+    const result = await postIntegrationAction<{ redirectUrl?: string }>(
+      '/api/integrations/composio/connect',
+      { appName: app.name },
+      'Could not open this connector. Try again or use native setup for now.',
+    );
+
+    if (!result.ok) {
+      if (result.kind === 'unauthorized') setState({ kind: 'anonymous' });
+      else setError(result.message);
       setBusyApp(null);
+      return;
     }
+
+    const redirectUrl = typeof result.data.redirectUrl === 'string' ? result.data.redirectUrl : '';
+    if (!redirectUrl) {
+      setError('Could not open this connector. Try again or use native setup for now.');
+      setBusyApp(null);
+      return;
+    }
+
+    window.location.assign(redirectUrl);
   }
 
   async function handleDisconnect(app: PartnerApp) {
     if (mutationsBlocked) return;
     setBusyApp(app.name);
     setError(null);
-    try {
-      const request = getWorkspaceRequest('/api/integrations/composio/disconnect');
-      const res = await fetch(request.url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...request.headers },
-        credentials: 'same-origin',
-        body: JSON.stringify({ appName: app.name }),
-      });
-      if (res.status === 401 || res.status === 403) {
-        setState({ kind: 'anonymous' });
-        return;
-      }
-      // 404 means the connection was already gone — the refetch reconciles it.
-      if (!res.ok && res.status !== 404) {
-        const data = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(typeof data.error === 'string' && data.error.trim()
-          ? data.error.trim()
-          : 'Could not disconnect this app. Try again in a moment.');
-      }
-      setPendingDisconnect(null);
-      setReturnSlug('');
-      setFailedSlug('');
-      await refresh({ force: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not disconnect');
-    } finally {
+    const result = await postIntegrationAction(
+      '/api/integrations/composio/disconnect',
+      { appName: app.name },
+      'Could not disconnect this app. Try again in a moment.',
+    );
+
+    if (!result.ok && result.kind === 'unauthorized') {
+      setState({ kind: 'anonymous' });
       setBusyApp(null);
+      return;
     }
+    if (!result.ok && result.kind === 'error') {
+      setError(result.message);
+      setBusyApp(null);
+      return;
+    }
+
+    // A 'missing' result means the connection was already gone — the refetch
+    // reconciles it rather than reporting a failure the operator cannot act on.
+    setPendingDisconnect(null);
+    setReturnSlug('');
+    setFailedSlug('');
+    await refresh({ force: true });
+    setBusyApp(null);
   }
 
   return (

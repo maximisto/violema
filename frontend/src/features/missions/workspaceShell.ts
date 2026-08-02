@@ -168,13 +168,15 @@ export const WORKSPACE_AREAS: WorkspaceAreaConfig[] = [
     id: 'integrations',
     label: 'Integrations',
     shortLabel: 'Integrations',
-    description: 'Connect the founder stack and prepare future suite/MCP expansion.',
+    description: 'Connect, reconnect, and disconnect the systems your missions run on.',
     icon: Plug,
     defaultTab: 'core',
+    // One surface, deliberately. 'Suites' and 'MCP' held static copy about
+    // connectors that were never wired, sitting beside the tab that was
+    // supposed to manage real connections — the operator had to guess which
+    // one was live. The command center is the whole area now.
     tabs: [
-      { id: 'core', label: 'Core' },
-      { id: 'suites', label: 'Suites' },
-      { id: 'mcp', label: 'MCP' },
+      { id: 'core', label: 'Connections' },
     ],
   },
   {
