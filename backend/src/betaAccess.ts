@@ -5,6 +5,11 @@ function isPublicAuthApiPath(method: string, path: string) {
   if (path === '/api/auth/session') return ['GET', 'POST'].includes(normalizedMethod);
   if (path === '/api/auth/logout') return normalizedMethod === 'POST';
   if (path === '/api/auth/admin/magic') return normalizedMethod === 'GET';
+  // Signing in cannot require a session. Both magic-link routes enforce their
+  // own gate: `/request` only ever answers with the same generic message, and
+  // `/consume` re-checks approval before it mints anything.
+  if (path === '/api/auth/magic-link/request') return normalizedMethod === 'POST';
+  if (path === '/api/auth/magic-link/consume') return normalizedMethod === 'GET';
   return normalizedMethod === 'GET'
     && /^\/api\/auth\/(google|microsoft)\/(start|callback)$/.test(path);
 }

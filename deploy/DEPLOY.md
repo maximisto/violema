@@ -29,6 +29,10 @@ sudo mkdir -p /var/www/nexus/backend
 sudo tee /var/www/nexus/backend/.env >/dev/null <<'EOF'
 ANTHROPIC_API_KEY=your_real_key
 TAVILY_API_KEY=your_tavily_key
+# Also powers the email sign-in link (see the magic-link note below). Without
+# both of these, POST /api/auth/magic-link/request still answers 200 — it must
+# never reveal anything — but no mail is sent and the browser-agnostic sign-in
+# is effectively dead. Check pm2 logs for `[magic-link] no link sent`.
 POSTMARK_API_KEY=your_postmark_server_api_key
 POSTMARK_FROM_EMAIL=demo@yourdomain.com
 SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
@@ -87,5 +91,12 @@ Notes:
 - `/api/health` is a public liveness probe and returns only `{ status, service, timestamp }`. Model ids, provider routing, and integration status are operator diagnostics and now live behind `GET /api/admin/health`, which requires an admin session.
 - With `NODE_ENV=production`, checkout endpoints return an honest 503 (`billing_not_configured`) instead of mock sessions when Stripe env vars are missing, and `/api/billing/stripe/mock-checkout/*` returns 404. Mock checkout exists for local development only.
 - Auth cookies can now be pinned to `violema.com` with `AUTH_COOKIE_DOMAIN=violema.com`, which is the right setting once DNS fully cuts over.
+- **Email sign-in link (browser-agnostic re-authentication).** Two public routes, both required for people whose browser never returns from the Google account chooser — a real Safari behaviour when several Google accounts are signed in:
+  - `POST /api/auth/magic-link/request` — body `{ email, next? }`. **Always** `200 {ok:true, message}` with one generic message, for every address, existing or not. Behind the strict per-IP limiter, plus a 60s per-address cooldown and a 5-per-15-minutes per-address window.
+  - `GET /api/auth/magic-link/consume?token=…` — single-use, 10-minute token. On success sets the same session cookie as the OAuth callback and redirects to an allowlisted internal path. Every failure redirects to `/login` with one identical message.
+  - **Depends on `POSTMARK_API_KEY` and `POSTMARK_FROM_EMAIL`.** They are the same variables the delivery steps use; no separate mail config. Missing them does not error the endpoint — it silently sends nothing, so verify with a real request after deploying.
+  - Links are issued **only** to an address that already has an auth user, an access record with `identityVerifiedAt` set by a Google/Microsoft OAuth login, and `status: approved`. It is re-authentication only: it never verifies identity, never records terms acceptance, and never creates an account. A user with stale terms is signed in and then routed to `/access-terms`, exactly as after an OAuth login.
+  - Adds runtime state at `backend/auth-magic-link-tokens.json` (gitignored). Tokens are stored as sha256 hashes — the plaintext exists only in the email. Deleting the file invalidates outstanding links and nothing else.
+  - Both `auth.magic_link.requested` and `auth.magic_link.signed_in` land in the admin audit log, so sessions created without an OAuth round-trip stay answerable.
 - The production nginx template now supports redirecting the legacy host `nexus.purpleorange.io` to `violema.com` over HTTP with `LEGACY_DOMAIN=nexus.purpleorange.io`.
 - If you also want clean HTTPS redirects from the legacy host, keep or provision a separate certificate for `nexus.purpleorange.io` before adding an SSL redirect block for that host.

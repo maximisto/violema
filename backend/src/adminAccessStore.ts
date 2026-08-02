@@ -28,7 +28,13 @@ export type AdminAuditAction =
   // something real; without these the admin trail cannot answer "who approved
   // this delivery" for anything approved from chat.
   | 'review.approved'
-  | 'review.changes_requested';
+  | 'review.changes_requested'
+  // Email magic-link RE-authentication of an already-verified, already-approved
+  // account. Recorded because a credential was minted and then spent, and
+  // "which sessions were created without an OAuth round-trip" has to be
+  // answerable. Neither event asserts identity or consent — see authMagicLink.ts.
+  | 'auth.magic_link.requested'
+  | 'auth.magic_link.signed_in';
 
 export interface AdminAccessRecord {
   email: string;
@@ -82,6 +88,8 @@ const AUDIT_ACTIONS = new Set<AdminAuditAction>([
   'credits.adjusted',
   'review.approved',
   'review.changes_requested',
+  'auth.magic_link.requested',
+  'auth.magic_link.signed_in',
 ]);
 
 function getAccessFile() {

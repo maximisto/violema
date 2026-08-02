@@ -95,7 +95,7 @@ test('a seed version bump preserves operator-owned status, cadence, and destinat
       consecutive_failures: 0,
       next_run_at: undefined,
       // Older seed content, so the upgrade has something to re-propagate.
-      steps: seeded.steps?.filter((step) => step.inputs?.source !== 'google_drive'),
+      steps: seeded.steps?.filter((step) => step.inputs?.source !== 'account_library'),
     },
   ]);
 
@@ -122,7 +122,7 @@ test('a seed version bump preserves operator-owned status, cadence, and destinat
   assert.equal(upgraded.workflowId, seeded.workflowId);
   assert.deepEqual(
     upgraded.steps?.filter((step) => step.kind === 'query').map((step) => step.inputs?.source),
-    ['stripe', 'github', 'linear', 'email', 'calendar', 'google_drive'],
+    ['stripe', 'github', 'linear', 'email', 'calendar', 'account_library', 'account_library'],
   );
 });
 

@@ -1,6 +1,13 @@
 import type { MouseEventHandler, ReactNode } from 'react';
 
-export type AuthProviderKind = 'google' | 'microsoft';
+/**
+ * `email` is not a third identity provider — it is re-authentication for an
+ * account Google or Microsoft already verified. It renders through this same
+ * component on purpose: the browser-agnostic path has to carry the same visual
+ * weight as the OAuth ones, and sharing the component is the only way that
+ * cannot quietly drift into a demoted fallback link.
+ */
+export type AuthProviderKind = 'google' | 'microsoft' | 'email';
 
 export function GoogleMark({ className = 'h-5 w-5' }: { className?: string }) {
   return (
@@ -48,6 +55,24 @@ const PROVIDER_STYLES: Record<AuthProviderKind, {
     label: 'Continue with Microsoft',
     titleFont: '"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif',
   },
+  // Violema's own violet rather than a borrowed brand — this door is ours, and
+  // dressing it as a third vendor would misrepresent what it verifies. Same
+  // halo/badge/accent structure and the same opacities as the two above, so the
+  // three cards read as one row of equals.
+  email: {
+    halo: 'from-violet-500/18 via-violet-400/10 to-cyan-400/16 border-violet-500/18 hover:border-violet-400/38 hover:shadow-[0_18px_40px_rgba(139,92,246,0.14)]',
+    badge: 'border-violet-400/25 bg-violet-500/12',
+    eyebrow: 'text-violet-300',
+    accent: 'bg-gradient-to-r from-violet-500/0 via-violet-400/35 to-cyan-400/0',
+    label: 'Email me a sign-in link',
+    titleFont: 'inherit',
+  },
+};
+
+const PROVIDER_EYEBROWS: Record<AuthProviderKind, string> = {
+  google: 'Google workspace',
+  microsoft: 'Microsoft identity',
+  email: 'Works in any browser',
 };
 
 interface AuthProviderButtonProps {
@@ -55,6 +80,9 @@ interface AuthProviderButtonProps {
   note: string;
   onClick: MouseEventHandler<HTMLButtonElement>;
   icon: ReactNode;
+  /** Set on cards that reveal a panel, so assistive tech hears the toggle. */
+  expanded?: boolean;
+  controls?: string;
 }
 
 export default function AuthProviderButton({
@@ -62,6 +90,8 @@ export default function AuthProviderButton({
   note,
   onClick,
   icon,
+  expanded,
+  controls,
 }: AuthProviderButtonProps) {
   const style = PROVIDER_STYLES[provider];
 
@@ -69,6 +99,8 @@ export default function AuthProviderButton({
     <button
       type="button"
       onClick={onClick}
+      aria-expanded={expanded}
+      aria-controls={controls}
       className={`group relative overflow-hidden rounded-[1.35rem] border bg-gradient-to-br ${style.halo} px-3.5 py-3.5 text-left transition-all duration-200 hover:-translate-y-0.5 sm:px-4`}
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent opacity-80" />
@@ -79,7 +111,7 @@ export default function AuthProviderButton({
         </div>
         <div className="min-w-0 flex-1">
           <p className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${style.eyebrow} sm:text-[10px]`}>
-            {provider === 'google' ? 'Google workspace' : 'Microsoft identity'}
+            {PROVIDER_EYEBROWS[provider]}
           </p>
           <p
             className="mt-1 text-[0.95rem] font-semibold tracking-[-0.01em] text-white sm:text-sm"

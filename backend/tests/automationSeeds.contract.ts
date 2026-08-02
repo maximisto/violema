@@ -29,7 +29,7 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
     assert.equal(weekly.timezone, 'America/Chicago');
     assert.equal(weekly.execution_policy?.reviewPolicy, 'standard');
     assert.equal(weekly.notify, '#violema-demo');
-    assert.equal(weekly.version, 4);
+    assert.equal(weekly.version, 5);
     // Explicit identity keeps the seed on the supported-workflow readiness
     // table instead of inferring 'custom-workflow' from its step sources.
     assert.equal(weekly.workflowId, 'weekly-founder-update');
@@ -37,7 +37,7 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
       weekly.steps
         ?.filter((step) => step.kind === 'query')
         .map((step) => step.inputs?.source),
-      ['stripe', 'github', 'linear', 'email', 'calendar', 'google_drive'],
+      ['stripe', 'github', 'linear', 'email', 'calendar', 'account_library', 'account_library'],
     );
     assert.ok(weekly.steps?.some((step) => step.kind === 'search'), 'Expected Tavily market-search step.');
     assert.ok(weekly.steps?.some((step) => step.kind === 'summarize'), 'Expected founder brief step.');
@@ -71,7 +71,7 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
       last_run_status: 'succeeded' as const,
       consecutive_failures: 0,
       steps: weekly.steps?.filter(
-        (step) => !['linear', 'google_drive'].includes(String(step.inputs?.source || '')),
+        (step) => !['linear', 'account_library'].includes(String(step.inputs?.source || '')),
       ),
     };
     fs.writeFileSync(
@@ -85,7 +85,7 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
     );
 
     assert.ok(upgraded, 'Expected upgraded weekly founder seed.');
-    assert.equal(upgraded.version, 4);
+    assert.equal(upgraded.version, 5);
     assert.equal(upgraded.workflowId, 'weekly-founder-update');
     assert.equal(upgraded.created_at, '2026-06-01T12:00:00.000Z');
     assert.equal(upgraded.last_run_at, '2026-07-18T12:00:00.000Z');
@@ -94,7 +94,7 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
       upgraded.steps
         ?.filter((step) => step.kind === 'query')
         .map((step) => step.inputs?.source),
-      ['stripe', 'github', 'linear', 'email', 'calendar', 'google_drive'],
+      ['stripe', 'github', 'linear', 'email', 'calendar', 'account_library', 'account_library'],
     );
   } finally {
     scheduler?.deleteAutomation('auto_weekly_founder_update');

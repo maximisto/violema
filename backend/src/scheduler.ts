@@ -12,6 +12,7 @@ import {
   ACCOUNT_LIBRARY_SOURCE,
   ACCOUNT_LIBRARY_WRITE_QUERY_TYPE,
   COMPETITIVE_INTELLIGENCE_SECTION,
+  FOUNDER_BRIEF_SECTION,
 } from './integrationGateway/accountLibrary';
 
 export interface AutomationRoleDirective {
@@ -103,7 +104,10 @@ type AutomationSeed = Omit<
 const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
   {
     id: 'auto_weekly_founder_update',
-    version: 4,
+    // v5: the Drive step now reads Violema's own filed briefs instead of
+    // scanning the founder's Drive, which `drive.file` cannot see, and the
+    // brief files itself so each week opens with the delta.
+    version: 5,
     // Declared so readiness enforcement uses the weekly-founder requirements
     // table instead of inferring 'custom-workflow' from the step sources.
     workflowId: 'weekly-founder-update',
@@ -171,11 +175,21 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
         inputs: { source: 'calendar', query_type: 'weekly_commitments', limit: 10 },
       },
       {
-        id: 'step_drive_context',
+        // Reads the briefs Violema itself filed, not the founder's whole Drive:
+        // the `drive.file` scope deliberately cannot see documents Violema did
+        // not create, and scanning an entire Drive was never worth the
+        // permission it demanded. What this buys instead is continuity — the
+        // brief opens with what changed since the last one.
+        id: 'step_brief_history',
         kind: 'query',
-        title: 'Review operating documents',
-        objective: 'Review metadata for recently changed Google Drive operating documents without reading file bodies.',
-        inputs: { source: 'google_drive', query_type: 'recent_files', limit: 10 },
+        title: 'Read prior founder briefs',
+        objective: 'Load the briefs already filed for this account so this week reports what changed rather than restating the standing picture.',
+        inputs: {
+          source: ACCOUNT_LIBRARY_SOURCE,
+          query_type: ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+          filters: { section: FOUNDER_BRIEF_SECTION },
+          limit: 2,
+        },
       },
       {
         id: 'step_market_scan',
@@ -189,7 +203,22 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
         kind: 'summarize',
         title: 'Draft founder brief',
         objective: 'Synthesize a concise founder-ready brief with revenue movement, product progress, customer signals, market context, risks, decisions needed, and next actions.',
-        inputs: { instruction: 'Draft the weekly founder update with source-linked evidence, clear risks, decisions, and next actions.' },
+        inputs: { instruction: 'Draft the weekly founder update with source-linked evidence, clear risks, decisions, and next actions. When prior briefs are in the evidence, lead with what changed since the last one.' },
+      },
+      {
+        // Filed whether or not the delivery is approved: what the week showed
+        // is true regardless of who read it. Auxiliary severity, so a Drive
+        // failure warns instead of holding back the brief.
+        id: 'step_brief_record',
+        kind: 'query',
+        title: 'File this brief in the library',
+        objective: "Append this week's founder brief to the account library so the next run can report the delta.",
+        inputs: {
+          source: ACCOUNT_LIBRARY_SOURCE,
+          query_type: ACCOUNT_LIBRARY_WRITE_QUERY_TYPE,
+          section: FOUNDER_BRIEF_SECTION,
+          entry_title: 'Weekly founder brief',
+        },
       },
       {
         id: 'step_slack_delivery',

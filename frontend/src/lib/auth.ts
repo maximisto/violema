@@ -1,3 +1,4 @@
+import { resolveMagicLinkFeedback, type MagicLinkFeedback } from './magicLink';
 import { adoptAuthWorkspace, isFounderWorkspace } from './workspace';
 
 export type AccessRole = 'user' | 'admin';
@@ -315,6 +316,36 @@ export async function logoutBackendAuthSession() {
     });
   } finally {
     clearAuthSession();
+  }
+}
+
+/**
+ * Ask for an email sign-in link.
+ *
+ * Never throws and never distinguishes outcomes: the endpoint answers 200 with
+ * one generic message whatever the address is, and a client that turned a
+ * transport failure into a different sentence would leak exactly what the
+ * server hides. A thrown fetch is therefore treated as an unremarkable send.
+ *
+ * Creates no local session — a request is only a request. The session arrives
+ * later, as the HttpOnly cookie set by the consume redirect, and is hydrated by
+ * `fetchBackendAuthSession` like any other login.
+ */
+export async function requestMagicLinkSignIn(
+  email: string,
+  options: { next?: string } = {},
+): Promise<MagicLinkFeedback> {
+  try {
+    const response = await fetch('/api/auth/magic-link/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ email: email.trim(), next: options.next }),
+    });
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    return resolveMagicLinkFeedback({ status: response.status, message: payload?.message });
+  } catch {
+    return resolveMagicLinkFeedback({ status: 0 });
   }
 }
 

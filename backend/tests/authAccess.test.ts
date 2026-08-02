@@ -848,6 +848,12 @@ test('beta API protection only leaves auth and signed webhook surfaces public', 
   assert.equal(isPublicBetaApiPath('POST', '/api/auth/session'), true);
   assert.equal(isPublicBetaApiPath('GET', '/api/auth/terms'), true);
   assert.equal(isPublicBetaApiPath('POST', '/api/auth/terms/accept'), true);
+  // Signing in cannot itself require a session.
+  assert.equal(isPublicBetaApiPath('POST', '/api/auth/magic-link/request'), true);
+  assert.equal(isPublicBetaApiPath('GET', '/api/auth/magic-link/consume'), true);
+  // …but only with the verb each route actually implements.
+  assert.equal(isPublicBetaApiPath('GET', '/api/auth/magic-link/request'), false);
+  assert.equal(isPublicBetaApiPath('POST', '/api/auth/magic-link/consume'), false);
   assert.equal(isPublicBetaApiPath('POST', '/api/billing/stripe/webhook'), true);
   assert.equal(isPublicBetaApiPath('POST', '/api/slack/events'), true);
   assert.equal(isPublicBetaApiPath('OPTIONS', '/api/chat'), true);

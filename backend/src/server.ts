@@ -37,6 +37,15 @@ import {
   verifyAdminMagicLoginToken,
 } from './auth';
 import { getAccessRecord, recordAdminAuditEvent, syncVerifiedAccessEvidence } from './adminAccessStore';
+import {
+  consumeMagicLinkToken,
+  deliverMagicLinkSignIn,
+  resolveMagicLinkRecipient,
+  sanitizeMagicLinkNext,
+  MAGIC_LINK_DEFAULT_NEXT,
+  MAGIC_LINK_GENERIC_MESSAGE,
+  MAGIC_LINK_INVALID_MESSAGE,
+} from './authMagicLink';
 import { registerAdminRoutes } from './adminRoutes';
 import {
   assertAuthenticatedAdminAccess,
@@ -6287,6 +6296,131 @@ app.get('/api/auth/admin/magic', (req: Request, res: Response) => {
       fallbackNext,
       error instanceof Error ? error.message : 'Magic login is not available right now.',
     );
+  }
+});
+
+/**
+ * Ask for an email sign-in link.
+ *
+ * Browser-agnostic re-entry, added because Safari can strand the Google account
+ * chooser when several Google accounts are signed in. It is RE-authentication
+ * only — see `authMagicLink.ts` for why it can never verify an identity or
+ * record consent.
+ *
+ * Enumeration is closed by construction, not by matching two response bodies:
+ * the generic 200 is written and handed to the socket BEFORE any store is
+ * touched, and the eligibility check runs on a later tick. Response time
+ * therefore cannot depend on whether the address exists, whether it is
+ * approved, or how long Postmark took.
+ */
+app.post('/api/auth/magic-link/request', (req: Request, res: Response) => {
+  const body = (req.body || {}) as Record<string, unknown>;
+  const email = typeof body.email === 'string' ? body.email : '';
+  const next = sanitizeMagicLinkNext(typeof body.next === 'string' ? body.next : undefined);
+  const origin = getAuthPublicOrigin(req);
+  const createdIp = req.ip;
+  const userAgent = req.header('user-agent') || undefined;
+
+  res.json({ ok: true, message: MAGIC_LINK_GENERIC_MESSAGE });
+
+  // Deferred to the next tick so the response is already on the wire. Every
+  // branch below is invisible to the caller.
+  setImmediate(() => {
+    void deliverMagicLinkSignIn(
+      { email, next, origin, createdIp, userAgent },
+      {
+        // The existing Postmark path, not a second client.
+        sendEmail: (message) => sendMessage({
+          channel: 'email',
+          to: message.to,
+          subject: message.subject,
+          body: message.body,
+        }),
+      },
+    )
+      .then((outcome) => {
+        if (!outcome.delivered) {
+          console.log(`[magic-link] no link sent (${outcome.reason})`);
+          return;
+        }
+        recordAdminAuditEvent({
+          actorEmail: 'system',
+          action: 'auth.magic_link.requested',
+          targetEmail: outcome.email,
+          metadata: { method: 'magic_link', tokenId: outcome.tokenId },
+        });
+      })
+      .catch((error) => {
+        console.error('[magic-link] request handling failed', error instanceof Error ? error.message : error);
+      });
+  });
+});
+
+/**
+ * Spend a sign-in link.
+ *
+ * Every failure — absent, malformed, unknown, expired, already used, or
+ * belonging to an account revoked since the link was mailed — redirects to the
+ * login page with one identical message. Success creates a session through the
+ * same `createAuthSession` + `buildAuthCookie` pair the OAuth callback uses, so
+ * the cookie attributes cannot drift apart.
+ *
+ * Nothing here writes identity, consent, or the user record. A user whose
+ * accepted terms are stale is signed in and then routed to `/access-terms` by
+ * the existing `requiresTermsAcceptance` path, exactly as after an OAuth login.
+ */
+app.get('/api/auth/magic-link/consume', (req: Request, res: Response) => {
+  const origin = getAuthPublicOrigin(req);
+  const reject = (detail: string) => {
+    // The reason is logged for operators and never rendered to the visitor.
+    console.warn(`[magic-link] sign-in link rejected (${detail})`);
+    redirectToAuthError(res, origin, 'login', MAGIC_LINK_DEFAULT_NEXT, MAGIC_LINK_INVALID_MESSAGE);
+  };
+
+  try {
+    const consumed = consumeMagicLinkToken(
+      typeof req.query.token === 'string' ? req.query.token : undefined,
+    );
+    if (!consumed.ok) {
+      reject(consumed.reason);
+      return;
+    }
+
+    // Approval can be withdrawn between mailing the link and clicking it.
+    const recipient = resolveMagicLinkRecipient(consumed.record.email);
+    if (!recipient.eligible) {
+      reject(recipient.reason);
+      return;
+    }
+
+    // Audited before the session exists: an unwritable audit log fails the
+    // sign-in closed rather than minting a session with no trail, matching how
+    // `setAccessStatus` refuses to mutate access without one.
+    recordAdminAuditEvent({
+      actorEmail: recipient.user.email,
+      action: 'auth.magic_link.signed_in',
+      targetEmail: recipient.user.email,
+      metadata: {
+        method: 'magic_link',
+        identityMethod: recipient.access.method,
+        tokenId: consumed.record.id,
+      },
+    });
+
+    const { token: sessionToken } = createAuthSession(recipient.user.id);
+    res.setHeader('Set-Cookie', buildAuthCookie(sessionToken));
+
+    try {
+      fulfillApprovedBetaTrial(recipient.user);
+    } catch (error) {
+      // The session is already valid; credit provisioning is not worth failing
+      // a login over, but it must not fail silently either.
+      console.error('[magic-link] trial credit provisioning failed', error instanceof Error ? error.message : error);
+    }
+
+    res.redirect(`${origin}${sanitizeMagicLinkNext(consumed.record.next)}`);
+  } catch (error) {
+    reject(error instanceof Error ? error.message : 'unexpected_error');
   }
 });
 

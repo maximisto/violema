@@ -116,6 +116,12 @@ export const LIBRARY_ROOT_FOLDER_NAME = 'Violema Library';
 /** The section the competitor monitor writes to. Sections are just subfolders. */
 export const COMPETITIVE_INTELLIGENCE_SECTION = 'Competitive Intelligence';
 
+/**
+ * Where the weekly founder brief files itself, so the next one can open with
+ * what changed rather than restating the week from zero.
+ */
+export const FOUNDER_BRIEF_SECTION = 'Founder Briefs';
+
 const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 const ENTRY_MIME_TYPE = 'text/markdown';
 const ENTRY_FILE_EXTENSION = '.md';

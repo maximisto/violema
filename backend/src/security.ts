@@ -38,6 +38,13 @@ export function isRateLimitExempt(path: string): boolean {
 // limiter still protects.
 export const SENSITIVE_RATE_LIMIT_PREFIXES: readonly string[] = [
   '/api/auth/admin',
+  // The magic-link request route: unauthenticated, takes an arbitrary address,
+  // and each accepted call sends real mail. The per-IP ceiling here is the
+  // outer bound; a per-address cooldown and window live in authMagicLink.ts, so
+  // one IP cannot spray many addresses and one address cannot be flooded from
+  // many IPs. The consume route is deliberately NOT here: its tokens carry 256
+  // bits of entropy, and throttling it would lock out an office behind one NAT.
+  '/api/auth/magic-link/request',
   '/api/waitlist',
   '/api/integrations/composio/connect',
   '/api/integrations/composio/disconnect',

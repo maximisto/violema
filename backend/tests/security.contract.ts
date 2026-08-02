@@ -36,6 +36,16 @@ test('the strict limiter targets only magic login and the public waitlist', () =
   assert.equal(isSensitiveRateLimitPath('/api/waitlist'), true);
 });
 
+test('the strict limiter covers the magic-link request route but not the consume route', () => {
+  // Requesting a link is unauthenticated, accepts an arbitrary address, and
+  // sends real mail — the classic spray target.
+  assert.equal(isSensitiveRateLimitPath('/api/auth/magic-link/request'), true);
+  assert.ok(SENSITIVE_RATE_LIMIT_PREFIXES.includes('/api/auth/magic-link/request'));
+  // Consuming carries a 256-bit token, so brute force is not the threat;
+  // throttling it would lock out everyone behind one office NAT.
+  assert.equal(isSensitiveRateLimitPath('/api/auth/magic-link/consume'), false);
+});
+
 test('the strict limiter covers the Composio connect and disconnect routes', () => {
   // Each call hits a third-party API and mutates live integration state, so
   // they belong on the tight ceiling rather than the general one.
