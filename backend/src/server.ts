@@ -42,6 +42,11 @@ import {
   shouldSendBetaApplicationReceivedEmail,
 } from './betaApplicationEmail';
 import {
+  classifyPostmarkWebhook,
+  recordEmailSuppression,
+  verifyPostmarkWebhookSecret,
+} from './emailSuppressions';
+import {
   consumeMagicLinkToken,
   deliverMagicLinkSignIn,
   resolveMagicLinkRecipient,
@@ -7217,6 +7222,48 @@ app.post('/api/admin/test-credits', (req: Request, res: Response) => {
       error: error instanceof Error ? error.message : 'Could not load test credits',
     });
   }
+});
+
+/**
+ * Postmark bounce/complaint webhook — the delivery half of the promise made to
+ * Postmark at account approval: addresses that hard-bounce or complain stop
+ * receiving mail (`sendEmailMessage` enforces the suppression list).
+ *
+ * Dormant until `POSTMARK_WEBHOOK_SECRET` is set; configure the same value in
+ * Postmark's webhook URL as `?token=…` (or as the Basic-auth password). Every
+ * authenticated event answers 200 — Postmark retries non-200s, and a retry
+ * storm over an event we deliberately ignore helps nobody.
+ */
+app.post('/api/email/postmark/webhook', (req: Request, res: Response) => {
+  const secret = process.env.POSTMARK_WEBHOOK_SECRET?.trim();
+  if (!secret) {
+    // Unconfigured — behave like the route does not exist.
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  const basicHeader = req.header('authorization') || '';
+  const basicPassword = basicHeader.startsWith('Basic ')
+    ? Buffer.from(basicHeader.slice(6), 'base64').toString('utf-8').split(':').slice(1).join(':')
+    : undefined;
+  const token = typeof req.query.token === 'string' ? req.query.token : undefined;
+  if (
+    !verifyPostmarkWebhookSecret(token, secret)
+    && !verifyPostmarkWebhookSecret(basicPassword, secret)
+  ) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const decision = classifyPostmarkWebhook(req.body);
+  if (decision.action === 'suppress') {
+    const { recorded } = recordEmailSuppression(decision);
+    console.warn(
+      `[email-suppressions] ${decision.reason} for ${decision.email} (${decision.recordType}` +
+        `${decision.bounceType ? `/${decision.bounceType}` : ''})${recorded ? '' : ' — already suppressed'}`,
+    );
+  }
+  res.json({ ok: true });
 });
 
 app.post('/api/billing/stripe/webhook', async (req: Request, res: Response) => {

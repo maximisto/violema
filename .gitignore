@@ -19,6 +19,7 @@ backend/auth-users.json
 # Outstanding email sign-in links. Holds real addresses and request IPs; the
 # token itself is only ever stored as a sha256 hash.
 backend/auth-magic-link-tokens.json
+backend/email-suppressions.json
 backend/automations.json
 backend/platform-billing-config.json
 backend/platform-credit-ledger.json

@@ -35,6 +35,15 @@ TAVILY_API_KEY=your_tavily_key
 # is effectively dead. Check pm2 logs for `[magic-link] no link sent`.
 POSTMARK_API_KEY=your_postmark_server_api_key
 POSTMARK_FROM_EMAIL=demo@yourdomain.com
+# Enables POST /api/email/postmark/webhook (bounce/complaint suppression — the
+# behaviour promised to Postmark at account approval). Generate a long random
+# value, then configure the webhook in Postmark (server → Settings → Webhooks)
+# as https://violema.com/api/email/postmark/webhook?token=<this value> with the
+# Bounce and Spam Complaint events checked. Unset = the route answers 404 and
+# no suppression is recorded. Suppressed addresses land in
+# backend/email-suppressions.json (gitignored runtime data); removing a line
+# from that file is the deliberate way to re-enable a repaired mailbox.
+POSTMARK_WEBHOOK_SECRET=replace_with_a_long_random_webhook_secret
 SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
 PUBLIC_APP_URL=https://violema.com
 APP_BASE_URL=https://violema.com

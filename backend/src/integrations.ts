@@ -1,3 +1,4 @@
+import { isEmailSuppressed } from './emailSuppressions';
 import { buildSlackMessagePayload, chunkSlackBlocks } from './slackBlocks';
 import { collectLinkImageBlocks } from './linkPreviews';
 import { usesInternalDemoRouting } from './platform/tenancy';
@@ -407,6 +408,18 @@ async function sendSlackMessage(input: SendMessageInput) {
 }
 
 async function sendEmailMessage(input: SendMessageInput) {
+  // The promise made to Postmark at account approval: bounced and complained
+  // addresses stop receiving mail. Checked before any provider call so a
+  // suppressed recipient fails honestly instead of burning sender reputation.
+  const suppression = isEmailSuppressed(input.to);
+  if (suppression) {
+    throw new Error(
+      `Email to ${input.to} is blocked: the address ${
+        suppression.reason === 'spam_complaint' ? 'marked our mail as spam' : 'hard-bounced'
+      } on ${suppression.suppressedAt.slice(0, 10)}. Remove it from email-suppressions.json only if the mailbox is confirmed working again.`,
+    );
+  }
+
   const apiKey = getRequiredEnv('POSTMARK_API_KEY');
   const fromEmail = getRequiredEnv('POSTMARK_FROM_EMAIL');
 

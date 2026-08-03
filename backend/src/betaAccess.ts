@@ -22,6 +22,9 @@ export function isPublicBetaApiPath(method: string, path: string) {
     path === '/api/health' ||
     path === '/api/waitlist' ||
     path === '/api/billing/stripe/webhook' ||
+    // Postmark cannot present a session cookie either; the route is dormant
+    // without POSTMARK_WEBHOOK_SECRET and authenticated by that shared secret.
+    path === '/api/email/postmark/webhook' ||
     path === '/api/slack/events' ||
     // Slack cannot present a Violema session cookie. Both Slack paths are
     // authenticated by request signature instead, and the interactions path
