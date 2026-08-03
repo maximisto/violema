@@ -163,8 +163,22 @@ export interface LatestBrief {
 }
 
 export function findLatestBrief(data: OperatorConsoleData, automationId: string): LatestBrief | null {
+  return findLatestBriefAcross(data, [automationId]);
+}
+
+/**
+ * Newest stored brief across SEVERAL automations. Exists because workspaces
+ * really do hold same-name duplicates (a platform seed plus a workspace copy
+ * of "Competitor monitor"); a name-ambiguity prompt cannot distinguish them,
+ * so for a read the only honest answer is the newest brief among the group.
+ */
+export function findLatestBriefAcross(
+  data: OperatorConsoleData,
+  automationIds: readonly string[],
+): LatestBrief | null {
+  const ids = new Set(automationIds);
   const runs = data.taskRuns
-    .filter((run) => run.metadata?.automationId === automationId)
+    .filter((run) => typeof run.metadata?.automationId === 'string' && ids.has(run.metadata.automationId as string))
     .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
 
   for (const run of runs) {
@@ -220,9 +234,21 @@ export function buildNoBriefReply(automation: ConsoleAutomation): string {
 }
 
 export function buildAmbiguousLatestReply(query: string, options: ConsoleAutomation[]): string {
-  const lines = [`"${query}" matches ${options.length} missions. Whose brief do you want?`];
-  for (const option of options) {
-    lines.push(`• \`latest ${option.name}\``);
+  // Same-name duplicates collapse to one line — two identical suggestions
+  // would hand the reader a question with no answerable difference.
+  const seen = new Set<string>();
+  const names = options
+    .map((option) => option.name)
+    .filter((name) => {
+      const key = name.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  const lines = [`"${query}" matches ${names.length} missions. Whose brief do you want?`];
+  for (const name of names) {
+    lines.push(`• \`latest ${name}\``);
   }
   return lines.join('\n');
 }

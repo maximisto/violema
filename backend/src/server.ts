@@ -262,6 +262,7 @@ import {
   buildStatusReply,
   buildUnknownMissionReply,
   findLatestBrief,
+  findLatestBriefAcross,
 } from './slack/operatorConsole';
 import {
   executeReviewApproval,
@@ -1467,6 +1468,20 @@ async function handleSlackLatestIntent(input: {
     return;
   }
   if (match.kind === 'ambiguous') {
+    // Duplicates with one shared name (platform seed + workspace copy) leave
+    // nothing to ask about — the newest brief across the group IS the answer.
+    const distinctNames = new Set(match.options.map((option) => option.name.trim().toLowerCase()));
+    if (distinctNames.size === 1) {
+      const groupBrief = findLatestBriefAcross(data, match.options.map((option) => option.id));
+      await replyInSlack(
+        input.channel,
+        groupBrief
+          ? buildLatestBriefReply(match.options[0], groupBrief)
+          : buildNoBriefReply(match.options[0]),
+        input.threadTs,
+      );
+      return;
+    }
     await replyInSlack(input.channel, buildAmbiguousLatestReply(input.missionQuery, match.options), input.threadTs);
     return;
   }

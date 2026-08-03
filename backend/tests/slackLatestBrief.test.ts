@@ -7,6 +7,7 @@ import {
   buildLatestBriefReply,
   buildNoBriefReply,
   findLatestBrief,
+  findLatestBriefAcross,
   type OperatorConsoleData,
 } from '../src/slack/operatorConsole';
 import type { TaskRunRecord } from '../src/platform/types';
@@ -114,6 +115,35 @@ test('findLatestBrief returns the newest run that actually kept a brief', () => 
   assert.equal(brief?.deliveryTarget, '#violema-demo');
 
   assert.equal(findLatestBrief(consoleData([]), 'auto_competitor'), null);
+});
+
+test('same-name duplicates resolve by recency, never by an unanswerable question', () => {
+  // The prod shape that produced "listed twice": platform seed + workspace
+  // copy, both literally named "Competitor monitor".
+  const DUPLICATES = [
+    { id: 'auto_seed', name: 'Competitor monitor' },
+    { id: 'auto_workspace', name: 'Competitor monitor' },
+  ];
+
+  const grouped = matchAutomationForBrief('competitive review', DUPLICATES);
+  assert.equal(grouped.kind, 'ambiguous', 'the matcher itself still reports both');
+
+  const data: OperatorConsoleData = {
+    automations: DUPLICATES,
+    tasks: [],
+    taskRuns: [
+      runFixture({ id: 'r_seed', startedAt: '2026-08-01T10:00:00.000Z', automationId: 'auto_seed', markdown: 'SEED BRIEF' }),
+      runFixture({ id: 'r_ws', startedAt: '2026-08-02T10:00:00.000Z', automationId: 'auto_workspace', markdown: 'WORKSPACE BRIEF' }),
+    ],
+  };
+  const across = findLatestBriefAcross(data, ['auto_seed', 'auto_workspace']);
+  assert.equal(across?.markdown, 'WORKSPACE BRIEF', 'newest brief across the group wins');
+  assert.equal(across?.run.id, 'r_ws');
+
+  // If the prompt ever renders for a mixed set, identical names collapse.
+  const mixed = buildAmbiguousLatestReply('review', [...DUPLICATES, { id: 'auto_rev', name: 'Revenue watch' }]);
+  assert.equal((mixed.match(/`latest Competitor monitor`/g) || []).length, 1, 'no duplicate suggestion lines');
+  assert.ok(mixed.includes('matches 2 missions'), 'the count reflects answerable choices, not raw rows');
 });
 
 test('replies state provenance and never dress a repost as a fresh delivery', () => {
