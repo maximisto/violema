@@ -127,6 +127,7 @@ export function buildHelpReply(canOperate: boolean): string {
     '• `status` — what is running, waiting review, or blocked, plus what is scheduled next',
     '• `reviews` — everything waiting for approval',
     '• `run <mission name>` — start a mission now',
+    '• `latest <mission name>` — repost the most recent brief a mission produced',
     '• `help` — this list',
     '',
     'Approve and request-changes happen on the review card I post when a run is ready.',
@@ -149,6 +150,80 @@ export function buildAmbiguousRunReply(query: string, options: ConsoleAutomation
     lines.push(`• ${option.name}`);
   }
   lines.push('', 'Nothing started — reply with the full name.');
+  return lines.join('\n');
+}
+
+/** The most recent stored brief for a mission, or null when no run kept one. */
+export interface LatestBrief {
+  run: TaskRunRecord;
+  markdown: string;
+  title?: string;
+  delivered: boolean;
+  deliveryTarget?: string;
+}
+
+export function findLatestBrief(data: OperatorConsoleData, automationId: string): LatestBrief | null {
+  const runs = data.taskRuns
+    .filter((run) => run.metadata?.automationId === automationId)
+    .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
+
+  for (const run of runs) {
+    const artifacts = Array.isArray(run.metadata?.artifacts)
+      ? (run.metadata.artifacts as Array<{ kind?: unknown; title?: unknown; payload?: Record<string, unknown> }>)
+      : [];
+    const artifact = artifacts.find((item) =>
+      item &&
+      item.kind === 'review_gate' &&
+      typeof item.payload?.markdown === 'string' &&
+      (item.payload.markdown as string).trim().length > 0
+    );
+    if (!artifact) continue;
+
+    const receipt = run.metadata?.reviewReceipt as { status?: unknown } | undefined;
+    const deliveryTarget = artifact.payload?.deliveryTarget;
+    return {
+      run,
+      markdown: artifact.payload?.markdown as string,
+      ...(typeof artifact.title === 'string' && artifact.title ? { title: artifact.title } : {}),
+      delivered: receipt?.status === 'delivered',
+      ...(typeof deliveryTarget === 'string' && deliveryTarget ? { deliveryTarget } : {}),
+    };
+  }
+
+  return null;
+}
+
+/**
+ * The whole brief, reposted, with its provenance stated first: which run it
+ * came from and whether a human approved it. A repost must never read as a
+ * fresh delivery — that distinction is the review gate's entire point.
+ */
+export function buildLatestBriefReply(automation: ConsoleAutomation, brief: LatestBrief): string {
+  const when = formatWhen(brief.run.startedAt);
+  const provenance = brief.delivered
+    ? `approved and delivered${brief.deliveryTarget ? ` to ${brief.deliveryTarget}` : ''}`
+    : 'not yet approved for delivery';
+
+  return [
+    `*Latest from ${automation.name}*${brief.title ? ` — ${brief.title}` : ''}`,
+    `_Run started ${when || 'recently'} · ${provenance}._`,
+    '',
+    brief.markdown,
+  ].join('\n');
+}
+
+export function buildNoBriefReply(automation: ConsoleAutomation): string {
+  return [
+    `*${automation.name}* has no stored brief yet — no run has produced one that was kept.`,
+    `Say \`run ${automation.name}\` and I will prepare a fresh one for review.`,
+  ].join('\n');
+}
+
+export function buildAmbiguousLatestReply(query: string, options: ConsoleAutomation[]): string {
+  const lines = [`"${query}" matches ${options.length} missions. Whose brief do you want?`];
+  for (const option of options) {
+    lines.push(`• \`latest ${option.name}\``);
+  }
   return lines.join('\n');
 }
 

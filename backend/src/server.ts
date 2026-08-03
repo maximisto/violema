@@ -236,7 +236,7 @@ import {
 } from './slackIncoming';
 import { verifySlackRequestSignature } from './slack/signature';
 import { SLACK_READ_ONLY_NOTICE, isSlackOperator } from './slack/operators';
-import { matchAutomationByName, parseSlackOperatorIntent } from './slack/intents';
+import { matchAutomationByName, matchAutomationForBrief, parseSlackOperatorIntent } from './slack/intents';
 import {
   consumePendingChangeRequest,
   hasPendingChangeRequest,
@@ -253,11 +253,15 @@ import {
 } from './slack/reviewCard';
 import { resolveSlackOperatorTransport } from './slack/transport';
 import {
+  buildAmbiguousLatestReply,
   buildAmbiguousRunReply,
   buildHelpReply,
+  buildLatestBriefReply,
+  buildNoBriefReply,
   buildReviewsReply,
   buildStatusReply,
   buildUnknownMissionReply,
+  findLatestBrief,
 } from './slack/operatorConsole';
 import {
   executeReviewApproval,
@@ -1443,6 +1447,38 @@ async function handleSlackRunIntent(input: {
   );
 }
 
+/**
+ * `latest <mission>` — repost the newest stored brief. Uses the loose
+ * brief matcher ("competitive review" → Competitor monitor) because a wrong
+ * repost costs a correction; `run` keeps its strict matcher because a wrong
+ * run costs credits.
+ */
+async function handleSlackLatestIntent(input: {
+  missionQuery: string;
+  channel: string;
+  threadTs?: string;
+  workspaceId: string;
+}) {
+  const data = buildSlackOperatorConsoleData(input.workspaceId);
+  const match = matchAutomationForBrief(input.missionQuery, data.automations);
+
+  if (match.kind === 'none') {
+    await replyInSlack(input.channel, buildUnknownMissionReply(input.missionQuery, data.automations), input.threadTs);
+    return;
+  }
+  if (match.kind === 'ambiguous') {
+    await replyInSlack(input.channel, buildAmbiguousLatestReply(input.missionQuery, match.options), input.threadTs);
+    return;
+  }
+
+  const brief = findLatestBrief(data, match.automation.id);
+  await replyInSlack(
+    input.channel,
+    brief ? buildLatestBriefReply(match.automation, brief) : buildNoBriefReply(match.automation),
+    input.threadTs,
+  );
+}
+
 async function handleSlackOperatorIntent(input: {
   intent: NonNullable<ReturnType<typeof parseSlackOperatorIntent>>;
   channel: string;
@@ -1464,6 +1500,17 @@ async function handleSlackOperatorIntent(input: {
   }
   if (input.intent.kind === 'reviews') {
     await replyInSlack(input.channel, buildReviewsReply(buildSlackOperatorConsoleData(input.workspaceId)), input.threadTs);
+    return;
+  }
+  // Reposting an existing brief is a read: it moves no credits, sends nothing
+  // anywhere new, and states its provenance. Open to the workspace like status.
+  if (input.intent.kind === 'latest') {
+    await handleSlackLatestIntent({
+      missionQuery: input.intent.missionQuery,
+      channel: input.channel,
+      threadTs: input.threadTs,
+      workspaceId: input.workspaceId,
+    });
     return;
   }
 
