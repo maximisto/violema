@@ -19,6 +19,10 @@ export type AdminAuditAction =
   | 'access.requested'
   | 'access.approved'
   | 'access.revoked'
+  // The one-shot "application received" confirmation email went out after a
+  // signup bounce attached identity evidence. Recorded so the admin trail can
+  // answer "was this applicant told their application is in".
+  | 'access.application_confirmed'
   | 'participant.updated'
   | 'stage.override.updated'
   | 'role.promoted'
@@ -81,6 +85,7 @@ const AUDIT_ACTIONS = new Set<AdminAuditAction>([
   'access.requested',
   'access.approved',
   'access.revoked',
+  'access.application_confirmed',
   'participant.updated',
   'stage.override.updated',
   'role.promoted',

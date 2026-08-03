@@ -201,6 +201,22 @@ export type AuthSessionRequest = Pick<AuthSession, 'email' | 'name' | 'role' | '
   & Partial<Pick<AuthSession, 'participantType' | 'acceptedTerms' | 'acceptedEducation' | 'slackWorkspace' | 'slackChannelId' | 'slackDisplayTarget' | 'slackConnectedAt'>>
   & { intent: 'signup' | 'login'; termsVersion?: string };
 
+/**
+ * Session-request failure that keeps the backend's machine-readable `code`.
+ * Lets the signup page distinguish "your request is recorded, finish with
+ * OAuth" (`access_not_approved`) from a real failure without matching on
+ * message text.
+ */
+export class AuthSessionRequestError extends Error {
+  code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = 'AuthSessionRequestError';
+    this.code = code;
+  }
+}
+
 export async function persistAuthSessionToBackend(
   session: AuthSessionRequest,
   options: { next?: string } = {},
@@ -230,6 +246,7 @@ export async function persistAuthSessionToBackend(
 
   const payload = await response.json().catch(() => null) as {
     error?: string;
+    code?: string;
     user?: Partial<AuthSession>;
     verificationRequired?: boolean;
     message?: string;
@@ -242,7 +259,10 @@ export async function persistAuthSessionToBackend(
   }
 
   if (!response.ok || !payload?.user) {
-    throw new Error(payload?.error || 'Could not create auth session');
+    throw new AuthSessionRequestError(
+      payload?.error || 'Could not create auth session',
+      typeof payload?.code === 'string' ? payload.code : undefined,
+    );
   }
 
   const nextSession = hydrateSession(payload.user);

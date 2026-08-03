@@ -38,6 +38,10 @@ import {
 } from './auth';
 import { getAccessRecord, recordAdminAuditEvent, syncVerifiedAccessEvidence } from './adminAccessStore';
 import {
+  buildBetaApplicationReceivedEmail,
+  shouldSendBetaApplicationReceivedEmail,
+} from './betaApplicationEmail';
+import {
   consumeMagicLinkToken,
   deliverMagicLinkSignIn,
   resolveMagicLinkRecipient,
@@ -6552,6 +6556,11 @@ app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
 
   let email = '';
   let name = '';
+  // True only when THIS attempt attached identity evidence for the first time —
+  // the moment the application became approvable. Drives the one-shot
+  // "application received" email and must survive into the catch, because the
+  // approvable-but-not-approved case ARRIVES there via AuthAccessDeniedError.
+  let firstVerifiedApplication = false;
 
   try {
     const callbackUrl = buildOAuthCallbackUrl(req, provider);
@@ -6640,6 +6649,20 @@ app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
     }
 
     if (state.intent === 'signup' && state.acceptedTerms) {
+      const priorAccess = (() => {
+        try {
+          return getAccessRecord(email);
+        } catch {
+          // An unreadable store must not block the application itself; the
+          // worst case is a repeated confirmation email, never a lost one.
+          return null;
+        }
+      })();
+      firstVerifiedApplication = shouldSendBetaApplicationReceivedEmail({
+        intent: state.intent,
+        acceptedTerms: state.acceptedTerms,
+        priorAccess,
+      });
       const acceptedAt = new Date().toISOString();
       recordBetaConsent({
         email,
@@ -6716,6 +6739,41 @@ app.get('/api/auth/:provider/callback', async (req: Request, res: Response) => {
         method: provider,
         note: 'OAuth session request',
       });
+    }
+    // A signup bounce with recorded evidence is the application SUCCEEDING,
+    // not failing — render it as such. The provider verified the mailbox
+    // seconds ago, so the confirmation email is safe to send; deferred so the
+    // redirect is never held hostage by Postmark latency.
+    if (isAuthAccessDenied(error) && email && state.intent === 'signup') {
+      if (firstVerifiedApplication) {
+        const applicant = { email, name, method: provider };
+        setImmediate(() => {
+          const message = buildBetaApplicationReceivedEmail(applicant);
+          void sendMessage({
+            channel: 'email',
+            to: applicant.email,
+            subject: message.subject,
+            body: message.body,
+          })
+            .then(() => {
+              recordAdminAuditEvent({
+                actorEmail: 'system',
+                action: 'access.application_confirmed',
+                targetEmail: applicant.email,
+                metadata: { method: applicant.method, trigger: 'oauth_signup_bounce' },
+              });
+            })
+            .catch((sendError) => {
+              console.error(
+                '[beta-application] confirmation email failed',
+                sendError instanceof Error ? sendError.message : sendError,
+              );
+            });
+        });
+      }
+      const params = new URLSearchParams({ applied: '1', email, next: state.next });
+      res.redirect(`${origin}/signup?${params.toString()}`);
+      return;
     }
     redirectToAuthError(
       res,

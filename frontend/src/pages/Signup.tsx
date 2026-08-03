@@ -5,7 +5,15 @@ import Eye from 'lucide-react/dist/esm/icons/eye.js';
 import Lock from 'lucide-react/dist/esm/icons/lock.js';
 import Mail from 'lucide-react/dist/esm/icons/mail.js';
 import MonitorSmartphone from 'lucide-react/dist/esm/icons/monitor-smartphone.js';
-import { beginOAuthFlow, persistAuthSessionToBackend, type AuthMethod, type ParticipantType } from '../lib/auth';
+import { AuthSessionRequestError, beginOAuthFlow, persistAuthSessionToBackend, type AuthMethod, type ParticipantType } from '../lib/auth';
+import {
+  APPLICATION_PENDING_NOTE,
+  APPLICATION_RECEIVED_STEPS,
+  APPLICATION_RECEIVED_TITLE,
+  EMAIL_FORM_RECORDED_BODY,
+  EMAIL_FORM_RECORDED_TITLE,
+  resolveSignupNotice,
+} from '../lib/signupApplication';
 import AuthProviderButton, { GoogleMark, MicrosoftMark } from '../components/AuthProviderButton';
 import BrandIcon from '../components/BrandIcon';
 import PublicHeader from '../components/PublicHeader';
@@ -80,7 +88,7 @@ export default function Signup() {
   const navigate = useNavigate();
   const location = useLocation();
   const nextPath = useNextPath();
-  const errorFromQuery = useMemo(() => new URLSearchParams(location.search).get('error'), [location.search]);
+  const signupNotice = useMemo(() => resolveSignupNotice(location.search), [location.search]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [participantType, setParticipantType] = useState<ParticipantType>('founder_operator');
@@ -88,8 +96,11 @@ export default function Signup() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [acceptedEducation, setAcceptedEducation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(errorFromQuery);
+  const [errorMessage, setErrorMessage] = useState<string | null>(
+    signupNotice.kind === 'error' ? signupNotice.message : null,
+  );
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [emailFormRecorded, setEmailFormRecorded] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -143,7 +154,13 @@ export default function Signup() {
       }
       navigate(`/connect/slack?next=${encodeURIComponent(nextPath)}`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Could not create access');
+      // "Recorded but not approved" is progress, not failure — steer to the
+      // OAuth buttons that complete the application instead of painting red.
+      if (error instanceof AuthSessionRequestError && error.code === 'access_not_approved') {
+        setEmailFormRecorded(true);
+      } else {
+        setErrorMessage(error instanceof Error ? error.message : 'Could not create access');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -223,6 +240,42 @@ export default function Signup() {
           </div>
 
           <div className="ui-panel-strong p-6 sm:p-7">
+            {signupNotice.kind === 'applied' ? (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300/80">Controlled beta</p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">{APPLICATION_RECEIVED_TITLE}</h2>
+                {signupNotice.email ? (
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                    Identity verified for <span className="font-medium text-slate-200">{signupNotice.email}</span>. Nothing else is needed from you.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                    Your identity is verified and your application is complete. Nothing else is needed from you.
+                  </p>
+                )}
+                <ol className="mt-6 space-y-3">
+                  {APPLICATION_RECEIVED_STEPS.map((step, index) => (
+                    <li key={step} className="flex gap-3 text-sm leading-relaxed text-slate-300">
+                      <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-emerald-400/25 bg-emerald-400/10 text-xs font-semibold text-emerald-200">
+                        {index + 1}
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-6 rounded-2xl border border-navy-700/80 bg-navy-950/45 p-4 text-xs leading-relaxed text-slate-500">
+                  {APPLICATION_PENDING_NOTE}
+                </p>
+                <Link
+                  to="/"
+                  className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-violet-300 transition-colors hover:text-violet-200"
+                >
+                  Back to violema.com
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            ) : (
+            <>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Registration</p>
@@ -337,6 +390,12 @@ export default function Signup() {
               {submitting ? 'Checking access…' : 'Request access'}
               <ArrowRight className="h-4 w-4" />
             </button>
+            {emailFormRecorded ? (
+              <div className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4">
+                <p className="text-sm font-semibold text-amber-100">{EMAIL_FORM_RECORDED_TITLE}</p>
+                <p className="mt-1 text-xs leading-relaxed text-amber-200/85">{EMAIL_FORM_RECORDED_BODY}</p>
+              </div>
+            ) : null}
             {errorMessage ? (
               <p className="mt-3 text-center text-sm text-rose-300">{errorMessage}</p>
             ) : null}
@@ -345,8 +404,10 @@ export default function Signup() {
             ) : null}
             <p className="mt-3 text-center text-xs text-slate-500">
               {termsVersion ? `Current beta terms: ${termsVersion}. ` : 'Loading current beta terms… '}
-              Access is manually approved. Approved beta users continue into setup; everyone else stays outside the workspace.
+              Access is manually approved. Applying with Google or Microsoft verifies your identity and completes the application — you will get a confirmation email when it lands.
             </p>
+            </>
+            )}
           </div>
         </div>
       </div>
