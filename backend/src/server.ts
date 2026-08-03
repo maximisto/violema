@@ -46,6 +46,7 @@ import {
   recordEmailSuppression,
   verifyPostmarkWebhookSecret,
 } from './emailSuppressions';
+import { buildReviewWaitingEmail } from './reviewNotificationEmail';
 import {
   consumeMagicLinkToken,
   deliverMagicLinkSignIn,
@@ -1836,6 +1837,34 @@ async function postSlackReviewCard(input: {
     });
   } catch (error) {
     console.error('[slack] could not post review card', error);
+  }
+}
+
+/**
+ * The tenant counterpart of the Slack review card: tenants have no card
+ * surface yet, so a run parking at approval emails the workspace owner —
+ * from Violema via Postmark, never through a customer connection. Fail-soft
+ * exactly like the card: the dashboard stays the source of truth, and an
+ * unnotifiable review must not fail the run.
+ */
+async function emailTenantReviewNotice(input: {
+  workspaceId: string;
+  missionName: string;
+  runId: string;
+}) {
+  if (usesInternalDemoRouting(input.workspaceId)) return;
+  const ownerEmail = listWorkspaces().find((item) => item.id === input.workspaceId)?.ownerEmail?.trim();
+  if (!ownerEmail) {
+    console.warn(`[review-notice] no owner email for ${input.workspaceId}; review ${input.runId} is dashboard-only`);
+    return;
+  }
+
+  try {
+    const message = buildReviewWaitingEmail({ missionName: input.missionName });
+    await sendMessage({ channel: 'email', to: ownerEmail, subject: message.subject, body: message.body });
+    console.log(`[review-notice] emailed workspace owner for run ${input.runId}`);
+  } catch (error) {
+    console.error('[review-notice] email failed', error instanceof Error ? error.message : error);
   }
 }
 
@@ -5596,6 +5625,13 @@ export async function runAutomation(automation: {
           summary,
         });
       }
+      // Independent of reviewTarget on purpose: a review with no delivery
+      // destination still needs a human to know it exists.
+      await emailTenantReviewNotice({
+        workspaceId,
+        missionName: automation.name,
+        runId: taskRun.id,
+      });
     }
 
     return {
