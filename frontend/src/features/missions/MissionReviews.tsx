@@ -1,4 +1,11 @@
 import MarkdownContent from '../../components/MarkdownContent';
+import {
+  NO_DELIVERY_CONTROLS_NOTE,
+  NO_DELIVERY_NEXT_DETAIL,
+  NO_DELIVERY_NEXT_VALUE,
+  NO_DELIVERY_TILE_DETAIL,
+  NO_DELIVERY_TILE_VALUE,
+} from './deliveryLane';
 import type { MissionWorkspaceView } from './types';
 
 interface MissionReviewsProps {
@@ -39,7 +46,11 @@ export function MissionReviews({
   const warnings = preflight?.warnings || [];
   // Absent on a server that has not shipped the severity lane yet.
   const runWarnings = mission.runWarnings || [];
-  const canApprove = canAct && !deliveryComplete && !hasBlockers && (!reviewRequired || reviewAcknowledged);
+  // A mission with no delivery lane has nothing an approval could send, so the
+  // approve/request-changes pair never renders for it. Rerun stays: rerunning
+  // is about the run, not a send.
+  const hasDeliveryLane = mission.hasDeliveryLane;
+  const canApprove = hasDeliveryLane && canAct && !deliveryComplete && !hasBlockers && (!reviewRequired || reviewAcknowledged);
   const deliveryTarget = mission.deliveryLabel || 'configured target';
 
   return (
@@ -132,13 +143,21 @@ export function MissionReviews({
             { label: 'Run', value: canAct || deliveryComplete ? 'Complete' : mission.statusLabel, detail: mission.lastRunLabel },
             {
               label: 'Delivery',
-              value: deliveryComplete ? 'Sent' : canAct ? 'Not sent' : deliveryTarget,
-              detail: deliveryComplete ? mission.reviewSummary : canAct ? `Held for ${deliveryTarget}` : 'Uses mission policy',
+              value: !hasDeliveryLane
+                ? NO_DELIVERY_TILE_VALUE
+                : deliveryComplete ? 'Sent' : canAct ? 'Not sent' : deliveryTarget,
+              detail: !hasDeliveryLane
+                ? NO_DELIVERY_TILE_DETAIL
+                : deliveryComplete ? mission.reviewSummary : canAct ? `Held for ${deliveryTarget}` : 'Uses mission policy',
             },
             {
               label: 'Next',
-              value: deliveryComplete ? 'Receipt stored' : canAct ? 'Approve or revise' : 'No action',
-              detail: deliveryComplete ? 'No approval is needed now.' : canAct ? 'Approval sends the Slack message.' : 'No review gate is open.',
+              value: !hasDeliveryLane
+                ? NO_DELIVERY_NEXT_VALUE
+                : deliveryComplete ? 'Receipt stored' : canAct ? 'Approve or revise' : 'No action',
+              detail: !hasDeliveryLane
+                ? NO_DELIVERY_NEXT_DETAIL
+                : deliveryComplete ? 'No approval is needed now.' : canAct ? 'Approval sends the Slack message.' : 'No review gate is open.',
             },
           ].map((item) => (
             <div key={item.label} className="rounded-lg border border-white/10 bg-navy-950/42 px-3 py-2.5">
@@ -186,7 +205,11 @@ export function MissionReviews({
         ) : null}
 
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
-          {deliveryComplete ? (
+          {!hasDeliveryLane ? (
+            <div className="rounded-lg border border-white/10 bg-navy-950/42 px-3 py-2 text-[11px] leading-4 text-slate-400 sm:col-span-2 lg:col-span-1 2xl:col-span-2">
+              {NO_DELIVERY_CONTROLS_NOTE}
+            </div>
+          ) : deliveryComplete ? (
             <>
               <div className="rounded-lg border border-green-400/25 bg-green-400/10 px-3 py-2 text-center text-[11px] font-semibold text-green-100">
                 Delivery complete
@@ -228,9 +251,11 @@ export function MissionReviews({
           </button>
         </div>
         <p className="mt-3 text-[10px] leading-4 text-slate-500">
-          {deliveryComplete
-            ? 'The approval receipt includes reviewer, delivery target, and delivery proof.'
-            : 'Review actions create a run receipt with reviewer, delivery target, and delivery proof.'}
+          {!hasDeliveryLane
+            ? 'Run output stays in this workspace and the mission library. Rerun creates a fresh run receipt.'
+            : deliveryComplete
+              ? 'The approval receipt includes reviewer, delivery target, and delivery proof.'
+              : 'Review actions create a run receipt with reviewer, delivery target, and delivery proof.'}
         </p>
       </div>
 

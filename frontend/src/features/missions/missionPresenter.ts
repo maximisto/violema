@@ -18,6 +18,7 @@ import {
   normalizeMissionStatus,
   readStringValue,
 } from './missionStatus';
+import { missionHasDeliveryLane } from './deliveryLane';
 import { formatRunTimestamp } from './runTimestamp';
 
 // Re-exported so existing importers keep their entry point while the status
@@ -923,6 +924,7 @@ export function buildMissionWorkspaceView(task?: MissionSourceTask | null): Miss
     lastRunLabel: formatMissionDateTime(task?.lastRunAt, 'No completed run yet'),
     scheduleLabel: task?.schedule || task?.time || (task ? 'Manual run' : 'No schedule'),
     deliveryLabel: task?.notify || (task ? 'Review before delivery' : 'No delivery target'),
+    hasDeliveryLane: missionHasDeliveryLane({ notify: task?.notify, steps }),
     activeAgentId: activeAgent?.id,
     steps,
     agents,

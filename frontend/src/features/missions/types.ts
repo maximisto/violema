@@ -161,6 +161,8 @@ export interface MissionWorkspaceView {
   lastRunLabel: string;
   scheduleLabel: string;
   deliveryLabel: string;
+  /** False when the workflow neither notifies a target nor has a deliver step. */
+  hasDeliveryLane: boolean;
   activeAgentId?: string;
   steps: MissionStepView[];
   agents: MissionAgentView[];
