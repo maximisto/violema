@@ -407,6 +407,17 @@ async function sendSlackMessage(input: SendMessageInput) {
   };
 }
 
+/**
+ * A bare address makes inboxes display its local part as the sender — Max's
+ * first tester email arrived "from hello". Every send goes out as
+ * `Violema <address>` unless the operator already configured a display name.
+ */
+export function formatEmailFrom(fromEmail: string): string {
+  const trimmed = fromEmail.trim();
+  if (trimmed.includes('<')) return trimmed;
+  return `Violema <${trimmed}>`;
+}
+
 async function sendEmailMessage(input: SendMessageInput) {
   // The promise made to Postmark at account approval: bounced and complained
   // addresses stop receiving mail. Checked before any provider call so a
@@ -431,7 +442,7 @@ async function sendEmailMessage(input: SendMessageInput) {
       'X-Postmark-Server-Token': apiKey,
     },
     body: JSON.stringify({
-      From: fromEmail,
+      From: formatEmailFrom(fromEmail),
       To: input.to,
       Subject: input.subject || 'Message from Violema',
       TextBody: input.body,
