@@ -1620,8 +1620,21 @@ async function handleSlackIncomingEvent(payload: {
       ? event.ts
       : undefined;
 
-  if (!channel) return;
-  if (event.bot_id || typeof event.subtype === 'string') return;
+  // One breadcrumb per event, unconditionally. Two real asks went silent
+  // tonight with zero trace (a deploy killed an in-flight reply; a second
+  // silence stayed unexplained) — this surface has several DELIBERATE quiet
+  // exits, and each one must say which door it closed.
+  const breadcrumb = (outcome: string) =>
+    console.log(`[slack] event ${payload.eventId} type=${eventType} channel=${channel} ${outcome}`);
+
+  if (!channel) {
+    console.log(`[slack] event ${payload.eventId} type=${eventType} skipped=no_channel`);
+    return;
+  }
+  if (event.bot_id || typeof event.subtype === 'string') {
+    breadcrumb(`skipped=${event.bot_id ? 'bot_message' : `subtype:${String(event.subtype)}`}`);
+    return;
+  }
   const isDm = eventType === 'message' && event.channel_type === 'im';
   const slackUserId = typeof event.user === 'string' ? event.user : '';
   const parentThreadTs = typeof event.thread_ts === 'string' ? event.thread_ts : '';
@@ -1630,6 +1643,7 @@ async function handleSlackIncomingEvent(payload: {
   // is an ordinary threaded message rather than a mention, so it is claimed
   // here — before the mention filter below would discard it.
   if (parentThreadTs && hasPendingChangeRequest({ channel, threadTs: parentThreadTs })) {
+    breadcrumb('handled=change_note_reply');
     await handleSlackChangeNoteReply({
       channel,
       threadTs: parentThreadTs,
@@ -1639,7 +1653,10 @@ async function handleSlackIncomingEvent(payload: {
     return;
   }
 
-  if (eventType !== 'app_mention' && !isDm) return;
+  if (eventType !== 'app_mention' && !isDm) {
+    breadcrumb('skipped=not_a_mention_or_dm');
+    return;
+  }
 
   const prompt = stripSlackMentions(eventText);
 
@@ -1648,6 +1665,8 @@ async function handleSlackIncomingEvent(payload: {
   // on a model being reachable or on the workspace having balance.
   const intent = parseSlackOperatorIntent(prompt);
   if (intent) {
+    const startedAt = Date.now();
+    breadcrumb(`handling=verb:${intent.kind}`);
     await handleSlackOperatorIntent({
       intent,
       channel,
@@ -1655,8 +1674,10 @@ async function handleSlackIncomingEvent(payload: {
       slackUserId,
       workspaceId: payload.workspaceId,
     });
+    breadcrumb(`replied=verb:${intent.kind} ms=${Date.now() - startedAt}`);
     return;
   }
+  breadcrumb('handling=chat');
 
   const billing = getBillingStatus(payload.workspaceId);
   if (billing.summary.balanceCredits <= 0) {
@@ -1675,6 +1696,7 @@ async function handleSlackIncomingEvent(payload: {
   }
 
   try {
+    const chatStartedAt = Date.now();
     const reply = await buildSlackIncomingReply({
       prompt,
       isDm,
@@ -1687,6 +1709,7 @@ async function handleSlackIncomingEvent(payload: {
       threadTs,
       body: reply.body,
     });
+    breadcrumb(`replied=chat ms=${Date.now() - chatStartedAt}`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown Slack processing error';
     console.error('[slack] event handling failed', { eventId: payload.eventId, error: errorMessage });
