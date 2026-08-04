@@ -1,5 +1,6 @@
 import { ArrowRight, Clock, Layers3, Play } from 'lucide-react';
 import type { WorkflowTemplateDefinition } from '../../content/workflowTemplates';
+import { normalizeMissionTitle, partitionCollectionMissions } from './galleryCollection';
 
 export interface GalleryUserMission {
   key: string;
@@ -102,27 +103,15 @@ const DEFAULT_ACCENT = {
   aura: 'hover:border-violet-400/45 hover:shadow-[0_22px_48px_-20px_rgba(124,58,237,0.42)]',
 };
 
-/** Legacy or renamed live missions that should claim a template card anyway. */
-const TEMPLATE_TITLE_ALIASES: Record<string, string> = {
-  'weekly founder update': 'weekly founder brief',
-};
-
-const normalizeMissionTitle = (title: string) => {
-  const normalized = title.trim().toLowerCase();
-  return TEMPLATE_TITLE_ALIASES[normalized] ?? normalized;
-};
-
 export function WorkflowTemplateGallery({ templates, onUse, userMissions = [], onOpenMission, onRunMission, className }: WorkflowTemplateGalleryProps) {
   // A live mission that matches a template claims that card (badge + open CTA)
-  // so each of the six loops appears exactly once. Only genuinely custom
-  // missions render in the "Your missions" section below.
-  const liveByTitle = new Map(userMissions.map((mission) => [normalizeMissionTitle(mission.title), mission]));
-  const claimedKeys = new Set(
-    templates
-      .map((template) => liveByTitle.get(normalizeMissionTitle(template.title))?.key)
-      .filter((key): key is string => Boolean(key)),
+  // so each of the six loops appears exactly once — including when several
+  // missions share the name. Only genuinely custom missions render in the
+  // "Your missions" section below.
+  const { liveByTitle, customMissions } = partitionCollectionMissions(
+    templates.map((template) => template.title),
+    userMissions,
   );
-  const customMissions = userMissions.filter((mission) => !claimedKeys.has(mission.key));
   if (templates.length === 0) return null;
 
   return (
