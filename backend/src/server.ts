@@ -122,6 +122,7 @@ import {
   applyRunWarningsToReviewGate,
   buildAutomationPreflightReport,
   classifyAutomationRunOutcome,
+  selectSupersededReviewTasks,
   validateAutomationDeliveryDraft,
 } from './platform/automationLifecycle';
 import { resolveAutomationStepSeverity } from './platform/stepSeverity';
@@ -5611,6 +5612,38 @@ export async function runAutomation(automation: {
     // something is waiting on them. Fail-soft: the dashboard is the source of
     // truth, and a card that cannot be posted must not fail the run.
     if (outcome.reviewRequired) {
+      // One approvable draft per automation, always the newest: every older
+      // open gate closes as superseded the moment this one parks. Closing is
+      // NOT delivering — the stale drafts ship nowhere, and the ledger says so.
+      for (const stale of selectSupersededReviewTasks(listTasks(workspaceId), {
+        automationId: automation.id,
+        keepTaskId: task.id,
+      })) {
+        updateTask(stale.id, {
+          status: 'completed',
+          delegationState: 'completed',
+          metadata: {
+            ...stale.metadata,
+            reviewRequired: false,
+            reviewSuperseded: {
+              byTaskId: task.id,
+              byRunId: taskRun.id,
+              supersededAt: new Date().toISOString(),
+            },
+          },
+        });
+        appendWorkflowLedgerEvent({
+          workspaceId,
+          workflowId,
+          automationId: automation.id,
+          taskId: stale.id,
+          type: 'approval_superseded',
+          summary: `An earlier ${automation.name} draft closed without delivery — a newer draft is now the one waiting for review.`,
+          metadata: { supersededTaskId: stale.id, byTaskId: task.id, byRunId: taskRun.id },
+        });
+        console.log(`[review] superseded stale review task ${stale.id} with ${task.id}`);
+      }
+
       const reviewGate = execution.artifacts.find((artifact) =>
         (artifact as { kind?: string }).kind === 'review_gate'
       ) as { payload?: { deliveryTarget?: string } } | undefined;

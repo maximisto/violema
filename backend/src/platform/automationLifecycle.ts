@@ -183,6 +183,41 @@ function readAutomationId(task: TaskRecord, taskRun: TaskRunRecord) {
   return readString(runMetadata.automationId) || readString(taskMetadata.automationId) || undefined;
 }
 
+export interface SupersedableTask {
+  id: string;
+  status?: string;
+  delegationState?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Older review gates for the same automation, left open by earlier runs.
+ *
+ * Field observation (2026-08-03): every run creates its own task, and nothing
+ * closed the old gates — a tenant workspace accumulated six same-named
+ * "Competitor monitor" tasks, two still `waiting_review` from hours earlier.
+ * After requesting changes, the operator could not tell the revised draft
+ * from the stale ones, and the queue happily offered to approve outdated
+ * content. When a new run parks at review, every older open gate for that
+ * automation must close as superseded — one approvable draft, always the
+ * newest.
+ *
+ * Included: `waiting_review` tasks, and `blocked` tasks parked in the review
+ * lane (a changes-requested draft that the new draft answers). Excluded:
+ * anything `running` — closing live work from here would race the scheduler.
+ */
+export function selectSupersededReviewTasks<T extends SupersedableTask>(
+  tasks: readonly T[],
+  input: { automationId: string; keepTaskId: string },
+): T[] {
+  return tasks.filter((task) => {
+    if (task.id === input.keepTaskId) return false;
+    if (task.metadata?.automationId !== input.automationId) return false;
+    if (task.status === 'waiting_review') return true;
+    return task.status === 'blocked' && task.delegationState === 'review';
+  });
+}
+
 function findReviewArtifact(task: TaskRecord, taskRun: TaskRunRecord) {
   return readArtifacts(task, taskRun).find((artifact) =>
     artifact.kind === 'review_gate' &&

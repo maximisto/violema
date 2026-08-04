@@ -40,6 +40,10 @@ export type WorkflowLedgerEventType =
   | 'approval_requested'
   | 'approval_granted'
   | 'approval_denied'
+  // A stale review gate closed WITHOUT delivery because a newer run of the
+  // same automation parked a fresh draft. Recorded so "what happened to the
+  // draft I saw this morning" always has a ledger answer.
+  | 'approval_superseded'
   | 'external_action_executed'
   | 'connector_failed';
 
