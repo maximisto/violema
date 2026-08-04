@@ -2611,9 +2611,19 @@ export default function Dashboard() {
     setActionBusy('run');
     try {
       const response = await fetch(`/api/automations/${task.automationId}/run`, { method: 'POST' });
-      if (!response.ok) throw new Error(await readApiError(response, 'Could not run automation'));
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { code?: unknown; message?: unknown; error?: unknown } | null;
+        // A second click while the first run is still drafting: the run they
+        // asked for already exists, so this is reassurance, not an error.
+        if (response.status === 409 && payload?.code === 'run_already_in_progress') {
+          showNotice('success', readString(payload.message) || `"${task.title}" is already running.`);
+          await refreshAutomations();
+          return;
+        }
+        throw new Error(readString(payload?.error) || readString(payload?.message) || 'Could not run automation');
+      }
       await refreshAutomations();
-      showNotice('success', `Started "${task.title}"`);
+      showNotice('success', `Started "${task.title}" — drafting now. It will park in Reviews for your approval.`);
     } catch (error) {
       showNotice('error', error instanceof Error && error.message !== 'Could not run automation' ? error.message : `Could not run "${task.title}"`);
     } finally {

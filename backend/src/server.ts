@@ -1362,6 +1362,36 @@ function buildSlackOperatorConsoleData(workspaceId: string) {
 }
 
 /**
+ * A second manual trigger while the first is still drafting doubles the spend
+ * and churns the review queue — the newer draft supersedes the older one the
+ * moment it parks. The second click is almost always "did the first one
+ * take?", so the answer is the in-flight run, not another run. Scheduled runs
+ * have their own reuse guard; this covers the human entry points (HTTP and the
+ * Slack run verb). Runs older than the age bound don't block: a record
+ * stranded mid-uptime has no way to clear before the boot sweep, and a real
+ * draft never takes half an hour.
+ */
+const IN_FLIGHT_RUN_MAX_AGE_MS = 30 * 60 * 1000;
+
+function findInFlightRunForAutomation(workspaceId: string, automationId: string) {
+  const now = Date.now();
+  return listTaskRuns(workspaceId).find((run) => {
+    if (run.status !== 'running' && run.status !== 'retrying' && run.status !== 'queued') return false;
+    if (run.metadata?.automationId !== automationId) return false;
+    const startedMs = Date.parse(run.startedAt);
+    return Number.isFinite(startedMs) && now - startedMs <= IN_FLIGHT_RUN_MAX_AGE_MS;
+  });
+}
+
+function describeInFlightRun(automationName: string, startedAt: string) {
+  const elapsedMs = Date.now() - Date.parse(startedAt);
+  const elapsed = elapsedMs < 90_000
+    ? `${Math.max(1, Math.round(elapsedMs / 1000))}s`
+    : `${Math.round(elapsedMs / 60_000)} min`;
+  return `"${automationName}" is already running — started ${elapsed} ago. It will park in Reviews when the draft is ready.`;
+}
+
+/**
  * `triggerAutomationNow` starts the run asynchronously and hands back the
  * automation, not the run. The run id appears once `runAutomation` creates the
  * task run, so this waits briefly for it rather than inventing one — and gives
@@ -1402,6 +1432,12 @@ async function handleSlackRunIntent(input: {
   }
 
   const automation = match.automation;
+
+  const inFlight = findInFlightRunForAutomation(automation.workspaceId || input.workspaceId, automation.id);
+  if (inFlight) {
+    await replyInSlack(input.channel, describeInFlightRun(automation.name, inFlight.startedAt), input.threadTs);
+    return;
+  }
 
   // The same gate the HTTP run endpoint applies. A blocked mission reports its
   // blockers here instead of starting and failing out of sight.
@@ -8025,6 +8061,20 @@ app.post('/api/automations/:id/run', async (req: Request, res: Response) => {
   const automation = getAutomationById(req.params.id);
   if (!automation || !automationBelongsToWorkspace(automation, workspaceId)) {
     res.status(404).json({ error: 'Automation not found' });
+    return;
+  }
+
+  const inFlight = findInFlightRunForAutomation(automation.workspaceId || workspaceId, req.params.id);
+  if (inFlight) {
+    const message = describeInFlightRun(automation.name, inFlight.startedAt);
+    res.status(409).json({
+      ok: false,
+      code: 'run_already_in_progress',
+      error: message,
+      message,
+      runId: inFlight.id,
+      startedAt: inFlight.startedAt,
+    });
     return;
   }
 
