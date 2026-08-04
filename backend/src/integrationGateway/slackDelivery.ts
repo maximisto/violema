@@ -187,6 +187,12 @@ function isIdentityScopeRejection(message: string): boolean {
     || normalized.includes('chat:write.customize')
     || normalized.includes('cannot_customize')
     || normalized.includes('not_allowed_token_type')
+    // Composio's tool schema can reject the identity fields outright before
+    // Slack ever sees them ("Extra inputs are not permitted on parameter
+    // `username`"). Same meaning, different mouth: branding unavailable,
+    // deliver unbranded. Field-caught 2026-08-04 — it failed an approve.
+    || (normalized.includes('extra inputs are not permitted')
+      && (normalized.includes('username') || normalized.includes('icon_url')))
   );
 }
 
