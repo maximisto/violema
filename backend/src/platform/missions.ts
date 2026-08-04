@@ -184,6 +184,20 @@ function getTaskContextTime(task: TaskRecord, run?: TaskRunRecord) {
   );
 }
 
+/**
+ * A task that still needs something from someone. An open task IS the
+ * automation's active context no matter what the clock says — supersession
+ * (and any other administrative close) stamps a fresh `updatedAt` on tasks it
+ * closes, so "newest timestamp" briefly belongs to a corpse. Picking by time
+ * alone made the missions API report `completed` while a review sat waiting,
+ * and the approval queue rendered honestly empty from dishonest context.
+ */
+const OPEN_TASK_STATUSES = new Set(['waiting_review', 'running', 'retrying', 'queued', 'blocked']);
+
+function isOpenTask(task: TaskRecord): boolean {
+  return OPEN_TASK_STATUSES.has(String(task.status));
+}
+
 function getTaskContextByAutomationId(tasks: TaskRecord[], taskRuns: TaskRunRecord[]) {
   const latestRunByTaskId = getLatestRunByTaskId(taskRuns);
   const taskContextByAutomationId = new Map<string, { task: TaskRecord; latestRun?: TaskRunRecord }>();
@@ -193,8 +207,18 @@ function getTaskContextByAutomationId(tasks: TaskRecord[], taskRuns: TaskRunReco
     const automationId = getTaskAutomationId(task, latestRun);
     if (automationId) {
       const existing = taskContextByAutomationId.get(automationId);
-      if (existing && getTaskContextTime(existing.task, existing.latestRun) >= getTaskContextTime(task, latestRun)) {
-        return;
+      if (existing) {
+        const existingOpen = isOpenTask(existing.task);
+        const candidateOpen = isOpenTask(task);
+        // Openness first, recency second: a closed task never displaces an
+        // open one, and an open task always displaces a closed one.
+        if (existingOpen && !candidateOpen) return;
+        if (
+          existingOpen === candidateOpen &&
+          getTaskContextTime(existing.task, existing.latestRun) >= getTaskContextTime(task, latestRun)
+        ) {
+          return;
+        }
       }
       taskContextByAutomationId.set(automationId, { task, latestRun });
     }
