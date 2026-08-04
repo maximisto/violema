@@ -82,8 +82,16 @@ EOF
   fi
 }
 
+# --skip-deps skips dependency INSTALLS everywhere — system packages here, and
+# the npm ci / Playwright installs below (which used to run on every deploy
+# regardless, observed 2026-08-04: a "skip-deps" deploy still reinstalled 440
+# packages and re-ran apt via Playwright). Fresh checkouts still install: the
+# npm skips only apply when node_modules already exists.
+SKIP_DEPS=false
+if [[ "${1:-}" == "--skip-deps" ]]; then SKIP_DEPS=true; fi
+
 # ── 1. Dependencies ──────────────────────────────────────────────────────────
-if [[ "${1:-}" != "--skip-deps" ]]; then
+if [[ "$SKIP_DEPS" != true ]]; then
   info "Updating system packages…"
   apt-get update -qq && apt-get upgrade -y -qq
 
@@ -120,15 +128,23 @@ if [[ ! -f ".env" ]]; then
   die "Missing $APP_DIR/backend/.env — please create it with:\n  ANTHROPIC_API_KEY=sk-ant-..."
 fi
 
-npm ci --prefer-offline
-npx playwright install --with-deps chromium
+if [[ "$SKIP_DEPS" == true && -d node_modules ]]; then
+  info "Skipping backend dependency install (--skip-deps, node_modules present)."
+else
+  npm ci --prefer-offline
+  npx playwright install --with-deps chromium
+fi
 npm run build
 info "Backend build complete."
 
 # ── 4. Frontend ──────────────────────────────────────────────────────────────
 info "Building frontend…"
 cd "$APP_DIR/frontend"
-npm ci --prefer-offline
+if [[ "$SKIP_DEPS" == true && -d node_modules ]]; then
+  info "Skipping frontend dependency install (--skip-deps, node_modules present)."
+else
+  npm ci --prefer-offline
+fi
 npm run build
 info "Frontend build complete ($(du -sh dist | cut -f1) in dist/)."
 
