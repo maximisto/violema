@@ -251,6 +251,55 @@ export function sweepOrphanedTaskRuns(bootTime: Date) {
   return swept;
 }
 
+/**
+ * Runs get failed by `sweepOrphanedTaskRuns`; this closes the tasks those runs
+ * strand. Field observation (2026-08-03): two tenant tasks sat in `running`
+ * forever — their runs had succeeded, but the close-out never landed, so the
+ * mission surface showed live work that did not exist. A boot finding a
+ * `running` task whose runs are all terminal closes it to the newest run's
+ * outcome. Deliberately NOT resurrected to `waiting_review`: re-opening an old
+ * gate at boot would inject a stale approvable — the exact disease
+ * supersession cures. The run truth wins; nothing else.
+ */
+export function sweepZombieTasks(bootTime: Date) {
+  const taskRuns = readJsonFile<TaskRunRecord[]>(TASK_RUNS_FILE, []);
+  const runsByTask = new Map<string, TaskRunRecord[]>();
+  for (const run of taskRuns) {
+    const list = runsByTask.get(run.taskId);
+    if (list) list.push(run);
+    else runsByTask.set(run.taskId, [run]);
+  }
+  const activeRunStatuses = new Set<TaskRunStatus>(['queued', 'running', 'retrying']);
+  const swept: TaskRecord[] = [];
+
+  updateJsonFile<TaskRecord[]>(TASKS_FILE, [], (tasks) => tasks.map((task) => {
+    if (task.status !== 'running') return task;
+    if (new Date(task.updatedAt || task.createdAt).getTime() >= bootTime.getTime()) return task;
+    const runs = runsByTask.get(task.id) || [];
+    // A running task with no runs at all is a different story — leave it for
+    // a human rather than guess an outcome it never had.
+    if (runs.length === 0) return task;
+    if (runs.some((run) => activeRunStatuses.has(run.status))) return task;
+    const newest = runs.reduce((left, right) =>
+      Date.parse(right.startedAt) >= Date.parse(left.startedAt) ? right : left,
+    );
+    const updated: TaskRecord = {
+      ...task,
+      status: mapTaskRunToStatus(newest.status),
+      updatedAt: new Date().toISOString(),
+      metadata: {
+        ...task.metadata,
+        zombieSweptAt: new Date().toISOString(),
+        zombieSweptFromRun: newest.id,
+      },
+    };
+    swept.push(updated);
+    return updated;
+  }));
+
+  return swept;
+}
+
 export function updateTaskRun(taskRunId: string, patch: Partial<Omit<TaskRunRecord, 'id' | 'workspaceId' | 'taskId' | 'startedAt'>>) {
   let updatedRun: TaskRunRecord | null = null;
 

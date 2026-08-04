@@ -47,3 +47,61 @@ test('sweepOrphanedTaskRuns fails runs stranded in running/retrying from before 
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('sweepZombieTasks closes running tasks whose runs are all terminal — and nothing else', async () => {
+  const originalCwd = process.cwd();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'violema-zombie-tasks-'));
+  process.chdir(tempDir);
+
+  try {
+    const store = await import('../src/platform/store');
+    const runInput = (taskId: string) => ({
+      workspaceId: 'workspace_demo',
+      taskId,
+      agentRole: 'operator' as const,
+      modelTier: 'default' as const,
+      estimatedCredits: 10,
+    });
+    const makeTask = (status: 'running' | 'waiting_review') => {
+      const task = store.createTask({ workspaceId: 'workspace_demo', title: 'QA task', kind: 'automation' });
+      store.updateTask(task.id, { status });
+      return task;
+    };
+
+    // The 2026-08-03 zombie shape: task running, run long since succeeded.
+    const zombie = makeTask('running');
+    const zombieOldRun = store.createTaskRun(runInput(zombie.id));
+    store.finalizeTaskRun(zombieOldRun.id, { status: 'failed' });
+    const zombieNewRun = store.createTaskRun(runInput(zombie.id));
+    store.finalizeTaskRun(zombieNewRun.id, { status: 'succeeded' });
+
+    // Live work: run still in flight — closing this would race the scheduler.
+    const live = makeTask('running');
+    store.createTaskRun(runInput(live.id));
+
+    // Never ran: not this sweep's story.
+    const runless = makeTask('running');
+
+    // Open review gate: not in scope, must never be touched at boot.
+    const waiting = makeTask('waiting_review');
+    const waitingRun = store.createTaskRun(runInput(waiting.id));
+    store.finalizeTaskRun(waitingRun.id, { status: 'succeeded' });
+
+    const bootTime = new Date(Date.now() + 5);
+    const swept = store.sweepZombieTasks(bootTime);
+
+    assert.deepEqual(swept.map((task) => task.id), [zombie.id], 'Only the zombie is swept.');
+
+    const tasks = new Map(store.listTasks('workspace_demo').map((task) => [task.id, task]));
+    const closed = tasks.get(zombie.id);
+    assert.equal(closed?.status, 'completed', 'The NEWEST run outcome wins — succeeded maps to completed.');
+    assert.equal(closed?.metadata?.zombieSweptFromRun, zombieNewRun.id, 'The sweep records which run decided the outcome.');
+    assert.ok(closed?.metadata?.zombieSweptAt, 'The sweep stamps when it acted.');
+    assert.equal(tasks.get(live.id)?.status, 'running', 'A task with an in-flight run stays running.');
+    assert.equal(tasks.get(runless.id)?.status, 'running', 'A running task with no runs is left for a human.');
+    assert.equal(tasks.get(waiting.id)?.status, 'waiting_review', 'An open review gate is never closed by a boot.');
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

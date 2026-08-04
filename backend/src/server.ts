@@ -197,6 +197,7 @@ import {
   mapTaskRunToStatus,
   isElasticLane,
   sweepOrphanedTaskRuns,
+  sweepZombieTasks,
   updateTask,
   updateTaskRun,
   upsertBillingConfig,
@@ -8634,9 +8635,16 @@ export function startServer() {
     console.error('[server] unhandled rejection — investigate, process kept alive', reason);
   });
 
-  const orphaned = sweepOrphanedTaskRuns(new Date());
+  const bootTime = new Date();
+  const orphaned = sweepOrphanedTaskRuns(bootTime);
   if (orphaned.length > 0) {
     console.log(`Swept ${orphaned.length} task run(s) orphaned by the previous shutdown.`);
+  }
+  // After the run sweep, so tasks whose runs were just failed close in the
+  // same boot instead of waiting for the next one.
+  const zombies = sweepZombieTasks(bootTime);
+  if (zombies.length > 0) {
+    console.log(`Closed ${zombies.length} zombie task(s) whose runs had already finished.`);
   }
   loadPersistedAutomations(runAutomation);
   ensureCoreAutomationSeeds(runAutomation);
