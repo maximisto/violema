@@ -2432,6 +2432,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!uiNotice) return undefined;
+    // Errors stay until dismissed — an operator cannot act on a message they
+    // never got to read. Success confirmations still clear themselves.
+    if (uiNotice.tone !== 'success') return undefined;
     const timeout = window.setTimeout(() => setUiNotice(null), 3200);
     return () => window.clearTimeout(timeout);
   }, [uiNotice]);
@@ -4747,7 +4750,17 @@ export default function Dashboard() {
                 : 'border-red-500/20 bg-red-500/12 text-red-100'
             }`}
           >
-            <p className="text-sm font-medium">{uiNotice.message}</p>
+            <div className="flex items-start gap-3">
+              <p className="text-sm font-medium">{uiNotice.message}</p>
+              <button
+                type="button"
+                onClick={() => setUiNotice(null)}
+                aria-label="Dismiss notification"
+                className="-mr-1 -mt-0.5 flex-shrink-0 rounded-md px-1.5 py-0.5 text-xs font-semibold opacity-70 transition hover:opacity-100"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         </div>
       )}
