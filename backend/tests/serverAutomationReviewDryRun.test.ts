@@ -262,7 +262,9 @@ test('automation review dry-run rerun validates without triggering a fresh run',
   assert.equal(response.status, 200);
   assert.equal(payload.ok, true);
   assert.equal(payload.dryRun, true);
-  assert.equal((payload.wouldPatchTask as Record<string, unknown>).status, 'running');
+  // The rerun never re-animates the old task — the fresh run owns its own task
+  // (the old `status: 'running'` patch was the zombie-task factory).
+  assert.equal((payload.wouldPatchTask as Record<string, unknown>).status, undefined);
   assert.match(String(payload.message), /would request a fresh run/i);
 
   const runsAfter = await fetch(`${baseUrl}/api/platform/task-runs`, { headers: authHeaders(sessionToken) })

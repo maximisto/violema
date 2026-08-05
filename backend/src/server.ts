@@ -8291,11 +8291,16 @@ app.post('/api/automations/:id/reviews/:runId/rerun', async (req: Request, res: 
       return;
     }
   }
+  // The fresh run creates and owns its own task. Flipping the OLD task to
+  // 'running' here left a task no run would ever close — the origin of the
+  // swept zombie-task family. The stored request-changes note is likewise
+  // consumed by exactly one rerun: cleared below so a stale client-held run id
+  // can never replay it (2026-08-05: "add Viktor" resurfaced a day later
+  // through this path).
   const taskPatch = {
-    status: 'running',
-    delegationState: 'in_progress',
     metadata: {
       ...(context.task.metadata || {}),
+      reviewRequest: null,
       reviewRerun: {
         reviewer,
         note,
@@ -8316,6 +8321,8 @@ app.post('/api/automations/:id/reviews/:runId/rerun', async (req: Request, res: 
   }
 
   updateTask(context.task.id, taskPatch);
+  // Consume the stored note on the run side too — one rerun, one application.
+  updateTaskRun(context.taskRun.id, { metadata: { reviewRequest: null } });
   // Feed the reviewer's ask into the fresh run: the rerun note plus any stored
   // request-changes note, so research and drafting both address it.
   const storedChangeNote = (context.taskRun.metadata?.reviewRequest as { note?: string } | undefined)?.note;
