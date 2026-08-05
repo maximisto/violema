@@ -79,7 +79,8 @@ test('sweepZombieTasks closes running tasks whose runs are all terminal — and 
     const live = makeTask('running');
     store.createTaskRun(runInput(live.id));
 
-    // Never ran: not this sweep's story.
+    // Never ran: nothing will ever close it, so the sweep fails it honestly
+    // (operator ruling 2026-08-04: "kill all the zombies").
     const runless = makeTask('running');
 
     // Open review gate: not in scope, must never be touched at boot.
@@ -90,7 +91,7 @@ test('sweepZombieTasks closes running tasks whose runs are all terminal — and 
     const bootTime = new Date(Date.now() + 5);
     const swept = store.sweepZombieTasks(bootTime);
 
-    assert.deepEqual(swept.map((task) => task.id), [zombie.id], 'Only the zombie is swept.');
+    assert.deepEqual(swept.map((task) => task.id).sort(), [zombie.id, runless.id].sort(), 'The zombie and the run-less relic are swept.');
 
     const tasks = new Map(store.listTasks('workspace_demo').map((task) => [task.id, task]));
     const closed = tasks.get(zombie.id);
@@ -98,7 +99,11 @@ test('sweepZombieTasks closes running tasks whose runs are all terminal — and 
     assert.equal(closed?.metadata?.zombieSweptFromRun, zombieNewRun.id, 'The sweep records which run decided the outcome.');
     assert.ok(closed?.metadata?.zombieSweptAt, 'The sweep stamps when it acted.');
     assert.equal(tasks.get(live.id)?.status, 'running', 'A task with an in-flight run stays running.');
-    assert.equal(tasks.get(runless.id)?.status, 'running', 'A running task with no runs is left for a human.');
+    const failedRunless = tasks.get(runless.id);
+    assert.equal(failedRunless?.status, 'failed', 'A pre-boot running task with no runs fails: no run will ever close it.');
+    assert.equal(failedRunless?.metadata?.zombieSweptReason, 'no_runs', 'The sweep names why it failed a task that never ran.');
+    assert.ok(failedRunless?.metadata?.zombieSweptAt, 'The run-less sweep stamps when it acted.');
+    assert.equal(failedRunless?.metadata?.zombieSweptFromRun, undefined, 'No run decided this outcome, so none is claimed.');
     assert.equal(tasks.get(waiting.id)?.status, 'waiting_review', 'An open review gate is never closed by a boot.');
   } finally {
     process.chdir(originalCwd);

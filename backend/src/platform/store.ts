@@ -276,9 +276,23 @@ export function sweepZombieTasks(bootTime: Date) {
     if (task.status !== 'running') return task;
     if (new Date(task.updatedAt || task.createdAt).getTime() >= bootTime.getTime()) return task;
     const runs = runsByTask.get(task.id) || [];
-    // A running task with no runs at all is a different story — leave it for
-    // a human rather than guess an outcome it never had.
-    if (runs.length === 0) return task;
+    // A running task with no runs at all: no run will ever close it, and the
+    // scheduler never resumes it, so it fails honestly rather than showing
+    // live work that does not exist (operator ruling 2026-08-04).
+    if (runs.length === 0) {
+      const failed: TaskRecord = {
+        ...task,
+        status: 'failed',
+        updatedAt: new Date().toISOString(),
+        metadata: {
+          ...task.metadata,
+          zombieSweptAt: new Date().toISOString(),
+          zombieSweptReason: 'no_runs',
+        },
+      };
+      swept.push(failed);
+      return failed;
+    }
     if (runs.some((run) => activeRunStatuses.has(run.status))) return task;
     const newest = runs.reduce((left, right) =>
       Date.parse(right.startedAt) >= Date.parse(left.startedAt) ? right : left,
