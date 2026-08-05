@@ -1,3 +1,4 @@
+import { evidenceHref } from './evidenceLink';
 import type {
   MissionAgentView,
   MissionArtifactView,
@@ -345,12 +346,18 @@ function evidenceItemFromRecord(
   const detail =
     readFirstString(record, ['detail', 'summary', 'snippet', 'description', 'text', 'markdown', 'content']) ||
     'Source linked from the latest run.';
+  const href =
+    evidenceHref(readFirstString(record, ['url', 'href', 'link'])) ||
+    evidenceHref(source) ||
+    evidenceHref(label) ||
+    undefined;
 
   return {
     id: `${idPrefix}-${index + 1}-${evidenceSlug(label)}`,
     label,
     source,
     detail: detail.slice(0, 420),
+    href,
   };
 }
 

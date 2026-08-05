@@ -21,7 +21,8 @@
     "test:workspace-surfaces": "node tests/workspaceSurfaces.contract.mjs",
     "test:guided-start": "node tests/guidedStart.contract.mjs",
     "test:admin-surface": "node tests/adminSurface.contract.mjs",
-    "test:run-warnings": "node tests/runWarnings.contract.mjs"
+    "test:run-warnings": "node tests/runWarnings.contract.mjs",
+    "test:evidence-link": "node tests/evidenceLink.contract.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",

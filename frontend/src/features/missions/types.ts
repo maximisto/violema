@@ -56,6 +56,8 @@ export interface MissionEvidenceItem {
   label: string;
   source: string;
   detail: string;
+  /** Openable http(s) link, present only when the record carries a real URL. */
+  href?: string;
 }
 
 export interface MissionMetricView {

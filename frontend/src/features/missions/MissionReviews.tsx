@@ -270,9 +270,21 @@ export function MissionReviews({
               <article key={item.id} className="rounded-lg border border-navy-700/70 bg-navy-950/50 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold text-white" title={item.label}>
-                      {item.label}
-                    </p>
+                    {item.href ? (
+                      <a
+                        href={item.href}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="block truncate text-[13px] font-semibold text-cyan-100 underline-offset-2 hover:underline"
+                        title={item.href}
+                      >
+                        {item.label}
+                      </a>
+                    ) : (
+                      <p className="truncate text-[13px] font-semibold text-white" title={item.label}>
+                        {item.label}
+                      </p>
+                    )}
                     <p className="mt-1 truncate text-[10px] text-cyan-200/80" title={item.source}>
                       Source: {item.source}
                     </p>
