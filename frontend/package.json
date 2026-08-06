@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "test": "npm run test:brand-bleed && npm run test:integrations && npm run test:dashboard-integrations && npm run test:review-queue && npm run test:run-timestamp && npm run test:workspace-surfaces && npm run test:guided-start && npm run test:admin-surface && npm run test:run-warnings && npm run test:magic-link && npm run test:delivery-lane && npm run test:signup-application && npm run test:mission-collection && npm run test:business-context && npm run test:evidence-link",
+    "test": "npm run test:brand-bleed && npm run test:integrations && npm run test:dashboard-integrations && npm run test:review-queue && npm run test:run-timestamp && npm run test:workspace-surfaces && npm run test:guided-start && npm run test:admin-surface && npm run test:run-warnings && npm run test:magic-link && npm run test:delivery-lane && npm run test:signup-application && npm run test:mission-collection && npm run test:business-context && npm run test:evidence-link && npm run test:folder-drop",
     "test:mission-collection": "node tests/missionCollectionCollapse.contract.mjs",
     "test:magic-link": "node tests/magicLinkSignIn.contract.mjs",
     "test:delivery-lane": "node tests/missionDeliveryLane.contract.mjs",
@@ -23,7 +23,8 @@
     "test:admin-surface": "node tests/adminSurface.contract.mjs",
     "test:run-warnings": "node tests/runWarnings.contract.mjs",
     "test:evidence-link": "node tests/evidenceLink.contract.mjs",
-    "test:business-context": "node tests/businessContextSettings.contract.mjs"
+    "test:business-context": "node tests/businessContextSettings.contract.mjs",
+    "test:folder-drop": "node tests/folderDrop.contract.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",

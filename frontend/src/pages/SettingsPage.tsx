@@ -3,7 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left.js';
 import Bot from 'lucide-react/dist/esm/icons/bot.js';
 import Building2 from 'lucide-react/dist/esm/icons/building-2.js';
+import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2.js';
+import Copy from 'lucide-react/dist/esm/icons/copy.js';
+import FolderInput from 'lucide-react/dist/esm/icons/folder-input.js';
 import KeyRound from 'lucide-react/dist/esm/icons/key-round.js';
+import LinkIcon from 'lucide-react/dist/esm/icons/link.js';
 import Plug from 'lucide-react/dist/esm/icons/plug.js';
 import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw.js';
 import Save from 'lucide-react/dist/esm/icons/save.js';
@@ -18,6 +22,7 @@ type Profile = 'micro' | 'default' | 'hard' | 'critical' | 'ops' | 'memory_text'
 type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 type AutoGraduationProfileId = 'cautious' | 'balanced' | 'fast_learning';
 type WorkflowArchetypeId = 'briefing' | 'research' | 'analysis' | 'ops' | 'general';
+type FolderDropLaneState = 'not_configured' | 'needs_share' | 'active';
 
 interface ProviderStatus {
   configured: boolean;
@@ -76,6 +81,13 @@ interface SettingsPayload {
     base_url?: string;
     reasoning_effort?: ReasoningEffort;
   }>;
+}
+
+interface FolderDropStatus {
+  laneState: FolderDropLaneState;
+  readerEmail: string | null;
+  rootFolderId: string | null;
+  manualShare?: boolean;
 }
 
 interface ProviderTestState {
@@ -217,6 +229,21 @@ const AUTO_GRADUATION_PROFILES: Array<{
   { id: 'fast_learning', label: 'Fast learning', help: 'Promotes sooner. Better when speed matters more than avoiding reversals.' },
 ];
 
+// User-facing status language for each folder-drop lane state. Verbatim —
+// this text is contract-tested, and the operator reads it as the honest
+// state of the lane, not a summary of it.
+const FOLDER_DROP_LANE_COPY: Record<FolderDropLaneState, string> = {
+  not_configured: "Folder drop isn't configured on this server yet.",
+  needs_share: 'Share your Violema Library folder with the reader address below, then verify.',
+  active: 'Violema can see files you drop in your Violema Library folder.',
+};
+
+const FOLDER_DROP_LANE_LABEL: Record<FolderDropLaneState, string> = {
+  not_configured: 'Not configured',
+  needs_share: 'Needs share',
+  active: 'Active',
+};
+
 function createEmptyIntegrationInputState() {
   return Object.fromEntries(INTEGRATION_OPTIONS.map((provider) => [provider, ''])) as Record<IntegrationProvider, string>;
 }
@@ -292,6 +319,18 @@ export default function SettingsPage() {
   // fields above (which lag or lead the server between load and Save).
   const [businessLoading, setBusinessLoading] = useState(true);
   const [businessContextSet, setBusinessContextSet] = useState(false);
+  // Same server-snapshot convention as the business pill above: the pill and
+  // lane copy must reflect what the backend just reported, never anything
+  // derived from the reader-email or URL inputs below.
+  const [folderDropLoading, setFolderDropLoading] = useState(true);
+  const [folderDropStatus, setFolderDropStatus] = useState<FolderDropStatus | null>(null);
+  const [folderDropVerifying, setFolderDropVerifying] = useState(false);
+  const [folderDropSharing, setFolderDropSharing] = useState(false);
+  const [folderDropNotice, setFolderDropNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  const [folderDropCopied, setFolderDropCopied] = useState(false);
+  const [libraryUrl, setLibraryUrl] = useState('');
+  const [libraryUrlStatus, setLibraryUrlStatus] = useState<'idle' | 'adding' | 'added' | 'error'>('idle');
+  const [libraryUrlMessage, setLibraryUrlMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (window.location.hash === '#business') {
@@ -408,6 +447,32 @@ export default function SettingsPage() {
   useEffect(() => {
     void loadBusinessContext();
     // Intentionally runs once on mount; loadBusinessContext is redefined each
+    // render (not memoized), so listing it here would refetch on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadFolderDropStatus() {
+    setFolderDropLoading(true);
+    try {
+      const response = await fetch(`/api/workspace/library/folder-drop?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
+        headers: {
+          'X-Workspace-Id': workspace.workspaceId,
+          'X-Workspace-Name': workspace.workspaceName,
+        },
+      });
+      if (!response.ok) throw new Error('Could not load your folder-drop status');
+      const payload = await response.json() as FolderDropStatus;
+      setFolderDropStatus(payload);
+    } catch (error) {
+      setNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not load your folder-drop status.' });
+    } finally {
+      setFolderDropLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadFolderDropStatus();
+    // Intentionally runs once on mount; loadFolderDropStatus is redefined each
     // render (not memoized), so listing it here would refetch on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -550,6 +615,101 @@ export default function SettingsPage() {
     } catch (error) {
       setBusinessErrors([error instanceof Error ? error.message : 'Could not save your business context.']);
       setBusinessStatus('error');
+    }
+  }
+
+  async function handleFolderDropVerify() {
+    setFolderDropVerifying(true);
+    setFolderDropNotice(null);
+    try {
+      const response = await fetch('/api/workspace/library/folder-drop/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Workspace-Id': workspace.workspaceId,
+          'X-Workspace-Name': workspace.workspaceName,
+        },
+        body: JSON.stringify({ workspaceId: workspace.workspaceId, workspaceName: workspace.workspaceName }),
+      });
+      if (!response.ok) throw new Error('Could not verify your folder-drop lane');
+      const payload = await response.json() as FolderDropStatus;
+      setFolderDropStatus(payload);
+      setFolderDropNotice(
+        payload.laneState === 'active'
+          ? { tone: 'success', message: 'Verified. Violema can see your folder now.' }
+          : { tone: 'error', message: FOLDER_DROP_LANE_COPY[payload.laneState] },
+      );
+    } catch (error) {
+      setFolderDropNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not verify your folder-drop lane.' });
+    } finally {
+      setFolderDropVerifying(false);
+    }
+  }
+
+  async function handleFolderDropShare() {
+    setFolderDropSharing(true);
+    setFolderDropNotice(null);
+    try {
+      const response = await fetch('/api/workspace/library/folder-drop/share', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Workspace-Id': workspace.workspaceId,
+          'X-Workspace-Name': workspace.workspaceName,
+        },
+        body: JSON.stringify({ workspaceId: workspace.workspaceId, workspaceName: workspace.workspaceName }),
+      });
+      if (!response.ok) throw new Error('Could not share your library folder');
+      const payload = await response.json() as FolderDropStatus;
+      setFolderDropStatus(payload);
+      if (!payload.manualShare && payload.laneState !== 'active') {
+        setFolderDropNotice({ tone: 'error', message: FOLDER_DROP_LANE_COPY[payload.laneState] });
+      }
+    } catch (error) {
+      setFolderDropNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not share your library folder.' });
+    } finally {
+      setFolderDropSharing(false);
+    }
+  }
+
+  async function handleFolderDropCopyReaderEmail() {
+    if (!folderDropStatus?.readerEmail) return;
+    try {
+      await navigator.clipboard.writeText(folderDropStatus.readerEmail);
+      setFolderDropCopied(true);
+      window.setTimeout(() => setFolderDropCopied(false), 1500);
+    } catch {
+      setFolderDropCopied(false);
+    }
+  }
+
+  async function handleAddLibraryUrl() {
+    const url = libraryUrl.trim();
+    if (!url) return;
+    setLibraryUrlStatus('adding');
+    setLibraryUrlMessage(null);
+    try {
+      const response = await fetch('/api/workspace/library/url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Workspace-Id': workspace.workspaceId,
+          'X-Workspace-Name': workspace.workspaceName,
+        },
+        body: JSON.stringify({ workspaceId: workspace.workspaceId, workspaceName: workspace.workspaceName, url }),
+      });
+      const payload = await response.json() as { ok?: boolean; fileName?: string; sourceUrl?: string; error?: string; code?: string };
+      if (!response.ok || !payload.ok) {
+        setLibraryUrlStatus('error');
+        setLibraryUrlMessage(payload.error || 'Could not add that link to your library.');
+        return;
+      }
+      setLibraryUrlStatus('added');
+      setLibraryUrlMessage(`Added "${payload.fileName}" to your library.`);
+      setLibraryUrl('');
+    } catch (error) {
+      setLibraryUrlStatus('error');
+      setLibraryUrlMessage(error instanceof Error ? error.message : 'Could not add that link to your library.');
     }
   }
 
@@ -842,6 +1002,135 @@ export default function SettingsPage() {
               <Save className="h-3.5 w-3.5" />
               {businessStatus === 'saving' ? 'Saving…' : 'Save business context'}
             </button>
+          </div>
+        </section>
+
+        <section id="folder-drop" className="mb-6 rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-3xl">
+              <div className="flex items-center gap-2">
+                <FolderInput className="h-4 w-4 text-cyan-300" />
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workspace library</p>
+                  <h2 className="text-sm font-semibold text-white">Folder drop</h2>
+                </div>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                Drop files into your Violema Library folder in Google Drive and missions can read them without a manual upload.
+              </p>
+            </div>
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+              folderDropLoading
+                ? 'border-navy-700 bg-navy-900 text-slate-400'
+                : folderDropStatus?.laneState === 'active'
+                  ? 'border-green-500/18 bg-green-500/8 text-green-200'
+                  : folderDropStatus?.laneState === 'needs_share'
+                    ? 'border-amber-500/18 bg-amber-500/8 text-amber-200'
+                    : 'border-navy-700 bg-navy-900 text-slate-400'
+            }`}>
+              {folderDropLoading ? 'Checking…' : FOLDER_DROP_LANE_LABEL[folderDropStatus?.laneState ?? 'not_configured']}
+            </span>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2.5 text-[12px] leading-relaxed text-slate-300">
+            {folderDropLoading ? 'Checking your folder-drop status…' : FOLDER_DROP_LANE_COPY[folderDropStatus?.laneState ?? 'not_configured']}
+          </div>
+
+          {!folderDropLoading && folderDropStatus?.readerEmail ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-navy-700/70 bg-navy-950/42 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Reader address</p>
+                <p className="truncate text-sm text-slate-200">{folderDropStatus.readerEmail}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleFolderDropCopyReaderEmail()}
+                className="ui-pill ml-auto shrink-0 px-3 py-1.5 text-[10px] normal-case tracking-normal text-cyan-200"
+              >
+                <Copy className="h-3 w-3" />
+                {folderDropCopied ? 'Copied' : 'Copy reader email'}
+              </button>
+            </div>
+          ) : null}
+
+          {folderDropStatus?.manualShare ? (
+            <div className="mt-3 rounded-xl border border-amber-500/18 bg-amber-500/8 px-3 py-2.5 text-[11px] leading-relaxed text-amber-100">
+              Violema can&apos;t share this folder automatically from here. {FOLDER_DROP_LANE_COPY.needs_share}
+            </div>
+          ) : null}
+
+          {folderDropNotice ? (
+            <div className={`mt-3 rounded-xl border px-3 py-2 text-[11px] ${
+              folderDropNotice.tone === 'success'
+                ? 'border-green-500/18 bg-green-500/8 text-green-200'
+                : 'border-red-500/18 bg-red-500/8 text-red-200'
+            }`}>
+              {folderDropNotice.message}
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[11px] leading-relaxed text-slate-500">
+              Once this lane is active, files dropped into your Violema Library folder become available to missions automatically.
+            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              {folderDropStatus?.laneState !== 'active' ? (
+                <button
+                  type="button"
+                  onClick={() => void handleFolderDropShare()}
+                  disabled={folderDropSharing || folderDropLoading}
+                  className="ui-button-ghost px-3 py-2 text-xs disabled:opacity-60"
+                >
+                  <FolderInput className="h-3.5 w-3.5" />
+                  {folderDropSharing ? 'Sharing…' : 'Share folder'}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleFolderDropVerify()}
+                disabled={folderDropVerifying || folderDropLoading}
+                className="flex items-center gap-2 rounded-xl border border-violet-500/25 bg-violet-500/12 px-3 py-2 text-xs font-medium text-violet-100 transition-colors hover:bg-violet-500/18 disabled:opacity-60"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {folderDropVerifying ? 'Verifying…' : 'Verify'}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 border-t border-white/6 pt-4">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Add a link to your library</p>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+              Paste a URL and Violema pulls it into your library the same way a dropped file would.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="ui-input-shell min-w-[220px] flex-1">
+                <input
+                  type="url"
+                  value={libraryUrl}
+                  onChange={(event) => setLibraryUrl(event.target.value)}
+                  className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                  placeholder="https://…"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleAddLibraryUrl()}
+                disabled={libraryUrlStatus === 'adding' || !libraryUrl.trim()}
+                className="flex shrink-0 items-center gap-2 rounded-xl border border-violet-500/25 bg-violet-500/12 px-3 py-2 text-xs font-medium text-violet-100 transition-colors hover:bg-violet-500/18 disabled:opacity-60"
+              >
+                <LinkIcon className="h-3.5 w-3.5" />
+                {libraryUrlStatus === 'adding' ? 'Adding…' : 'Add'}
+              </button>
+            </div>
+            {libraryUrlMessage ? (
+              <div className={`mt-3 rounded-xl border px-3 py-2 text-[11px] ${
+                libraryUrlStatus === 'added'
+                  ? 'border-green-500/18 bg-green-500/8 text-green-200'
+                  : 'border-red-500/18 bg-red-500/8 text-red-200'
+              }`}>
+                {libraryUrlMessage}
+              </div>
+            ) : null}
           </div>
         </section>
 
