@@ -59,6 +59,23 @@ test('the strict limiter covers the Composio connect and disconnect routes', () 
   assert.equal(isSensitiveRateLimitPath('/api/integrations/composio/connections'), false);
 });
 
+test('the strict limiter covers the outbound-fetch and Drive-write library routes', () => {
+  // /library/url makes up to 4 outbound fetches (10s, 500 KB each) to an
+  // arbitrary attacker-chosen host and then writes a Drive file — the same
+  // profile as the Composio connect routes, but it sat at 1200/15min on the
+  // general limiter. /folder-drop/share mutates a real Drive permission per
+  // call.
+  assert.equal(isSensitiveRateLimitPath('/api/workspace/library/url'), true);
+  assert.equal(isSensitiveRateLimitPath('/api/workspace/library/folder-drop/share'), true);
+  assert.ok(SENSITIVE_RATE_LIMIT_PREFIXES.includes('/api/workspace/library/url'));
+  assert.ok(SENSITIVE_RATE_LIMIT_PREFIXES.includes('/api/workspace/library/folder-drop/share'));
+
+  // The read-only status route stays on the general limiter — the settings
+  // page polls it on every load.
+  assert.equal(isSensitiveRateLimitPath('/api/workspace/library/folder-drop'), false);
+  assert.equal(isSensitiveRateLimitPath('/api/workspace/library'), false);
+});
+
 test('the strict limiter never catches the OAuth flow or session reads', () => {
   // These stay on the general limiter so logins and session polling are not throttled.
   assert.equal(isSensitiveRateLimitPath('/api/auth/session'), false);

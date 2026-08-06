@@ -48,6 +48,16 @@ export const SENSITIVE_RATE_LIMIT_PREFIXES: readonly string[] = [
   '/api/waitlist',
   '/api/integrations/composio/connect',
   '/api/integrations/composio/disconnect',
+  // The library URL paste: one call makes up to four outbound fetches (10s,
+  // 500 KB each) to a host the CALLER chooses, then writes a Drive file. That
+  // is a server-side request amplifier aimed at arbitrary targets — the SSRF
+  // guard decides WHERE it may go, and this decides HOW OFTEN.
+  '/api/workspace/library/url',
+  // Folder-drop share: each call mutates a real Drive permission through a
+  // third-party API — the same profile as the Composio routes above. The
+  // read-only `/folder-drop` status route is deliberately NOT here; the
+  // settings page polls it on every load.
+  '/api/workspace/library/folder-drop/share',
 ];
 
 export function isSensitiveRateLimitPath(path: string): boolean {
