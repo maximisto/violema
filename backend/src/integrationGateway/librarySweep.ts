@@ -218,25 +218,37 @@ export async function shareLibraryFolderWithReader(
 // --- lane state -----------------------------------------------------------------
 
 /**
- * The three buckets, named explicitly:
+ * The three buckets, named explicitly.
  *
- * - `not_configured`: either no reader key is present on this server at all,
- *   OR `rootFolderId` is null (the workspace's `Violema Library` folder does
- *   not exist yet — nothing has ever been shared, so there is nothing to
- *   warn about "re-sharing"), OR the key IS present but unusable
- *   (`DriveReaderError.code === 'auth_failed'` — a malformed/expired/revoked
- *   platform credential). That last case is deliberately folded into
- *   `not_configured` rather than `needs_share`: it is a Violema-side
- *   incident, not something the operator re-sharing their folder could ever
- *   fix, and telling them to "share your folder" for a broken platform key
- *   would hide our own outage behind onboarding UI.
- * - `needs_share`: a working key, but the reader could not list the root
- *   folder for any OTHER reason (typically `http_error` from a 403/404 —
- *   the folder is not shared with the reader, or was unshared later).
+ * `needs_share` is the only state that produces an operator-facing
+ * instruction ("re-share your Violema Library folder"). Everything that is
+ * OUR problem must therefore land somewhere else, or a single platform
+ * outage renders as an accusation in every workspace's every run — telling
+ * thousands of operators to fix something they did not break, and hiding our
+ * own incident behind onboarding UI.
+ *
+ * - `not_configured`: no reader key on this server, OR `rootFolderId` is null
+ *   (the workspace's `Violema Library` folder does not exist yet — nothing
+ *   has ever been shared, so there is nothing to re-share), OR the key is
+ *   present but unusable, OR the platform side failed in a way the operator
+ *   cannot act on:
+ *     · `auth_failed` — malformed/expired/revoked platform credential.
+ *     · HTTP 401/403 on files.list — Drive API disabled on the project, the
+ *       service account suspended, an org-policy change. `timedFetch` maps
+ *       every non-ok Drive status to `http_error`, so the CODE cannot
+ *       separate these; the STATUS can.
+ *     · `timeout` / `too_large` — transient or platform-bound, never
+ *       something re-sharing a folder would fix.
+ * - `needs_share`: a working key that reached Drive and was told the folder
+ *   is not there for it. A folder not shared with the reader returns 404,
+ *   which is what makes this cleanly separable from the 401/403 bucket above.
  * - `active`: the reader listed the folder successfully.
  */
 function laneStateForDriveReaderError(error: DriveReaderError): FolderDropLaneState {
-  return error.code === 'auth_failed' ? 'not_configured' : 'needs_share';
+  if (error.code === 'auth_failed') return 'not_configured';
+  if (error.code === 'timeout' || error.code === 'too_large') return 'not_configured';
+  if (error.status === 401 || error.status === 403) return 'not_configured';
+  return 'needs_share';
 }
 
 export async function getFolderDropLaneState(

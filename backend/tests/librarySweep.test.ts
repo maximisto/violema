@@ -616,12 +616,12 @@ test('a download stream that dies mid-read yields contentError, and never throws
 
 // --- lane state ---------------------------------------------------------------------
 
-test('lane state: null reader → not_configured; reader http_error on root list → needs_share; list ok → active', async () => {
+test('lane state: null reader → not_configured; reader 404 on root list → needs_share; list ok → active', async () => {
   assert.equal(await getFolderDropLaneState(ROOT_ID, { reader: null }), 'not_configured');
 
   const failingReader: DriveReader = {
     listFolderTree: async () => {
-      throw new DriveReaderError('http_error', 'forbidden', 403);
+      throw new DriveReaderError('http_error', 'not found', 404);
     },
     downloadFile: async () => {
       throw new Error('unused');
@@ -642,6 +642,96 @@ test('lane state: null reader → not_configured; reader http_error on root list
     },
   };
   assert.equal(await getFolderDropLaneState(ROOT_ID, { reader: okReader }), 'active');
+});
+
+// A platform outage must never render as "re-share your folder" in every
+// tenant's every run. Drive API disabled / SA suspended / org-policy change
+// all surface as 401 or 403 on files.list; a genuinely un-shared folder
+// returns 404, so the two states are cleanly separable.
+const laneStateCases: Array<{ label: string; error: DriveReaderError; expected: string }> = [
+  {
+    label: '403 from files.list (Drive API disabled, SA suspended, org policy)',
+    error: new DriveReaderError('http_error', 'Drive files.list request failed with status 403', 403),
+    expected: 'not_configured',
+  },
+  {
+    label: '401 from files.list (revoked platform credential)',
+    error: new DriveReaderError('http_error', 'Drive files.list request failed with status 401', 401),
+    expected: 'not_configured',
+  },
+  {
+    label: '404 from files.list (folder genuinely not shared with the reader)',
+    error: new DriveReaderError('http_error', 'Drive files.list request failed with status 404', 404),
+    expected: 'needs_share',
+  },
+  {
+    label: 'timeout (transient platform/network, not an operator action)',
+    error: new DriveReaderError('timeout', 'Drive files.list request timed out after 10000ms'),
+    expected: 'not_configured',
+  },
+  {
+    label: 'too_large (a platform bound, not an operator action)',
+    error: new DriveReaderError('too_large', 'response exceeded the byte limit'),
+    expected: 'not_configured',
+  },
+];
+
+for (const testCase of laneStateCases) {
+  test(`lane state: ${testCase.label} → ${testCase.expected}`, async () => {
+    const failingReader: DriveReader = {
+      listFolderTree: async () => {
+        throw testCase.error;
+      },
+      downloadFile: async () => {
+        throw new Error('unused');
+      },
+      exportDoc: async () => {
+        throw new Error('unused');
+      },
+    };
+
+    assert.equal(await getFolderDropLaneState(ROOT_ID, { reader: failingReader }), testCase.expected);
+
+    const result = await sweepOperatorFiles(
+      { workspaceId: 'ws_test', rootFolderId: ROOT_ID, budgetBytes: 1_000_000 },
+      { reader: failingReader },
+    );
+    assert.equal(result.laneState, testCase.expected);
+  });
+}
+
+test('DriveReaderError.status is actually populated on the files.list path', async () => {
+  // The 401/403 classification above is worthless if `status` is undefined
+  // in the one place the lane check reads it.
+  const { privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
+  const fetchImpl: DriveReaderFetch = async (input) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response('{"error":"forbidden"}', { status: 403 });
+  };
+
+  const reader = createDriveReader(
+    { clientEmail: 'status-probe@test.iam.gserviceaccount.com', privateKey },
+    fetchImpl,
+  );
+
+  await assert.rejects(reader.listFolderTree(ROOT_ID), (error: unknown) => {
+    if (!(error instanceof DriveReaderError)) assert.fail('expected a DriveReaderError');
+    assert.equal(error.status, 403, 'files.list must carry the HTTP status through');
+    return true;
+  });
+
+  assert.equal(await getFolderDropLaneState(ROOT_ID, { reader }), 'not_configured');
 });
 
 test('auth_failed is a platform-side problem, not a share problem: it maps to not_configured', async () => {
