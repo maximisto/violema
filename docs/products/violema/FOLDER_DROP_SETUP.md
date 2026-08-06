@@ -13,6 +13,40 @@ for the design; this doc is only the "make it live" checklist.
 
 ---
 
+## Blast radius — read this before handling the key
+
+**One key, every customer.** The reader is a single platform-owned identity.
+Every workspace that completes §4 grants *that one service account* Viewer
+access to its `Violema Library` folder. So the private key in
+`/root/violema-secrets/library-reader.json` is not "a credential for one
+tenant" — it is a **read grant over every customer folder ever shared with the
+reader, simultaneously**, usable from anywhere on the internet by anyone
+holding the file. There is no per-tenant scoping between them, and no
+rate limit or audit trail on Google's side that would flag a stolen key being
+used from a laptop.
+
+That is the entire justification for the handling discipline in §2, and none
+of it is ceremony:
+
+| Rule | What it stops |
+| --- | --- |
+| `/root/violema-secrets/`, `chmod 700` | Any non-root process on the box reading the directory |
+| `library-reader.json`, `chmod 600` | Any non-root user reading the key itself |
+| Outside `/var/www/nexus` | The key ever entering the git working tree |
+| Path in `.env`, never contents | The key entering a backup, a log, or a note |
+| Delete local copies after §5 | The key living on in Downloads or shell history |
+
+The repo's `.gitignore` additionally covers `*-key.json`,
+`*service-account*.json` and `library-reader*.json` as defense in depth. Treat
+that as a backstop for a mistake, not as permission to keep a key in the tree.
+
+If the key is ever exposed — pasted into a chat, committed, emailed, left on a
+shared machine — treat it as compromised and run §6 (rotation) immediately.
+Rotation is cheap and invisible to customers; assuming it was probably fine is
+not.
+
+---
+
 ## 0. Before you start
 
 - A workspace must have connected Google Drive at least once already — that
@@ -80,13 +114,44 @@ ssh root@<vps-host> "mkdir -p /root/violema-secrets && chmod 700 /root/violema-s
 scp reader-key.json root@<vps-host>:/root/violema-secrets/library-reader.json
 ssh root@<vps-host> "chmod 600 /root/violema-secrets/library-reader.json"
 
-# Append the env var (path only — this command never prints the key):
+# Set the env var (path only — this command never prints the key).
+# Idempotent on purpose: a bare `echo ... >> .env` run twice leaves TWO
+# GOOGLE_LIBRARY_READER_KEY_FILE lines, and dotenv silently keeps the first,
+# so a later "fix" appended to the bottom would have no effect at all and
+# look like a mystery. Add the line only if the key is not already present.
 ssh root@<vps-host> \
-  "echo 'GOOGLE_LIBRARY_READER_KEY_FILE=/root/violema-secrets/library-reader.json' >> /var/www/nexus/backend/.env"
+  "grep -q '^GOOGLE_LIBRARY_READER_KEY_FILE=' /var/www/nexus/backend/.env \
+     || echo 'GOOGLE_LIBRARY_READER_KEY_FILE=/root/violema-secrets/library-reader.json' \
+        >> /var/www/nexus/backend/.env"
+
+# Confirm exactly one line, and that it points where you think it does:
+ssh root@<vps-host> "grep -c '^GOOGLE_LIBRARY_READER_KEY_FILE=' /var/www/nexus/backend/.env"
 ```
+
+If that count is anything but `1`, edit `/var/www/nexus/backend/.env` by hand
+(`nano`, `vi`) and delete the duplicates before continuing.
 
 Never commit the key, never place it under `/var/www/nexus` (the git working
 tree), and never put its contents — only its path — in `backend/.env`.
+
+**Check the backend process can actually read it.** The key is `chmod 600`
+under `/root`, so only root can open it. That is correct *if* pm2 runs the
+backend as root, and a silent failure if it does not — `readDriveReaderConfig()`
+never throws, so an unreadable key is indistinguishable from no key at all:
+the lane just sits at `not_configured` forever with nothing in the logs.
+
+```bash
+# Who does pm2 run the backend as?
+ssh root@<vps-host> "pm2 jlist | python3 -c \"import sys,json; print([(p['name'], p['pm2_env'].get('username')) for p in json.load(sys.stdin)])\""
+
+# Prove that user can read the key (substitute the username printed above):
+ssh root@<vps-host> "sudo -u <username> test -r /root/violema-secrets/library-reader.json && echo READABLE || echo NOT-READABLE"
+```
+
+`READABLE` (or a `username` of `root`) and you are fine. `NOT-READABLE` means
+the lane will never leave `not_configured`: either run the backend as root, or
+move the key to a directory that user owns and keep the same `600` mode —
+never widen the file to `644` to make this pass.
 
 **Apply it:** a normal `deploy.sh` run picks this up automatically (the
 backend calls `dotenv.config()` on boot). To apply it sooner without a full
@@ -194,7 +259,62 @@ were green" does not fully prove the VPS will behave the same way:
 
 ---
 
-## 6. Rollback
+## 6. Key rotation (~5 min, zero customer action)
+
+**The one thing worth knowing up front: rotating the key does NOT change the
+reader's identity.** A service account can hold several keys at once, and the
+`client_email` belongs to the *account*, not to any key. Every workspace's
+Drive share is granted to that email address — so a new key inherits every
+existing share automatically. **No workspace has to re-share, nothing flips
+back to `needs_share`, and no operator ever sees this happen.** That is what
+makes rotation cheap enough to do on suspicion rather than on proof.
+
+Rotate on any of: a suspected exposure, an operator/laptop offboarding, or a
+routine cadence (annually is reasonable for a read-only grant).
+
+```bash
+# 1. Create a SECOND key on the SAME service account — do not delete the old
+#    one yet, so a mistake in step 2 cannot take the lane down.
+gcloud iam service-accounts keys create reader-key-new.json \
+  --iam-account=violema-library-reader@<project>.iam.gserviceaccount.com
+
+# 2. Land it over the old one. Same path, same mode — the env var does not
+#    change, so nothing else on the box needs touching.
+scp reader-key-new.json root@<vps-host>:/root/violema-secrets/library-reader.json
+ssh root@<vps-host> "chmod 600 /root/violema-secrets/library-reader.json"
+
+# 3. RESTART. This is not optional: readDriveReaderConfig() memoizes its
+#    result for the lifetime of the process, so swapping the file's contents
+#    without a restart leaves the backend happily using the OLD key — and
+#    step 4 would then take the lane down with no obvious cause.
+ssh root@<vps-host> "pm2 restart violema-backend"
+
+# 4. Confirm the new key works BEFORE destroying the old one: open Settings →
+#    Folder drop in a workspace that was Active, and confirm it still reads
+#    Active. Then list the keys and delete the previous one by id.
+gcloud iam service-accounts keys list \
+  --iam-account=violema-library-reader@<project>.iam.gserviceaccount.com
+gcloud iam service-accounts keys delete <old-key-id> \
+  --iam-account=violema-library-reader@<project>.iam.gserviceaccount.com
+```
+
+Then delete `reader-key-new.json` from your machine, per §2.
+
+If you skip step 4's confirmation and the new key is bad, the symptom is the
+whole lane reporting `not_configured` (not `needs_share` — a broken platform
+credential is deliberately never blamed on the operator). Re-check the file
+landed intact and that the backend was restarted.
+
+**Rotating the reader's *identity*** — a different service account, a
+different `client_email` — is a different, much more expensive operation:
+every workspace's existing share points at the old address, so every one of
+them would land back at `needs_share` and need §4 run again. Don't do it as
+part of a routine rotation; it is only warranted if the account itself is
+compromised in a way a new key cannot fix.
+
+---
+
+## 7. Rollback
 
 Folder-drop is additive and fails inert by design — turning it off never
 breaks anything else in the library or a mission run.
