@@ -1,6 +1,12 @@
 import path from 'path';
 import { readJsonFile, writeJsonFile } from './jsonStore';
 import type { WorkspaceProfile } from './types';
+import {
+  validateBusinessContextInput,
+  isBusinessContextSet,
+  type BusinessContextInput,
+} from './businessContext';
+import type { WorkspaceBusinessContext } from './types';
 
 export const WORKSPACES_FILE = path.join(process.cwd(), 'platform-workspaces.json');
 export const DEFAULT_WORKSPACE_ID = 'purpleorangehq';
@@ -79,4 +85,37 @@ export function upsertWorkspaceProfile(
   }
   saveWorkspaces(items);
   return next;
+}
+
+export function getBusinessContext(
+  workspaceId = DEFAULT_WORKSPACE_ID,
+): WorkspaceBusinessContext | null {
+  // listWorkspaces, not getWorkspaceProfile: a read must never mint a profile.
+  const profile = listWorkspaces().find((item) => item.id === workspaceId);
+  const ctx = profile?.businessContext;
+  return isBusinessContextSet(ctx) ? ctx : null;
+}
+
+export function setBusinessContext(
+  workspaceId: string,
+  input: BusinessContextInput,
+  updatedBy?: string,
+): { ok: true; context: WorkspaceBusinessContext } | { ok: false; errors: string[] } {
+  const validation = validateBusinessContextInput(input);
+  if (!validation.ok) return validation;
+
+  const context: WorkspaceBusinessContext = {
+    ...validation.value,
+    updatedAt: new Date().toISOString(),
+    updatedBy,
+  };
+
+  const current = getWorkspaceProfile(workspaceId);
+  const items = listWorkspaces();
+  const next = { ...current, businessContext: context, updatedAt: context.updatedAt };
+  const index = items.findIndex((item) => item.id === workspaceId);
+  if (index === -1) items.unshift(next);
+  else items[index] = next;
+  saveWorkspaces(items);
+  return { ok: true, context };
 }
