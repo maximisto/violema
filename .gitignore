@@ -37,3 +37,12 @@ backend/*.json.bak
 backend/*.json.bak.*
 graphify-out/
 backend/brief-charts/
+# Google service-account keys for the folder-drop Drive reader. The real key
+# lives outside the repo (/root/violema-secrets, chmod 600) and is referenced
+# by GOOGLE_LIBRARY_READER_KEY_FILE — these patterns are defense in depth for
+# the day someone downloads one into the working tree "just to test it". One
+# leaked key reads every customer folder shared with the reader, and this repo
+# already had a .bak near-miss on 2026-07-27.
+*-key.json
+*service-account*.json
+library-reader*.json

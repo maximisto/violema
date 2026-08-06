@@ -110,6 +110,39 @@ test('readDriveReaderConfig: inline key wins over file path; file path read from
   }
 });
 
+test('readDriveReaderConfig memoizes the key-file read, and re-reads when the env changes', () => {
+  const { privateKey } = generateTestKeypair();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'violema-reader-memo-'));
+  const firstPath = path.join(tempDir, 'first-reader.json');
+  const secondPath = path.join(tempDir, 'second-reader.json');
+  fs.writeFileSync(firstPath, JSON.stringify({ client_email: 'first@test.iam', private_key: privateKey }));
+  fs.writeFileSync(secondPath, JSON.stringify({ client_email: 'second@test.iam', private_key: privateKey }));
+
+  try {
+    const env = { GOOGLE_LIBRARY_READER_KEY_FILE: firstPath } as unknown as NodeJS.ProcessEnv;
+    assert.equal(readDriveReaderConfig(env)?.clientEmail, 'first@test.iam');
+
+    // Deleting the file proves the second call never touched the disk. This
+    // runs on every lane check, every sweep, and every settings load.
+    fs.rmSync(firstPath);
+    assert.equal(
+      readDriveReaderConfig(env)?.clientEmail,
+      'first@test.iam',
+      'a repeat call with identical env must be served from the memo, not a fresh readFileSync',
+    );
+
+    // A different env is a different question, and gets a fresh answer.
+    const otherEnv = { GOOGLE_LIBRARY_READER_KEY_FILE: secondPath } as unknown as NodeJS.ProcessEnv;
+    assert.equal(readDriveReaderConfig(otherEnv)?.clientEmail, 'second@test.iam');
+
+    // Including the absent case — the memo must never pin a stale answer.
+    assert.equal(readDriveReaderConfig({} as NodeJS.ProcessEnv), null);
+    assert.equal(readDriveReaderConfig(otherEnv)?.clientEmail, 'second@test.iam');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 // --- token exchange + caching ----------------------------------------------
 
 test('token request is a valid RS256 JWT for drive.readonly and is cached across calls', async () => {

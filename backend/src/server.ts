@@ -7491,9 +7491,18 @@ app.get('/api/workspace/library/folder-drop', async (req: Request, res: Response
     return;
   }
   const { workspaceId } = resolveWorkspaceContext(req);
+  // No platform reader key on this server means the lane cannot be active for
+  // ANY workspace, so there is nothing a folder lookup could change about the
+  // answer. Short-circuiting saves a Composio call on every settings load —
+  // and this route is polled on every render of the page.
+  const readerEmail = getFolderDropReaderEmail();
+  if (!readerEmail) {
+    res.json({ laneState: 'not_configured', readerEmail: null, rootFolderId: null });
+    return;
+  }
   const rootFolderId = await findLibraryRootFolderId(workspaceId);
   const laneState = await getFolderDropLaneState(rootFolderId);
-  res.json({ laneState, readerEmail: getFolderDropReaderEmail(), rootFolderId });
+  res.json({ laneState, readerEmail, rootFolderId });
 });
 
 app.post('/api/workspace/library/folder-drop/verify', async (req: Request, res: Response) => {
