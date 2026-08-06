@@ -409,6 +409,15 @@ export interface TaskOwnershipMetadata {
   primaryBand?: IntelligenceBand;
 }
 
+export interface WorkspaceBusinessContext {
+  summary: string;          // one sentence: what the business is
+  marketKeywords: string[]; // category terms that build search queries
+  competitors: string[];    // named rivals — names or domains
+  exclusions?: string[];    // topics to keep out of research
+  updatedAt: string;
+  updatedBy?: string;
+}
+
 export interface WorkspaceProfile {
   id: string;
   slug: string;
@@ -417,6 +426,7 @@ export interface WorkspaceProfile {
   createdAt: string;
   updatedAt: string;
   metadata?: Record<string, unknown>;
+  businessContext?: WorkspaceBusinessContext;
 }
 
 export interface UsageEvent {
