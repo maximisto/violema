@@ -490,7 +490,7 @@ export function validateAutomationDeliveryDraft(input: {
 
 type ClassifiableStep = Pick<
   AutomationStepExecution,
-  'status' | 'title' | 'error' | 'kind' | 'stepId' | 'stepSeverity'
+  'status' | 'title' | 'error' | 'kind' | 'stepId' | 'stepSeverity' | 'warnings'
 >;
 
 /**
@@ -527,13 +527,31 @@ function isBlockingStepFailure(step: ClassifiableStep) {
 export function collectAutomationRunWarnings(
   stepExecutions: ClassifiableStep[],
 ): AutomationRunWarning[] {
-  return stepExecutions
+  const failureWarnings = stepExecutions
     .filter((step) => step.status === 'failed' && step.stepSeverity === 'auxiliary')
     .map((step) => ({
       stepId: step.stepId,
       title: step.title,
       message: readString(step.error) || `${step.title || 'A workflow step'} did not complete.`,
     }));
+
+  // A step can also carry its own named warnings independent of failure — a
+  // read that still succeeded but has something the operator should see
+  // (e.g. a folder-drop share problem). Deduped per step so a repeated
+  // message never shows up twice for the same step.
+  const stepWarnings: AutomationRunWarning[] = [];
+  for (const step of stepExecutions) {
+    const messages = step.warnings ?? [];
+    if (messages.length === 0) continue;
+    const seen = new Set<string>();
+    for (const message of messages) {
+      if (!message || seen.has(message)) continue;
+      seen.add(message);
+      stepWarnings.push({ stepId: step.stepId, title: step.title, message });
+    }
+  }
+
+  return [...failureWarnings, ...stepWarnings];
 }
 
 function describeRunWarnings(warnings: AutomationRunWarning[]) {

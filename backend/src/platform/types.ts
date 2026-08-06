@@ -267,6 +267,13 @@ export interface AutomationStepExecution {
    * records simply omit it. 'none' means the step produced no external data.
    */
   dataOrigin?: 'live' | 'simulated' | 'none';
+  /**
+   * Named warnings from a step that still succeeded — e.g. a folder-drop
+   * share problem the account library surfaced during a read. Optional and
+   * additive; older ledger records simply omit it. Distinct from `error`,
+   * which is reserved for a step that failed.
+   */
+  warnings?: string[];
 }
 
 export interface AutomationRolePlan {

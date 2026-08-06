@@ -95,6 +95,13 @@ import {
 import { executeComposioAction } from '../composioBridge';
 import { toolkitForPartnerSource } from './partnerAppMap';
 import type { IntegrationQuerySuccess, IntegrationReadinessError } from './types';
+import {
+  getFolderDropLaneState,
+  sweepOperatorFiles,
+  LibrarySweepError,
+  type FolderDropLaneState,
+  type LibrarySweepResult,
+} from './librarySweep';
 
 /** The query-step source name a mission uses to reach the library. */
 export const ACCOUNT_LIBRARY_SOURCE = 'account_library';
@@ -166,6 +173,12 @@ export interface AccountLibraryEntry {
   truncated: boolean;
   /** Set when this entry's body could not be read, so the gap is visible. */
   contentError?: string;
+  /**
+   * Which reader saw this file: the platform folder-drop sweep
+   * (`operator_file`) or the workspace's own Composio grant (`app_entry`).
+   * Optional and additive — absent means legacy, pre-sweep behavior.
+   */
+  origin?: 'operator_file' | 'app_entry';
 }
 
 export interface AccountLibrarySnapshot {
@@ -176,6 +189,12 @@ export interface AccountLibrarySnapshot {
   folderId: string | null;
   entryCount: number;
   entries: AccountLibraryEntry[];
+  /**
+   * The folder-drop sweep's own verdict for this read: whether the platform
+   * reader could see the library folder at all, and any named skips
+   * (unsupported file, share problem, cap). Optional and additive.
+   */
+  sweep?: { laneState: FolderDropLaneState; warnings: string[] };
 }
 
 export interface AccountLibraryAppendResult {
@@ -706,6 +725,15 @@ async function readEntryContent(
 }
 
 /**
+ * Shown when the folder-drop lane has a working platform credential but the
+ * customer's `Violema Library` folder is not (or no longer) shared with the
+ * platform reader. Never shown for `not_configured` — that bucket means
+ * there is nothing to re-share in the first place.
+ */
+export const FOLDER_DROP_NEEDS_SHARE_WARNING =
+  "Folder drop is enabled but Violema's reader can no longer see your Violema Library folder — re-share it to include your dropped files.";
+
+/**
  * Read the most recent entries in a section.
  *
  * Deliberately never creates anything. On a workspace that has never written
@@ -732,6 +760,48 @@ export async function readLibrary(
   const root = await findFolderByName(execute, workspaceId, LIBRARY_ROOT_FOLDER_NAME);
   if (!root.ok) return root.failure;
 
+  // Folder-drop hook: a second, platform-owned reader sees operator-dropped
+  // files the Composio `drive.file` grant above never can. Orchestration —
+  // the discriminator, pagination, memo, per-file bounds — all lives in
+  // `librarySweep`; this call site only decides when to ask and folds the
+  // answer into the entries this section read returns. Operator entries are
+  // capped to half the total content budget, so a heavy drop can never crowd
+  // out every app-written entry.
+  const rootFolderId = root.folderId;
+  const laneState = await getFolderDropLaneState(rootFolderId);
+  const sweepWarnings: string[] = [];
+  let operatorEntries: AccountLibraryEntry[] = [];
+  if (laneState === 'active' && rootFolderId) {
+    let sweepResult: LibrarySweepResult;
+    try {
+      sweepResult = await sweepOperatorFiles(
+        { workspaceId, rootFolderId, budgetBytes: Math.floor(MAX_TOTAL_CONTENT_BYTES / 2) },
+        { execute },
+      );
+    } catch (error) {
+      if (!(error instanceof LibrarySweepError)) throw error;
+      return libraryFailure('integration_query_failed', 'Folder-drop listing could not complete.');
+    }
+    sweepWarnings.push(...sweepResult.warnings);
+    operatorEntries = sweepResult.entries.map((entry) => ({
+      fileId: entry.fileId,
+      fileName: entry.fileName,
+      modifiedTime: entry.modifiedTime,
+      webViewLink: entry.webViewLink,
+      content: entry.content,
+      truncated: entry.truncated,
+      origin: 'operator_file' as const,
+      ...(entry.contentError ? { contentError: entry.contentError } : {}),
+    }));
+  } else if (laneState === 'needs_share') {
+    sweepWarnings.push(FOLDER_DROP_NEEDS_SHARE_WARNING);
+  }
+  const sweep = { laneState, warnings: sweepWarnings };
+  const operatorBytesUsed = operatorEntries.reduce(
+    (total, entry) => total + (entry.content ? Buffer.byteLength(entry.content, 'utf8') : 0),
+    0,
+  );
+
   let folderId: string | null = null;
   if (root.folderId) {
     const sectionFolder = await findFolderByName(
@@ -751,8 +821,9 @@ export async function readLibrary(
         rootFolderName: LIBRARY_ROOT_FOLDER_NAME,
         libraryInitialized: false,
         folderId: null,
-        entryCount: 0,
-        entries: [],
+        entryCount: operatorEntries.length,
+        entries: operatorEntries,
+        sweep,
       },
       now,
       startedAt,
@@ -769,8 +840,10 @@ export async function readLibrary(
   if (!listing.ok) return listing.failure;
 
   const files = readDriveFiles(listing.data).slice(0, limit);
-  const entries: AccountLibraryEntry[] = [];
-  let remainingBudget = MAX_TOTAL_CONTENT_BYTES;
+  const appEntries: AccountLibraryEntry[] = [];
+  // App entries fill whatever budget the operator sweep above left behind, so
+  // the two origins share one ceiling instead of each getting a full one.
+  let remainingBudget = Math.max(0, MAX_TOTAL_CONTENT_BYTES - operatorBytesUsed);
 
   for (const file of files) {
     const fileId = asString(file.id);
@@ -782,7 +855,7 @@ export async function readLibrary(
       remainingBudget -= Buffer.byteLength(body.content, 'utf8');
     }
 
-    entries.push({
+    appEntries.push({
       fileId,
       fileName,
       entryDate: readEntryDate(fileName),
@@ -790,9 +863,12 @@ export async function readLibrary(
       webViewLink: asString(file.webViewLink),
       content: body.content,
       truncated: body.truncated,
+      origin: 'app_entry' as const,
       ...(body.contentError ? { contentError: body.contentError } : {}),
     });
   }
+
+  const entries = [...operatorEntries, ...appEntries];
 
   return librarySnapshotResult(
     {
@@ -802,6 +878,7 @@ export async function readLibrary(
       folderId,
       entryCount: entries.length,
       entries,
+      sweep,
     },
     now,
     startedAt,

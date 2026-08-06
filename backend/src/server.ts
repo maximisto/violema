@@ -4475,6 +4475,23 @@ async function executeAutomationCore(
           stepErrors,
           artifactCount: chartArtifact ? 2 : 1,
         });
+        // Folder-drop warnings ride the run's warning pipeline rather than
+        // failing the step: the read still succeeded, but something about
+        // the operator's dropped files needs attention (a share problem, a
+        // skipped file, a cap).
+        if (
+          payload.ok !== false &&
+          payloadSource === ACCOUNT_LIBRARY_BACKING_SOURCE &&
+          isObjectRecord(payload.data)
+        ) {
+          const sweep = payload.data.sweep;
+          const sweepWarnings = isObjectRecord(sweep) && Array.isArray(sweep.warnings)
+            ? sweep.warnings.filter((entry): entry is string => typeof entry === 'string')
+            : [];
+          if (sweepWarnings.length > 0) {
+            stepExecution.warnings = sweepWarnings;
+          }
+        }
         stepExecution.dataOrigin = readQueryPayloadDataOrigin(payload);
         if (payloadSource) {
           appendIntegrationQueryLedgerEvent({
