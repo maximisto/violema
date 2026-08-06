@@ -287,6 +287,11 @@ export default function SettingsPage() {
   const [businessExclusions, setBusinessExclusions] = useState('');
   const [businessStatus, setBusinessStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [businessErrors, setBusinessErrors] = useState<string[]>([]);
+  // Loading flag + a server-confirmed snapshot flag for the status pill: the
+  // pill must reflect what the backend actually holds, not the live-editable
+  // fields above (which lag or lead the server between load and Save).
+  const [businessLoading, setBusinessLoading] = useState(true);
+  const [businessContextSet, setBusinessContextSet] = useState(false);
 
   useEffect(() => {
     if (window.location.hash === '#business') {
@@ -370,6 +375,7 @@ export default function SettingsPage() {
   }, []);
 
   async function loadBusinessContext() {
+    setBusinessLoading(true);
     try {
       const response = await fetch(`/api/workspace/business-context?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
         headers: {
@@ -382,14 +388,20 @@ export default function SettingsPage() {
         workspaceId: string;
         businessContext: { summary: string; marketKeywords: string[]; competitors: string[]; exclusions?: string[] } | null;
       };
-      if (payload.businessContext) {
-        setBusinessSummary(payload.businessContext.summary);
-        setBusinessKeywords(payload.businessContext.marketKeywords.join(', '));
-        setBusinessCompetitors(payload.businessContext.competitors.join(', '));
-        setBusinessExclusions((payload.businessContext.exclusions || []).join(', '));
+      const ctx = payload.businessContext;
+      if (ctx) {
+        setBusinessSummary(ctx.summary);
+        setBusinessKeywords(ctx.marketKeywords.join(', '));
+        setBusinessCompetitors(ctx.competitors.join(', '));
+        setBusinessExclusions((ctx.exclusions || []).join(', '));
       }
+      // Server-confirmed, not the live fields just above: mirrors the
+      // backend's own isBusinessContextSet gate (summary + >=1 keyword).
+      setBusinessContextSet(Boolean(ctx && ctx.summary.trim() && ctx.marketKeywords.length >= 1));
     } catch (error) {
       setNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not load your business context.' });
+    } finally {
+      setBusinessLoading(false);
     }
   }
 
@@ -530,6 +542,10 @@ export default function SettingsPage() {
       setBusinessKeywords(payload.businessContext.marketKeywords.join(', '));
       setBusinessCompetitors(payload.businessContext.competitors.join(', '));
       setBusinessExclusions((payload.businessContext.exclusions || []).join(', '));
+      // A 200 here only happens when the backend's own validation passed
+      // (non-empty summary, >=1 keyword), so the server-confirmed snapshot
+      // the pill reads from can move to "set" unconditionally.
+      setBusinessContextSet(true);
       setBusinessStatus('saved');
     } catch (error) {
       setBusinessErrors([error instanceof Error ? error.message : 'Could not save your business context.']);
@@ -736,11 +752,13 @@ export default function SettingsPage() {
               </p>
             </div>
             <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-              businessSummary.trim() && businessKeywords.trim()
-                ? 'border-green-500/18 bg-green-500/8 text-green-200'
-                : 'border-amber-500/18 bg-amber-500/8 text-amber-200'
+              businessLoading
+                ? 'border-navy-700 bg-navy-900 text-slate-400'
+                : businessContextSet
+                  ? 'border-green-500/18 bg-green-500/8 text-green-200'
+                  : 'border-amber-500/18 bg-amber-500/8 text-amber-200'
             }`}>
-              {businessSummary.trim() && businessKeywords.trim() ? 'Set' : 'Not set yet'}
+              {businessLoading ? 'Checking…' : businessContextSet ? 'Set' : 'Not set yet'}
             </span>
           </div>
 
