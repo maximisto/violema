@@ -73,6 +73,8 @@ import {
 import { isParseableSourceMime, parseSourceBuffer } from './sourceParsing';
 import { executeComposioAction } from '../composioBridge';
 import { classifyFailure, type PartnerComposioExecutor } from './adapters/partnerComposio';
+import { appendLibraryEntry, isLibraryFailure, MAX_ENTRY_CONTENT_BYTES } from './accountLibrary';
+import { safeUrlFetch } from './safeUrlFetch';
 
 const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 const GOOGLE_DOC_MIME_TYPE = 'application/vnd.google-apps.document';
@@ -560,4 +562,143 @@ export async function sweepOperatorFiles(
   }
 
   return { laneState: 'active', entries, warnings };
+}
+
+// --- URL ingestion ("paste a link") ----------------------------------------------
+
+/**
+ * A second front door onto the same `Sources` library section the folder
+ * drop feeds — this one populated by pasting a link instead of dropping a
+ * file. `safeUrlFetch` (the SSRF guard) is the ONLY thing allowed to touch
+ * the network here; this module's job stops at turning its HTML body into
+ * plain text and handing it to `appendLibraryEntry`, the same durable-write
+ * path every other library writer uses.
+ */
+
+const URL_INGEST_SECTION = 'Sources';
+
+const BASIC_ENTITY_DECODINGS: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+  '&nbsp;': ' ',
+};
+
+/** The five basic HTML entities plus `&nbsp;` — deliberately not a general-purpose HTML entity decoder. */
+function decodeBasicEntities(text: string): string {
+  return text.replace(/&amp;|&lt;|&gt;|&quot;|&#39;|&nbsp;/g, (match) => BASIC_ENTITY_DECODINGS[match] ?? match);
+}
+
+function collapseWhitespace(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/** Removes `<script>...</script>` and `<style>...</style>` blocks WHOLESALE, contents included. */
+function stripScriptAndStyleBlocks(html: string): string {
+  return html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ');
+}
+
+/** Removes tag markup only; text between tags (including any inside `<title>`) is left in place. */
+function stripTags(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ');
+}
+
+/** Order matters: strip real markup first, THEN decode entities — decoding first would turn escaped
+ *  text like `&lt;script&gt;` into a literal `<script>` tag that the strip pass would wrongly remove. */
+function extractPlainText(html: string): string {
+  const withoutScriptsAndStyles = stripScriptAndStyleBlocks(html);
+  const withoutTags = stripTags(withoutScriptsAndStyles);
+  return collapseWhitespace(decodeBasicEntities(withoutTags));
+}
+
+function extractPageTitle(html: string): string | null {
+  const match = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
+  if (!match) return null;
+  const title = collapseWhitespace(decodeBasicEntities(stripTags(match[1])));
+  return title || null;
+}
+
+/**
+ * Same UTF-8-safe truncation convention `sourceParsing.ts`'s `capToByteLimit`
+ * uses: `Buffer#write` never writes a partial multi-byte sequence, so the
+ * returned text's byte length is always <= maxBytes.
+ */
+function capToByteLength(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text;
+  const safeMax = Math.max(0, maxBytes);
+  const bounded = Buffer.alloc(safeMax);
+  const written = bounded.write(text, 0, safeMax, 'utf8');
+  return bounded.toString('utf8', 0, written);
+}
+
+export type IngestUrlIntoLibraryResult =
+  | { ok: true; fileName: string; sourceUrl: string }
+  | { ok: false; code: 'invalid_url' | 'fetch_blocked' | 'fetch_failed' | 'write_failed'; message: string };
+
+/**
+ * Fetch a URL through the SSRF guard, reduce it to plain text, and append it
+ * as a dated entry in the workspace's `Sources` library section.
+ *
+ * Deliberately validates scheme up front (before calling `fetchUrl` at all)
+ * so an obviously malformed input never even reaches the network guard —
+ * not a correctness requirement (`safeUrlFetch` would refuse it anyway with
+ * the same `invalid_url` reason), just one fewer async hop for the common
+ * "empty paste" and "not a URL" mistakes.
+ */
+export async function ingestUrlIntoLibrary(
+  input: { workspaceId: string; url: string },
+  deps: LibrarySweepDeps & { fetchUrl?: typeof safeUrlFetch } = {},
+): Promise<IngestUrlIntoLibraryResult> {
+  const trimmedUrl = typeof input.url === 'string' ? input.url.trim() : '';
+  if (!trimmedUrl) {
+    return { ok: false, code: 'invalid_url', message: 'A URL is required.' };
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(trimmedUrl);
+  } catch {
+    return { ok: false, code: 'invalid_url', message: 'That does not look like a valid URL.' };
+  }
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    return { ok: false, code: 'invalid_url', message: 'Only http and https links can be added to the library.' };
+  }
+
+  const fetchUrl = deps.fetchUrl ?? safeUrlFetch;
+  const fetched = await fetchUrl(trimmedUrl);
+  if (!fetched.ok) {
+    if (fetched.reason === 'invalid_url') {
+      return { ok: false, code: 'invalid_url', message: 'That does not look like a valid URL.' };
+    }
+    if (fetched.reason === 'fetch_failed') {
+      return { ok: false, code: 'fetch_failed', message: 'That link could not be reached.' };
+    }
+    // 'blocked_address' | 'too_many_redirects' | 'too_large' are all the SSRF
+    // guard refusing the fetch, not an ordinary network hiccup — the operator
+    // should hear "blocked", never "try again".
+    return { ok: false, code: 'fetch_blocked', message: 'That link could not be safely fetched.' };
+  }
+
+  const title = extractPageTitle(fetched.body) || parsedUrl.hostname;
+  const bodyText = capToByteLength(extractPlainText(fetched.body), MAX_ENTRY_CONTENT_BYTES);
+  const now = deps.now ? deps.now() : new Date();
+  const frontMatter = `---\nsource_url: ${trimmedUrl}\nfetched_at: ${now.toISOString()}\n---\n\n`;
+  const markdown = `${frontMatter}${bodyText}`;
+
+  const appended = await appendLibraryEntry(
+    input.workspaceId,
+    URL_INGEST_SECTION,
+    { title, markdown },
+    { execute: deps.execute, now: deps.now },
+  );
+
+  if (isLibraryFailure(appended)) {
+    return { ok: false, code: 'write_failed', message: appended.message };
+  }
+
+  return { ok: true, fileName: appended.fileName, sourceUrl: trimmedUrl };
 }

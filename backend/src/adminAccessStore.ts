@@ -51,7 +51,11 @@ export type AdminAuditAction =
   // platform's service-account reader. Recorded once per workspace (guarded
   // by the `folderDropEnabledAt` stamp in the workspace profile's metadata),
   // content-free: `{ folderId }` only, never folder contents.
-  | 'workspace.library_folder_share.enabled';
+  | 'workspace.library_folder_share.enabled'
+  // An operator pasted a URL into the library's "paste a link" ingestion
+  // route and the SSRF-guarded fetch + write succeeded. Recorded host-only —
+  // `{ host }` — never the full URL and never the fetched page content.
+  | 'workspace.library_url.added';
 
 export interface AdminAccessRecord {
   email: string;
@@ -111,6 +115,7 @@ const AUDIT_ACTIONS = new Set<AdminAuditAction>([
   'workspace.business_context.updated',
   'automation.business_context_migrated',
   'workspace.library_folder_share.enabled',
+  'workspace.library_url.added',
 ]);
 
 function getAccessFile() {

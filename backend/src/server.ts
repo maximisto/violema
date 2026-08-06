@@ -322,6 +322,7 @@ import {
 import {
   getFolderDropLaneState,
   getFolderDropReaderEmail,
+  ingestUrlIntoLibrary,
   shareLibraryFolderWithReader,
   type FolderDropLaneState,
 } from './integrationGateway/librarySweep';
@@ -7461,6 +7462,54 @@ app.post('/api/workspace/library/folder-drop/share', async (req: Request, res: R
     readerEmail,
     rootFolderId,
   });
+});
+
+/**
+ * "Paste a link" ingestion: the third front door onto the library (after
+ * an app-created entry and an operator's folder drop), fed by a URL instead
+ * of a file. `ingestUrlIntoLibrary` owns the SSRF guard, the extraction, and
+ * the write; this route is just auth, input shape, and status mapping.
+ *
+ * Audited host-only — `new URL(url).host`, never the full URL and never the
+ * fetched page content — same content-free convention every other library
+ * audit event in this file already follows.
+ */
+app.post('/api/workspace/library/url', async (req: Request, res: Response) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: 'Approved Violema beta session required.', code: 'beta_session_required' });
+    return;
+  }
+
+  const rawUrl = (req.body as Record<string, unknown> | undefined)?.url;
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
+    res.status(400).json({ error: 'A URL is required.', code: 'invalid_url' });
+    return;
+  }
+
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const result = await ingestUrlIntoLibrary({ workspaceId, url: rawUrl });
+
+  if (!result.ok) {
+    const status = result.code === 'fetch_failed' || result.code === 'write_failed' ? 502 : 400;
+    res.status(status).json({ error: result.message, code: result.code });
+    return;
+  }
+
+  let host: string | undefined;
+  try {
+    host = new URL(rawUrl).host;
+  } catch {
+    host = undefined;
+  }
+  recordAdminAuditEvent({
+    actorEmail: authUser.email,
+    action: 'workspace.library_url.added',
+    workspaceId,
+    metadata: { host },
+  });
+
+  res.json({ ok: true, fileName: result.fileName, sourceUrl: result.sourceUrl });
 });
 
 app.get('/api/billing/usage', (req: Request, res: Response) => {
