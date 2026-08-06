@@ -93,21 +93,44 @@ function isBlockedIPv4(address: string): boolean {
   return false;
 }
 
+/** Parses a dotted-quad IPv4 tail (e.g. the "127.0.0.1" in "::ffff:127.0.0.1") into two 16-bit groups. */
+function ipv4TextToGroups(ipv4: string): [number, number] | null {
+  const octets = ipv4.split('.');
+  if (octets.length !== 4) return null;
+  const values = octets.map((part) => Number(part));
+  if (values.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return null;
+  return [(values[0] << 8) | values[1], (values[2] << 8) | values[3]];
+}
+
 /** Parses a (possibly `::`-compressed) IPv6 literal into 8 16-bit groups, or null if malformed. */
 function parseIPv6Groups(address: string): number[] | null {
   const clean = address.split('%')[0]; // drop a zone id, e.g. "fe80::1%eth0"
-  const doubleColonAt = clean.indexOf('::');
+
+  // An embedded IPv4 dotted-quad tail (e.g. "::ffff:127.0.0.1") is valid IPv6
+  // textual form, distinct from the fully-hex form ("::ffff:7f00:1") that
+  // `new URL(...).hostname` normalizes to. Rewrite the dotted tail to two hex
+  // groups BEFORE the "::" expansion below, so both spellings of the same
+  // address parse to the identical group array.
+  const lastColon = clean.lastIndexOf(':');
+  let normalized = clean;
+  if (lastColon !== -1 && clean.includes('.', lastColon)) {
+    const embedded = ipv4TextToGroups(clean.slice(lastColon + 1));
+    if (!embedded) return null;
+    normalized = `${clean.slice(0, lastColon + 1)}${embedded[0].toString(16)}:${embedded[1].toString(16)}`;
+  }
+
+  const doubleColonAt = normalized.indexOf('::');
 
   let groupStrings: string[];
   if (doubleColonAt !== -1) {
-    if (clean.indexOf('::', doubleColonAt + 1) !== -1) return null; // more than one "::"
-    const left = clean.slice(0, doubleColonAt).split(':').filter(Boolean);
-    const right = clean.slice(doubleColonAt + 2).split(':').filter(Boolean);
+    if (normalized.indexOf('::', doubleColonAt + 1) !== -1) return null; // more than one "::"
+    const left = normalized.slice(0, doubleColonAt).split(':').filter(Boolean);
+    const right = normalized.slice(doubleColonAt + 2).split(':').filter(Boolean);
     const missing = 8 - (left.length + right.length);
     if (missing < 0) return null;
     groupStrings = [...left, ...Array(missing).fill('0'), ...right];
   } else {
-    groupStrings = clean.split(':');
+    groupStrings = normalized.split(':');
   }
 
   if (groupStrings.length !== 8) return null;
@@ -116,13 +139,28 @@ function parseIPv6Groups(address: string): number[] | null {
   return groups;
 }
 
-/** Loopback (::1), link-local (fe80::/10), unique local / ULA (fc00::/7). */
+/** Loopback (::1), link-local (fe80::/10), unique local / ULA (fc00::/7), IPv4-mapped (::ffff:0:0/96). */
 function isBlockedIPv6(address: string): boolean {
   const groups = parseIPv6Groups(address);
   if (!groups) return true; // unparseable: fail closed.
 
   const isLoopback = groups.slice(0, 7).every((value) => value === 0) && groups[7] === 1;
   if (isLoopback) return true;
+
+  // IPv4-mapped IPv6 (::ffff:0:0/96): the last 32 bits ARE an IPv4 address
+  // wearing an IPv6 costume. Without this unwrap, a host literal like
+  // "[::ffff:169.254.169.254]" — the cloud metadata endpoint this guard
+  // exists to stop — reads as an unremarkable IPv6 address that matches none
+  // of the IPv6-only ranges below, and sails straight through. Re-running
+  // the IPv4 guard on the unwrapped address (rather than adding a second,
+  // easily-out-of-sync IPv4 range table here) means every IPv4 rule is
+  // defined in exactly one place.
+  const isIPv4Mapped = groups.slice(0, 5).every((value) => value === 0) && groups[5] === 0xffff;
+  if (isIPv4Mapped) {
+    const [high, low] = [groups[6], groups[7]];
+    const embeddedIPv4 = [(high >> 8) & 0xff, high & 0xff, (low >> 8) & 0xff, low & 0xff].join('.');
+    return isBlockedIPv4(embeddedIPv4);
+  }
 
   const firstGroup = groups[0];
   const isLinkLocal = firstGroup >= 0xfe80 && firstGroup <= 0xfebf; // fe80::/10

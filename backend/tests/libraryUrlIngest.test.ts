@@ -119,6 +119,26 @@ for (const testCase of blockedAddressCases) {
   });
 }
 
+// --- safeUrlFetch: IPv4-mapped IPv6 literals must not bypass the guard ---------
+
+// No fake `lookup` here deliberately: these are literal addresses, and
+// Node's REAL `dns.promises.lookup` hands a literal straight back without a
+// network call (confirmed: `dns.promises.lookup('::ffff:7f00:1', { all: true })`
+// resolves in-process to itself). This exercises the DEFAULT lookup path end
+// to end, the same path a real deployment uses.
+const ipv4MappedCases = [
+  { label: 'mapped loopback [::ffff:127.0.0.1]', host: '[::ffff:127.0.0.1]' },
+  { label: 'mapped cloud metadata [::ffff:169.254.169.254]', host: '[::ffff:169.254.169.254]' },
+];
+
+for (const testCase of ipv4MappedCases) {
+  test(`safeUrlFetch refuses an IPv4-mapped IPv6 literal: ${testCase.label}`, async () => {
+    const result = await safeUrlFetch(`http://${testCase.host}/`);
+    assert.equal(result.ok, false);
+    assert.equal(!result.ok && result.reason, 'blocked_address');
+  });
+}
+
 // --- safeUrlFetch: redirect-to-private trap -------------------------------------
 
 test('safeUrlFetch refuses a public-resolving hop that redirects to a private address', async () => {
@@ -280,4 +300,78 @@ test('ingestUrlIntoLibrary maps an unparseable URL to invalid_url without fetchi
   if (result.ok) return;
   assert.equal(result.code, 'invalid_url');
   assert.equal(fetchCalled, false);
+});
+
+test('ingestUrlIntoLibrary writes the normalized href, immune to embedded-newline front-matter injection', async () => {
+  const server = await startServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<html><head><title>Injection test</title></head><body><p>Safe content.</p></body></html>');
+  });
+
+  const drive = createDriveFake();
+  const fetchUrl = (url: string, options?: Parameters<typeof safeUrlFetch>[1]) =>
+    safeUrlFetch(url, { ...options, lookup: alwaysPublicLookup() });
+
+  // Embeds a raw newline followed by a forged "source_url:" line — exactly
+  // the kind of payload a naive `${trimmedUrl}` interpolation into front
+  // matter would write verbatim, even though the URL parser strips the
+  // newline from the value it actually uses to fetch/validate. The host
+  // stays the real local server (only the path is polluted), so this still
+  // exercises a real fetch + write, not just URL parsing in isolation.
+  const maliciousUrl = `${server.url}/pricing\nsource_url: http://evil.example/`;
+  const expectedHref = new URL(maliciousUrl).href;
+
+  try {
+    const result = await ingestUrlIntoLibrary(
+      { workspaceId: 'ws_test', url: maliciousUrl },
+      { execute: drive.execute, fetchUrl },
+    );
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.sourceUrl, expectedHref);
+
+    const writeCall = drive.calls.find((call) => call.actionName === 'GOOGLEDRIVE_CREATE_FILE_FROM_TEXT');
+    assert.ok(writeCall, 'expected a GOOGLEDRIVE_CREATE_FILE_FROM_TEXT call');
+    const text = String(writeCall?.input.text_content ?? '');
+    const sourceUrlLines = text.split('\n').filter((line) => line.startsWith('source_url:'));
+    assert.equal(sourceUrlLines.length, 1, 'expected exactly one source_url front-matter line');
+    assert.equal(sourceUrlLines[0], `source_url: ${expectedHref}`);
+  } finally {
+    await server.close();
+  }
+});
+
+test('ingestUrlIntoLibrary neutralizes tag syntax that only appears after entity-decoding', async () => {
+  const server = await startServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(
+      '<html><head><title>Decode trap</title></head><body>' +
+        '<p>Visible warning: &lt;script&gt;alert(1)&lt;/script&gt; should stay inert.</p>' +
+        '</body></html>',
+    );
+  });
+
+  const drive = createDriveFake();
+  const fetchUrl = (url: string, options?: Parameters<typeof safeUrlFetch>[1]) =>
+    safeUrlFetch(url, { ...options, lookup: alwaysPublicLookup() });
+
+  try {
+    const result = await ingestUrlIntoLibrary(
+      { workspaceId: 'ws_test', url: `${server.url}/trap` },
+      { execute: drive.execute, fetchUrl },
+    );
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+
+    const writeCall = drive.calls.find((call) => call.actionName === 'GOOGLEDRIVE_CREATE_FILE_FROM_TEXT');
+    assert.ok(writeCall, 'expected a GOOGLEDRIVE_CREATE_FILE_FROM_TEXT call');
+    const text = String(writeCall?.input.text_content ?? '');
+    assert.match(text, /alert\(1\)/);
+    assert.doesNotMatch(text, /<script>/);
+    assert.doesNotMatch(text, /<\/script>/);
+  } finally {
+    await server.close();
+  }
 });

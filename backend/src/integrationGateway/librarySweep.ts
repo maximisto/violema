@@ -607,12 +607,32 @@ function stripTags(html: string): string {
   return html.replace(/<[^>]*>/g, ' ');
 }
 
-/** Order matters: strip real markup first, THEN decode entities — decoding first would turn escaped
- *  text like `&lt;script&gt;` into a literal `<script>` tag that the strip pass would wrongly remove. */
+/**
+ * Order matters, in both directions:
+ *
+ * 1. Strip real markup FIRST, then decode entities. Decoding first would
+ *    turn escaped text like `&lt;script&gt;` into a literal `<script>` tag
+ *    that the strip pass would then wrongly treat as real markup content to
+ *    remove wholesale (losing the visible-escaped text a page author meant
+ *    to display, e.g. a code sample).
+ * 2. Strip AGAIN, after decoding. Decoding is exactly what can materialize
+ *    NEW tag syntax that did not exist as real markup on the source page —
+ *    a page that visibly displays `&lt;script&gt;alert(1)&lt;/script&gt;` as
+ *    text decodes to the literal string `<script>alert(1)</script>`, which
+ *    is live, renderable tag syntax if left in a stored entry. The library
+ *    entry this produces is "evidence" a mission reasons over and a human
+ *    may later render — it must be inert BY CONSTRUCTION, not merely safe
+ *    because today's one HTML-rendering surface happens to re-escape it.
+ *    This second pass accepts a small amount of prose lossiness (a decoded
+ *    "a < b" also gets stripped) as the price of never storing live markup
+ *    syntax, decoded or otherwise.
+ */
 function extractPlainText(html: string): string {
   const withoutScriptsAndStyles = stripScriptAndStyleBlocks(html);
   const withoutTags = stripTags(withoutScriptsAndStyles);
-  return collapseWhitespace(decodeBasicEntities(withoutTags));
+  const decoded = decodeBasicEntities(withoutTags);
+  const reNeutralized = stripTags(decoded);
+  return collapseWhitespace(reNeutralized);
 }
 
 function extractPageTitle(html: string): string | null {
@@ -668,8 +688,20 @@ export async function ingestUrlIntoLibrary(
     return { ok: false, code: 'invalid_url', message: 'Only http and https links can be added to the library.' };
   }
 
+  // From here on, every downstream use (the actual fetch, the front matter,
+  // the returned `sourceUrl`, and the caller's audit-log host derivation in
+  // server.ts) reads from `parsedUrl.href` — the URL parser's OWN normalized
+  // serialization — never from the raw `trimmedUrl` input string. The WHATWG
+  // URL parser silently strips embedded ASCII tab/newline/carriage-return
+  // characters while validating, but a naive `${trimmedUrl}` interpolation
+  // into the front matter would still write the ORIGINAL, unstripped string
+  // — letting an embedded newline inject a forged extra front-matter line
+  // (e.g. a second `source_url:` key) into what is meant to be a trusted,
+  // machine-parsed header. `href` is provably single-line and fully escaped.
+  const normalizedUrl = parsedUrl.href;
+
   const fetchUrl = deps.fetchUrl ?? safeUrlFetch;
-  const fetched = await fetchUrl(trimmedUrl);
+  const fetched = await fetchUrl(normalizedUrl);
   if (!fetched.ok) {
     if (fetched.reason === 'invalid_url') {
       return { ok: false, code: 'invalid_url', message: 'That does not look like a valid URL.' };
@@ -686,7 +718,7 @@ export async function ingestUrlIntoLibrary(
   const title = extractPageTitle(fetched.body) || parsedUrl.hostname;
   const bodyText = capToByteLength(extractPlainText(fetched.body), MAX_ENTRY_CONTENT_BYTES);
   const now = deps.now ? deps.now() : new Date();
-  const frontMatter = `---\nsource_url: ${trimmedUrl}\nfetched_at: ${now.toISOString()}\n---\n\n`;
+  const frontMatter = `---\nsource_url: ${normalizedUrl}\nfetched_at: ${now.toISOString()}\n---\n\n`;
   const markdown = `${frontMatter}${bodyText}`;
 
   const appended = await appendLibraryEntry(
@@ -700,5 +732,5 @@ export async function ingestUrlIntoLibrary(
     return { ok: false, code: 'write_failed', message: appended.message };
   }
 
-  return { ok: true, fileName: appended.fileName, sourceUrl: trimmedUrl };
+  return { ok: true, fileName: appended.fileName, sourceUrl: normalizedUrl };
 }
