@@ -38,10 +38,17 @@
  * FAILS HONEST, NEVER SILENT
  *
  * Every skip is named in `warnings`: unsupported mime, oversized file, files
- * dropped by the 20-file cap. A file whose bytes cannot be parsed still
- * becomes an entry — `content: null, contentError: 'content unreadable'` —
- * the same visible-gap semantics `accountLibrary`'s `AccountLibraryEntry`
- * already uses, rather than disappearing without a trace.
+ * dropped by the 20-file cap, files with no content budget left. A file whose
+ * bytes cannot be parsed still becomes an entry — `content: null,
+ * contentError: 'content unreadable'` — the same visible-gap semantics
+ * `accountLibrary`'s `AccountLibraryEntry` already uses, rather than
+ * disappearing without a trace. So does a file the budget ran out on
+ * (`contentError: 'content budget exhausted'`), which is the most likely skip
+ * in practice.
+ *
+ * Two ceilings, not one: `budgetBytes` bounds the whole operator lane, and
+ * `MAX_ENTRY_CONTENT_BYTES` bounds any single file within it, so one fat drop
+ * cannot monopolize the lane and starve everything behind it.
  *
  * MEMO
  *
@@ -458,6 +465,17 @@ async function resolveFileText(
   return { text: parsed.text, truncated: parsed.truncated };
 }
 
+/**
+ * Byte ceilings are engineering facts; warnings are read by operators. "5 MB"
+ * is a size someone can act on ("split the deck"); "5000000-byte cap" is a
+ * number they have to decode first.
+ */
+function formatMegabytes(bytes: number): string {
+  const mb = bytes / 1_000_000;
+  const rendered = Number.isInteger(mb) ? String(mb) : mb.toFixed(1);
+  return `${rendered} MB`;
+}
+
 function modifiedTimeValue(file: DriveFileMeta): number {
   if (!file.modifiedTime) return 0;
   const parsed = Date.parse(file.modifiedTime);
@@ -526,12 +544,14 @@ export async function sweepOperatorFiles(
   const entries: OperatorSourceEntry[] = [];
   let remainingBudget = input.budgetBytes;
   const nowMs = nowFn().getTime();
+  const starvedFileNames: string[] = [];
 
   for (const file of selected) {
-    if (remainingBudget <= 0) break;
-
     const isGoogleDoc = file.mimeType === GOOGLE_DOC_MIME_TYPE;
 
+    // The two free screens first: neither spends budget, and both already
+    // name themselves in `warnings`, so a file rejected on type or size
+    // should say THAT rather than "budget exhausted".
     if (!isGoogleDoc && !isParseableSourceMime(file.mimeType)) {
       warnings.push(`Folder drop: '${file.name}' skipped (unsupported type ${file.mimeType})`);
       continue;
@@ -539,12 +559,38 @@ export async function sweepOperatorFiles(
 
     if (!isGoogleDoc && typeof file.size === 'number' && file.size > DRIVE_READER_MAX_DOWNLOAD_BYTES) {
       warnings.push(
-        `Folder drop: '${file.name}' skipped (exceeds the ${DRIVE_READER_MAX_DOWNLOAD_BYTES}-byte cap)`,
+        `Folder drop: '${file.name}' skipped (larger than ${formatMegabytes(DRIVE_READER_MAX_DOWNLOAD_BYTES)})`,
       );
       continue;
     }
 
-    const body = await resolveFileText(reader, file, remainingBudget, isGoogleDoc, nowMs);
+    // Out of room. The file still becomes an ENTRY — name, link, modified
+    // time, and an explicit `contentError` — exactly the visible-gap
+    // semantics `accountLibrary.readEntryContent` uses for the same
+    // condition on the app-entry side. A bare `break` here was the one skip
+    // in this module that left no trace anywhere: not in entries, not in
+    // warnings, not in evidence.
+    if (remainingBudget <= 0) {
+      starvedFileNames.push(file.name);
+      entries.push({
+        fileId: file.id,
+        fileName: file.name,
+        mimeType: file.mimeType,
+        modifiedTime: file.modifiedTime,
+        webViewLink: file.webViewLink,
+        content: null,
+        truncated: true,
+        contentError: 'content budget exhausted',
+      });
+      continue;
+    }
+
+    // Per-entry ceiling as well as the lane-wide one: without it, a single
+    // 12 KB markdown drop consumes the whole operator budget and starves
+    // every later file. Same `MAX_ENTRY_CONTENT_BYTES` the app-entry path
+    // applies, so neither origin can monopolize the shared ceiling.
+    const perFileBudget = Math.min(MAX_ENTRY_CONTENT_BYTES, remainingBudget);
+    const body = await resolveFileText(reader, file, perFileBudget, isGoogleDoc, nowMs);
     if (body.text !== null) {
       remainingBudget -= Buffer.byteLength(body.text, 'utf8');
     }
@@ -559,6 +605,12 @@ export async function sweepOperatorFiles(
       truncated: body.truncated,
       ...(body.contentError ? { contentError: body.contentError } : {}),
     });
+  }
+
+  if (starvedFileNames.length > 0) {
+    warnings.push(
+      `Folder drop: ${starvedFileNames.length} file(s) were listed but not read this run (content budget exhausted): ${starvedFileNames.join(', ')}`,
+    );
   }
 
   return { laneState: 'active', entries, warnings };

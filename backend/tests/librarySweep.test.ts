@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { test, beforeEach } from 'node:test';
 
+import { MAX_ENTRY_CONTENT_BYTES } from '../src/integrationGateway/accountLibrary';
 import {
   MAX_OPERATOR_FILES_PER_SWEEP,
   SWEEP_MEMO_MAX_ENTRIES,
@@ -268,9 +269,15 @@ test('unsupported and oversized files are skipped with warnings naming the file'
   assert.ok(unsupportedWarning, 'expected a warning naming diagram.png');
   assert.equal(unsupportedWarning, "Folder drop: 'diagram.png' skipped (unsupported type image/png)");
 
+  // Operators read these warnings, not engineers: "5 MB" is a size a person
+  // can act on, "5000000-byte cap" is a number they have to decode.
   const oversizedWarning = result.warnings.find((w) => w.includes('huge.pdf'));
   assert.ok(oversizedWarning, 'expected a warning naming huge.pdf');
-  assert.ok(oversizedWarning?.includes(String(DRIVE_READER_MAX_DOWNLOAD_BYTES)));
+  assert.equal(oversizedWarning, "Folder drop: 'huge.pdf' skipped (larger than 5 MB)");
+  assert.ok(
+    !oversizedWarning?.includes(String(DRIVE_READER_MAX_DOWNLOAD_BYTES)),
+    'the raw byte count must not be shown to operators',
+  );
 });
 
 // --- 20-file cap ------------------------------------------------------------------
@@ -416,7 +423,7 @@ test('memo re-clamp keeps truncation honest: a once-truncated file never later r
 
 // --- budget -------------------------------------------------------------------------
 
-test('entries stop accumulating at budgetBytes', async () => {
+test('budget exhaustion leaves a VISIBLE gap, never a silent disappearance', async () => {
   const tree: DriveFileMeta[] = [
     {
       id: 'budget-1',
@@ -449,9 +456,76 @@ test('entries stop accumulating at budgetBytes', async () => {
     { reader, execute },
   );
 
-  assert.equal(result.entries.length, 1, 'the second file must never be attempted once the budget is spent');
-  assert.equal(result.entries[0]?.fileId, 'budget-1');
+  // Still no wasted download for the file there is no room to read...
   assert.ok(!downloadCalls.includes('budget-2'));
+
+  // ...but it does NOT vanish. The module's own stated policy is that every
+  // skip is named, and this was the only one that wasn't.
+  assert.equal(result.entries.length, 2);
+  assert.equal(result.entries[0]?.fileId, 'budget-1');
+  assert.equal(result.entries[0]?.content, 'X'.repeat(20));
+
+  const starved = result.entries[1];
+  assert.equal(starved?.fileId, 'budget-2');
+  assert.equal(starved?.content, null);
+  assert.equal(starved?.contentError, 'content budget exhausted');
+  assert.equal(starved?.truncated, true);
+  assert.equal(starved?.fileName, 'second.md', 'the operator must still see the file NAME');
+
+  assert.ok(
+    result.warnings.some((warning) => /budget/i.test(warning) && warning.includes('second.md')),
+    `expected a warning naming the starved file, got ${JSON.stringify(result.warnings)}`,
+  );
+});
+
+test('a fat first file cannot monopolize the operator lane', async () => {
+  // 12 KB of markdown against a 12 KB budget: without a per-entry ceiling this
+  // one file eats the whole lane and every later drop disappears. The
+  // per-entry cap is MAX_ENTRY_CONTENT_BYTES (8 KB), the same ceiling the
+  // sibling app-entry path in accountLibrary applies.
+  const budgetBytes = 12_000;
+  const tree: DriveFileMeta[] = [
+    {
+      id: 'fat-1',
+      name: 'fat.md',
+      mimeType: 'text/markdown',
+      size: budgetBytes,
+      modifiedTime: '2026-08-02T00:00:00.000Z',
+      md5Checksum: 'md5-fat-1',
+    },
+    {
+      id: 'small-1',
+      name: 'small.md',
+      mimeType: 'text/markdown',
+      size: 30,
+      modifiedTime: '2026-08-01T00:00:00.000Z',
+      md5Checksum: 'md5-small-1',
+    },
+  ];
+  const { reader, downloadCalls } = createFakeReader({
+    tree,
+    fileContents: {
+      'fat-1': Buffer.from('X'.repeat(budgetBytes)),
+      'small-1': Buffer.from('the later drop that must survive'),
+    },
+  });
+  const { execute } = createComposioFake({ [ROOT_ID]: [{ files: [] }] });
+
+  const result = await sweepOperatorFiles(
+    { workspaceId: 'ws_test', rootFolderId: ROOT_ID, budgetBytes },
+    { reader, execute },
+  );
+
+  const fat = result.entries.find((entry) => entry.fileId === 'fat-1');
+  assert.ok(fat);
+  assert.equal(Buffer.byteLength(String(fat?.content), 'utf8'), MAX_ENTRY_CONTENT_BYTES);
+  assert.equal(fat?.truncated, true, 'a clipped file must say so');
+
+  const small = result.entries.find((entry) => entry.fileId === 'small-1');
+  assert.ok(small, 'the later file must not be starved by the fat one');
+  assert.equal(small?.contentError, undefined);
+  assert.match(String(small?.content), /must survive/);
+  assert.ok(downloadCalls.includes('small-1'));
 });
 
 // --- a broken download must degrade the FILE, never the RUN -------------------------
