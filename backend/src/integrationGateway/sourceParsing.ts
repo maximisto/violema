@@ -20,6 +20,17 @@
  * `capToByteLimit` is the same `Buffer.byteLength` check + slice +
  * `truncated` flag that `accountLibrary`'s read path uses for its content
  * ceilings. One truncation convention across the ingestion pipeline, not two.
+ *
+ * DEPLOY-TARGET CONSTRAINT (carry forward into Task 9's deploy runbook)
+ *
+ * `pdf-parse` declares `engines.node: ">=20.16.0 <21 || >=22.3.0"`. The VPS
+ * deploy script (`deploy/deploy.sh`) provisions Node via NodeSource's
+ * `setup_20.x`, which always tracks the latest 20.x point release — every
+ * 20.x release since 20.16.0 (mid-2024) satisfies this, but that install
+ * step only runs `if ! command -v node`, i.e. it is skipped on a host that
+ * already has Node installed. Whoever runs the next deploy should confirm
+ * the live VPS Node version explicitly rather than assume the nodesource
+ * step reran.
  */
 
 import mammoth from 'mammoth';
@@ -41,19 +52,31 @@ export type ParseSourceResult =
   | { ok: false; reason: 'unsupported_type' | 'parse_failed' };
 
 /**
- * Byte-length check + slice, same ceiling convention as `accountLibrary`'s
- * `MAX_ENTRY_CONTENT_BYTES` handling. Slicing raw UTF-8 bytes rather than JS
- * characters means a multi-byte character straddling the cut point can come
- * back as a replacement character — an accepted, documented cost of a hard
- * byte ceiling, not a bug.
+ * Byte-length check + bounded write, same ceiling convention as
+ * `accountLibrary`'s `MAX_ENTRY_CONTENT_BYTES` handling.
+ *
+ * Deliberately uses `Buffer#write` into a fixed-size `maxBytes` buffer
+ * rather than `Buffer.from(text).subarray(0, maxBytes).toString()`. The
+ * subarray approach slices raw UTF-8 bytes at an arbitrary byte offset, and
+ * if that offset lands mid multi-byte character, `.toString('utf8')`
+ * replaces the truncated tail with a 3-byte U+FFFD replacement character —
+ * which can push the decoded string back OVER maxBytes (e.g. cutting a
+ * 4-byte emoji after its first byte yields a 3-byte replacement char, net
+ * +2 bytes over the cap). `Buffer#write` never writes a partial multi-byte
+ * sequence into the destination buffer in the first place, so the returned
+ * text is always <= maxBytes, full stop — verified with emoji and
+ * multi-byte punctuation (em dash, curly quote) landing exactly on the cut
+ * boundary.
  */
 function capToByteLimit(text: string, maxBytes: number): { text: string; truncated: boolean } {
-  const bytes = Buffer.from(text, 'utf8');
-  if (bytes.byteLength <= maxBytes) {
+  const totalBytes = Buffer.byteLength(text, 'utf8');
+  if (totalBytes <= maxBytes) {
     return { text, truncated: false };
   }
   const safeMax = Math.max(0, maxBytes);
-  return { text: bytes.subarray(0, safeMax).toString('utf8'), truncated: true };
+  const bounded = Buffer.alloc(safeMax);
+  const written = bounded.write(text, 0, safeMax, 'utf8');
+  return { text: bounded.toString('utf8', 0, written), truncated: true };
 }
 
 /**
@@ -64,6 +87,26 @@ function capToByteLimit(text: string, maxBytes: number): { text: string; truncat
  * confined to the one call path that actually parses a PDF, instead of
  * firing every time any part of the server imports this module — including
  * the text/docx-only paths that never touch a PDF at all.
+ *
+ * NATIVE DEPENDENCY, VERIFIED DEGRADED-NOT-CRASHED: `pdf-parse` depends on
+ * `@napi-rs/canvas` (a native binary, resolved per-platform through its own
+ * `optionalDependencies`). Confirmed by reading `pdf-parse`'s source that
+ * `getText()`/`getPageText()` never touch canvas directly — only
+ * `getImage`/`getScreenshot`/`getTable` do — but also confirmed empirically
+ * (by removing the installed `@napi-rs/canvas` package and re-running this
+ * module's test suite) that `pdfjs-dist`'s internal DOMMatrix/ImageData/
+ * Path2D polyfills still depend on it being loadable, so `getText()` itself
+ * fails when canvas cannot load. The guarantee that matters for this module
+ * is not "canvas is never needed" — it verifiably still is a runtime
+ * requirement inside `getText()` on the tested version — it is that this
+ * `require` and every call below it live inside `extractPdfText`, which is
+ * only ever invoked from `parseSourceBuffer`'s single try/catch (see below):
+ * a synchronous `require` failure, a missing native binary, or any getText
+ * failure all surface as a rejected promise here, which that outer catch
+ * turns into `{ ok: false, reason: 'parse_failed' }` for that one file —
+ * never a crash of the sweep that called it. Verified directly: with
+ * `@napi-rs/canvas` removed, every PDF in this module's test suite degrades
+ * to `parse_failed` (not a throw) while the text/docx paths keep working.
  */
 async function extractPdfText(buffer: Buffer): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -87,9 +130,14 @@ async function extractDocxText(buffer: Buffer): Promise<string> {
  *
  * Never throws: an unsupported mime type is `unsupported_type`; anything a
  * parser rejects — corrupt bytes, a truncated file, a format edge case
- * neither library handles — is `parse_failed`. Every `ok: true` result has
- * already been passed through `capToByteLimit`, so no caller needs to
- * re-check size before treating the text as safe to embed in a prompt.
+ * neither library handles, or `pdf-parse`'s lazy `require` itself failing
+ * to load (missing module, missing native `@napi-rs/canvas` binary on an
+ * unexpected host) — is `parse_failed`. The `try` below wraps the entire
+ * switch, so every branch's failure mode, including a `require` throw,
+ * collapses to the same `parse_failed` result rather than escaping as a
+ * raw exception. Every `ok: true` result has already been passed through
+ * `capToByteLimit`, so no caller needs to re-check size before treating the
+ * text as safe to embed in a prompt.
  */
 export async function parseSourceBuffer(
   input: { fileName: string; mimeType: string; buffer: Buffer },

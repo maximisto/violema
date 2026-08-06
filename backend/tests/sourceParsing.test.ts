@@ -177,3 +177,38 @@ test('every ok result respects maxBytes', async () => {
     assert.equal(docxResult.truncated, true);
   }
 });
+
+test('byte cap never exceeds maxBytes when the cut lands mid multi-byte character', async () => {
+  // Exact repro from review: a 4-byte emoji (U+1F600) straddling the cut
+  // point. Slicing raw bytes and decoding would substitute a 3-byte
+  // replacement character for the truncated tail, landing at 5 bytes for a
+  // 3-byte cap — this asserts the fixed behavior never exceeds the cap.
+  const emojiResult = await parseSourceBuffer(
+    { fileName: 'x.txt', mimeType: 'text/plain', buffer: Buffer.from('ab😀cd', 'utf8') },
+    3,
+  );
+  assert.equal(emojiResult.ok, true);
+  if (emojiResult.ok) {
+    assert.ok(
+      Buffer.byteLength(emojiResult.text, 'utf8') <= 3,
+      `expected <= 3 bytes, got ${Buffer.byteLength(emojiResult.text, 'utf8')} (${JSON.stringify(emojiResult.text)})`,
+    );
+    assert.equal(emojiResult.truncated, true);
+  }
+
+  // Em dash and curly quote are common 3-byte UTF-8 sequences (typographic
+  // punctuation that shows up constantly in real Word docs and PDFs), a
+  // second, distinct multi-byte width from the 4-byte emoji case above.
+  const punctuationResult = await parseSourceBuffer(
+    { fileName: 'punctuation.txt', mimeType: 'text/plain', buffer: Buffer.from('ab—cd’ef', 'utf8') },
+    4,
+  );
+  assert.equal(punctuationResult.ok, true);
+  if (punctuationResult.ok) {
+    assert.ok(
+      Buffer.byteLength(punctuationResult.text, 'utf8') <= 4,
+      `expected <= 4 bytes, got ${Buffer.byteLength(punctuationResult.text, 'utf8')} (${JSON.stringify(punctuationResult.text)})`,
+    );
+    assert.equal(punctuationResult.truncated, true);
+  }
+});
