@@ -108,6 +108,18 @@ const blockedAddressCases: Array<{ label: string; address: string; family: numbe
   { label: 'link-local 169.254.169.254', address: '169.254.169.254', family: 4 },
   { label: 'loopback ::1', address: '::1', family: 6 },
   { label: 'ULA fd00::1', address: 'fd00::1', family: 6 },
+  // "This network" / unspecified — on Linux, 0.0.0.0 connects to LOOPBACK.
+  { label: 'unspecified 0.0.0.0', address: '0.0.0.0', family: 4 },
+  { label: 'this-network 0.1.2.3', address: '0.1.2.3', family: 4 },
+  // CGNAT (100.64.0.0/10): carrier-internal space, never a legitimate target.
+  { label: 'CGNAT 100.64.0.1', address: '100.64.0.1', family: 4 },
+  { label: 'CGNAT 100.127.255.254', address: '100.127.255.254', family: 4 },
+  // Multicast (224/4), reserved (240/4) and the limited broadcast address.
+  { label: 'multicast 224.0.0.1', address: '224.0.0.1', family: 4 },
+  { label: 'reserved 240.0.0.1', address: '240.0.0.1', family: 4 },
+  { label: 'broadcast 255.255.255.255', address: '255.255.255.255', family: 4 },
+  // IPv6 unspecified (::) — the v6 spelling of the same loopback trap.
+  { label: 'unspecified ::', address: '::', family: 6 },
 ];
 
 for (const testCase of blockedAddressCases) {
@@ -116,6 +128,26 @@ for (const testCase of blockedAddressCases) {
     const result = await safeUrlFetch('http://blocked.example.test/', { lookup });
     assert.equal(result.ok, false);
     assert.equal(!result.ok && result.reason, 'blocked_address');
+  });
+}
+
+// The table must not over-block: ordinary public unicast still resolves past
+// the guard (it fails later, at the transport, for a host that does not exist
+// — anything BUT `blocked_address`).
+const allowedAddressCases: Array<{ label: string; address: string; family: number }> = [
+  { label: 'public IPv4 93.184.216.34', address: '93.184.216.34', family: 4 },
+  { label: 'public IPv4 100.63.255.255 (just below CGNAT)', address: '100.63.255.255', family: 4 },
+  { label: 'public IPv4 223.255.255.255 (just below multicast)', address: '223.255.255.255', family: 4 },
+  { label: 'public IPv4 1.0.0.1', address: '1.0.0.1', family: 4 },
+  { label: 'public IPv6 2606:2800:220:1:248:1893:25c8:1946', address: '2606:2800:220:1:248:1893:25c8:1946', family: 6 },
+];
+
+for (const testCase of allowedAddressCases) {
+  test(`safeUrlFetch does not block ${testCase.label}`, async () => {
+    const lookup = fixedAddressLookup(testCase.address, testCase.family);
+    const result = await safeUrlFetch('http://allowed.example.test/', { lookup, timeoutMs: 250 });
+    assert.equal(result.ok, false, 'the probe host does not serve anything');
+    assert.notEqual(!result.ok && result.reason, 'blocked_address');
   });
 }
 
@@ -129,11 +161,37 @@ for (const testCase of blockedAddressCases) {
 const ipv4MappedCases = [
   { label: 'mapped loopback [::ffff:127.0.0.1]', host: '[::ffff:127.0.0.1]' },
   { label: 'mapped cloud metadata [::ffff:169.254.169.254]', host: '[::ffff:169.254.169.254]' },
+  // The DEPRECATED IPv4-compatible form (`::/96`, no `ffff` marker). The URL
+  // parser normalizes `[::127.0.0.1]` to `[::7f00:1]`, which matches no
+  // IPv6-only range — it has to be unwrapped like the mapped form or it
+  // reaches loopback.
+  { label: 'IPv4-compatible loopback [::127.0.0.1]', host: '[::127.0.0.1]' },
+  { label: 'IPv4-compatible metadata [::169.254.169.254]', host: '[::169.254.169.254]' },
 ];
 
 for (const testCase of ipv4MappedCases) {
   test(`safeUrlFetch refuses an IPv4-mapped IPv6 literal: ${testCase.label}`, async () => {
     const result = await safeUrlFetch(`http://${testCase.host}/`);
+    assert.equal(result.ok, false);
+    assert.equal(!result.ok && result.reason, 'blocked_address');
+  });
+}
+
+// --- safeUrlFetch: bare-zero literals must not reach loopback -------------------
+
+// `http://0/` and `http://0.0.0.0:PORT/` both normalize to hostname `0.0.0.0`,
+// and `http://[::]/` to the all-zeros IPv6 address. On Linux each connects to
+// LOOPBACK, so an authenticated tenant could otherwise make this server fetch
+// its own internal services. Real default lookup here — these are literals.
+const bareZeroLiteralCases = [
+  { label: 'http://0/', url: 'http://0/' },
+  { label: 'http://0.0.0.0:1/', url: 'http://0.0.0.0:1/' },
+  { label: 'http://[::]/', url: 'http://[::]/' },
+];
+
+for (const testCase of bareZeroLiteralCases) {
+  test(`safeUrlFetch refuses the bare-zero literal ${testCase.label}`, async () => {
+    const result = await safeUrlFetch(testCase.url);
     assert.equal(result.ok, false);
     assert.equal(!result.ok && result.reason, 'blocked_address');
   });

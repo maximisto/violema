@@ -77,7 +77,16 @@ async function defaultLookup(host: string): Promise<Array<{ address: string; fam
 
 // --- address classification ---------------------------------------------------
 
-/** Loopback (127.0.0.0/8), private (10/8, 172.16/12, 192.168/16), link-local (169.254/16). */
+/**
+ * The IPv4 address table. Everything not listed here is treated as public
+ * unicast and allowed through.
+ *
+ * `0.0.0.0/8` is the one that reads like an oddity and is not: `http://0/` and
+ * `http://0.0.0.0:6379/` both normalize (WHATWG URL parser) to the hostname
+ * `0.0.0.0`, and on Linux connecting to `0.0.0.0` reaches LOOPBACK. Without
+ * this row, "block 127.0.0.0/8" is a guard with a second, unwatched door onto
+ * the same house.
+ */
 function isBlockedIPv4(address: string): boolean {
   const octets = address.split('.');
   if (octets.length !== 4) return true; // unparseable as dotted-quad: fail closed.
@@ -85,11 +94,14 @@ function isBlockedIPv4(address: string): boolean {
   if (parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
 
   const [a, b] = parts;
+  if (a === 0) return true; // "this network" (0.0.0.0/8) — 0.0.0.0 reaches loopback on Linux
   if (a === 127) return true; // loopback
   if (a === 10) return true; // private
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT (100.64.0.0/10)
   if (a === 172 && b >= 16 && b <= 31) return true; // private
   if (a === 192 && b === 168) return true; // private
   if (a === 169 && b === 254) return true; // link-local
+  if (a >= 224) return true; // multicast (224/4), reserved (240/4), broadcast (255.255.255.255)
   return false;
 }
 
@@ -139,13 +151,28 @@ function parseIPv6Groups(address: string): number[] | null {
   return groups;
 }
 
-/** Loopback (::1), link-local (fe80::/10), unique local / ULA (fc00::/7), IPv4-mapped (::ffff:0:0/96). */
+/** Turns the low 32 bits of an IPv6 group array into the dotted-quad they encode. */
+function embeddedIPv4From(groups: number[]): string {
+  const [high, low] = [groups[6], groups[7]];
+  return [(high >> 8) & 0xff, high & 0xff, (low >> 8) & 0xff, low & 0xff].join('.');
+}
+
+/**
+ * Unspecified (::), loopback (::1), link-local (fe80::/10), unique local / ULA
+ * (fc00::/7), IPv4-mapped (::ffff:0:0/96) and IPv4-compatible (::/96).
+ */
 function isBlockedIPv6(address: string): boolean {
   const groups = parseIPv6Groups(address);
   if (!groups) return true; // unparseable: fail closed.
 
   const isLoopback = groups.slice(0, 7).every((value) => value === 0) && groups[7] === 1;
   if (isLoopback) return true;
+
+  // The unspecified address (::) is the v6 twin of 0.0.0.0: `http://[::]/`
+  // reaches loopback for the same reason, and matches none of the ranges
+  // below because every group is zero.
+  const isUnspecified = groups.every((value) => value === 0);
+  if (isUnspecified) return true;
 
   // IPv4-mapped IPv6 (::ffff:0:0/96): the last 32 bits ARE an IPv4 address
   // wearing an IPv6 costume. Without this unwrap, a host literal like
@@ -157,9 +184,16 @@ function isBlockedIPv6(address: string): boolean {
   // defined in exactly one place.
   const isIPv4Mapped = groups.slice(0, 5).every((value) => value === 0) && groups[5] === 0xffff;
   if (isIPv4Mapped) {
-    const [high, low] = [groups[6], groups[7]];
-    const embeddedIPv4 = [(high >> 8) & 0xff, high & 0xff, (low >> 8) & 0xff, low & 0xff].join('.');
-    return isBlockedIPv4(embeddedIPv4);
+    return isBlockedIPv4(embeddedIPv4From(groups));
+  }
+
+  // The DEPRECATED IPv4-compatible form (::/96 — the same low 32 bits, but
+  // with no `ffff` marker). Deprecated is not the same as unreachable: the URL
+  // parser happily normalizes `[::127.0.0.1]` to `[::7f00:1]`, which carries
+  // no v6 range signature at all. Same unwrap, same single IPv4 table.
+  const isIPv4Compatible = groups.slice(0, 6).every((value) => value === 0);
+  if (isIPv4Compatible) {
+    return isBlockedIPv4(embeddedIPv4From(groups));
   }
 
   const firstGroup = groups[0];
