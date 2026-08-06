@@ -100,6 +100,14 @@ export function getDashboardReadinessBlockerAction(
     };
   }
 
+  if (blocker.key === 'business_context_missing') {
+    return {
+      kind: 'navigate',
+      label: 'Tell Violema about your business',
+      href: '/settings#business',
+    };
+  }
+
   if (blocker.route) {
     return {
       kind: 'navigate',

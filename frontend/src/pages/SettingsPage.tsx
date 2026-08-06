@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left.js';
 import Bot from 'lucide-react/dist/esm/icons/bot.js';
+import Building2 from 'lucide-react/dist/esm/icons/building-2.js';
 import KeyRound from 'lucide-react/dist/esm/icons/key-round.js';
 import Plug from 'lucide-react/dist/esm/icons/plug.js';
 import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw.js';
@@ -280,6 +281,18 @@ export default function SettingsPage() {
     autoRollbackWeaknessThreshold: 12,
     autoRollbackMomentumThreshold: 6,
   });
+  const [businessSummary, setBusinessSummary] = useState('');
+  const [businessKeywords, setBusinessKeywords] = useState('');
+  const [businessCompetitors, setBusinessCompetitors] = useState('');
+  const [businessExclusions, setBusinessExclusions] = useState('');
+  const [businessStatus, setBusinessStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [businessErrors, setBusinessErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (window.location.hash === '#business') {
+      document.getElementById('business')?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
 
   useEffect(() => {
     if (loading || !data || typeof window === 'undefined') return;
@@ -353,6 +366,37 @@ export default function SettingsPage() {
     void loadSettings();
     // Intentionally runs once on mount; loadSettings is redefined each render
     // (not memoized), so listing it here would refetch settings on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadBusinessContext() {
+    try {
+      const response = await fetch(`/api/workspace/business-context?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
+        headers: {
+          'X-Workspace-Id': workspace.workspaceId,
+          'X-Workspace-Name': workspace.workspaceName,
+        },
+      });
+      if (!response.ok) throw new Error('Could not load your business context');
+      const payload = await response.json() as {
+        workspaceId: string;
+        businessContext: { summary: string; marketKeywords: string[]; competitors: string[]; exclusions?: string[] } | null;
+      };
+      if (payload.businessContext) {
+        setBusinessSummary(payload.businessContext.summary);
+        setBusinessKeywords(payload.businessContext.marketKeywords.join(', '));
+        setBusinessCompetitors(payload.businessContext.competitors.join(', '));
+        setBusinessExclusions((payload.businessContext.exclusions || []).join(', '));
+      }
+    } catch (error) {
+      setNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not load your business context.' });
+    }
+  }
+
+  useEffect(() => {
+    void loadBusinessContext();
+    // Intentionally runs once on mount; loadBusinessContext is redefined each
+    // render (not memoized), so listing it here would refetch on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -443,6 +487,53 @@ export default function SettingsPage() {
       setNotice({ tone: 'error', message: error instanceof Error ? error.message : 'Could not save settings.' });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleBusinessSave() {
+    setBusinessStatus('saving');
+    setBusinessErrors([]);
+    try {
+      const marketKeywords = businessKeywords.split(',').map((item) => item.trim()).filter(Boolean);
+      const competitors = businessCompetitors.split(',').map((item) => item.trim()).filter(Boolean);
+      const exclusions = businessExclusions.split(',').map((item) => item.trim()).filter(Boolean);
+
+      const response = await fetch(`/api/workspace/business-context?workspace_id=${encodeURIComponent(workspace.workspaceId)}&workspace_name=${encodeURIComponent(workspace.workspaceName)}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Workspace-Id': workspace.workspaceId,
+          'X-Workspace-Name': workspace.workspaceName,
+        },
+        body: JSON.stringify({
+          summary: businessSummary.trim(),
+          marketKeywords,
+          competitors,
+          exclusions,
+        }),
+      });
+
+      if (response.status === 400) {
+        const payload = await response.json() as { error?: string; code?: string; details?: string[] };
+        setBusinessErrors(payload.details?.length ? payload.details : [payload.error || 'Could not save your business context.']);
+        setBusinessStatus('error');
+        return;
+      }
+      if (!response.ok) throw new Error('Could not save your business context');
+
+      const payload = await response.json() as {
+        ok: boolean;
+        workspaceId: string;
+        businessContext: { summary: string; marketKeywords: string[]; competitors: string[]; exclusions?: string[] };
+      };
+      setBusinessSummary(payload.businessContext.summary);
+      setBusinessKeywords(payload.businessContext.marketKeywords.join(', '));
+      setBusinessCompetitors(payload.businessContext.competitors.join(', '));
+      setBusinessExclusions((payload.businessContext.exclusions || []).join(', '));
+      setBusinessStatus('saved');
+    } catch (error) {
+      setBusinessErrors([error instanceof Error ? error.message : 'Could not save your business context.']);
+      setBusinessStatus('error');
     }
   }
 
@@ -630,6 +721,112 @@ export default function SettingsPage() {
       </header>
 
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6">
+        <section id="business" className="mb-6 rounded-[1.8rem] border border-navy-800/80 bg-gradient-to-b from-navy-900/72 via-navy-900/56 to-navy-950/88 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-3xl">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-cyan-300" />
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workspace context</p>
+                  <h2 className="text-sm font-semibold text-white">Your business</h2>
+                </div>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                What Violema researches for this workspace. Missions that scan the market use this — not a generic category.
+              </p>
+            </div>
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+              businessSummary.trim() && businessKeywords.trim()
+                ? 'border-green-500/18 bg-green-500/8 text-green-200'
+                : 'border-amber-500/18 bg-amber-500/8 text-amber-200'
+            }`}>
+              {businessSummary.trim() && businessKeywords.trim() ? 'Set' : 'Not set yet'}
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="block md:col-span-2">
+              <span className="mb-1.5 block text-[11px] text-slate-500">What your business is</span>
+              <div className="ui-input-shell">
+                <input
+                  type="text"
+                  value={businessSummary}
+                  onChange={(event) => setBusinessSummary(event.target.value)}
+                  className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                  placeholder="One sentence: what your business is"
+                />
+              </div>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] text-slate-500">Market keywords</span>
+              <div className="ui-input-shell">
+                <input
+                  type="text"
+                  value={businessKeywords}
+                  onChange={(event) => setBusinessKeywords(event.target.value)}
+                  className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                  placeholder="Comma-separated: e.g. AI-powered espresso machine, smart coffee machine"
+                />
+              </div>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] text-slate-500">Named competitors</span>
+              <div className="ui-input-shell">
+                <input
+                  type="text"
+                  value={businessCompetitors}
+                  onChange={(event) => setBusinessCompetitors(event.target.value)}
+                  className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                  placeholder="Comma-separated names or domains"
+                />
+              </div>
+            </label>
+            <label className="block md:col-span-2">
+              <span className="mb-1.5 block text-[11px] text-slate-500">Topics to avoid (optional)</span>
+              <div className="ui-input-shell">
+                <input
+                  type="text"
+                  value={businessExclusions}
+                  onChange={(event) => setBusinessExclusions(event.target.value)}
+                  className="w-full bg-transparent px-3 py-3 text-sm text-slate-100 outline-none"
+                  placeholder="Comma-separated, optional"
+                />
+              </div>
+            </label>
+          </div>
+
+          {businessErrors.length ? (
+            <div className="mt-3 rounded-xl border border-red-500/18 bg-red-500/8 px-3 py-2 text-[11px] text-red-200">
+              <ul className="list-disc space-y-1 pl-4">
+                {businessErrors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {businessStatus === 'saved' ? (
+            <div className="mt-3 rounded-xl border border-green-500/18 bg-green-500/8 px-3 py-2 text-[11px] text-green-200">
+              Saved. Missions that scan the market will use this from your next run.
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[11px] leading-relaxed text-slate-500">
+              A named competitor and a market keyword are different things — competitors are rivals, keywords are what buyers search for.
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleBusinessSave()}
+              disabled={businessStatus === 'saving'}
+              className="flex shrink-0 items-center gap-2 rounded-xl border border-violet-500/25 bg-violet-500/12 px-3 py-2 text-xs font-medium text-violet-100 transition-colors hover:bg-violet-500/18 disabled:opacity-60"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {businessStatus === 'saving' ? 'Saving…' : 'Save business context'}
+            </button>
+          </div>
+        </section>
+
         {loading || !data ? (
           <div className="rounded-[1.8rem] border border-dashed border-navy-700/70 bg-navy-950/35 px-5 py-12 text-center text-sm text-slate-500">
             Loading workspace setup…
