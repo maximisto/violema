@@ -280,7 +280,140 @@ test('downloadFile refuses oversized content with DriveReaderError too_large', a
   assert.ok(DRIVE_READER_MAX_DOWNLOAD_BYTES < 6_000_000);
 });
 
+// --- downloadFile: mid-stream failures stay inside DriveReaderError -----------
+
+/** A body that yields one chunk and then errors the stream with `error`. */
+function bodyThatFailsMidStream(error: Error): ReadableStream<Uint8Array> {
+  let pulls = 0;
+  return new ReadableStream({
+    pull(controller) {
+      pulls += 1;
+      if (pulls === 1) {
+        controller.enqueue(new Uint8Array(16));
+        return;
+      }
+      throw error;
+    },
+  });
+}
+
+const midStreamCases: Array<{ label: string; error: Error; expectedCode: string }> = [
+  {
+    label: 'a network drop mid-body',
+    error: new TypeError('terminated'),
+    expectedCode: 'http_error',
+  },
+  {
+    // AbortSignal.timeout covers body STREAMING, not just headers — a slow
+    // 4 MB PDF aborts here, well after timedFetch has returned.
+    label: 'the request timeout firing mid-body',
+    error: Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }),
+    expectedCode: 'timeout',
+  },
+];
+
+for (const testCase of midStreamCases) {
+  test(`downloadFile maps ${testCase.label} to DriveReaderError ${testCase.expectedCode}`, async () => {
+    const { privateKey } = generateTestKeypair();
+    const clientEmail = 'stream-reader@test.iam.gserviceaccount.com';
+    const fileId = 'slow-file-id';
+
+    const fetchImpl: DriveReaderFetch = async (input) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === TOKEN_URL) return jsonResponse({ access_token: 'tok', expires_in: 3600 });
+      if (url === `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`) {
+        return new Response(bodyThatFailsMidStream(testCase.error), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch to ${url}`);
+    };
+
+    const reader = createDriveReader({ clientEmail, privateKey }, fetchImpl);
+
+    await assert.rejects(reader.downloadFile(fileId), (error: unknown) => {
+      if (!(error instanceof DriveReaderError)) {
+        assert.fail(`expected a DriveReaderError, got ${(error as Error)?.name}`);
+      }
+      assert.equal(error.code, testCase.expectedCode);
+      assert.ok(!error.message.includes(privateKey));
+      return true;
+    });
+  });
+}
+
+test('downloadFile still reports too_large (not http_error) when the stream cap trips', async () => {
+  const { privateKey } = generateTestKeypair();
+  const clientEmail = 'cap-reader@test.iam.gserviceaccount.com';
+  const fileId = 'streamed-huge-file-id';
+
+  // No Content-Length header, so only the running byte count can catch it.
+  const fetchImpl: DriveReaderFetch = async (input) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url === TOKEN_URL) return jsonResponse({ access_token: 'tok', expires_in: 3600 });
+    if (url === `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`) {
+      const body = new ReadableStream({
+        pull(controller) {
+          controller.enqueue(new Uint8Array(1_000_000));
+        },
+      });
+      return new Response(body, { status: 200 });
+    }
+    throw new Error(`Unexpected fetch to ${url}`);
+  };
+
+  const reader = createDriveReader({ clientEmail, privateKey }, fetchImpl);
+
+  await assert.rejects(reader.downloadFile(fileId), (error: unknown) => {
+    if (!(error instanceof DriveReaderError)) assert.fail('expected a DriveReaderError');
+    assert.equal(error.code, 'too_large', 'the cap error must not be re-wrapped as a generic http_error');
+    return true;
+  });
+});
+
 // --- exportDoc ----------------------------------------------------------------
+
+test('exportDoc maps a failing body read to DriveReaderError, and caps its size', async () => {
+  const { privateKey } = generateTestKeypair();
+  const clientEmail = 'export-fail-reader@test.iam.gserviceaccount.com';
+  const exportUrlFor = (id: string) =>
+    `https://www.googleapis.com/drive/v3/files/${id}/export?mimeType=text%2Fplain`;
+
+  const bodies: Record<string, () => ReadableStream<Uint8Array> | string> = {
+    'timeout-doc': () =>
+      bodyThatFailsMidStream(
+        Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }),
+      ),
+    'broken-doc': () => bodyThatFailsMidStream(new TypeError('terminated')),
+    'huge-doc': () => 'x'.repeat(DRIVE_READER_MAX_DOWNLOAD_BYTES + 1),
+  };
+
+  const fetchImpl: DriveReaderFetch = async (input) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url === TOKEN_URL) return jsonResponse({ access_token: 'tok', expires_in: 3600 });
+    for (const [id, makeBody] of Object.entries(bodies)) {
+      if (url === exportUrlFor(id)) return new Response(makeBody(), { status: 200 });
+    }
+    throw new Error(`Unexpected fetch to ${url}`);
+  };
+
+  const reader = createDriveReader({ clientEmail, privateKey }, fetchImpl);
+
+  const expectations: Array<[string, string]> = [
+    ['timeout-doc', 'timeout'],
+    ['broken-doc', 'http_error'],
+    ['huge-doc', 'too_large'],
+  ];
+
+  for (const [fileId, expectedCode] of expectations) {
+    await assert.rejects(reader.exportDoc(fileId), (error: unknown) => {
+      if (!(error instanceof DriveReaderError)) {
+        assert.fail(`expected a DriveReaderError for ${fileId}, got ${(error as Error)?.name}`);
+      }
+      assert.equal(error.code, expectedCode, `${fileId} should surface as ${expectedCode}`);
+      assert.ok(!error.message.includes(privateKey));
+      return true;
+    });
+  }
+});
 
 test('exportDoc returns the exported plain text', async () => {
   const { privateKey } = generateTestKeypair();

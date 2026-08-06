@@ -33,7 +33,7 @@ export interface DriveReader {
   listFolderTree(rootFolderId: string): Promise<DriveFileMeta[]>;
   /** Refuses > 5 MB via Content-Length and a buffered running count. */
   downloadFile(fileId: string): Promise<Buffer>;
-  /** files.export as text/plain (for Google Docs/Sheets/Slides). */
+  /** files.export as text/plain (for Google Docs/Sheets/Slides). Same 5 MB ceiling as `downloadFile`. */
   exportDoc(fileId: string): Promise<string>;
 }
 
@@ -327,30 +327,69 @@ async function listFolderTreeImpl(
   return results;
 }
 
-// --- downloadFile --------------------------------------------------------------
+// --- bounded body reading ---------------------------------------------------------
 
-async function downloadFileImpl(fetchImpl: DriveReaderFetch, accessToken: string, fileId: string): Promise<Buffer> {
-  const response = await timedFetch(
-    fetchImpl,
-    `${DRIVE_FILES_BASE}/${encodeURIComponent(fileId)}?alt=media`,
-    accessToken,
-    'Drive files.get (alt=media) request',
+/**
+ * `timedFetch` guarantees a DriveReaderError for anything that goes wrong
+ * before the headers land. This is the same guarantee for everything that goes
+ * wrong AFTER them.
+ */
+function asDriveReaderError(error: unknown, contextLabel: string): DriveReaderError {
+  if (error instanceof DriveReaderError) return error;
+  if (isAbortError(error)) {
+    return new DriveReaderError(
+      'timeout',
+      `${contextLabel} timed out after ${REQUEST_TIMEOUT_MS}ms while reading the response body`,
+    );
+  }
+  return new DriveReaderError(
+    'http_error',
+    `${contextLabel} failed while reading the response body: ${messageOf(error)}`,
   );
+}
 
+/**
+ * Read a response body into a Buffer, bounded by
+ * `DRIVE_READER_MAX_DOWNLOAD_BYTES`, with every failure collapsed into a
+ * DriveReaderError.
+ *
+ * WHY THE CATCH IS LOAD-BEARING, NOT DEFENSIVE DECORATION
+ *
+ * `AbortSignal.timeout` covers body STREAMING, not merely the headers — so a
+ * slow 4 MB PDF, or a connection dropped mid-body, throws HERE, long after
+ * `timedFetch` handed back a perfectly healthy Response. A raw
+ * `AbortError`/`TypeError: terminated` escaping this module reaches
+ * `librarySweep.resolveFileText`, which deliberately RETHROWS anything that is
+ * not a DriveReaderError (it treats those as bugs, not expected failure
+ * modes). `sweepOperatorFiles` has no per-file catch, `readLibrary` catches
+ * only LibrarySweepError, and the library-read step is `critical` severity —
+ * so one unlucky dropped file would block an entire mission run instead of
+ * degrading to a visible `contentError: 'content unreadable'` gap.
+ */
+async function readBoundedBody(
+  response: Response,
+  subject: string,
+  contextLabel: string,
+): Promise<Buffer> {
   const declaredLength = Number(response.headers.get('content-length') || '0');
   if (Number.isFinite(declaredLength) && declaredLength > DRIVE_READER_MAX_DOWNLOAD_BYTES) {
     throw new DriveReaderError(
       'too_large',
-      `Drive file ${fileId} declares ${declaredLength} bytes, exceeding the ${DRIVE_READER_MAX_DOWNLOAD_BYTES}-byte limit`,
+      `${subject} declares ${declaredLength} bytes, exceeding the ${DRIVE_READER_MAX_DOWNLOAD_BYTES}-byte limit`,
     );
   }
 
   if (!response.body) {
-    const buffer = Buffer.from(await response.arrayBuffer());
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(await response.arrayBuffer());
+    } catch (error) {
+      throw asDriveReaderError(error, contextLabel);
+    }
     if (buffer.byteLength > DRIVE_READER_MAX_DOWNLOAD_BYTES) {
       throw new DriveReaderError(
         'too_large',
-        `Drive file ${fileId} is ${buffer.byteLength} bytes, exceeding the ${DRIVE_READER_MAX_DOWNLOAD_BYTES}-byte limit`,
+        `${subject} is ${buffer.byteLength} bytes, exceeding the ${DRIVE_READER_MAX_DOWNLOAD_BYTES}-byte limit`,
       );
     }
     return buffer;
@@ -368,11 +407,16 @@ async function downloadFileImpl(fetchImpl: DriveReaderFetch, accessToken: string
       if (total > DRIVE_READER_MAX_DOWNLOAD_BYTES) {
         throw new DriveReaderError(
           'too_large',
-          `Drive file ${fileId} exceeded the ${DRIVE_READER_MAX_DOWNLOAD_BYTES}-byte limit while streaming`,
+          `${subject} exceeded the ${DRIVE_READER_MAX_DOWNLOAD_BYTES}-byte limit while streaming`,
         );
       }
       chunks.push(chunk);
     }
+  } catch (error) {
+    // The `too_large` throw above lands here too. `asDriveReaderError` passes
+    // an existing DriveReaderError through untouched, so the size verdict is
+    // never re-labelled as a generic transport failure.
+    throw asDriveReaderError(error, contextLabel);
   } finally {
     reader.cancel().catch(() => {});
   }
@@ -380,17 +424,35 @@ async function downloadFileImpl(fetchImpl: DriveReaderFetch, accessToken: string
   return Buffer.concat(chunks);
 }
 
+// --- downloadFile --------------------------------------------------------------
+
+async function downloadFileImpl(fetchImpl: DriveReaderFetch, accessToken: string, fileId: string): Promise<Buffer> {
+  const contextLabel = 'Drive files.get (alt=media) request';
+  const response = await timedFetch(
+    fetchImpl,
+    `${DRIVE_FILES_BASE}/${encodeURIComponent(fileId)}?alt=media`,
+    accessToken,
+    contextLabel,
+  );
+  return readBoundedBody(response, `Drive file ${fileId}`, contextLabel);
+}
+
 // --- exportDoc -------------------------------------------------------------------
 
 async function exportDocImpl(fetchImpl: DriveReaderFetch, accessToken: string, fileId: string): Promise<string> {
+  const contextLabel = 'Drive files.export request';
   const params = new URLSearchParams({ mimeType: 'text/plain' });
   const response = await timedFetch(
     fetchImpl,
     `${DRIVE_FILES_BASE}/${encodeURIComponent(fileId)}/export?${params.toString()}`,
     accessToken,
-    'Drive files.export request',
+    contextLabel,
   );
-  return response.text();
+  // Exports get the same byte ceiling downloads do: a Google Doc has no
+  // Drive-reported `size`, so the pre-flight size check in the sweep cannot
+  // screen it — this is the only bound on how much text an export can return.
+  const buffer = await readBoundedBody(response, `Drive export of file ${fileId}`, contextLabel);
+  return buffer.toString('utf8');
 }
 
 // --- factory ----------------------------------------------------------------

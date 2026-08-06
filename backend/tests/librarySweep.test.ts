@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { test, beforeEach } from 'node:test';
 
 import {
@@ -13,10 +14,12 @@ import {
   sweepOperatorFiles,
 } from '../src/integrationGateway/librarySweep';
 import {
+  createDriveReader,
   DRIVE_READER_MAX_DOWNLOAD_BYTES,
   DriveReaderError,
   type DriveFileMeta,
   type DriveReader,
+  type DriveReaderFetch,
 } from '../src/integrationGateway/adapters/nativeDriveReader';
 import type { PartnerComposioExecutor } from '../src/integrationGateway/adapters/partnerComposio';
 
@@ -449,6 +452,92 @@ test('entries stop accumulating at budgetBytes', async () => {
   assert.equal(result.entries.length, 1, 'the second file must never be attempted once the budget is spent');
   assert.equal(result.entries[0]?.fileId, 'budget-1');
   assert.ok(!downloadCalls.includes('budget-2'));
+});
+
+// --- a broken download must degrade the FILE, never the RUN -------------------------
+
+test('a download stream that dies mid-read yields contentError, and never throws out of the sweep', async () => {
+  // The REAL reader, not the fake one: the whole point is that
+  // nativeDriveReader's streaming loop converts a raw mid-body failure into a
+  // DriveReaderError, which is the only thing resolveFileText knows how to
+  // degrade. A raw TypeError/AbortError escaping here would propagate through
+  // sweepOperatorFiles → readLibrary → a `critical` library-read step, so one
+  // slow dropped PDF would block the entire mission run.
+  const { privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
+  const fetchImpl: DriveReaderFetch = async (input) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url.includes('/files/broken-pdf?alt=media')) {
+      let pulls = 0;
+      const body = new ReadableStream({
+        pull(controller) {
+          pulls += 1;
+          if (pulls === 1) {
+            controller.enqueue(new Uint8Array(16));
+            return;
+          }
+          throw new TypeError('terminated');
+        },
+      });
+      return new Response(body, { status: 200 });
+    }
+    if (url.includes('/files/good-md?alt=media')) {
+      return new Response('a healthy operator note', { status: 200 });
+    }
+    throw new Error(`test fixture: unexpected fetch to ${url}`);
+  };
+
+  const reader = createDriveReader(
+    { clientEmail: 'reader@test.iam.gserviceaccount.com', privateKey },
+    fetchImpl,
+  );
+  // listFolderTree is not what is under test here; serve the tree directly.
+  const tree: DriveFileMeta[] = [
+    {
+      id: 'broken-pdf',
+      name: 'slow.pdf',
+      mimeType: 'application/pdf',
+      size: 4_000_000,
+      modifiedTime: '2026-08-02T00:00:00.000Z',
+      md5Checksum: 'md5-broken',
+    },
+    {
+      id: 'good-md',
+      name: 'healthy.md',
+      mimeType: 'text/markdown',
+      size: 40,
+      modifiedTime: '2026-08-01T00:00:00.000Z',
+      md5Checksum: 'md5-good',
+    },
+  ];
+  const readerWithTree: DriveReader = { ...reader, listFolderTree: async () => tree };
+  const { execute } = createComposioFake({ [ROOT_ID]: [{ files: [] }] });
+
+  const result = await sweepOperatorFiles(
+    { workspaceId: 'ws_test', rootFolderId: ROOT_ID, budgetBytes: 1_000_000 },
+    { reader: readerWithTree, execute },
+  );
+
+  assert.equal(result.laneState, 'active');
+  const broken = result.entries.find((entry) => entry.fileId === 'broken-pdf');
+  assert.ok(broken, 'the unreadable file must stay VISIBLE as an entry, not vanish');
+  assert.equal(broken?.content, null);
+  assert.equal(broken?.contentError, 'content unreadable');
+
+  const healthy = result.entries.find((entry) => entry.fileId === 'good-md');
+  assert.ok(healthy, 'the healthy file must still be read');
+  assert.equal(healthy?.contentError, undefined);
+  assert.match(String(healthy?.content), /healthy operator note/);
 });
 
 // --- lane state ---------------------------------------------------------------------
