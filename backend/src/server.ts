@@ -181,6 +181,7 @@ import {
   finalizeTaskRun,
   getBillingStatus,
   getBusinessContext,
+  setBusinessContext,
   getStripeBillingConfig,
   isBillingProductionEnvironment,
   getWorkspaceProfile,
@@ -7277,6 +7278,53 @@ app.post('/api/workspace', (req: Request, res: Response) => {
     workspace,
     billing: getBillingStatus(workspace.id),
   });
+});
+
+app.get('/api/workspace/business-context', (req: Request, res: Response) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: 'Approved Violema beta session required.', code: 'beta_session_required' });
+    return;
+  }
+  const { workspaceId } = resolveWorkspaceContext(req);
+  res.json({ workspaceId, businessContext: getBusinessContext(workspaceId) });
+});
+
+app.put('/api/workspace/business-context', (req: Request, res: Response) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: 'Approved Violema beta session required.', code: 'beta_session_required' });
+    return;
+  }
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const result = setBusinessContext(
+    workspaceId,
+    {
+      summary: body.summary,
+      marketKeywords: body.marketKeywords,
+      competitors: body.competitors,
+      exclusions: body.exclusions,
+    },
+    authUser.id,
+  );
+  if (!result.ok) {
+    res.status(400).json({ error: 'Invalid business context.', code: 'invalid_business_context', details: result.errors });
+    return;
+  }
+  recordAdminAuditEvent({
+    actorEmail: authUser.email,
+    action: 'workspace.business_context.updated',
+    workspaceId,
+    // Content-free by design: shape metrics only, never the operator's data.
+    metadata: {
+      summaryLength: result.context.summary.length,
+      keywordCount: result.context.marketKeywords.length,
+      competitorCount: result.context.competitors.length,
+      exclusionCount: result.context.exclusions?.length ?? 0,
+    },
+  });
+  res.json({ ok: true, workspaceId, businessContext: result.context });
 });
 
 app.get('/api/billing/usage', (req: Request, res: Response) => {

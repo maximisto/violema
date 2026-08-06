@@ -38,7 +38,10 @@ export type AdminAuditAction =
   // "which sessions were created without an OAuth round-trip" has to be
   // answerable. Neither event asserts identity or consent — see authMagicLink.ts.
   | 'auth.magic_link.requested'
-  | 'auth.magic_link.signed_in';
+  | 'auth.magic_link.signed_in'
+  // The operator (re)pointed a workspace's missions at their business. Recorded
+  // content-free so the trail answers "when and who" without holding the data.
+  | 'workspace.business_context.updated';
 
 export interface AdminAccessRecord {
   email: string;
@@ -95,6 +98,7 @@ const AUDIT_ACTIONS = new Set<AdminAuditAction>([
   'review.changes_requested',
   'auth.magic_link.requested',
   'auth.magic_link.signed_in',
+  'workspace.business_context.updated',
 ]);
 
 function getAccessFile() {
