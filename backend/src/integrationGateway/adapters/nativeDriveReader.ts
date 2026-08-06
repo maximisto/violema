@@ -140,7 +140,19 @@ function signAssertion(config: DriveReaderConfig, iat: number): string {
   };
   const signingInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(claims))}`;
   // config.privateKey is consumed only here; never placed into a string we throw or log.
-  const signature = crypto.sign('RSA-SHA256', Buffer.from(signingInput, 'utf-8'), config.privateKey);
+  // crypto.sign throws a raw OpenSSL error (e.g. "error:1E08010C:DECODER
+  // routines::unsupported") for a malformed/truncated PEM — that must never
+  // escape as-is, since some OpenSSL error variants can echo fragments of
+  // the input. Collapse to a generic, key-free DriveReaderError instead.
+  let signature: Buffer;
+  try {
+    signature = crypto.sign('RSA-SHA256', Buffer.from(signingInput, 'utf-8'), config.privateKey);
+  } catch {
+    throw new DriveReaderError(
+      'auth_failed',
+      'Drive service-account private key could not be used to sign the auth token (check its format)',
+    );
+  }
   return `${signingInput}.${base64url(signature)}`;
 }
 
@@ -189,7 +201,12 @@ async function fetchAccessToken(config: DriveReaderConfig, fetchImpl: DriveReade
     );
   }
 
-  const payload = (await response.json()) as { access_token?: string; expires_in?: number };
+  let payload: { access_token?: string; expires_in?: number };
+  try {
+    payload = (await response.json()) as { access_token?: string; expires_in?: number };
+  } catch (error) {
+    throw new DriveReaderError('auth_failed', `Drive service-account token response was not valid JSON: ${messageOf(error)}`);
+  }
   if (!payload.access_token) {
     throw new DriveReaderError('auth_failed', 'Drive service-account token response did not include an access_token');
   }
@@ -274,7 +291,11 @@ async function fetchFolderPage(
   if (pageToken) params.set('pageToken', pageToken);
 
   const response = await timedFetch(fetchImpl, `${DRIVE_FILES_BASE}?${params.toString()}`, accessToken, 'Drive files.list request');
-  return (await response.json()) as RawFilesListResponse;
+  try {
+    return (await response.json()) as RawFilesListResponse;
+  } catch (error) {
+    throw new DriveReaderError('http_error', `Drive files.list response was not valid JSON: ${messageOf(error)}`);
+  }
 }
 
 async function listFolderTreeImpl(

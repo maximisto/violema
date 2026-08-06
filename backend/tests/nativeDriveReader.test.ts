@@ -345,3 +345,96 @@ test('errors never contain the private key', async () => {
     },
   );
 });
+
+// --- fix round 1: crypto.sign() and response.json() must never escape the taxonomy ---
+
+test('a malformed private key surfaces as DriveReaderError auth_failed without leaking key material', async () => {
+  const { privateKey: validKey } = generateTestKeypair();
+  const clientEmail = 'malformed-key-reader@test.iam.gserviceaccount.com';
+  // Simulates a truncated PEM from a hand-pasted env var: crypto.sign throws a
+  // raw OpenSSL decoder error for this, which must never escape as-is.
+  const truncatedPrivateKey = validKey.slice(0, 60);
+
+  const fetchImpl: DriveReaderFetch = async () => {
+    throw new Error('fetch must never be called when the private key cannot be used to sign');
+  };
+
+  const reader = createDriveReader({ clientEmail, privateKey: truncatedPrivateKey }, fetchImpl);
+
+  await assert.rejects(
+    reader.listFolderTree('some-folder'),
+    (error: unknown) => {
+      if (!(error instanceof DriveReaderError)) assert.fail('expected a DriveReaderError');
+      assert.equal(error.code, 'auth_failed');
+      assert.ok(!error.message.includes(truncatedPrivateKey));
+      assert.ok(!error.message.includes('BEGIN'));
+      assert.ok(!error.message.toLowerCase().includes('decoder'));
+      assert.ok(!(error.stack || '').includes(truncatedPrivateKey));
+      return true;
+    },
+  );
+});
+
+test('token endpoint 200 with invalid JSON surfaces as DriveReaderError', async () => {
+  const { privateKey } = generateTestKeypair();
+  const clientEmail = 'bad-token-json-reader@test.iam.gserviceaccount.com';
+
+  const fetchImpl: DriveReaderFetch = async (input) => {
+    const url = typeof input === 'string' ? input : input.toString();
+
+    if (url === TOKEN_URL) {
+      return new Response('this is not json', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch to ${url}`);
+  };
+
+  const reader = createDriveReader({ clientEmail, privateKey }, fetchImpl);
+
+  await assert.rejects(
+    reader.listFolderTree('some-folder'),
+    (error: unknown) => {
+      if (!(error instanceof DriveReaderError)) assert.fail('expected a DriveReaderError');
+      assert.equal(error.code, 'auth_failed');
+      assert.ok(!error.message.includes(privateKey));
+      return true;
+    },
+  );
+});
+
+test('files.list endpoint 200 with invalid JSON surfaces as DriveReaderError', async () => {
+  const { privateKey } = generateTestKeypair();
+  const clientEmail = 'bad-list-json-reader@test.iam.gserviceaccount.com';
+
+  const fetchImpl: DriveReaderFetch = async (input) => {
+    const url = typeof input === 'string' ? input : input.toString();
+
+    if (url === TOKEN_URL) {
+      return jsonResponse({ access_token: 'tok', expires_in: 3600 });
+    }
+
+    if (url.startsWith('https://www.googleapis.com/drive/v3/files?')) {
+      return new Response('this is not json', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    throw new Error(`Unexpected fetch to ${url}`);
+  };
+
+  const reader = createDriveReader({ clientEmail, privateKey }, fetchImpl);
+
+  await assert.rejects(
+    reader.listFolderTree('some-folder'),
+    (error: unknown) => {
+      if (!(error instanceof DriveReaderError)) assert.fail('expected a DriveReaderError');
+      assert.equal(error.code, 'http_error');
+      assert.ok(!error.message.includes(privateKey));
+      return true;
+    },
+  );
+});
