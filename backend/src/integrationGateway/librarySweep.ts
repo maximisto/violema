@@ -159,10 +159,27 @@ function resolveReader(deps: LibrarySweepDeps): DriveReader | null {
 // --- lane state -----------------------------------------------------------------
 
 /**
- * `not_configured`: no reader key on this server. `needs_share`: a key
- * exists but the reader could not list the root folder (not shared, or the
- * folder does not exist yet). `active`: the reader can see the folder.
+ * The three buckets, named explicitly:
+ *
+ * - `not_configured`: either no reader key is present on this server at all,
+ *   OR `rootFolderId` is null (the workspace's `Violema Library` folder does
+ *   not exist yet — nothing has ever been shared, so there is nothing to
+ *   warn about "re-sharing"), OR the key IS present but unusable
+ *   (`DriveReaderError.code === 'auth_failed'` — a malformed/expired/revoked
+ *   platform credential). That last case is deliberately folded into
+ *   `not_configured` rather than `needs_share`: it is a Violema-side
+ *   incident, not something the operator re-sharing their folder could ever
+ *   fix, and telling them to "share your folder" for a broken platform key
+ *   would hide our own outage behind onboarding UI.
+ * - `needs_share`: a working key, but the reader could not list the root
+ *   folder for any OTHER reason (typically `http_error` from a 403/404 —
+ *   the folder is not shared with the reader, or was unshared later).
+ * - `active`: the reader listed the folder successfully.
  */
+function laneStateForDriveReaderError(error: DriveReaderError): FolderDropLaneState {
+  return error.code === 'auth_failed' ? 'not_configured' : 'needs_share';
+}
+
 export async function getFolderDropLaneState(
   rootFolderId: string | null,
   deps: LibrarySweepDeps = {},
@@ -179,7 +196,7 @@ export async function getFolderDropLaneState(
     return 'active';
   } catch (error) {
     if (!(error instanceof DriveReaderError)) throw error;
-    return 'needs_share';
+    return laneStateForDriveReaderError(error);
   }
 }
 
@@ -347,12 +364,20 @@ async function resolveFileText(
   const cached = readSweepMemo(key, nowMs);
   if (cached) {
     // Re-clamp to the CURRENT budget without re-downloading or re-exporting.
+    // `cached.truncated` is carried forward with OR, never discarded: the
+    // cached text is itself already a possibly-partial view of the real
+    // file (it was capped to whatever budget the sweep that wrote it had
+    // left). A later sweep with more remainingBudget can re-clamp that
+    // partial text and find it fits under the new, larger ceiling — but
+    // "fits under a bigger ceiling" is not the same fact as "this is the
+    // whole file". A file once known-partial must never later report
+    // complete without an actual re-download/re-export.
     const reclamped = await parseSourceBuffer(
       { fileName: file.name, mimeType: 'text/plain', buffer: Buffer.from(cached.text, 'utf8') },
       maxBytes,
     );
     return reclamped.ok
-      ? { text: reclamped.text, truncated: reclamped.truncated }
+      ? { text: reclamped.text, truncated: cached.truncated || reclamped.truncated }
       : { text: null, truncated: false, contentError: 'content unreadable' };
   }
 
@@ -417,7 +442,7 @@ export async function sweepOperatorFiles(
     tree = await reader.listFolderTree(input.rootFolderId);
   } catch (error) {
     if (!(error instanceof DriveReaderError)) throw error;
-    return { laneState: 'needs_share', entries: [], warnings: [] };
+    return { laneState: laneStateForDriveReaderError(error), entries: [], warnings: [] };
   }
 
   const folderIds = new Set<string>([input.rootFolderId]);

@@ -367,6 +367,50 @@ test('memo: unchanged fileId+modifiedTime+md5 parses once across two sweeps', as
   assert.equal(SWEEP_MEMO_TTL_MS, 15 * 60 * 1000);
 });
 
+test('memo re-clamp keeps truncation honest: a once-truncated file never later reports complete', async () => {
+  const tree: DriveFileMeta[] = [
+    {
+      id: 'trunc-md-1',
+      name: 'big-notes.md',
+      mimeType: 'text/markdown',
+      size: 1000,
+      modifiedTime: '2026-08-01T00:00:00.000Z',
+      md5Checksum: 'trunc-md5-1',
+    },
+  ];
+  const { reader, downloadCalls } = createFakeReader({
+    tree,
+    fileContents: { 'trunc-md-1': Buffer.from('A'.repeat(1000)) },
+  });
+
+  // Sweep #1: a tight per-file budget truncates the file and memoizes the
+  // truncated slice with truncated: true.
+  const first = await sweepOperatorFiles(
+    { workspaceId: 'ws_test', rootFolderId: ROOT_ID, budgetBytes: 100 },
+    { reader, execute: createComposioFake({ [ROOT_ID]: [{ files: [] }] }).execute },
+  );
+  assert.equal(downloadCalls.length, 1);
+  assert.equal(first.entries[0]?.truncated, true);
+  assert.equal(Buffer.byteLength(first.entries[0]?.content ?? '', 'utf8'), 100);
+
+  // Sweep #2: the file is unchanged (same fileId+modifiedTime+md5), but this
+  // sweep has a much larger remaining budget. The cached 100-byte slice now
+  // fits comfortably under the new ceiling, but it is still only a slice of
+  // the real 1000-byte file — the entry must keep reporting truncated: true,
+  // and downloadFile must never be called again.
+  const second = await sweepOperatorFiles(
+    { workspaceId: 'ws_test', rootFolderId: ROOT_ID, budgetBytes: 1_000_000 },
+    { reader, execute: createComposioFake({ [ROOT_ID]: [{ files: [] }] }).execute },
+  );
+  assert.equal(downloadCalls.length, 1, 'downloadFile must not be called again on the memo hit');
+  assert.equal(
+    second.entries[0]?.truncated,
+    true,
+    'a once-truncated file must never later report complete without an actual re-download',
+  );
+  assert.equal(Buffer.byteLength(second.entries[0]?.content ?? '', 'utf8'), 100);
+});
+
 // --- budget -------------------------------------------------------------------------
 
 test('entries stop accumulating at budgetBytes', async () => {
@@ -435,6 +479,33 @@ test('lane state: null reader → not_configured; reader http_error on root list
     },
   };
   assert.equal(await getFolderDropLaneState(ROOT_ID, { reader: okReader }), 'active');
+});
+
+test('auth_failed is a platform-side problem, not a share problem: it maps to not_configured', async () => {
+  const authFailedReader: DriveReader = {
+    listFolderTree: async () => {
+      throw new DriveReaderError('auth_failed', 'the platform key could not be used to sign the auth token');
+    },
+    downloadFile: async () => {
+      throw new Error('unused');
+    },
+    exportDoc: async () => {
+      throw new Error('unused');
+    },
+  };
+
+  assert.equal(
+    await getFolderDropLaneState(ROOT_ID, { reader: authFailedReader }),
+    'not_configured',
+    'a broken platform credential must never tell the operator to re-share their folder',
+  );
+
+  const result = await sweepOperatorFiles(
+    { workspaceId: 'ws_test', rootFolderId: ROOT_ID, budgetBytes: 1_000_000 },
+    { reader: authFailedReader },
+  );
+  assert.equal(result.laneState, 'not_configured');
+  assert.deepEqual(result.entries, []);
 });
 
 // --- reader email + test overrides ---------------------------------------------------
