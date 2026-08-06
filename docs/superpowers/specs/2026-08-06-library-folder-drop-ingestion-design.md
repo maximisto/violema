@@ -88,3 +88,65 @@ Notion/structured backends (documented non-goal in accountLibrary.ts), backgroun
 - **`readLibrary` grows** — it gains sweep orchestration; the SA reader and parser live in their own modules with injected seams to keep `accountLibrary.ts` from becoming a god file. If it tips past readability during implementation, extracting a `librarySweep.ts` orchestrator is the sanctioned split.
 - **Parser dependencies** (pdf, docx) are the feature's only new packages; chosen at plan time under the maintained/production-proven rule, and every parse is size-capped before it starts.
 - **Set-difference discriminator depends on both listings succeeding** — if the Composio listing fails mid-sweep, the sweep must fail the read step honestly (existing library failure semantics), never classify all files as operator files.
+
+## Deviations from this spec (recorded at close-out, 2026-08-06)
+
+**(a) Sweep-unavailable run warning fires only on `needs_share`, silent on `not_configured`.**
+§4 describes "sweep-unavailable degrades to today's behavior plus a run
+warning" without distinguishing the two down-states named in §1. The shipped
+behavior (`accountLibrary.ts` `readLibrary`, `librarySweep.ts`
+`getFolderDropLaneState`) narrows this: a warning is appended only when the
+lane is `needs_share` (a key is configured, the reader once could or should
+be able to see the folder, and the operator has a concrete fix — re-share
+it). `not_configured` — no reader key on this server at all — adds nothing to
+the run. Rationale: `not_configured` is a platform-wide, cross-workspace
+state, not a per-workspace problem; before Max lands the key (this doc's
+§1–§2), *every* workspace's *every* run would otherwise carry the same inert
+warning, which is noise, not signal, and would train operators to ignore run
+warnings generally. A warning that cannot be acted on by the person reading
+it is worse than no warning.
+
+**(b) `auth_failed` on the SA credential maps to `not_configured`, not `needs_share`.**
+Related refinement, same function. A malformed, expired, or revoked platform
+service-account key (`DriveReaderError.code === 'auth_failed'`) is folded into
+`not_configured` rather than `needs_share`. This is a Violema-side incident —
+no operator action on their Drive folder can fix a broken platform
+credential — so surfacing it as "needs_share" would misdirect the operator
+into re-sharing a folder that was never the problem, hiding an internal
+outage behind onboarding UI. `needs_share` is now reserved for the one case
+an operator can actually act on: a working reader that the folder itself does
+not (or no longer) expose to it.
+
+**(c) `shareLibraryFolderWithReader` — Task 5 Step 1 registry outcome: Branch A shipped.**
+§2 called this a build-time verification point with two possible outcomes. As
+of 2026-08-06, `GOOGLEDRIVE_CREATE_PERMISSION` is confirmed present on the
+live Composio `googledrive` toolkit (`file_id`, `type`, `role` required;
+`email_address` required when `type` is `user`), so Branch A shipped in full:
+`shareLibraryFolderWithReader` (`librarySweep.ts`) invokes it directly with
+`type: 'user'`, `role: 'reader'`, `send_notification_email: false` (the
+grantee is the platform's own service-account reader, never a human inbox).
+The guided manual-share fallback (§2's "if no such action exists" path, and
+the settings card's `needs_share` copy) still ships as UI, and is the surface
+an operator actually sees whenever the reader cannot list a folder for any
+reason — but the live share call itself is untested end-to-end: the backend
+test environment carries no `COMPOSIO_API_KEY`, so `folderDropApi.test.ts`
+exercises the route against a fake executor, never the real Drive API. See
+`FOLDER_DROP_SETUP.md` §4's manual smoke test — required once against a real
+workspace before operator-facing rollout.
+
+**(d) `pdf-parse` major-version drift from the spec's assumed API.**
+§4 named `pdf-parse`/`pdfjs-dist` as parser candidates "picked at plan time"
+without committing to a version or API shape. The version resolved at
+install time, `pdf-parse@2.4.5`, ships a class-based API
+(`new PDFParse({ data: buffer }).getText()`) rather than the plain
+`pdf-parse(buffer)` function call the spec's pseudo-code in §4 assumed
+(a v1-era API). `sourceParsing.ts` is written against the actual 2.4.5 shape.
+Two consequences worth carrying forward: (1) `pdf-parse@2.4.5` declares
+`engines.node: ">=20.16.0 <21 || >=22.3.0"` — narrower than "any current
+Node" — so a deploy target's Node version needs an explicit check, not an
+assumption (`FOLDER_DROP_SETUP.md` §5); (2) `getText()` depends on
+`@napi-rs/canvas`, a native binary resolved per-platform, being loadable —
+when it is not, parsing degrades to `parse_failed` per file (never a crash,
+per §7's fails-honest posture) rather than throwing, so a missing binary on
+the VPS is silent unless someone drops a real PDF and checks
+(`FOLDER_DROP_SETUP.md` §5, item 2).
