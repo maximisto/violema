@@ -145,9 +145,16 @@ const allowedAddressCases: Array<{ label: string; address: string; family: numbe
 for (const testCase of allowedAddressCases) {
   test(`safeUrlFetch does not block ${testCase.label}`, async () => {
     const lookup = fixedAddressLookup(testCase.address, testCase.family);
+    // Only the GUARD's verdict is under test. Whether the probe host then
+    // fails to connect, times out, or (on a network with wildcard DNS)
+    // actually answers is not this test's business — asserting on it would
+    // make the address table's coverage hostage to the resolver.
     const result = await safeUrlFetch('http://allowed.example.test/', { lookup, timeoutMs: 250 });
-    assert.equal(result.ok, false, 'the probe host does not serve anything');
-    assert.notEqual(!result.ok && result.reason, 'blocked_address');
+    assert.notEqual(
+      !result.ok && result.reason,
+      'blocked_address',
+      `${testCase.address} is public unicast and must not be refused by the address table`,
+    );
   });
 }
 
