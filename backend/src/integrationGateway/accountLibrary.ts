@@ -429,6 +429,27 @@ async function createFolder(
   return { ok: true, folderId };
 }
 
+/**
+ * Read-only lookup of the workspace's `Violema Library` root folder id, for
+ * callers (the folder-drop lane API) that only need the id — not a full
+ * library read.
+ *
+ * Folds a lookup FAILURE into `null`, same as "the folder does not exist
+ * yet": the folder-drop lane already treats a missing root folder as
+ * `not_configured` (see `librarySweep.getFolderDropLaneState`), so a
+ * transient Composio hiccup here should degrade the same way rather than
+ * throwing out of an HTTP handler.
+ */
+export async function findLibraryRootFolderId(
+  workspaceId: string,
+  deps: AccountLibraryDeps = {},
+): Promise<string | null> {
+  if (!workspaceId.trim()) return null;
+  const execute = deps.execute ?? executeComposioAction;
+  const result = await findFolderByName(execute, workspaceId, LIBRARY_ROOT_FOLDER_NAME);
+  return result.ok ? result.folderId : null;
+}
+
 async function findOrCreateFolder(
   execute: PartnerComposioExecutor,
   workspaceId: string,

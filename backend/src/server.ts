@@ -311,6 +311,7 @@ import {
   appendLibraryEntry,
   buildLibraryAccessFailure,
   COMPETITIVE_INTELLIGENCE_SECTION,
+  findLibraryRootFolderId,
   isAccountLibraryWriteRequest,
   isLibraryFailure,
   provisionLibrarySection,
@@ -318,6 +319,12 @@ import {
   readAccountLibrarySection,
   summarizeLibrarySection,
 } from './integrationGateway/accountLibrary';
+import {
+  getFolderDropLaneState,
+  getFolderDropReaderEmail,
+  shareLibraryFolderWithReader,
+  type FolderDropLaneState,
+} from './integrationGateway/librarySweep';
 import {
   buildPartnerCapabilityReport,
   hasCapability,
@@ -7343,6 +7350,103 @@ app.put('/api/workspace/business-context', (req: Request, res: Response) => {
     },
   });
   res.json({ ok: true, workspaceId, businessContext: result.context });
+});
+
+/**
+ * Stamp the workspace profile's `folderDropEnabledAt` metadata and audit the
+ * enablement, but only on the FIRST transition to `active` for this
+ * workspace. Both `verify` and `share` call through here, so the audit event
+ * fires exactly once per workspace no matter which route (or how many
+ * repeated calls) actually observed the transition.
+ */
+function stampFolderDropEnabledOnFirstActivation(input: {
+  workspaceId: string;
+  currentMetadata: Record<string, unknown> | undefined;
+  laneState: FolderDropLaneState;
+  rootFolderId: string | null;
+  actorEmail: string;
+}): void {
+  if (input.laneState !== 'active') return;
+  if (input.currentMetadata?.folderDropEnabledAt) return;
+
+  upsertWorkspaceProfile(input.workspaceId, {
+    metadata: { ...(input.currentMetadata ?? {}), folderDropEnabledAt: new Date().toISOString() },
+  });
+  recordAdminAuditEvent({
+    actorEmail: input.actorEmail,
+    action: 'workspace.library_folder_share.enabled',
+    workspaceId: input.workspaceId,
+    // Content-free by design: which folder, never what is in it.
+    metadata: { folderId: input.rootFolderId },
+  });
+}
+
+app.get('/api/workspace/library/folder-drop', async (req: Request, res: Response) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: 'Approved Violema beta session required.', code: 'beta_session_required' });
+    return;
+  }
+  const { workspaceId } = resolveWorkspaceContext(req);
+  const rootFolderId = await findLibraryRootFolderId(workspaceId);
+  const laneState = await getFolderDropLaneState(rootFolderId);
+  res.json({ laneState, readerEmail: getFolderDropReaderEmail(), rootFolderId });
+});
+
+app.post('/api/workspace/library/folder-drop/verify', async (req: Request, res: Response) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: 'Approved Violema beta session required.', code: 'beta_session_required' });
+    return;
+  }
+  const { workspaceId, workspace } = resolveWorkspaceContext(req);
+  const rootFolderId = await findLibraryRootFolderId(workspaceId);
+  const laneState = await getFolderDropLaneState(rootFolderId);
+  stampFolderDropEnabledOnFirstActivation({
+    workspaceId,
+    currentMetadata: workspace.metadata,
+    laneState,
+    rootFolderId,
+    actorEmail: authUser.email,
+  });
+  res.json({ laneState, readerEmail: getFolderDropReaderEmail(), rootFolderId });
+});
+
+app.post('/api/workspace/library/folder-drop/share', async (req: Request, res: Response) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: 'Approved Violema beta session required.', code: 'beta_session_required' });
+    return;
+  }
+  const { workspaceId, workspace } = resolveWorkspaceContext(req);
+  const rootFolderId = await findLibraryRootFolderId(workspaceId);
+  const readerEmail = getFolderDropReaderEmail();
+
+  // Nothing to share to (lane unconfigured) or nowhere to share (the
+  // operator's library folder does not exist in Drive yet) — either way,
+  // there is no live call worth making, and this is not the same thing as
+  // "sharing requires a manual step".
+  let manualShare = false;
+  if (readerEmail && rootFolderId) {
+    const shareResult = await shareLibraryFolderWithReader(workspaceId, rootFolderId, readerEmail);
+    manualShare = !shareResult.ok && shareResult.reason === 'manual_share_required';
+  }
+
+  const laneState = await getFolderDropLaneState(rootFolderId);
+  stampFolderDropEnabledOnFirstActivation({
+    workspaceId,
+    currentMetadata: workspace.metadata,
+    laneState,
+    rootFolderId,
+    actorEmail: authUser.email,
+  });
+
+  res.json({
+    ...(manualShare ? { manualShare: true } : {}),
+    laneState,
+    readerEmail,
+    rootFolderId,
+  });
 });
 
 app.get('/api/billing/usage', (req: Request, res: Response) => {

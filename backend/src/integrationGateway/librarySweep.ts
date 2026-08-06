@@ -72,11 +72,12 @@ import {
 } from './adapters/nativeDriveReader';
 import { isParseableSourceMime, parseSourceBuffer } from './sourceParsing';
 import { executeComposioAction } from '../composioBridge';
-import type { PartnerComposioExecutor } from './adapters/partnerComposio';
+import { classifyFailure, type PartnerComposioExecutor } from './adapters/partnerComposio';
 
 const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 const GOOGLE_DOC_MIME_TYPE = 'application/vnd.google-apps.document';
 const FIND_FILE_ACTION = 'GOOGLEDRIVE_FIND_FILE';
+const CREATE_PERMISSION_ACTION = 'GOOGLEDRIVE_CREATE_PERMISSION';
 
 export const MAX_OPERATOR_FILES_PER_SWEEP = 20;
 export const SWEEP_COMPOSIO_MAX_PAGES = 10;
@@ -154,6 +155,55 @@ function resolveReader(deps: LibrarySweepDeps): DriveReader | null {
   if (deps.reader !== undefined) return deps.reader;
   const config = readDriveReaderConfig();
   return config ? createDriveReader(config) : null;
+}
+
+// --- share --------------------------------------------------------------------
+
+export type ShareLibraryFolderResult =
+  | { ok: true }
+  | { ok: false; reason: ReturnType<typeof classifyFailure> | 'manual_share_required' };
+
+/**
+ * Share the workspace's `Violema Library` root folder with the platform's
+ * read-only Drive reader, so the folder-drop lane can move out of
+ * `needs_share`.
+ *
+ * BRANCH A. Registry-verified 2026-08-06 against the live Composio tool
+ * registry (not docs) on toolkit `googledrive`: `GOOGLEDRIVE_CREATE_PERMISSION`
+ * is present, with `file_id`, `type`, `role` required and `email_address`
+ * required when `type` is `user` — see Task 5's report for the full
+ * registry-check output. `send_notification_email: false` because the
+ * grantee here is the platform's own service-account reader, never a human
+ * inbox, so a share notification would just bounce.
+ */
+export async function shareLibraryFolderWithReader(
+  workspaceId: string,
+  folderId: string,
+  readerEmail: string,
+  deps: LibrarySweepDeps = {},
+): Promise<ShareLibraryFolderResult> {
+  const execute = deps.execute ?? executeComposioAction;
+
+  try {
+    const response = await execute(
+      CREATE_PERMISSION_ACTION,
+      {
+        file_id: folderId,
+        type: 'user',
+        role: 'reader',
+        email_address: readerEmail,
+        send_notification_email: false,
+      },
+      { entityId: workspaceId },
+    );
+    if (!isRecord(response) || (response as ComposioEnvelope).successful !== true) {
+      const failureDetail = isRecord(response) ? (response as ComposioEnvelope).error : 'share failed';
+      return { ok: false, reason: classifyFailure(failureDetail ?? 'share failed') };
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: classifyFailure(error) };
+  }
 }
 
 // --- lane state -----------------------------------------------------------------

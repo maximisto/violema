@@ -45,7 +45,13 @@ export type AdminAuditAction =
   // The 2026-08-05 boot migration rewrote an automation's step content — an
   // edit no operator asked for. One event per rewritten record so "why does my
   // mission look different" has an answer.
-  | 'automation.business_context_migrated';
+  | 'automation.business_context_migrated'
+  // The folder-drop lane's FIRST transition to `active` for a workspace —
+  // the operator's `Violema Library` Drive folder became readable by the
+  // platform's service-account reader. Recorded once per workspace (guarded
+  // by the `folderDropEnabledAt` stamp in the workspace profile's metadata),
+  // content-free: `{ folderId }` only, never folder contents.
+  | 'workspace.library_folder_share.enabled';
 
 export interface AdminAccessRecord {
   email: string;
@@ -104,6 +110,7 @@ const AUDIT_ACTIONS = new Set<AdminAuditAction>([
   'auth.magic_link.signed_in',
   'workspace.business_context.updated',
   'automation.business_context_migrated',
+  'workspace.library_folder_share.enabled',
 ]);
 
 function getAccessFile() {
