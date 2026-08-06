@@ -132,6 +132,7 @@ import {
   requireCompleteAutomationSummary,
 } from './platform/automationSummaryPolicy';
 import { extractToolArtifactsFromResult, type StoredToolArtifact } from './platform/toolArtifacts';
+import { applyBusinessContextToStep } from './platform/businessContext';
 import {
   createAutomation,
   deleteAutomation,
@@ -210,6 +211,7 @@ import {
   createTopUpCheckoutSession,
   constructStripeWebhookEvent,
   fulfillStripeWebhookEvent,
+  type WorkspaceBusinessContext,
 } from './platform';
 import {
   createMemoryEmbeddings,
@@ -3508,9 +3510,13 @@ function createAutomationStepDefinitionFromPersisted(
     notify?: string;
     condition?: string;
   },
-  step: PersistedAutomationStep,
+  persistedStep: PersistedAutomationStep,
   index: number,
+  businessContext: WorkspaceBusinessContext | null,
 ): AutomationStepDefinition {
+  // Resolve operator-owned business context BEFORE any kind-specific handling,
+  // so the search/analyze/summarize branches below see concrete inputs.
+  const step = applyBusinessContextToStep(persistedStep, businessContext);
   const baseId = step.id?.trim() || buildAutomationStepId(automation.id, index);
   const title = step.title?.trim() || step.objective.trim() || `Step ${index + 1}`;
   const objective = step.objective.trim() || title;
@@ -4044,9 +4050,10 @@ function ensureAutomationDeliveryStep(
   ] as AutomationStepDefinition[];
 }
 
-function buildAutomationExecutionPlan(automation: {
+export function buildAutomationExecutionPlan(automation: {
   id: string;
   name: string;
+  workspaceId?: string;
   description?: string;
   actions: string[];
   steps?: PersistedAutomationStep[];
@@ -4055,8 +4062,12 @@ function buildAutomationExecutionPlan(automation: {
   notify?: string;
   condition?: string;
 }): AutomationExecutionPlan {
+  // One context read per plan build; seed records with no workspaceId are
+  // internal and resolve to the default workspace, matching run-time tenancy.
+  const businessContext = getBusinessContext(automation.workspaceId ?? DEFAULT_WORKSPACE_ID);
   const baseSteps = automation.steps?.length
-    ? automation.steps.map((step, index) => createAutomationStepDefinitionFromPersisted(automation, step, index))
+    ? automation.steps.map((step, index) =>
+        createAutomationStepDefinitionFromPersisted(automation, step, index, businessContext))
     : automation.actions.map((action, index) => createAutomationStepDefinition(automation, action, index));
   const canonicalSteps = canonicalizeAutomationPlanSteps(baseSteps);
   const steps = ensureAutomationDeliveryStep(automation, ensureAutomationSummaryStep(automation, canonicalSteps));
