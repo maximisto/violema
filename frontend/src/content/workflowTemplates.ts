@@ -89,9 +89,10 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplateDefinition[] = [
       { kind: 'query', title: 'Review calendar commitments', objective: 'Review meetings and relationship commitments for the next seven days.', inputs: { source: 'calendar', query_type: 'weekly_commitments', limit: 10 } },
       // Mirrors the backend seed: reads the briefs Violema filed rather than
       // scanning the founder's Drive, which the drive.file scope cannot see.
+      // Search and summarize steps reference the workspace's business context at run time (resolved by backend).
       { kind: 'query', title: 'Read prior founder briefs', objective: 'Load the briefs already filed for this account so this week reports what changed rather than restating the standing picture.', inputs: { source: 'account_library', query_type: 'read', filters: { section: 'Founder Briefs' }, limit: 2 } },
-      { kind: 'search', title: 'Scan market signals', objective: 'Research customer, competitor, pricing, platform, and AI automation changes since the last update.', inputs: { query: 'AI automation platform startup competitor pricing product launch founder update', num_results: 6 } },
-      { kind: 'summarize', title: 'Draft founder brief', objective: 'Synthesize a founder-ready brief with signals, risks, decisions needed, and next actions. When prior briefs are in the evidence, lead with what changed since the last one.' },
+      { kind: 'search', title: 'Scan market signals', objective: 'Research customer, competitor, pricing, platform, and AI automation changes since the last update.', inputs: { use_business_context: true, query_suffix: 'competitor pricing product launch news', num_results: 6 } },
+      { kind: 'summarize', title: 'Draft founder brief', objective: 'Synthesize a founder-ready brief with signals, risks, decisions needed, and next actions. When prior briefs are in the evidence, lead with what changed since the last one.', inputs: { use_business_context: true } },
       { kind: 'query', title: 'File this brief in the library', objective: "Append this week's founder brief to the account library so the next run can report the delta.", inputs: { source: 'account_library', query_type: 'write', section: 'Founder Briefs', entry_title: 'Weekly founder brief' } },
       { kind: 'deliver', title: 'Hold for approval and deliver', objective: 'Send the reviewed weekly founder update after approval.', inputs: { approval_required: true }, deliveryTarget: { channel: 'slack', target: '#violema-demo' } },
     ],
