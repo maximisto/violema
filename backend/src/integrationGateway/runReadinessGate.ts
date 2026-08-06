@@ -261,6 +261,24 @@ export function evaluateStepSourceReadiness(input: {
   return blockers;
 }
 
+/** True when any step opted into workspace business context. */
+export function stepsRequireBusinessContext(steps?: RunReadinessStepLike[]): boolean {
+  return (steps || []).some((step) => step.inputs?.use_business_context === true);
+}
+
+/**
+ * The honest empty state for context-requiring steps. Running anyway would
+ * research a generic market and present it as this workspace's — the exact
+ * 2026-08-05 demo-night failure — so the gate blocks before money is spent.
+ */
+export const BUSINESS_CONTEXT_BLOCKER: WorkflowReadinessBlocker = {
+  key: 'business_context_missing',
+  label: 'Tell Violema about your business',
+  detail:
+    "Violema doesn't know your business yet — tell it what you do and who you compete with, so this mission researches your market instead of a generic one.",
+  route: '/settings#business',
+};
+
 /**
  * The enforcement decision for one automation run. Pure: the caller supplies
  * the settings view, the runtime status, and whether the workspace is a demo,
@@ -274,6 +292,7 @@ export function evaluateRunReadiness(input: {
   deliveryTarget?: string | null;
   settingsView?: WorkspaceSettingsView | MinimalSettingsView;
   runtimeStatus?: Record<string, WorkflowRuntimeIntegrationStatus>;
+  businessContextSet?: boolean;
 }): RunReadinessDecision {
   if (input.isDemoWorkspace) {
     return {
@@ -285,6 +304,8 @@ export function evaluateRunReadiness(input: {
     };
   }
 
+  let decision: RunReadinessDecision;
+
   if (isSupportedReadinessWorkflow(input.workflowId)) {
     const report = checkWorkflowReadiness({
       workflowId: input.workflowId,
@@ -294,30 +315,40 @@ export function evaluateRunReadiness(input: {
       runtimeStatus: input.runtimeStatus,
     });
 
-    return {
+    decision = {
       allowed: report.ready,
       tier: 'supported_workflow',
       workflowId: input.workflowId,
       summary: report.ready ? report.summary : summarizeBlockers(report.blockers),
       blockers: report.blockers,
     };
+  } else {
+    const blockers = evaluateStepSourceReadiness({
+      steps: input.steps,
+      settingsView: input.settingsView,
+      runtimeStatus: input.runtimeStatus,
+      workspaceId: input.workspaceId,
+    });
+
+    decision = {
+      allowed: blockers.length === 0,
+      tier: 'step_sources',
+      workflowId: input.workflowId,
+      summary:
+        blockers.length === 0
+          ? 'Every data source this automation reads is connected.'
+          : summarizeBlockers(blockers),
+      blockers,
+    };
   }
 
-  const blockers = evaluateStepSourceReadiness({
-    steps: input.steps,
-    settingsView: input.settingsView,
-    runtimeStatus: input.runtimeStatus,
-    workspaceId: input.workspaceId,
-  });
-
-  return {
-    allowed: blockers.length === 0,
-    tier: 'step_sources',
-    workflowId: input.workflowId,
-    summary:
-      blockers.length === 0
-        ? 'Every data source this automation reads is connected.'
-        : summarizeBlockers(blockers),
-    blockers,
-  };
+  if (stepsRequireBusinessContext(input.steps) && !input.businessContextSet) {
+    return {
+      ...decision,
+      allowed: false,
+      summary: BUSINESS_CONTEXT_BLOCKER.detail,
+      blockers: [BUSINESS_CONTEXT_BLOCKER, ...decision.blockers],
+    };
+  }
+  return decision;
 }

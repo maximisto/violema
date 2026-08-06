@@ -179,6 +179,7 @@ import {
   CREDIT_VALUE_USD,
   finalizeTaskRun,
   getBillingStatus,
+  getBusinessContext,
   getStripeBillingConfig,
   isBillingProductionEnvironment,
   getWorkspaceProfile,
@@ -4864,6 +4865,7 @@ export async function evaluateAutomationRunReadiness(input: {
       nativeStatus: getIntegrationStatus(),
       workspaceId: input.workspaceId,
     }),
+    businessContextSet: getBusinessContext(input.workspaceId) !== null,
   });
 }
 
