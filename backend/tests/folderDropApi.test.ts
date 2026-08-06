@@ -72,8 +72,23 @@ async function withApiServer(
   const originalReaderKey = process.env.GOOGLE_LIBRARY_READER_KEY;
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'violema-folder-drop-api-'));
 
+  // A fresh, unique email per `withApiServer` call — never the fixed
+  // `qa@example.com` other test files use. `auth.ts`'s `USERS_FILE` (like
+  // `platform/workspace.ts`'s `WORKSPACES_FILE`) is a module-level constant
+  // resolved from `process.cwd()` at first import, not re-resolved per call
+  // the way `adminAccessStore.ts`'s file paths are — so within ONE test
+  // file's process, every `test()` block actually shares the same
+  // underlying `auth-users.json` (and `platform-workspaces.json`), no
+  // matter how many separate temp dirs `withApiServer` creates and tears
+  // down. A fixed email would make `upsertAuthUser` find the SAME "existing"
+  // user row across every test in this file, reuse its `id`, and therefore
+  // reuse its derived `defaultWorkspaceId` too — silently leaking one test's
+  // `folderDropEnabledAt` stamp into the next. A unique email guarantees a
+  // fresh user id, and therefore a fresh, uncollided workspace, per test.
+  const testEmail = `qa-${crypto.randomUUID()}@example.com`;
+
   process.chdir(tempDir);
-  process.env.VIOLEMA_APPROVED_EMAILS = 'qa@example.com';
+  process.env.VIOLEMA_APPROVED_EMAILS = testEmail;
   process.env.VIOLEMA_DISABLE_AUTOMATION_SCHEDULER = '1';
   if (options.readerKeyEnvValue) {
     process.env.GOOGLE_LIBRARY_READER_KEY = options.readerKeyEnvValue;
@@ -95,7 +110,7 @@ async function withApiServer(
     const acceptedAt = '2026-07-11T12:01:00.000Z';
 
     consent.recordBetaConsent({
-      email: 'qa@example.com',
+      email: testEmail,
       participantType: 'founder_operator',
       termsVersion: betaProgram.CURRENT_BETA_TERMS_VERSION,
       termsDigest: betaProgram.CURRENT_BETA_TERMS_DIGEST,
@@ -104,10 +119,17 @@ async function withApiServer(
       acceptanceSource: 'signup',
     });
 
+    // Deliberately role: 'user', not 'admin'. `auth.ts`'s `upsertAuthUser`
+    // gives an 'admin' user the fixed, shared `DEFAULT_WORKSPACE_ID`
+    // constant as its `defaultWorkspaceId` — which would undo the
+    // unique-email fix above by putting every test's user back onto the
+    // SAME workspace. A 'user' role instead derives the workspace id from
+    // this user's own (now-unique) id, so each test genuinely gets its own
+    // workspace and its own, uncollided `folderDropEnabledAt` metadata bag.
     const user = auth.upsertAuthUser({
-      email: 'qa@example.com',
+      email: testEmail,
       name: 'QA Operator',
-      role: 'admin',
+      role: 'user',
       method: 'email',
       participantType: 'founder_operator',
       acceptedTerms: true,
@@ -233,5 +255,65 @@ test('the first transition to active audits exactly once, even across repeated v
     assert.equal(events.length, 1, 'exactly one enablement event across both verify calls.');
     assert.equal(events[0].workspaceId, workspaceId);
     assert.deepEqual(Object.keys(events[0].metadata ?? {}), ['folderId'], 'audit metadata is content-free: folderId only.');
+  });
+});
+
+/**
+ * The TOCTOU fix-round-1 regression: `stampFolderDropEnabledOnFirstActivation`
+ * used to accept a `currentMetadata` snapshot captured by `resolveWorkspaceContext`
+ * near the top of each handler, BEFORE that handler's own `await` points
+ * (Drive lookup, lane-state check, and — on `/share` — a live Composio call).
+ * Two overlapping requests (e.g. a double-click, or a status poll landing
+ * while a share is in flight) would each capture a snapshot showing no
+ * `folderDropEnabledAt`, both pass the guard once their awaits resolved, and
+ * both stamp + audit — two events for one logical transition.
+ *
+ * The fix re-reads the workspace profile FRESH, with no `await` between that
+ * read, the guard, the `upsertWorkspaceProfile` write, and the (synchronous)
+ * `recordAdminAuditEvent` call — making the whole sequence atomic on Node's
+ * single-threaded event loop no matter how many other requests are in
+ * flight. This test forces two requests to genuinely overlap by delaying
+ * `getFolderDropLaneState` (the last `await` both `verify` and `share` take
+ * before reaching the stamp call) via `t.mock.method` on the shared,
+ * cached `librarySweep` module object — the same technique Task 4 used to
+ * force `LibrarySweepError` through the real call path, and effective here
+ * because the backend compiles to CommonJS, so `server.ts`'s import resolves
+ * to a property lookup on this exact object at each call site.
+ */
+test('concurrent verify + share requests racing the first activation audit exactly once', async (t) => {
+  const readerKeyEnvValue = buildTestReaderKeyEnvValue('reader@test.iam');
+
+  await withApiServer({ readerKeyEnvValue }, async ({ baseUrl, sessionToken, workspaceId }) => {
+    if (!librarySweepModule) throw new Error('librarySweep module not loaded yet.');
+
+    // Both routes' handlers now pause here for ~30ms before reaching the
+    // stamp call, guaranteeing the two concurrent requests below are both
+    // genuinely in flight — neither has stamped yet — at the same time.
+    t.mock.method(librarySweepModule, 'getFolderDropLaneState', async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return 'active' as const;
+    });
+
+    const [verifyResponse, shareResponse] = await Promise.all([
+      fetch(`${baseUrl}/api/workspace/library/folder-drop/verify`, {
+        method: 'POST',
+        headers: authHeaders(sessionToken),
+      }),
+      fetch(`${baseUrl}/api/workspace/library/folder-drop/share`, {
+        method: 'POST',
+        headers: authHeaders(sessionToken),
+      }),
+    ]);
+
+    assert.equal(verifyResponse.status, 200);
+    assert.equal(shareResponse.status, 200);
+    const verifyBody = await verifyResponse.json() as Record<string, unknown>;
+    const shareBody = await shareResponse.json() as Record<string, unknown>;
+    assert.equal(verifyBody.laneState, 'active');
+    assert.equal(shareBody.laneState, 'active');
+
+    const events = readFolderDropShareAuditEvents();
+    assert.equal(events.length, 1, 'exactly one enablement event across concurrent verify+share calls.');
+    assert.equal(events[0].workspaceId, workspaceId);
   });
 });

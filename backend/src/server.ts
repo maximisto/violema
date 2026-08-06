@@ -7355,22 +7355,38 @@ app.put('/api/workspace/business-context', (req: Request, res: Response) => {
 /**
  * Stamp the workspace profile's `folderDropEnabledAt` metadata and audit the
  * enablement, but only on the FIRST transition to `active` for this
- * workspace. Both `verify` and `share` call through here, so the audit event
- * fires exactly once per workspace no matter which route (or how many
- * repeated calls) actually observed the transition.
+ * workspace.
+ *
+ * Deliberately re-reads the workspace profile FRESH here rather than taking
+ * a caller-supplied metadata snapshot: both `verify` and `share` await a
+ * Drive/Composio round trip before reaching this call, so a snapshot taken
+ * before that await is stale by the time a second, overlapping request
+ * (a double-click, or a status poll landing mid-share) reaches this same
+ * point — two stale-but-"empty" snapshots would both pass the guard and
+ * both audit. The fresh read below, the `folderDropEnabledAt` guard, the
+ * `upsertWorkspaceProfile` write, and the (synchronous) `recordAdminAuditEvent`
+ * call all run with NO `await` between them. This codebase has no lock
+ * utility, but none is needed: Node's single-threaded event loop never
+ * interleaves another request's JS between two statements that contain no
+ * `await`, so this read-guard-write-audit sequence is atomic with respect to
+ * every other request on the process, and the audit event fires exactly
+ * once per workspace no matter how many concurrent or repeated calls race to
+ * observe the transition.
  */
 function stampFolderDropEnabledOnFirstActivation(input: {
   workspaceId: string;
-  currentMetadata: Record<string, unknown> | undefined;
   laneState: FolderDropLaneState;
   rootFolderId: string | null;
   actorEmail: string;
 }): void {
   if (input.laneState !== 'active') return;
-  if (input.currentMetadata?.folderDropEnabledAt) return;
+
+  // Fresh read — no `await` from here through the audit call below.
+  const currentMetadata = getWorkspaceProfile(input.workspaceId).metadata;
+  if (currentMetadata?.folderDropEnabledAt) return;
 
   upsertWorkspaceProfile(input.workspaceId, {
-    metadata: { ...(input.currentMetadata ?? {}), folderDropEnabledAt: new Date().toISOString() },
+    metadata: { ...(currentMetadata ?? {}), folderDropEnabledAt: new Date().toISOString() },
   });
   recordAdminAuditEvent({
     actorEmail: input.actorEmail,
@@ -7399,12 +7415,11 @@ app.post('/api/workspace/library/folder-drop/verify', async (req: Request, res: 
     res.status(401).json({ error: 'Approved Violema beta session required.', code: 'beta_session_required' });
     return;
   }
-  const { workspaceId, workspace } = resolveWorkspaceContext(req);
+  const { workspaceId } = resolveWorkspaceContext(req);
   const rootFolderId = await findLibraryRootFolderId(workspaceId);
   const laneState = await getFolderDropLaneState(rootFolderId);
   stampFolderDropEnabledOnFirstActivation({
     workspaceId,
-    currentMetadata: workspace.metadata,
     laneState,
     rootFolderId,
     actorEmail: authUser.email,
@@ -7418,7 +7433,7 @@ app.post('/api/workspace/library/folder-drop/share', async (req: Request, res: R
     res.status(401).json({ error: 'Approved Violema beta session required.', code: 'beta_session_required' });
     return;
   }
-  const { workspaceId, workspace } = resolveWorkspaceContext(req);
+  const { workspaceId } = resolveWorkspaceContext(req);
   const rootFolderId = await findLibraryRootFolderId(workspaceId);
   const readerEmail = getFolderDropReaderEmail();
 
@@ -7435,7 +7450,6 @@ app.post('/api/workspace/library/folder-drop/share', async (req: Request, res: R
   const laneState = await getFolderDropLaneState(rootFolderId);
   stampFolderDropEnabledOnFirstActivation({
     workspaceId,
-    currentMetadata: workspace.metadata,
     laneState,
     rootFolderId,
     actorEmail: authUser.email,
