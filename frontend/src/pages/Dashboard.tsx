@@ -757,7 +757,9 @@ function buildLocalPreviewAutomationItems(): DashboardTaskItem[] {
           kind: 'search',
           title: 'Search competitor moves',
           objective: 'Find pricing, launch, and positioning changes relevant to founders.',
-          inputs: { query: 'AI agent workflow competitors pricing product launch this week', num_results: 8 },
+          // Reference form, matching the founder seed. A literal query here
+          // showed Violema's own market to every tenant looking at the sample.
+          inputs: { use_business_context: true, query_suffix: 'competitor pricing product launch news', num_results: 6 },
         },
         {
           id: 'preview-step-brief',
@@ -1332,6 +1334,33 @@ function readString(value: unknown) {
 async function readApiError(response: Response, fallback: string) {
   const payload = await response.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
   return readString(payload?.error) || readString(payload?.message) || fallback;
+}
+
+/** A readiness blocker as it arrives on a refused run's 409 body. */
+interface DashboardRunBlocker {
+  key: string;
+  label: string;
+  detail?: string;
+  route?: string;
+}
+
+/**
+ * Read the `blockers` array off a refused-run response.
+ *
+ * The server sends the same shape `WorkflowReadinessPanel` renders, so a
+ * blocked run can offer the same fix affordances the editor's readiness panel
+ * does rather than flattening to a message string.
+ */
+function readRunBlockers(value: unknown): DashboardRunBlocker[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const key = readString(item.key);
+    const label = readString(item.label);
+    if (!key || !label) return [];
+    return [{ key, label, detail: readString(item.detail), route: readString(item.route) }];
+  });
 }
 
 function isLikelySlackTarget(value: string) {
@@ -1961,7 +1990,13 @@ export default function Dashboard() {
   const [missionSourceTasks, setMissionSourceTasks] = useState<MissionSourceTask[]>([]);
   const [taskPanelLoaded, setTaskPanelLoaded] = useState(false);
   const [taskPanelRefreshing, setTaskPanelRefreshing] = useState(false);
-  const [uiNotice, setUiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  // `blockers` carries a refused run's readiness blockers so the notice can
+  // offer the fix (connect Stripe, set your business context) instead of only
+  // naming it. They arrive on the error tone, which already stays until
+  // dismissed — an actionable notice must not vanish before it is acted on.
+  const [uiNotice, setUiNotice] = useState<
+    { tone: 'success' | 'error'; message: string; blockers?: DashboardRunBlocker[] } | null
+  >(null);
   const [actionBusy, setActionBusy] = useState<'run' | 'pause' | 'edit' | 'save' | 'delete' | 'grant' | 'review-approve' | 'review-change' | 'review-rerun' | null>(null);
   // Two-step confirmation for the founder test-credit grant: it writes a real
   // ledger entry, so it must not fire on a single stray click.
@@ -2439,8 +2474,8 @@ export default function Dashboard() {
     return () => window.clearTimeout(timeout);
   }, [uiNotice]);
 
-  const showNotice = useCallback((tone: 'success' | 'error', message: string) => {
-    setUiNotice({ tone, message });
+  const showNotice = useCallback((tone: 'success' | 'error', message: string, blockers?: DashboardRunBlocker[]) => {
+    setUiNotice({ tone, message, ...(blockers?.length ? { blockers } : {}) });
   }, []);
 
   useEffect(() => {
@@ -2612,7 +2647,7 @@ export default function Dashboard() {
     try {
       const response = await fetch(`/api/automations/${task.automationId}/run`, { method: 'POST' });
       if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { code?: unknown; message?: unknown; error?: unknown } | null;
+        const payload = await response.json().catch(() => null) as { code?: unknown; message?: unknown; error?: unknown; blockers?: unknown } | null;
         // A second click while the first run is still drafting: the run they
         // asked for already exists, so this is reassurance, not an error.
         if (response.status === 409 && payload?.code === 'run_already_in_progress') {
@@ -2620,7 +2655,16 @@ export default function Dashboard() {
           await refreshAutomations();
           return;
         }
-        throw new Error(readString(payload?.error) || readString(payload?.message) || 'Could not run automation');
+        const summary = readString(payload?.error) || readString(payload?.message) || 'Could not run automation';
+        // A refused run is the one moment the operator is looking at the
+        // problem. Carry its blockers into the notice so the fix is one click
+        // away — a bare summary sent them hunting for the right settings page.
+        const blockers = readRunBlockers(payload?.blockers);
+        if (blockers.length > 0) {
+          showNotice('error', summary, blockers);
+          return;
+        }
+        throw new Error(summary);
       }
       await refreshAutomations();
       showNotice('success', `Started "${task.title}" — drafting now. It will park in Reviews for your approval.`);
@@ -4771,6 +4815,34 @@ export default function Dashboard() {
                 ✕
               </button>
             </div>
+            {uiNotice.blockers?.length ? (
+              <div className="mt-3 space-y-2">
+                {uiNotice.blockers.map((blocker) => {
+                  const action = getReadinessBlockerAction(blocker);
+
+                  return (
+                    <div key={blocker.key} className="rounded-xl border border-white/8 bg-navy-950/45 px-3 py-2">
+                      <p className="text-xs font-semibold text-white">{blocker.label}</p>
+                      {blocker.detail ? (
+                        <p className="mt-1 text-[11px] leading-5 text-slate-400">{blocker.detail}</p>
+                      ) : null}
+                      {action ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUiNotice(null);
+                            action.onClick();
+                          }}
+                          className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 transition-colors hover:text-cyan-100"
+                        >
+                          {action.label}
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         </div>
       )}
@@ -6684,7 +6756,35 @@ export default function Dashboard() {
                               </div>
                             );
                           })()}
-                          {step.kind === 'search' && (
+                          {step.kind === 'search' && step.inputs?.use_business_context === true && (
+                            // The run composes this query from the workspace's
+                            // business context and discards whatever sits in
+                            // `query`. Offering an editable field here would be
+                            // offering a control that does nothing.
+                            <div>
+                              <p className="mb-1 px-1 text-xs font-medium text-slate-400">Search query</p>
+                              <div className="rounded-2xl border border-cyan-500/18 bg-cyan-500/8 px-3 py-3">
+                                <p className="text-sm font-medium text-cyan-100">Composed from your business context at run time</p>
+                                {typeof step.inputs?.query_suffix === 'string' && step.inputs.query_suffix ? (
+                                  <p className="mt-1.5 text-[11px] leading-5 text-slate-400">
+                                    Your market and competitors, then{' '}
+                                    <span className="font-mono text-slate-300">{step.inputs.query_suffix}</span>
+                                  </p>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    closeAutomationEditor();
+                                    navigate('/settings#business');
+                                  }}
+                                  className="mt-2 inline-flex text-[11px] font-semibold text-cyan-200 transition-colors hover:text-cyan-100"
+                                >
+                                  Edit your business context
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {step.kind === 'search' && step.inputs?.use_business_context !== true && (
                             <div>
                               <p className="mb-1 px-1 text-xs font-medium text-slate-400">Search query override</p>
                               <div className="ui-input-shell">
