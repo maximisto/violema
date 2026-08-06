@@ -8711,6 +8711,22 @@ export function startServer() {
       `[boot] business-context migration: ${businessContextMigration.backfilled} workspace(s) backfilled, ${businessContextMigration.rewrittenAutomations} automation(s) rewritten`,
     );
   }
+  // A migration that edits step content owes the operator a trail. Content-free
+  // by design — the ids, not the queries — and never fatal: an unwritable audit
+  // file must not stop a boot.
+  for (const automationId of businessContextMigration.rewrittenAutomationIds) {
+    try {
+      const workspaceId = getAutomationById(automationId)?.workspaceId;
+      recordAdminAuditEvent({
+        actorEmail: 'system@violema.com',
+        action: 'automation.business_context_migrated',
+        ...(workspaceId ? { workspaceId } : {}),
+        metadata: { automationId },
+      });
+    } catch (error) {
+      console.error(`[boot] could not record migration audit event for ${automationId}`, error);
+    }
+  }
   const orphaned = sweepOrphanedTaskRuns(bootTime);
   if (orphaned.length > 0) {
     console.log(`Swept ${orphaned.length} task run(s) orphaned by the previous shutdown.`);

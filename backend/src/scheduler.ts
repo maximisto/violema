@@ -461,6 +461,28 @@ function writeAutomations(items: AutomationRecord[]) {
   fs.writeFileSync(AUTOMATIONS_FILE, JSON.stringify(items, null, 2));
 }
 
+/**
+ * Snapshot the automations file before a one-shot migration rewrites it.
+ *
+ * The house pattern (`platform/jsonStore.ts`) keeps one rolling `.bak` sibling,
+ * which the next ordinary write would overwrite. A migration edits step content
+ * an operator never asked to change, so its snapshot is timestamped and
+ * survives. Best effort: a failed copy must not stop the rewrite.
+ */
+function backupAutomationsFile(): string | null {
+  if (!fs.existsSync(AUTOMATIONS_FILE)) return null;
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const destination = `${AUTOMATIONS_FILE}.bak.${stamp}`;
+  try {
+    fs.copyFileSync(AUTOMATIONS_FILE, destination);
+    return destination;
+  } catch (error) {
+    console.error(`[migration] could not back up ${AUTOMATIONS_FILE} before rewrite`, error);
+    return null;
+  }
+}
+
 function isValidTimeZone(timezone?: string): boolean {
   if (!timezone) return false;
   try {
@@ -1108,12 +1130,20 @@ const MIGRATION_CONTEXT_STEP_TITLES = new Set([
   'Draft founder brief',
 ]);
 
-export function runBusinessContextMigration(): { backfilled: number; rewrittenAutomations: number } {
+/** Stamped on migration-authored contexts so the trail can tell them from an operator's. */
+const MIGRATION_UPDATED_BY = 'migration:business-context';
+
+export function runBusinessContextMigration(): {
+  backfilled: number;
+  rewrittenAutomations: number;
+  /** Fed to the admin audit trail — one content-free event per rewritten record. */
+  rewrittenAutomationIds: string[];
+} {
   let backfilled = 0;
-  let rewrittenAutomations = 0;
+  const rewrittenAutomationIds: string[] = [];
 
   if (!getBusinessContext(DEFAULT_WORKSPACE_ID)) {
-    if (setBusinessContext(DEFAULT_WORKSPACE_ID, FOUNDER_BACKFILL).ok) backfilled += 1;
+    if (setBusinessContext(DEFAULT_WORKSPACE_ID, FOUNDER_BACKFILL, MIGRATION_UPDATED_BY).ok) backfilled += 1;
   }
 
   const items = readAutomations();
@@ -1126,19 +1156,23 @@ export function runBusinessContextMigration(): { backfilled: number; rewrittenAu
         typeof step.inputs?.query === 'string' && step.inputs.query.trim() === ESPRESSO_LEGACY_QUERY,
     );
     if (hasEspressoQuery && item.workspaceId && !getBusinessContext(item.workspaceId)) {
-      if (setBusinessContext(item.workspaceId, ESPRESSO_BACKFILL).ok) backfilled += 1;
+      if (setBusinessContext(item.workspaceId, ESPRESSO_BACKFILL, MIGRATION_UPDATED_BY).ok) backfilled += 1;
     }
   }
 
   // Pass 2: rewrite legacy queries to the reference form; flag the automation's
   // known context-consuming steps by title so copies get the preamble too.
-  let changed = false;
   const next = items.map((item) => {
     if (!item.steps?.length) return item;
     let touched = false;
     let steps = item.steps.map((step) => {
       const query = typeof step.inputs?.query === 'string' ? step.inputs.query.trim() : '';
-      const suffix = LEGACY_BUSINESS_QUERY_SUFFIXES[query];
+      // hasOwnProperty, not a bare lookup: a query of `constructor` or
+      // `toString` would otherwise resolve to an inherited Object member and
+      // rewrite a step nobody migrated.
+      const suffix = Object.prototype.hasOwnProperty.call(LEGACY_BUSINESS_QUERY_SUFFIXES, query)
+        ? LEGACY_BUSINESS_QUERY_SUFFIXES[query]
+        : '';
       if (step.kind !== 'search' || !suffix) return step;
       touched = true;
       const numResults = typeof step.inputs?.num_results === 'number' ? step.inputs.num_results : 6;
@@ -1152,11 +1186,13 @@ export function runBusinessContextMigration(): { backfilled: number; rewrittenAu
         ? { ...step, inputs: { ...(step.inputs || {}), use_business_context: true } }
         : step,
     );
-    changed = true;
-    rewrittenAutomations += 1;
+    rewrittenAutomationIds.push(item.id);
     return { ...item, steps };
   });
 
-  if (changed) writeAutomations(next);
-  return { backfilled, rewrittenAutomations };
+  if (rewrittenAutomationIds.length > 0) {
+    backupAutomationsFile();
+    writeAutomations(next);
+  }
+  return { backfilled, rewrittenAutomations: rewrittenAutomationIds.length, rewrittenAutomationIds };
 }

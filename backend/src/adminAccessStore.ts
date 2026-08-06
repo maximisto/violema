@@ -41,7 +41,11 @@ export type AdminAuditAction =
   | 'auth.magic_link.signed_in'
   // The operator (re)pointed a workspace's missions at their business. Recorded
   // content-free so the trail answers "when and who" without holding the data.
-  | 'workspace.business_context.updated';
+  | 'workspace.business_context.updated'
+  // The 2026-08-05 boot migration rewrote an automation's step content — an
+  // edit no operator asked for. One event per rewritten record so "why does my
+  // mission look different" has an answer.
+  | 'automation.business_context_migrated';
 
 export interface AdminAccessRecord {
   email: string;
@@ -99,6 +103,7 @@ const AUDIT_ACTIONS = new Set<AdminAuditAction>([
   'auth.magic_link.requested',
   'auth.magic_link.signed_in',
   'workspace.business_context.updated',
+  'automation.business_context_migrated',
 ]);
 
 function getAccessFile() {
