@@ -1,4 +1,5 @@
 import { evidenceHref } from './evidenceLink';
+import { libraryEvidenceItems, readLibrarySnapshotEntries } from './libraryEvidence';
 import type {
   MissionAgentView,
   MissionArtifactView,
@@ -369,6 +370,15 @@ function extractEvidenceItems(value: unknown, fallbackSource: string, idPrefix: 
         return record ? evidenceItemFromRecord(record, fallbackSource, idPrefix, index) : undefined;
       })
       .filter((item): item is MissionEvidenceItem => Boolean(item));
+  }
+
+  // A library-read query artifact's payload carries an AccountLibrarySnapshot
+  // (see backend/src/integrationGateway/accountLibrary.ts), not a plain
+  // title/url record -- check for that shape before the generic record path
+  // below, which would otherwise find nothing to label and drop it silently.
+  const libraryEntries = readLibrarySnapshotEntries(value);
+  if (libraryEntries) {
+    return libraryEvidenceItems(libraryEntries, fallbackSource, idPrefix);
   }
 
   const record = readRecordValue(value);
