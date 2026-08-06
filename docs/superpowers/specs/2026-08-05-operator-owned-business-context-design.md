@@ -112,6 +112,12 @@ Data files get `.bak` backups per house pattern; every rewrite emits an audit ev
 
 Separate items on the outstanding list, not this build: library ingestion for user files (`drive.file` picker/upload), review-card provenance, in-product Slack delivery receipt, Violema-branded tenant posts, stale `waiting_review` queue hygiene.
 
+## Implementation deviations (recorded 2026-08-05, post-build)
+
+1. **Migration is idempotent by construction, with no stamp file.** Rewrites match exact legacy query strings that no longer exist after the rewrite, and backfills skip workspaces whose context is already set — a second run finds nothing to do. The spec's "stamped" wording described the intent (safe re-runs), which this achieves without the extra state.
+2. **PUT auth maps "owner/admin" to authenticated + workspace access.** The auth model has global `admin`/`member` roles plus per-user workspace lists — no per-workspace owner role exists. `resolveWorkspaceContext` already asserts workspace access for authenticated users; inventing a per-workspace role system for this endpoint would be YAGNI.
+3. **The weekly-founder-brief frontend template was also converted** to the reference form (`query_suffix: 'competitor pricing product launch news'`) — the spec's "audit the other templates for the same pattern" clause found the same hardcoded market string there.
+
 ## Risks
 
 - `server.ts` and `runReadinessGate.ts` are regression-sensitive; every change is narrow and behind the `use_business_context` opt-in, so unopted steps are byte-identical.
