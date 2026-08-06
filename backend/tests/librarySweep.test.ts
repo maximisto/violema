@@ -5,6 +5,7 @@ import { test, beforeEach } from 'node:test';
 import { MAX_ENTRY_CONTENT_BYTES } from '../src/integrationGateway/accountLibrary';
 import {
   MAX_OPERATOR_FILES_PER_SWEEP,
+  SWEEP_COMPOSIO_MAX_PAGES,
   SWEEP_MEMO_MAX_ENTRIES,
   SWEEP_MEMO_TTL_MS,
   LibrarySweepError,
@@ -33,6 +34,7 @@ const SECTION_ID = 'section-a';
 
 interface FakeReaderOptions {
   tree: DriveFileMeta[];
+  treeTruncated?: boolean;
   fileContents?: Record<string, Buffer>;
   docExports?: Record<string, string>;
   listError?: Error;
@@ -45,7 +47,7 @@ function createFakeReader(options: FakeReaderOptions) {
   const reader: DriveReader = {
     async listFolderTree() {
       if (options.listError) throw options.listError;
-      return options.tree;
+      return { files: options.tree, truncated: options.treeTruncated ?? false };
     },
     async downloadFile(fileId: string) {
       downloadCalls.push(fileId);
@@ -528,6 +530,97 @@ test('a fat first file cannot monopolize the operator lane', async () => {
   assert.ok(downloadCalls.includes('small-1'));
 });
 
+// --- truncated listings must be NAMED, never silently short -------------------------
+
+test('a truncated SA tree listing warns that some folders were not read', async () => {
+  const tree: DriveFileMeta[] = [
+    {
+      id: 'op-md-1',
+      name: 'seen.md',
+      mimeType: 'text/markdown',
+      size: 20,
+      parentFolderId: ROOT_ID,
+      modifiedTime: '2026-08-02T00:00:00.000Z',
+      md5Checksum: 'md5-seen',
+    },
+  ];
+  const { reader } = createFakeReader({
+    tree,
+    treeTruncated: true,
+    fileContents: { 'op-md-1': Buffer.from('a visible operator note') },
+  });
+  const { execute } = createComposioFake({ [ROOT_ID]: [{ files: [] }] });
+
+  const result = await sweepOperatorFiles(
+    { workspaceId: 'ws_test', rootFolderId: ROOT_ID, budgetBytes: 1_000_000 },
+    { reader, execute },
+  );
+
+  // What WAS read is still delivered.
+  assert.equal(result.laneState, 'active');
+  assert.equal(result.entries.length, 1);
+
+  // But "we ran out of listing budget" must never read as "there is nothing
+  // else there".
+  assert.ok(
+    result.warnings.some((warning) => /not (be )?read|not fully listed|listing/i.test(warning)),
+    `expected a truncation warning, got ${JSON.stringify(result.warnings)}`,
+  );
+});
+
+test('too many folders for the Composio page budget degrades honestly instead of failing the run', async () => {
+  // One page minimum per folder, so SWEEP_COMPOSIO_MAX_PAGES + 3 folders
+  // cannot all be reconciled. Previously this threw LibrarySweepError, which
+  // readLibrary turns into a hard failure on a `critical` step — a blocked
+  // mission run because the operator made too many subfolders.
+  const folderCount = SWEEP_COMPOSIO_MAX_PAGES + 3;
+  const folders: DriveFileMeta[] = [];
+  const files: DriveFileMeta[] = [];
+  for (let index = 0; index < folderCount; index += 1) {
+    const folderId = `folder-${index}`;
+    folders.push({ id: folderId, name: `Section ${index}`, mimeType: FOLDER_MIME, parentFolderId: ROOT_ID });
+    files.push({
+      id: `file-${index}`,
+      name: `note-${index}.md`,
+      mimeType: 'text/markdown',
+      size: 20,
+      parentFolderId: folderId,
+      modifiedTime: '2026-08-02T00:00:00.000Z',
+      md5Checksum: `md5-${index}`,
+    });
+  }
+
+  const fileContents: Record<string, Buffer> = {};
+  for (const file of files) fileContents[file.id] = Buffer.from(`body of ${file.name}`);
+
+  const { reader } = createFakeReader({ tree: [...folders, ...files], fileContents });
+  const { execute, calls } = createComposioFake(
+    Object.fromEntries([ROOT_ID, ...folders.map((f) => f.id)].map((id) => [id, [{ files: [] }]])),
+  );
+
+  const result = await sweepOperatorFiles(
+    { workspaceId: 'ws_test', rootFolderId: ROOT_ID, budgetBytes: 1_000_000 },
+    { reader, execute },
+  );
+
+  assert.equal(result.laneState, 'active');
+  assert.ok(calls.length <= SWEEP_COMPOSIO_MAX_PAGES, 'the page budget must still be respected');
+
+  // Only files in folders we actually reconciled against Composio may be
+  // classified — an unreconciled folder's files could be app-created, and
+  // guessing would duplicate them into evidence.
+  assert.ok(result.entries.length > 0, 'the folders that DID fit must still be swept');
+  assert.ok(
+    result.entries.length < files.length,
+    'files in unreconciled folders must not be classified as operator files',
+  );
+
+  assert.ok(
+    result.warnings.some((warning) => /folder/i.test(warning) && /not/i.test(warning)),
+    `expected a warning naming the unread folders, got ${JSON.stringify(result.warnings)}`,
+  );
+});
+
 // --- a broken download must degrade the FILE, never the RUN -------------------------
 
 test('a download stream that dies mid-read yields contentError, and never throws out of the sweep', async () => {
@@ -594,7 +687,10 @@ test('a download stream that dies mid-read yields contentError, and never throws
       md5Checksum: 'md5-good',
     },
   ];
-  const readerWithTree: DriveReader = { ...reader, listFolderTree: async () => tree };
+  const readerWithTree: DriveReader = {
+    ...reader,
+    listFolderTree: async () => ({ files: tree, truncated: false }),
+  };
   const { execute } = createComposioFake({ [ROOT_ID]: [{ files: [] }] });
 
   const result = await sweepOperatorFiles(
@@ -633,7 +729,7 @@ test('lane state: null reader → not_configured; reader 404 on root list → ne
   assert.equal(await getFolderDropLaneState(ROOT_ID, { reader: failingReader }), 'needs_share');
 
   const okReader: DriveReader = {
-    listFolderTree: async () => [],
+    listFolderTree: async () => ({ files: [], truncated: false }),
     downloadFile: async () => {
       throw new Error('unused');
     },

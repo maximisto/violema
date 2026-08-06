@@ -20,11 +20,12 @@
  *
  * No naming convention, no persisted tracking flag, no per-file provenance
  * write — the two grants' scopes are the discriminator. The one thing that
- * must hold for this to be correct is that the Composio listing is COMPLETE:
- * a truncated app-file listing would misclassify app entries as operator
- * files and duplicate them into evidence. `listComposioVisibleFileIds` below
- * pages every folder in the SA tree to completion, or throws
- * `LibrarySweepError` rather than ever guessing.
+ * must hold for this to be correct is that the Composio listing is COMPLETE
+ * for any folder whose files we classify: a truncated app-file listing would
+ * misclassify app entries as operator files and duplicate them into evidence.
+ * `listComposioVisibleFileIds` therefore reports exactly which folders it
+ * paginated to completion, and only those folders' files are judged. It never
+ * guesses.
  *
  * WHY THE PAGE BUDGET IS SHARED ACROSS FOLDERS, NOT PER FOLDER
  *
@@ -33,7 +34,11 @@
  * `GOOGLEDRIVE_FIND_FILE` calls this sweep is allowed to make across every
  * folder combined — a workspace with many sections must not multiply the
  * cap, it must share it, or one sweep could make an unbounded number of
- * partner calls.
+ * partner calls. When that shared budget cannot cover every folder, the
+ * sweep degrades: it reads what fits, names the folders it did not reach in
+ * `warnings`, and returns. It does NOT throw — a workspace with fourteen
+ * subfolders is not an error condition, and turning it into one blocked the
+ * whole mission run on a `critical` library-read step.
  *
  * FAILS HONEST, NEVER SILENT
  *
@@ -75,6 +80,7 @@ import {
   DriveReaderError,
   DRIVE_READER_MAX_DOWNLOAD_BYTES,
   type DriveFileMeta,
+  type DriveFolderTree,
   type DriveReader,
 } from './adapters/nativeDriveReader';
 import { isParseableSourceMime, parseSourceBuffer } from './sourceParsing';
@@ -314,30 +320,62 @@ function escapeDriveQueryValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+interface ComposioVisibleListing {
+  /** Every app-created file id seen across the folders that were fully reconciled. */
+  visible: Set<string>;
+  /** Folders paginated to completeness — the ONLY folders whose files may be classified. */
+  reconciledFolderIds: Set<string>;
+  /** Folders the page budget could not cover. Their files are neither classified nor guessed at. */
+  unreconciledFolderIds: string[];
+}
+
 /**
  * Composio-visible file ids across every folder id in the SA tree (root +
- * every nested section folder discovered by the SA reader). Paginates each
- * folder to completeness; the page budget (`SWEEP_COMPOSIO_MAX_PAGES`) is
- * shared across every folder in this call, never per-folder. Throws
- * `LibrarySweepError` on any failure — a rejected call, a malformed
- * response, or the shared page budget running out — because a truncated
- * listing here would misclassify app-created files as operator files.
+ * every nested section folder discovered by the SA reader). Each folder is
+ * paginated to completeness; the page budget (`SWEEP_COMPOSIO_MAX_PAGES`) is
+ * shared across every folder in this call, never per-folder.
+ *
+ * TWO FAILURE MODES, TWO DIFFERENT ANSWERS
+ *
+ * A rejected call or a malformed response is a real failure and still throws
+ * `LibrarySweepError` — we cannot tell whether the folder is empty or the
+ * partner is broken.
+ *
+ * Running out of PAGE BUDGET is different: it is a known, bounded, entirely
+ * predictable consequence of a workspace having many section folders, and the
+ * caller can still do useful work with the folders that fit. Throwing there
+ * turned "the operator made 14 subfolders" into a hard failure on a
+ * `critical` library-read step — a blocked mission run. So the budget case
+ * reports WHICH folders were reconciled instead, and the caller confines
+ * classification to those. An unreconciled folder's files are never guessed
+ * at: without a complete app-file listing for that folder, an app-created
+ * file there would be misread as an operator drop and duplicated into
+ * evidence.
  */
 async function listComposioVisibleFileIds(
   execute: PartnerComposioExecutor,
   workspaceId: string,
   folderIds: Iterable<string>,
-): Promise<Set<string>> {
+): Promise<ComposioVisibleListing> {
   const visible = new Set<string>();
+  const reconciledFolderIds = new Set<string>();
+  const unreconciledFolderIds: string[] = [];
   let pagesUsed = 0;
+  let budgetSpent = false;
 
   for (const folderId of folderIds) {
+    if (budgetSpent) {
+      unreconciledFolderIds.push(folderId);
+      continue;
+    }
+
     let pageToken: string | undefined;
+    let completed = true;
     do {
       if (pagesUsed >= SWEEP_COMPOSIO_MAX_PAGES) {
-        throw new LibrarySweepError(
-          `Folder drop: the Composio listing did not complete within the ${SWEEP_COMPOSIO_MAX_PAGES}-page budget.`,
-        );
+        completed = false;
+        budgetSpent = true;
+        break;
       }
       pagesUsed += 1;
 
@@ -367,9 +405,12 @@ async function listComposioVisibleFileIds(
       }
       pageToken = readListingNextPageToken(envelope.data);
     } while (pageToken);
+
+    if (completed) reconciledFolderIds.add(folderId);
+    else unreconciledFolderIds.push(folderId);
   }
 
-  return visible;
+  return { visible, reconciledFolderIds, unreconciledFolderIds };
 }
 
 // --- memo -------------------------------------------------------------------------
@@ -499,9 +540,12 @@ function modifiedTimeValue(file: DriveFileMeta): number {
 /**
  * Sweep the operator-file set out of a workspace's `Violema Library` tree.
  *
- * Throws `LibrarySweepError` when the Composio listing cannot complete —
- * never returns a result built on a partial listing, since that would
- * misclassify app-created files as operator files.
+ * Throws `LibrarySweepError` only when the Composio listing FAILS (rejected
+ * call, malformed envelope) — never returns a result built on a listing whose
+ * completeness it cannot vouch for. A listing that merely ran out of page
+ * budget degrades instead: the folders that were reconciled are swept, the
+ * ones that were not are named in `warnings`, and no file from an
+ * unreconciled folder is classified.
  */
 export async function sweepOperatorFiles(
   input: { workspaceId: string; rootFolderId: string; budgetBytes: number },
@@ -519,7 +563,9 @@ export async function sweepOperatorFiles(
   const execute = deps.execute ?? executeComposioAction;
   const nowFn = deps.now ?? (() => new Date());
 
-  let tree: DriveFileMeta[];
+  const warnings: string[] = [];
+
+  let tree: DriveFolderTree;
   try {
     tree = await reader.listFolderTree(input.rootFolderId);
   } catch (error) {
@@ -527,21 +573,37 @@ export async function sweepOperatorFiles(
     return { laneState: laneStateForDriveReaderError(error), entries: [], warnings: [] };
   }
 
+  if (tree.truncated) {
+    warnings.push(
+      'Folder drop: your Violema Library has more folders than one run can list, so some were not read this run.',
+    );
+  }
+
   const folderIds = new Set<string>([input.rootFolderId]);
-  for (const file of tree) {
+  for (const file of tree.files) {
     if (file.mimeType === FOLDER_MIME_TYPE) folderIds.add(file.id);
   }
 
-  // Throws LibrarySweepError on any incomplete/failed listing — never a
-  // silent skip, never a misclassification.
-  const composioVisible = await listComposioVisibleFileIds(execute, input.workspaceId, folderIds);
+  // Throws LibrarySweepError on a rejected or malformed listing. Running out
+  // of page budget is NOT that: it reports which folders it managed to
+  // reconcile, and classification below is confined to exactly those.
+  const listing = await listComposioVisibleFileIds(execute, input.workspaceId, folderIds);
+  if (listing.unreconciledFolderIds.length > 0) {
+    warnings.push(
+      `Folder drop: ${listing.unreconciledFolderIds.length} folder(s) were not read this run (the ${SWEEP_COMPOSIO_MAX_PAGES}-page listing budget ran out); any files inside them were skipped.`,
+    );
+  }
 
-  const operatorFiles = tree.filter(
-    (file) => file.mimeType !== FOLDER_MIME_TYPE && !composioVisible.has(file.id),
+  const operatorFiles = tree.files.filter(
+    (file) =>
+      file.mimeType !== FOLDER_MIME_TYPE &&
+      // Files listed before this field existed, and the root's own children,
+      // belong to the root — which is always the first folder reconciled.
+      listing.reconciledFolderIds.has(file.parentFolderId ?? input.rootFolderId) &&
+      !listing.visible.has(file.id),
   );
   operatorFiles.sort((a, b) => modifiedTimeValue(b) - modifiedTimeValue(a));
 
-  const warnings: string[] = [];
   let selected = operatorFiles;
   if (operatorFiles.length > MAX_OPERATOR_FILES_PER_SWEEP) {
     const dropped = operatorFiles.slice(MAX_OPERATOR_FILES_PER_SWEEP);

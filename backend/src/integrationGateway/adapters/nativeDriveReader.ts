@@ -26,11 +26,28 @@ export interface DriveFileMeta {
   md5Checksum?: string;
   size?: number;
   webViewLink?: string;
+  /**
+   * The folder this file was listed under. Attribution, not decoration: a
+   * caller that can only reconcile SOME folders against a second listing
+   * needs to know which files it is entitled to judge.
+   */
+  parentFolderId?: string;
+}
+
+/**
+ * `truncated` is true when the page budget cut the walk short — either a
+ * folder's own pagination stopped mid-way, or folders were still queued when
+ * the budget ran out. Callers must be able to tell "the operator has no other
+ * files" apart from "we did not look".
+ */
+export interface DriveFolderTree {
+  files: DriveFileMeta[];
+  truncated: boolean;
 }
 
 export interface DriveReader {
-  /** ≤3 pages total across the whole call; folders recursed breadth-first within the page budget. */
-  listFolderTree(rootFolderId: string): Promise<DriveFileMeta[]>;
+  /** ≤3 pages total across the whole call; folders recursed breadth-first within the page budget. Reports its own truncation. */
+  listFolderTree(rootFolderId: string): Promise<DriveFolderTree>;
   /** Refuses > 5 MB via Content-Length and a buffered running count. */
   downloadFile(fileId: string): Promise<Buffer>;
   /** files.export as text/plain (for Google Docs/Sheets/Slides). Same 5 MB ceiling as `downloadFile`. */
@@ -265,7 +282,7 @@ interface RawFilesListResponse {
   nextPageToken?: string;
 }
 
-function toFileMeta(file: RawDriveFile): DriveFileMeta {
+function toFileMeta(file: RawDriveFile, parentFolderId: string): DriveFileMeta {
   return {
     id: file.id,
     name: file.name,
@@ -274,6 +291,7 @@ function toFileMeta(file: RawDriveFile): DriveFileMeta {
     md5Checksum: file.md5Checksum,
     size: file.size !== undefined ? Number(file.size) : undefined,
     webViewLink: file.webViewLink,
+    parentFolderId,
   };
 }
 
@@ -302,10 +320,11 @@ async function listFolderTreeImpl(
   fetchImpl: DriveReaderFetch,
   accessToken: string,
   rootFolderId: string,
-): Promise<DriveFileMeta[]> {
-  const results: DriveFileMeta[] = [];
+): Promise<DriveFolderTree> {
+  const files: DriveFileMeta[] = [];
   const queue: string[] = [rootFolderId];
   let pagesFetched = 0;
+  let truncated = false;
 
   while (queue.length > 0 && pagesFetched < DRIVE_READER_MAX_LIST_PAGES) {
     const folderId = queue.shift() as string;
@@ -316,15 +335,21 @@ async function listFolderTreeImpl(
       pagesFetched += 1;
 
       for (const file of page.files || []) {
-        results.push(toFileMeta(file));
+        files.push(toFileMeta(file, folderId));
         if (file.mimeType === FOLDER_MIME_TYPE) queue.push(file.id);
       }
 
       pageToken = page.nextPageToken;
     } while (pageToken && pagesFetched < DRIVE_READER_MAX_LIST_PAGES);
+
+    // This folder still had pages left when the budget ran out.
+    if (pageToken) truncated = true;
   }
 
-  return results;
+  // Folders discovered but never visited.
+  if (queue.length > 0) truncated = true;
+
+  return { files, truncated };
 }
 
 // --- bounded body reading ---------------------------------------------------------
@@ -461,7 +486,7 @@ export function createDriveReader(config: DriveReaderConfig, fetchImpl: DriveRea
   const getAccessToken = () => fetchAccessToken(config, fetchImpl);
 
   return {
-    async listFolderTree(rootFolderId: string): Promise<DriveFileMeta[]> {
+    async listFolderTree(rootFolderId: string): Promise<DriveFolderTree> {
       const accessToken = await getAccessToken();
       return listFolderTreeImpl(fetchImpl, accessToken, rootFolderId);
     },

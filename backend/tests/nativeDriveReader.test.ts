@@ -223,15 +223,46 @@ test('listFolderTree paginates and recurses but never fetches more than 3 pages'
   };
 
   const reader = createDriveReader({ clientEmail, privateKey }, fetchImpl);
-  const results = await reader.listFolderTree(rootId);
+  const tree = await reader.listFolderTree(rootId);
 
   assert.equal(DRIVE_READER_MAX_LIST_PAGES, 3);
   assert.equal(listCallCount, 3);
   assert.deepEqual(seenRequests, [`${rootId}:first`, `${rootId}:root-p2`, `${subId}:first`]);
 
-  const resultIds = results.map((file) => file.id);
+  const resultIds = tree.files.map((file) => file.id);
   assert.deepEqual(resultIds, [fileA.id, subfolderEntry.id, fileB.id, fileC.id]);
   assert.ok(!resultIds.includes(fileD.id), 'sub-p2 must never be fetched once the page cap is hit');
+
+  // The listing IS short. Saying so is the whole difference between "the
+  // operator has no other files" and "we did not look".
+  assert.equal(tree.truncated, true, 'a page-capped listing must report itself truncated');
+
+  // Attribution: which folder each file came from, so a caller that can only
+  // reconcile SOME folders knows which files it is entitled to judge.
+  assert.equal(tree.files.find((file) => file.id === fileA.id)?.parentFolderId, rootId);
+  assert.equal(tree.files.find((file) => file.id === fileC.id)?.parentFolderId, subId);
+});
+
+test('listFolderTree reports truncated: false when the whole tree fits the page budget', async () => {
+  const { privateKey } = generateTestKeypair();
+  const clientEmail = 'complete-listing-reader@test.iam.gserviceaccount.com';
+  const rootId = 'small-root';
+
+  const fetchImpl: DriveReaderFetch = async (input) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url === TOKEN_URL) return jsonResponse({ access_token: 'tok', expires_in: 3600 });
+    if (url.startsWith('https://www.googleapis.com/drive/v3/files?')) {
+      return jsonResponse({ files: [{ id: 'only-file', name: 'only.txt', mimeType: 'text/plain' }] });
+    }
+    throw new Error(`Unexpected fetch to ${url}`);
+  };
+
+  const reader = createDriveReader({ clientEmail, privateKey }, fetchImpl);
+  const tree = await reader.listFolderTree(rootId);
+
+  assert.equal(tree.truncated, false);
+  assert.deepEqual(tree.files.map((file) => file.id), ['only-file']);
+  assert.equal(tree.files[0]?.parentFolderId, rootId);
 });
 
 // --- downloadFile size guard -------------------------------------------------
