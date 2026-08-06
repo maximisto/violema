@@ -140,6 +140,7 @@ import {
   getAutomationById,
   listAutomations,
   loadPersistedAutomations,
+  runBusinessContextMigration,
   triggerAutomationNow,
   updateAutomation,
   type AutomationStudioState,
@@ -8704,6 +8705,12 @@ export function startServer() {
   });
 
   const bootTime = new Date();
+  const businessContextMigration = runBusinessContextMigration();
+  if (businessContextMigration.backfilled || businessContextMigration.rewrittenAutomations) {
+    console.log(
+      `[boot] business-context migration: ${businessContextMigration.backfilled} workspace(s) backfilled, ${businessContextMigration.rewrittenAutomations} automation(s) rewritten`,
+    );
+  }
   const orphaned = sweepOrphanedTaskRuns(bootTime);
   if (orphaned.length > 0) {
     console.log(`Swept ${orphaned.length} task run(s) orphaned by the previous shutdown.`);

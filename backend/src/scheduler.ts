@@ -3,6 +3,7 @@ import path from 'path';
 import type { ScheduledTask } from 'node-cron';
 import type { AutomationExecutionPolicy, AutomationStepKind, PersistedAutomationStep } from './platform/types';
 import { createInternalDemoRoutingResolver, usesInternalDemoRouting } from './platform/tenancy';
+import { getBusinessContext, setBusinessContext, DEFAULT_WORKSPACE_ID } from './platform/workspace';
 import {
   PLATFORM_LEARNING_BRIEF_WORKFLOW_ID,
   PLATFORM_TELEMETRY_SOURCE,
@@ -1065,4 +1066,97 @@ export function createAutomation(
   writeAutomations(items);
   scheduleAutomationTask(record, onTrigger);
   return record;
+}
+
+/**
+ * One-shot boot migration for the 2026-08-05 wrong-business failure: move
+ * business facts OUT of step content and INTO workspace business context.
+ * Idempotent by construction — rewrites match exact legacy strings that no
+ * longer exist after the rewrite, and backfills skip workspaces whose context
+ * is already set. No stamp file needed.
+ */
+const LEGACY_BUSINESS_QUERY_SUFFIXES: Record<string, string> = {
+  'AI agent automation platform competitor pricing launches positioning':
+    'competitor pricing launches positioning',
+  'AI automation platform startup competitor pricing product launch founder update':
+    'competitor pricing product launch news',
+  'AI-powered espresso machine competitors smart coffee machine pricing launches product announcements':
+    'competitor pricing launches product announcements',
+};
+
+/** The live 2026-08-05 espresso patch, recognized so its market moves into context. */
+const ESPRESSO_LEGACY_QUERY =
+  'AI-powered espresso machine competitors smart coffee machine pricing launches product announcements';
+
+const ESPRESSO_BACKFILL = {
+  summary: 'An AI-powered espresso machine company.',
+  marketKeywords: ['AI-powered espresso machine', 'smart coffee machine'],
+  competitors: [],
+};
+
+const FOUNDER_BACKFILL = {
+  summary:
+    'Violema is an outcome-first AI operator that runs recurring founder and team workflows with human approval.',
+  marketKeywords: ['AI agent automation platform'],
+  // viktor.com: the named rival generic queries missed (vault, 2026-07-30).
+  competitors: ['viktor.com'],
+};
+
+const MIGRATION_CONTEXT_STEP_TITLES = new Set([
+  'Extract what changed',
+  'Draft competitor memo',
+  'Draft founder brief',
+]);
+
+export function runBusinessContextMigration(): { backfilled: number; rewrittenAutomations: number } {
+  let backfilled = 0;
+  let rewrittenAutomations = 0;
+
+  if (!getBusinessContext(DEFAULT_WORKSPACE_ID)) {
+    if (setBusinessContext(DEFAULT_WORKSPACE_ID, FOUNDER_BACKFILL).ok) backfilled += 1;
+  }
+
+  const items = readAutomations();
+
+  // Pass 1: an espresso-patched record reveals its workspace's market — capture
+  // it into context BEFORE the rewrite destroys the query.
+  for (const item of items) {
+    const hasEspressoQuery = (item.steps || []).some(
+      (step) =>
+        typeof step.inputs?.query === 'string' && step.inputs.query.trim() === ESPRESSO_LEGACY_QUERY,
+    );
+    if (hasEspressoQuery && item.workspaceId && !getBusinessContext(item.workspaceId)) {
+      if (setBusinessContext(item.workspaceId, ESPRESSO_BACKFILL).ok) backfilled += 1;
+    }
+  }
+
+  // Pass 2: rewrite legacy queries to the reference form; flag the automation's
+  // known context-consuming steps by title so copies get the preamble too.
+  let changed = false;
+  const next = items.map((item) => {
+    if (!item.steps?.length) return item;
+    let touched = false;
+    let steps = item.steps.map((step) => {
+      const query = typeof step.inputs?.query === 'string' ? step.inputs.query.trim() : '';
+      const suffix = LEGACY_BUSINESS_QUERY_SUFFIXES[query];
+      if (step.kind !== 'search' || !suffix) return step;
+      touched = true;
+      const numResults = typeof step.inputs?.num_results === 'number' ? step.inputs.num_results : 6;
+      return { ...step, inputs: { use_business_context: true, query_suffix: suffix, num_results: numResults } };
+    });
+    if (!touched) return item;
+    steps = steps.map((step) =>
+      (step.kind === 'analyze' || step.kind === 'summarize') &&
+      MIGRATION_CONTEXT_STEP_TITLES.has(step.title?.trim() || '') &&
+      step.inputs?.use_business_context !== true
+        ? { ...step, inputs: { ...(step.inputs || {}), use_business_context: true } }
+        : step,
+    );
+    changed = true;
+    rewrittenAutomations += 1;
+    return { ...item, steps };
+  });
+
+  if (changed) writeAutomations(next);
+  return { backfilled, rewrittenAutomations };
 }
