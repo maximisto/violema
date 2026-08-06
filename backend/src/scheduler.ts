@@ -107,7 +107,7 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
     // v5: the Drive step now reads Violema's own filed briefs instead of
     // scanning the founder's Drive, which `drive.file` cannot see, and the
     // brief files itself so each week opens with the delta.
-    version: 5,
+    version: 6,
     // Declared so readiness enforcement uses the weekly-founder requirements
     // table instead of inferring 'custom-workflow' from the step sources.
     workflowId: 'weekly-founder-update',
@@ -196,14 +196,14 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
         kind: 'search',
         title: 'Scan market signals',
         objective: 'Research meaningful customer, competitor, pricing, platform, and AI automation changes since the last update.',
-        inputs: { query: 'AI automation platform startup competitor pricing product launch founder update', num_results: 6 },
+        inputs: { use_business_context: true, query_suffix: 'competitor pricing product launch news', num_results: 6 },
       },
       {
         id: 'step_founder_brief',
         kind: 'summarize',
         title: 'Draft founder brief',
         objective: 'Synthesize a concise founder-ready brief with revenue movement, product progress, customer signals, market context, risks, decisions needed, and next actions.',
-        inputs: { instruction: 'Draft the weekly founder update with source-linked evidence, clear risks, decisions, and next actions. When prior briefs are in the evidence, lead with what changed since the last one.' },
+        inputs: { use_business_context: true, instruction: 'Draft the weekly founder update with source-linked evidence, clear risks, decisions, and next actions. When prior briefs are in the evidence, lead with what changed since the last one.' },
       },
       {
         // Filed whether or not the delivery is approved: what the week showed
@@ -321,7 +321,8 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
   },
   {
     id: 'auto_competitor_monitor',
-    version: 1,
+    // 3, not 2: createAutomation stamps operator-authored records version 2, and the merge requires stored.version < seed.version.
+    version: 3,
     // Declared so the run gate resolves a stable identity instead of inferring
     // 'custom-workflow' from the step sources. `competitor-monitor` is not on
     // the supported-workflow readiness table, so it lands in tier 3, which
@@ -373,7 +374,11 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
         title: 'Search competitor moves',
         objective: 'Find pricing, launch, and positioning changes from key competitors.',
         inputs: {
-          query: 'AI agent automation platform competitor pricing launches positioning',
+          // Resolved at run time from the workspace's operator-owned business
+          // context (platform/businessContext.ts) — the market no longer lives
+          // in seed content, so a seed bump can never revert a tenant's market.
+          use_business_context: true,
+          query_suffix: 'competitor pricing launches positioning',
           num_results: 8,
         },
       },
@@ -384,6 +389,7 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
         objective:
           'Compare this run against the prior library entries and separate genuine change from noise.',
         inputs: {
+          use_business_context: true,
           instruction: [
             'Compare the search evidence against the prior library entries in the evidence block.',
             'Report NEW (absent from the library), CHANGED (present but different — say what it was and what it is now), and UNCHANGED (confirmed still true, one line).',
@@ -399,6 +405,7 @@ const CORE_AUTOMATION_SEEDS: AutomationSeed[] = [
         objective:
           'Create a concise founder memo leading with what changed since the last run, with implications and recommended action.',
         inputs: {
+          use_business_context: true,
           instruction:
             'Draft the competitor memo. Lead with what changed since the last run, then implications, then recommended action.',
         },

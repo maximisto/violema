@@ -140,3 +140,57 @@ test('an already-current seed is left exactly as the operator stored it', async 
   assert.equal(after?.status, 'paused');
   assert.equal(after?.notify, '#somewhere-else');
 });
+
+test('a seed bump replaces an operator-patched market query with the context reference form', async () => {
+  const scheduler = await import('../src/scheduler');
+
+  scheduler.ensureCoreAutomationSeeds(async () => ({ ok: true }));
+  const seeded = scheduler.listAutomations().find((item) => item.id === 'auto_competitor_monitor');
+  assert.ok(seeded, 'Expected the competitor monitor seed.');
+
+  // The 2026-08-05 live patch shape: operator-authored steps (version 2) with
+  // the tenant's market written directly into the search query.
+  writeAutomations([
+    {
+      ...seeded,
+      version: 2,
+      steps: seeded.steps?.map((step) =>
+        step.id === 'step_competitor_search'
+          ? { ...step, inputs: { query: 'AI-powered espresso machine competitors pricing', num_results: 8 } }
+          : step,
+      ),
+    },
+  ]);
+
+  scheduler.ensureCoreAutomationSeeds(async () => ({ ok: true }));
+  const upgraded = scheduler.listAutomations().find((item) => item.id === 'auto_competitor_monitor');
+  assert.ok(upgraded);
+  assert.ok((upgraded.version || 0) >= 3, 'seed version must exceed the operator-authored 2');
+
+  const search = upgraded.steps?.find((step) => step.id === 'step_competitor_search');
+  assert.equal(search?.inputs?.use_business_context, true);
+  assert.equal(search?.inputs?.query_suffix, 'competitor pricing launches positioning');
+  assert.equal(search?.inputs?.query, undefined, 'no finished query lives in the steps anymore');
+
+  const analyze = upgraded.steps?.find((step) => step.id === 'step_delta_analysis');
+  assert.equal(analyze?.inputs?.use_business_context, true);
+  const memo = upgraded.steps?.find((step) => step.id === 'step_competitor_memo');
+  assert.equal(memo?.inputs?.use_business_context, true);
+
+  assert.ok(
+    !JSON.stringify(upgraded.steps).includes('AI agent automation'),
+    "seed steps must not contain Violema's market",
+  );
+});
+
+test('the founder update seed market scan uses the reference form', async () => {
+  const scheduler = await import('../src/scheduler');
+  scheduler.ensureCoreAutomationSeeds(async () => ({ ok: true }));
+  const founder = scheduler.listAutomations().find((item) => item.id === FOUNDER_SEED_ID);
+  const scan = founder?.steps?.find((step) => step.id === 'step_market_scan');
+  assert.equal(scan?.inputs?.use_business_context, true);
+  assert.equal(scan?.inputs?.query_suffix, 'competitor pricing product launch news');
+  assert.equal(scan?.inputs?.query, undefined);
+  const brief = founder?.steps?.find((step) => step.id === 'step_founder_brief');
+  assert.equal(brief?.inputs?.use_business_context, true);
+});

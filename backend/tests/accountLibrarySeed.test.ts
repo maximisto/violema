@@ -40,7 +40,7 @@ test('the competitor monitor seed reads the library before searching and records
     'Seeding twice must not create two missions.',
   );
   assert.equal(competitor.name, 'Competitor monitor');
-  assert.equal(competitor.version, 1);
+  assert.equal(competitor.version, 3);
   assert.equal(competitor.workflowId, 'competitor-monitor');
   assert.equal(competitor.status, 'active');
 
@@ -122,9 +122,9 @@ test('the competitor seed is blocked on Google Drive until the library is reacha
   assert.equal(blocked.allowed, false, 'The library mission must not run without its memory.');
   assert.deepEqual(
     blocked.blockers.map((blocker) => blocker.key),
-    ['google_drive'],
+    ['business_context_missing', 'google_drive'],
   );
-  assert.equal(blocked.blockers[0].label, 'Connect Google Drive');
+  assert.equal(blocked.blockers[1].label, 'Connect Google Drive');
 
   const ready = evaluateRunReadiness({
     workflowId: competitor.workflowId || 'competitor-monitor',
@@ -132,6 +132,7 @@ test('the competitor seed is blocked on Google Drive until the library is reacha
     isDemoWorkspace: false,
     steps: competitor.steps,
     runtimeStatus: { google_drive: { ready: true } },
+    businessContextSet: true,
   });
   assert.equal(ready.allowed, true);
 });
@@ -210,7 +211,7 @@ test('upgrading the competitor seed preserves operator-owned cadence and destina
   assert.equal(upgraded.last_run_status, 'succeeded');
 
   // Seed-owned: the library steps did reach the existing install.
-  assert.equal(upgraded.version, 1);
+  assert.equal(upgraded.version, 3);
   assert.equal(upgraded.workflowId, 'competitor-monitor');
   assert.deepEqual(
     upgraded.steps

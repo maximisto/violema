@@ -29,7 +29,7 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
     assert.equal(weekly.timezone, 'America/Chicago');
     assert.equal(weekly.execution_policy?.reviewPolicy, 'standard');
     assert.equal(weekly.notify, '#violema-demo');
-    assert.equal(weekly.version, 5);
+    assert.equal(weekly.version, 6);
     // Explicit identity keeps the seed on the supported-workflow readiness
     // table instead of inferring 'custom-workflow' from its step sources.
     assert.equal(weekly.workflowId, 'weekly-founder-update');
@@ -85,7 +85,7 @@ test('ensureCoreAutomationSeeds creates the weekly founder update mission workfl
     );
 
     assert.ok(upgraded, 'Expected upgraded weekly founder seed.');
-    assert.equal(upgraded.version, 5);
+    assert.equal(upgraded.version, 6);
     assert.equal(upgraded.workflowId, 'weekly-founder-update');
     assert.equal(upgraded.created_at, '2026-06-01T12:00:00.000Z');
     assert.equal(upgraded.last_run_at, '2026-07-18T12:00:00.000Z');
