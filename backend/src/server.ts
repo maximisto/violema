@@ -4232,7 +4232,7 @@ export function buildAutomationEvidenceBlock(
   ].filter(Boolean).join('\n\n');
 }
 
-// The three prompts that read an evidence block and produce outward-facing
+// The four prompts that read an evidence block and produce outward-facing
 // text. They live here, next to the fence, so the marker and the instruction
 // that gives it meaning cannot drift apart — a delimiter no prompt mentions is
 // decoration.
@@ -4245,6 +4245,13 @@ export const AUTOMATION_SUMMARIZE_SYSTEM_PROMPT =
 
 export const AUTOMATION_FALLBACK_SUMMARY_SYSTEM_PROMPT =
   `Summarize the completed automation run in concise markdown. Lead with the highest-value outcome, then note any failure or delivery issue briefly. ${UNTRUSTED_EVIDENCE_PROMPT_RULE}`;
+
+// Nested inside the analyze step, triggered only when the step title/objective
+// matches /competitor|competitive|market/i. Its output is charted (pricing,
+// funding) and delivered to operators as evidence-backed data, so it reads
+// the same evidence block as the three prompts above and needs the same rule.
+export const AUTOMATION_INTEL_EXTRACTION_SYSTEM_PROMPT =
+  `You extract competitive intelligence as strict JSON. From the supplied evidence only, list up to 6 competitors as {"competitors":[{"name":string,"focus":string|null,"pricing_usd_month":number|null,"funding_musd":number|null}]}. Use null for anything the evidence does not state — never estimate or invent numbers. Output the JSON object only. ${UNTRUSTED_EVIDENCE_PROMPT_RULE}`;
 
 function buildAutomationDeliveryFallbackBody(
   automation: { name: string; description?: string; condition?: string; actions: string[] },
@@ -4671,7 +4678,7 @@ async function executeAutomationCore(
               `Intelligence extraction for "${step.title}"`,
               generateTextDetailed(
                 'hard',
-                'You extract competitive intelligence as strict JSON. From the supplied evidence only, list up to 6 competitors as {"competitors":[{"name":string,"focus":string|null,"pricing_usd_month":number|null,"funding_musd":number|null}]}. Use null for anything the evidence does not state — never estimate or invent numbers. Output the JSON object only.',
+                AUTOMATION_INTEL_EXTRACTION_SYSTEM_PROMPT,
                 [{ role: 'user', content: buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors) }],
                 700,
                 workspaceId,
