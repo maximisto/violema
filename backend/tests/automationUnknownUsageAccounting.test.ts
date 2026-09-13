@@ -30,14 +30,16 @@ test('missing, zero-only, partial, and retry-unknown provider usage quarantine t
     t.mock.method(global, 'fetch', async () => {
       transportCalls += 1;
       return transportCalls === 1
-        ? new Response(JSON.stringify({ error: { message: 'Gateway timeout' } }), { status: 504 })
+        ? mode === 'http_malformed_rejection_then_success'
+          ? new Response('{"error":{"message":"limit"},"usage":{"total_tokens":12', { status: 429 })
+          : new Response(JSON.stringify({ error: { message: 'Gateway timeout' } }), { status: 504 })
         : new Response(JSON.stringify({ choices: [{ message: { content: 'A complete retry brief.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 600, completion_tokens: 200, total_tokens: 800 } }), { status: 200 });
     });
-    type Mode = 'missing' | 'zero' | 'partial' | 'contradictory' | 'retry_then_success' | 'partial_retry_then_success' | 'http_timeout_then_success';
+    type Mode = 'missing' | 'zero' | 'partial' | 'contradictory' | 'retry_then_success' | 'partial_retry_then_success' | 'http_timeout_then_success' | 'http_malformed_rejection_then_success';
     let mode: Mode = 'missing';
     t.mock.method(console, 'warn', () => undefined);
     t.mock.method(models, 'generateTextDetailed', async (...args: Parameters<typeof models.generateTextDetailed>) => {
-      if (mode === 'http_timeout_then_success') {
+      if (mode === 'http_timeout_then_success' || mode === 'http_malformed_rejection_then_success') {
         transportCalls = 0;
         return realGenerate('micro', args[1], args[2], args[3], args[4], { ...args[5], maxRoutes: 1 });
       }
@@ -143,7 +145,7 @@ test('missing, zero-only, partial, and retry-unknown provider usage quarantine t
       }],
     }, onTrigger);
 
-    for (const scenario of ['missing', 'zero', 'partial', 'contradictory', 'retry_then_success', 'partial_retry_then_success', 'http_timeout_then_success'] as const) {
+    for (const scenario of ['missing', 'zero', 'partial', 'contradictory', 'retry_then_success', 'partial_retry_then_success', 'http_timeout_then_success', 'http_malformed_rejection_then_success'] as const) {
       mode = scenario;
       const priorRunIds = new Set(store.listTaskRuns('workspace_unknown_usage').map((run) => run.id));
       const result = await server.runAutomation(automation);
@@ -167,7 +169,7 @@ test('missing, zero-only, partial, and retry-unknown provider usage quarantine t
         status?: string;
         usage?: { totalTokens?: number };
       }>;
-      const retried = scenario === 'retry_then_success' || scenario === 'partial_retry_then_success' || scenario === 'http_timeout_then_success';
+      const retried = scenario === 'retry_then_success' || scenario === 'partial_retry_then_success' || scenario === 'http_timeout_then_success' || scenario === 'http_malformed_rejection_then_success';
       assert.equal(calls.length, retried ? 2 : 1);
       if (retried) {
         assert.deepEqual(calls.map((call) => call.status), ['failed', 'succeeded']);

@@ -516,3 +516,39 @@ test('response-read failures sanitize provider-derived parser text', async () =>
     },
   );
 });
+
+for (const body of [
+  '{"error":{"message":"limit"},"usage":{"total_tokens":12',
+  '{"error":{"message":"limit"}',
+]) {
+  test(`normal EOF cannot certify malformed rejection usage: ${body}`, async () => {
+    await withOpenAIRouteReturning(
+      () => new Response(body, { status: 429 }),
+      async ({ generate }) => {
+        const usages: unknown[] = [];
+        await assert.rejects(generate({ onAttemptFailure: (_attempt, _error, usage) => { usages.push(usage); } }));
+        assert.ok(usages.length > 0);
+        assert.ok(usages.every(usage => usage === undefined));
+      },
+    );
+  });
+}
+
+for (const status of [400, 408, 429]) {
+  test(`interrupted HTTP ${status} preserves a complete observed usage object`, async () => {
+    await withOpenAIRouteReturning(
+      () => new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"usage":{"prompt_tokens":19,"completion_tokens":2,"total_tokens":21},"error":{"message":"interrupted'));
+        },
+        pull(controller) { controller.error(new Error('synthetic tail interruption')); },
+      }), { status }),
+      async ({ generate }) => {
+        const usages: Array<import('../src/models').TextGenerationUsage | undefined> = [];
+        await assert.rejects(generate({ onAttemptFailure: (_attempt, _error, usage) => { usages.push(usage); } }));
+        assert.ok(usages.length > 0);
+        assert.ok(usages.every(usage => usage?.totalTokens === 21));
+      },
+    );
+  });
+}

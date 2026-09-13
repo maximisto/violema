@@ -286,6 +286,9 @@ async function readBoundedModelError(
     else if (typeof parsed.message === 'string') cause = parsed.message;
     if (route) usage = openAIUsage(route, parsed.usage);
   } catch {
+    // Transport EOF does not prove a complete JSON envelope. In particular,
+    // a normally closed but truncated usage object cannot certify zero usage.
+    complete = false;
     // The bounded stream may end mid-envelope. Extract only the two allowlisted
     // structured fields from that prefix; never persist arbitrary raw bytes.
     const messageMatch = /"message"\s*:\s*("(?:\\.|[^"\\])*")/u.exec(bodyText);
@@ -1180,7 +1183,7 @@ async function generateWithOpenAI(
       body: JSON.stringify(requestBody),
       signal: options.signal,
     });
-    if (response.status === 429 || response.status >= 500) {
+    if (!response.ok) {
       const failure = await readBoundedModelError(response, route);
       throw new ModelRequestError(
         route,
@@ -1199,15 +1202,6 @@ async function generateWithOpenAI(
       data = await response.json() as typeof data;
     } catch (error) {
       throw new ModelResponseReadError(route, error);
-    }
-
-    if (!response.ok) {
-      throw new ModelRequestError(
-        route,
-        response.status,
-        data.error?.message || response.statusText,
-        openAIUsage(route, data.usage) ?? rejectedRequestUsage(route, response.status),
-      );
     }
 
     // OpenRouter wraps upstream provider failures in an HTTP 200 with an
