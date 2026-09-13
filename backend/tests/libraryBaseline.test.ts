@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { countAutomationWords } from '../src/platform/automationSummaryPolicy';
 import { test, beforeEach } from 'node:test';
 
 import {
@@ -1340,4 +1341,44 @@ test('baseline file names are recognizable and ordinary entries are not', () => 
     false,
   );
   assert.equal(isLibraryBaselineFileName('2026-08-13 — Espresso findings.md'), false);
+});
+
+
+test('bootstrap assembly reserves the notice and separators in its byte ceiling', async () => {
+  for (const overflow of [0, 1, 2]) {
+    const drive = createFakeDrive(Array.from({ length: 4 }, (_, index) => ({
+      id: `legacy-${index}`, name: `2026-08-12 — Legacy ${index}.md`, content: 'x'.repeat(30_000),
+    })));
+    const notice = '_Bootstrapped baseline: this section had no baseline and more history than one read can cover. '
+      + '"2026-08-12 — Legacy 2.md" and everything older were not folded in; those files remain in the library folder._';
+    const digestBytes = MAX_ENTRY_CONTENT_BYTES - 1 - Buffer.byteLength(notice) - 2 + overflow;
+    const result = await updateLibraryBaseline({
+      workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+      latestFindingsMarkdown: 'Fresh fact.',
+    }, { ...drive, generate: async () => 'x'.repeat(digestBytes) });
+    assert.equal(result.ok, overflow === 0, JSON.stringify({ overflow, result }));
+    if (overflow === 0) {
+      assert.equal(Buffer.byteLength(drive.created[0].content), MAX_ENTRY_CONTENT_BYTES - 1);
+      const read = await readLibrary('ws_test', SECTION, { includeOperatorFiles: false }, drive);
+      assert.equal(read.ok && read.data.appEntryHistoryComplete, true);
+    } else assert.equal(drive.created.length, 0, 'oversized assembled baselines never reach Drive');
+  }
+});
+
+test('bootstrap generation prompt budgets the notice inside the unchanged 400-unit contract', async () => {
+  const drive = createFakeDrive(Array.from({ length: 4 }, (_, index) => ({
+    id: `legacy-${index}`, name: `2026-08-12 — Legacy ${index}.md`, content: 'x'.repeat(30_000),
+  })));
+  const result = await appendLibraryEntryWithBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh fact.', entry: { title: 'Fresh findings', markdown: 'Fresh fact.' },
+  }, { ...drive, generate: async (_profile, system) => {
+    const limit = Number(/At most (\d+) words/.exec(system)?.[1]);
+    assert.ok(limit > 0 && limit < 400, 'prompt reserves room for deterministic disclosure');
+    return Array.from({ length: limit }, () => 'fact').join(' ');
+  } });
+  assert.equal(result.baselineResult?.ok, true, JSON.stringify(result.baselineResult));
+  const baseline = drive.created.find((file) => isLibraryBaselineFileName(file.name));
+  assert.ok(baseline);
+  assert.equal(countAutomationWords(baseline.content), 400);
 });

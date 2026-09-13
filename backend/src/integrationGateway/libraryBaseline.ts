@@ -147,13 +147,19 @@ function fencedBlock(name: string, body: string, neutralize: (text: string) => s
   return `<untrusted_source name='${name}'>\n${neutralize(body)}\n</untrusted_source>`;
 }
 
-export function buildLibraryBaselineSystemPrompt(section: string, untrustedRule: string): string {
+export function buildLibraryBaselineSystemPrompt(
+  section: string,
+  untrustedRule: string,
+  wordLimit = LIBRARY_BASELINE_WORD_LIMIT,
+  maxBytes = LIBRARY_BASELINE_MAX_BYTES,
+): string {
   return (
     `You maintain the compact rolling "current state" baseline of a workspace's ${section} library. ` +
     `Merge the prior baseline and ALL newer findings into ONE up-to-date digest of what is true now: ` +
     `concrete facts, named entities, prices, dates, and open follow-ups. When they conflict, the newest ` +
     `findings win. Keep numbers and dates exact; drop narrative, repetition, and anything superseded. ` +
-    `At most ${LIBRARY_BASELINE_WORD_LIMIT} words of markdown bullets under short headings. ` +
+    `At most ${wordLimit} words of markdown bullets under short headings, and ${maxBytes} UTF-8 bytes. ` +
+    `Count each Han, Hiragana, Katakana, or Hangul character as one word; count other text by whitespace-separated words. ` +
     `Output the digest only, with no commentary. ${untrustedRule}`
   );
 }
@@ -163,10 +169,12 @@ export function buildLibraryBaselineGenerationPrompt(input: {
   untrustedRule: string;
   neutralize: (text: string) => string;
   priorBaseline?: string;
+  wordLimit?: number;
+  maxBytes?: number;
   newerFindings: string[];
 }) {
   return {
-    system: buildLibraryBaselineSystemPrompt(input.section, input.untrustedRule),
+    system: buildLibraryBaselineSystemPrompt(input.section, input.untrustedRule, input.wordLimit, input.maxBytes),
     userContent: [
       fencedBlock('prior baseline', input.priorBaseline?.trim() || '(none recorded yet)', input.neutralize),
       ...input.newerFindings.map((content, index) =>
@@ -455,11 +463,16 @@ async function updateLibraryBaselineLocked(
     ? buildBaselineBootstrapNotice(firstUnfolded?.fileName)
     : '';
 
+  const noticeSuffix = bootstrapNotice ? `\n\n${bootstrapNotice}` : '';
+  const digestMaxBytes = LIBRARY_BASELINE_MAX_BYTES - Buffer.byteLength(noticeSuffix, 'utf8');
+  const digestWordLimit = LIBRARY_BASELINE_WORD_LIMIT - countAutomationWords(bootstrapNotice);
   const generationPrompt = buildLibraryBaselineGenerationPrompt({
     section: input.section,
     untrustedRule: input.untrustedRule,
     neutralize: input.neutralize,
     priorBaseline: priorBaseline?.content || undefined,
+    wordLimit: digestWordLimit,
+    maxBytes: digestMaxBytes,
     newerFindings: uniqueNewerFindings,
   });
 
@@ -487,7 +500,7 @@ async function updateLibraryBaselineLocked(
     try {
       merged = requireBoundedAutomationOutput(
         typeof generated === 'string' ? { text: generated } : generated,
-        LIBRARY_BASELINE_MAX_BYTES - Buffer.byteLength(bootstrapNotice, 'utf8'),
+        digestMaxBytes,
         'baseline',
       );
     } catch (error) {
@@ -503,7 +516,18 @@ async function updateLibraryBaselineLocked(
       message: `The baseline merge failed: ${error instanceof Error ? error.message : 'unknown error'}.`,
     };
   }
-  if (bootstrapNotice) merged = `${merged.trimEnd()}\n\n${bootstrapNotice}`;
+  merged = `${merged.trimEnd()}${noticeSuffix}`;
+  // Validate the exact persisted body as well as the generated portion: the
+  // separator and deterministic disclosure share the reader's byte ceiling.
+  try {
+    merged = requireBoundedAutomationOutput({ text: merged }, LIBRARY_BASELINE_MAX_BYTES, 'baseline');
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'The assembled baseline exceeded its byte limit.',
+      generationRejected: true,
+    };
+  }
   const mergedWords = countAutomationWords(merged);
   if (mergedWords > LIBRARY_BASELINE_WORD_LIMIT) {
     return {
