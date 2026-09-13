@@ -10514,18 +10514,22 @@ function stampFolderDropEnabledOnFirstActivation(input: {
 /**
  * Lane states the folder-drop API can answer. The sweep's own states cover a
  * configured reader; `drive_not_connected` is the customer-side precondition
- * below them: the workspace has no usable Google Drive grant, so the lookup
- * could not run. That is a known next action, not a platform incident.
+ * below them: the workspace has no Google Drive grant. A connected grant
+ * missing scope instead needs reauthorization. Both have customer repair
+ * actions; missing server configuration and outages remain platform failures.
  */
-type FolderDropApiLaneState = FolderDropLaneState | 'drive_not_connected';
+type FolderDropApiLaneState = FolderDropLaneState | 'drive_not_connected' | 'drive_needs_reauthorization';
 
 function respondFolderDropLookupFailure(
   res: Response,
   failure: ReturnType<typeof buildLibraryAccessFailure>,
   readerEmail: string,
 ) {
-  if (failure.code === 'integration_not_connected' || failure.code === 'integration_not_ready') {
-    const laneState: FolderDropApiLaneState = 'drive_not_connected';
+  const needsReauthorization = failure.code === 'integration_scope_insufficient';
+  if (needsReauthorization || failure.code === 'integration_not_connected' || failure.code === 'integration_not_ready') {
+    const laneState: FolderDropApiLaneState = needsReauthorization
+      ? 'drive_needs_reauthorization'
+      : 'drive_not_connected';
     res.json({
       laneState,
       readerEmail,
@@ -10535,7 +10539,7 @@ function respondFolderDropLookupFailure(
     });
     return;
   }
-  // Anything else is OUR incident, not the operator's onboarding state.
+  // Platform configuration and upstream failures are not customer onboarding states.
   // Answering `no_library_yet` here would hide an outage behind "run your
   // first mission" copy; the settings card renders any non-200 as an honest
   // "could not load" notice.

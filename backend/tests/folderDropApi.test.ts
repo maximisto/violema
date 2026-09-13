@@ -71,6 +71,7 @@ async function withApiServer(
   const originalApproved = process.env.VIOLEMA_APPROVED_EMAILS;
   const originalDisableScheduler = process.env.VIOLEMA_DISABLE_AUTOMATION_SCHEDULER;
   const originalReaderKey = process.env.GOOGLE_LIBRARY_READER_KEY;
+  const originalComposioKey = process.env.COMPOSIO_API_KEY;
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'violema-folder-drop-api-'));
 
   // A fresh, unique email per `withApiServer` call — never the fixed
@@ -91,6 +92,7 @@ async function withApiServer(
   process.chdir(tempDir);
   process.env.VIOLEMA_APPROVED_EMAILS = testEmail;
   process.env.VIOLEMA_DISABLE_AUTOMATION_SCHEDULER = '1';
+  delete process.env.COMPOSIO_API_KEY;
   if (options.readerKeyEnvValue) {
     process.env.GOOGLE_LIBRARY_READER_KEY = options.readerKeyEnvValue;
   } else {
@@ -170,6 +172,8 @@ async function withApiServer(
     else delete process.env.VIOLEMA_DISABLE_AUTOMATION_SCHEDULER;
     if (typeof originalReaderKey === 'string') process.env.GOOGLE_LIBRARY_READER_KEY = originalReaderKey;
     else delete process.env.GOOGLE_LIBRARY_READER_KEY;
+    if (typeof originalComposioKey === 'string') process.env.COMPOSIO_API_KEY = originalComposioKey;
+    else delete process.env.COMPOSIO_API_KEY;
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
@@ -436,6 +440,9 @@ test('a not-connected Drive answers a connect-required lane state, not a 502 or 
         assert.equal(nextAction?.label, 'Connect Google Drive');
         assert.match(String(nextAction?.route), /^\/integrations/);
       }
+      // Avoid stacking mocks on one method: restoreAll otherwise reinstates
+      // the earlier mock while unwinding, leaking it into later route tests.
+      t.mock.restoreAll();
     }
     assert.equal(readFolderDropShareAuditEvents().length, 0, 'a not-connected lane never audits an enablement.');
   });
@@ -498,3 +505,57 @@ test('manual-share-required preserves the actionable lane state and reader addre
     assert.equal(readFolderDropShareAuditEvents().length, 0);
   });
 });
+
+// Exercise the production lookup and shared classifier, not an already-classified
+// findLibraryRootFolderId stub. The missing-key case uses the real lazy bridge;
+// other cases substitute only the SDK boundary with synthetic responses.
+for (const scenario of [
+  { name: 'missing Composio server configuration', status: 502 },
+  { name: 'insufficient Drive scope envelope', status: 200, laneState: 'drive_needs_reauthorization', label: 'Reauthorize Google Drive', envelope: { status: 403, code: 'ACCESS_TOKEN_SCOPE_INSUFFICIENT', message: 'Request had insufficient authentication scopes.' } },
+  { name: 'thrown insufficient Drive scope', status: 200, laneState: 'drive_needs_reauthorization', label: 'Reauthorize Google Drive', thrown: 'Request had insufficient authentication scopes (403).' },
+  { name: 'missing customer connected account', status: 200, laneState: 'drive_not_connected', label: 'Connect Google Drive', thrown: 'No connected account found for toolkit googledrive and user test' },
+  { name: 'Drive service outage', status: 502, thrown: 'Google Drive service unavailable (503)' },
+  { name: 'Drive rate limit', status: 502, envelope: { status: 403, message: 'userRateLimitExceeded' } },
+] as const) {
+  test(`real Drive lookup preserves ${scenario.name} across folder-drop routes`, async (t) => {
+    const readerKeyEnvValue = buildTestReaderKeyEnvValue('reader@test.iam');
+    await withApiServer({ readerKeyEnvValue }, async ({ baseUrl, sessionToken }) => {
+      if ('thrown' in scenario || 'envelope' in scenario) {
+        const bridgeModule = await import('../src/composioBridge');
+        const unexpected = async (): Promise<never> => { throw new Error('Unexpected connection operation'); };
+        const bridge = bridgeModule.createComposioBridge({
+          tools: { async execute() {
+            if ('thrown' in scenario) throw new Error(scenario.thrown);
+            return { successful: false, error: scenario.envelope };
+          } },
+          authConfigs: { list: unexpected, create: unexpected },
+          connectedAccounts: { list: unexpected, link: unexpected, delete: unexpected },
+        });
+        if (!accountLibraryModule) throw new Error('accountLibrary module not loaded yet.');
+        const findRoot = accountLibraryModule.findLibraryRootFolderId;
+        t.mock.method(accountLibraryModule, 'findLibraryRootFolderId', (workspaceId: string) =>
+          findRoot(workspaceId, { execute: bridge.executeAction }));
+      }
+      for (const [route, method] of [
+        ['/api/workspace/library/folder-drop', 'GET'],
+        ['/api/workspace/library/folder-drop/verify', 'POST'],
+        ['/api/workspace/library/folder-drop/share', 'POST'],
+      ] as const) {
+        const response = await fetch(`${baseUrl}${route}`, { method, headers: authHeaders(sessionToken) });
+        const body = await response.json() as Record<string, unknown>;
+        assert.equal(response.status, scenario.status, `${scenario.name}: ${route}: ${JSON.stringify(body)}`);
+        if ('laneState' in scenario) {
+          assert.equal(body.laneState, scenario.laneState);
+          assert.equal(body.rootFolderId, null);
+          assert.equal(body.readerEmail, 'reader@test.iam');
+          assert.deepEqual(body.nextAction, { label: scenario.label, route: '/integrations?provider=google_drive' });
+        } else {
+          assert.equal(body.code, 'folder_drop_lookup_failed');
+          assert.equal(body.laneState, undefined);
+          assert.equal(body.nextAction, undefined);
+        }
+      }
+      assert.equal(readFolderDropShareAuditEvents().length, 0);
+    });
+  });
+}
