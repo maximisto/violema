@@ -523,6 +523,84 @@ test('a legacy section with no baseline and history beyond the window bootstraps
   assert.equal(after.data.appEntryHistoryComplete, true, 'reads now stop at the bootstrapped baseline');
 });
 
+test('a predecessor beyond 100 files cannot be overwritten by a false first baseline', async () => {
+  const drive = createFakeDrive([
+    ...Array.from({ length: 100 }, (_, index) => ({
+      id: `pending-${index}`, name: `2026-08-13 — Pending ${index}.md`, content: `Finding ${index}.`,
+    })),
+    { id: 'hidden-baseline', name: `2026-08-12 — ${LIBRARY_BASELINE_TITLE_PREFIX} 18.30.md`, content: 'PREDECESSOR_ONLY_FACT' },
+  ]);
+  const result = await updateLibraryBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Newest finding.',
+  }, {
+    execute: drive.execute, fetchText: drive.fetchText,
+    generate: (async () => 'Digest without predecessor.') as never,
+  });
+  assert.equal(result.ok, false, 'incomplete metadata is not proof of baseline absence');
+  assert.equal(drive.created.length, 0, 'preserve the predecessor until the full history can be recovered');
+  const snapshot = await readLibrary('ws_test', SECTION, {
+    limit: 10, includeOperatorFiles: false, requireCompleteAppHistory: true,
+  }, { execute: drive.execute, fetchText: drive.fetchText });
+  assert.equal(snapshot.ok, true);
+  if (!snapshot.ok) return;
+  assert.equal(snapshot.data.appBaselineListed, undefined, 'absence is unknown outside the metadata window');
+  const mission = await executeQueryData({
+    workspaceId: 'ws_test', source: ACCOUNT_LIBRARY_SOURCE, queryType: ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+    filters: { section: SECTION }, clientOverrides: { accountLibraryRead: async () => snapshot },
+  });
+  assert.equal(mission.ok, false, 'mission reads must not certify a partial history');
+  const append = await appendLibraryEntryWithBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh fact.', entry: { title: 'Fresh fact', markdown: 'Fresh fact.' },
+  }, { execute: drive.execute, fetchText: drive.fetchText, generate: (async () => 'Unsafe digest.') as never });
+  assert.equal(append.libraryResult.ok, false, 'the write gate must preserve the unresolved history');
+  assert.equal(drive.created.length, 0);
+});
+
+test('a transient memo failure cannot become permanent omission when older history exhausts the budget', async () => {
+  const newest = { id: 'transient', name: '2026-08-13 — Important newest finding.md', content: 'IMPORTANT_NEW_FACT', unreadable: true };
+  const drive = createFakeDrive([
+    newest,
+    ...Array.from({ length: 3 }, (_, index) => ({
+      id: `older-${index}`, name: `2026-08-12 — Older ${index}.md`, content: `OLD-${index}:`.padEnd(30_000, 'x'),
+    })),
+  ]);
+  const input = {
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh findings.',
+  };
+  let prompt = '';
+  const deps = {
+    execute: drive.execute, fetchText: drive.fetchText,
+    generate: (async (_profile: string, _system: string, messages: Array<{ content: unknown }>) => {
+      prompt = String(messages[0]?.content ?? '');
+      return 'Recovered digest.';
+    }) as never,
+  };
+  const failed = await updateLibraryBaseline(input, deps);
+  assert.equal(failed.ok, false, 'a temporary failure must block compaction, even during bootstrap');
+  assert.equal(drive.created.length, 0);
+  const snapshot = await readLibrary('ws_test', SECTION, {
+    limit: 10, includeOperatorFiles: false, requireCompleteAppHistory: true,
+    maxAppEntryContentBytes: 32_001, maxAppHistoryBytes: MAX_RECOVERABLE_APP_HISTORY_BYTES,
+  }, deps);
+  const mission = await executeQueryData({
+    workspaceId: 'ws_test', source: ACCOUNT_LIBRARY_SOURCE, queryType: ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+    filters: { section: SECTION }, clientOverrides: { accountLibraryRead: async () => snapshot },
+  });
+  assert.equal(mission.ok, false, 'download failure must stop a partial mission brief');
+  const append = await appendLibraryEntryWithBaseline({
+    ...input, entry: { title: 'Fresh findings', markdown: 'Fresh findings.' },
+  }, deps);
+  assert.equal(append.libraryResult.ok, false, 'do not append over a recoverable source failure');
+  assert.equal(drive.created.length, 0);
+  newest.unreadable = false;
+  const recovered = await updateLibraryBaseline(input, deps);
+  assert.equal(recovered.ok, true, JSON.stringify(recovered));
+  assert.match(prompt, /IMPORTANT_NEW_FACT/, 'retry must revisit the formerly unreadable newest memo');
+});
+
 test('a mission read of a legacy section with no baseline proceeds with a warning instead of stopping the run', async () => {
   const drive = createFakeDrive(
     Array.from({ length: 4 }, (_, index) => ({

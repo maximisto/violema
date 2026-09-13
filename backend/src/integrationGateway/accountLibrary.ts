@@ -266,9 +266,9 @@ export interface AccountLibrarySnapshot {
   appEntryHistoryComplete?: boolean;
   /**
    * Whether any baseline file (readable or not) appeared in the listing this
-   * read walked. False means the section has never been compacted: the
-   * legacy case where an incomplete history has no baseline to stop at and
-   * the write lane may bootstrap one from the readable window.
+   * read walked. False requires an exhausted metadata listing with no
+   * baseline; undefined means the bounded listing cannot prove absence.
+   * Only proven absence permits bootstrapping from a partial content window.
    */
   appBaselineListed?: boolean;
   /**
@@ -279,6 +279,8 @@ export interface AccountLibrarySnapshot {
    * wider window would fix.
    */
   appHistoryBeyondWindow?: boolean;
+  /** A source failed independently of the shared history byte budget. */
+  appEntryReadFailed?: boolean;
   /**
    * Honest, operator-facing caveats about this read that did not stop it,
    * e.g. older findings left outside the window of a never-baselined
@@ -1090,6 +1092,7 @@ export async function readLibrary(
   let unreadableBaselineSeen = false;
   let readableBaselineFound = false;
   let appHistoryBeyondBudget = false;
+  let appEntryReadFailed = false;
   let recoveryListingLoaded = false;
   const loadRecoveryListing = async (): Promise<LibraryFailure | null> => {
     const recoveryListing = await listSectionFiles(MAX_LIBRARY_HISTORY_RECOVERY_FILES);
@@ -1197,13 +1200,16 @@ export async function readLibrary(
     // A memo cut because the shared history budget (not its own size cap)
     // ran out is history beyond this read's window, which only a baseline
     // can compact. An oversized memo is unreadable regardless of budget.
-    if (
-      !isBaseline
+    const omittedByHistoryBudget = !isBaseline
       && body.truncated
       && knownContent === undefined
-      && fileBudget < maxAppEntryContentBytes
-    ) {
+      && fileBudget < maxAppEntryContentBytes;
+    if (omittedByHistoryBudget) {
       appHistoryBeyondBudget = true;
+    }
+    if (!isBaseline && !omittedByHistoryBudget
+      && (body.truncated || Boolean(body.contentError) || !body.content?.trim())) {
+      appEntryReadFailed = true;
     }
 
     appEntries.push({
@@ -1254,8 +1260,11 @@ export async function readLibrary(
       appEntryHistoryComplete:
         (readableBaselineFound || !listingHasMore)
         && requiredAppSourcesReadable,
-      appBaselineListed: files.some((file) => typeof file.name === 'string' && isLibraryBaselineFileName(file.name)),
+      appBaselineListed: files.some((file) => typeof file.name === 'string' && isLibraryBaselineFileName(file.name))
+        ? true
+        : listingHasMore ? undefined : false,
       appHistoryBeyondWindow: !readableBaselineFound && (listingHasMore || appHistoryBeyondBudget),
+      appEntryReadFailed,
       sweep,
     },
     now,

@@ -563,11 +563,12 @@ async function updateLibraryBaselineLocked(
  * write lane bootstraps a first baseline from what it could read.
  */
 function isBaselineBootstrapCase(
-  snapshot: Pick<AccountLibrarySnapshot, 'appBaselineListed' | 'appEntryHistoryComplete' | 'appHistoryBeyondWindow'>,
+  snapshot: Pick<AccountLibrarySnapshot, 'appBaselineListed' | 'appEntryHistoryComplete' | 'appHistoryBeyondWindow' | 'appEntryReadFailed'>,
 ): boolean {
   return snapshot.appBaselineListed === false
     && snapshot.appEntryHistoryComplete === false
-    && snapshot.appHistoryBeyondWindow === true;
+    && snapshot.appHistoryBeyondWindow === true
+    && snapshot.appEntryReadFailed !== true;
 }
 
 function buildBaselineBootstrapNotice(firstUnfoldedFileName?: string): string {
