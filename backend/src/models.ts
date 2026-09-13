@@ -178,12 +178,11 @@ function sanitizeModelAttemptError(error: unknown, route?: ModelRoute): Error {
   if (!route) return safe;
 
   // SDK transports (Anthropic, MiniMax) throw their own error classes. Give
-  // them the same route-aware shape the HTTP routes produce, and treat an
-  // error that carries an HTTP status as a rejected request: nothing was
-  // generated, so its usage is an explicit zero rather than unknown.
+  // them the same route-aware shape as HTTP routes. A status alone does not
+  // prove that an upstream attempt generated nothing.
   const status = safe.status ?? safe.statusCode;
   if (typeof status === 'number') {
-    const named = new ModelRequestError(route, status, safe.message, safe.usage ?? rejectedRequestUsage(route));
+    const named = new ModelRequestError(route, status, safe.message, safe.usage ?? rejectedRequestUsage(route, status));
     if (safe.code) (named as Error & { code?: string }).code = safe.code;
     if (safe.retryable) (named as Error & { retryable?: boolean }).retryable = true;
     return named;
@@ -1103,15 +1102,18 @@ function openAIUsage(
   };
 }
 
-/**
- * Usage for a request the provider rejected with an HTTP error status and no
- * usage body. Nothing was generated, so the truthful figure is an explicit
- * zero, not "unknown": an unknown attempt quarantines the whole automation,
- * which turned every transient 5xx into a paused mission. Ambiguous failures
- * (a 200 error envelope, a body dying mid-stream, a timeout) keep reporting
- * no usage and stay quarantined.
+/** Infer zero only for explicit request rejection, never generic server failures.
+ * Gateway timeouts and internal errors can follow upstream work without a
+ * receipt. Leaving them unknown preserves automation reconciliation, including
+ * when a later retry succeeds. Observed usage always takes precedence.
  */
-function rejectedRequestUsage(route: ModelRoute): TextGenerationUsage {
+function rejectedRequestUsage(route: ModelRoute, status: number): TextGenerationUsage | undefined {
+  const requestRejected = [400, 401, 403, 404, 405, 413, 415, 422, 429].includes(status);
+  const directAnthropic = route.provider === 'anthropic'
+    && (!route.baseUrl || /^https:\/\/api\.anthropic\.com(?:\/|$)/.test(route.baseUrl));
+  // Anthropic documents 529 as overload rejection; do not generalize this
+  // provider-specific status to OpenAI-compatible gateways or custom proxies.
+  if (!requestRejected && !(directAnthropic && status === 529)) return undefined;
   return {
     inputTokens: 0,
     outputTokens: 0,
@@ -1184,7 +1186,7 @@ async function generateWithOpenAI(
         route,
         response.status,
         failure.cause,
-        failure.usage ?? (failure.complete ? rejectedRequestUsage(route) : undefined),
+        failure.usage ?? (failure.complete ? rejectedRequestUsage(route, response.status) : undefined),
       );
     }
 
@@ -1204,7 +1206,7 @@ async function generateWithOpenAI(
         route,
         response.status,
         data.error?.message || response.statusText,
-        openAIUsage(route, data.usage) ?? rejectedRequestUsage(route),
+        openAIUsage(route, data.usage) ?? rejectedRequestUsage(route, response.status),
       );
     }
 

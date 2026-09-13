@@ -217,16 +217,14 @@ test('a retryable HTTP error reports provider-supplied usage for every billed at
   );
 });
 
-// NF-9 (2026-08-23 re-review): a provider HTTP error status with no usage in
-// the body is a rejected request, not an unknown generation. Reporting it as
-// explicit zero usage lets the retry that follows it settle instead of
-// quarantining the whole automation.
-test('a retryable HTTP error without a usage body reports explicit zero usage, not unknown', async () => {
+// A completed rate-limit rejection is distinct from a gateway/server failure:
+// the latter cannot prove that the upstream did no billable work.
+test('a completed rate-limit rejection without usage reports explicit zero usage', async () => {
   await withOpenAIRouteReturning(
     () =>
       new Response(
         JSON.stringify({ error: { message: 'upstream hiccup' } }),
-        { headers: { 'content-type': 'application/json' }, status: 502, statusText: 'Bad Gateway' },
+        { headers: { 'content-type': 'application/json' }, status: 429, statusText: 'Too Many Requests' },
       ),
     async ({ generate, fetchCalls }) => {
       const failedUsages: Array<import('../src/models').TextGenerationUsage | undefined> = [];
@@ -246,6 +244,34 @@ test('a retryable HTTP error without a usage body reports explicit zero usage, n
         );
         assert.equal(usage?.provider, 'openai');
       }
+    },
+  );
+});
+
+for (const status of [408, 500, 502, 503, 504, 524, 529]) {
+  test(`a completed HTTP ${status} error without usage remains unknown`, async () => {
+    await withOpenAIRouteReturning(
+      () => new Response(JSON.stringify({ error: { message: 'upstream state unavailable' } }), { status }),
+      async ({ generate }) => {
+        const failures: Array<import('../src/models').TextGenerationUsage | undefined> = [];
+        await assert.rejects(generate({ onAttemptFailure: (_attempt, _error, usage) => { failures.push(usage); } }));
+        assert.ok(failures.length > 0);
+        assert.ok(failures.every((usage) => usage === undefined), 'an HTTP failure is not a zero-usage receipt');
+      },
+    );
+  });
+}
+
+test('a gateway timeout carrying completed usage preserves that observed usage', async () => {
+  await withOpenAIRouteReturning(
+    () => new Response(JSON.stringify({
+      error: { message: 'gateway timeout' }, usage: { prompt_tokens: 19, completion_tokens: 2, total_tokens: 21 },
+    }), { status: 504 }),
+    async ({ generate }) => {
+      const failures: Array<import('../src/models').TextGenerationUsage | undefined> = [];
+      await assert.rejects(generate({ onAttemptFailure: (_attempt, _error, usage) => { failures.push(usage); } }));
+      assert.ok(failures.length > 0);
+      assert.ok(failures.every((usage) => usage?.totalTokens === 21));
     },
   );
 });
