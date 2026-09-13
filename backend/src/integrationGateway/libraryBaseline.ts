@@ -35,6 +35,9 @@ import {
 } from '../models';
 import {
   LIBRARY_BASELINE_TITLE_PREFIX,
+  LIBRARY_BASELINE_OMISSION_MARKER,
+  readLibraryBaselineOmissionNotice,
+  stripLibraryBaselineOmissionNotice,
   MAX_ENTRY_CONTENT_BYTES,
   MAX_LIBRARY_HISTORY_RECOVERY_FILES,
   MAX_RECOVERABLE_APP_ENTRY_CONTENT_BYTES,
@@ -78,9 +81,8 @@ export type UpdateLibraryBaselineResult =
       created: boolean;
       generationUsage?: TextGenerationResult['usage'];
       /**
-       * True when this baseline was bootstrapped for a section that had no
-       * baseline and more history than the recovery window. The baseline
-       * text itself names what was not folded in.
+       * True when this baseline or any predecessor omitted historical
+       * findings during bootstrap. The persisted disclosure survives refreshes.
        */
       historyTruncated?: boolean;
     }
@@ -159,7 +161,7 @@ export function buildLibraryBaselineSystemPrompt(
     `concrete facts, named entities, prices, dates, and open follow-ups. When they conflict, the newest ` +
     `findings win. Keep numbers and dates exact; drop narrative, repetition, and anything superseded. ` +
     `At most ${wordLimit} words of markdown bullets under short headings, and ${maxBytes} UTF-8 bytes. ` +
-    `Count each Han, Hiragana, Katakana, or Hangul character as one word; count other text by whitespace-separated words. ` +
+    `Count each Han, Hiragana, Katakana, Hangul, Thai, Lao, Khmer, or Myanmar character as one word; count other letter/number runs as words, keeping internal apostrophes and hyphens. ` +
     `Output the digest only, with no commentary. ${untrustedRule}`
   );
 }
@@ -460,17 +462,19 @@ async function updateLibraryBaselineLocked(
   if (!newerFindings.includes(findings)) newerFindings.push(findings);
   const uniqueNewerFindings = [...new Set(newerFindings)];
   const bootstrapNotice = bootstrapping
-    ? buildBaselineBootstrapNotice(firstUnfolded?.fileName)
-    : '';
+    ? readLibraryBaselineOmissionNotice(
+      `${LIBRARY_BASELINE_OMISSION_MARKER}\n${buildBaselineBootstrapNotice(firstUnfolded?.fileName)}`,
+    )!
+    : readLibraryBaselineOmissionNotice(priorBaseline?.content) || '';
 
-  const noticeSuffix = bootstrapNotice ? `\n\n${bootstrapNotice}` : '';
+  const noticeSuffix = bootstrapNotice ? `\n\n${LIBRARY_BASELINE_OMISSION_MARKER}\n${bootstrapNotice}` : '';
   const digestMaxBytes = LIBRARY_BASELINE_MAX_BYTES - Buffer.byteLength(noticeSuffix, 'utf8');
-  const digestWordLimit = LIBRARY_BASELINE_WORD_LIMIT - countAutomationWords(bootstrapNotice);
+  const digestWordLimit = LIBRARY_BASELINE_WORD_LIMIT - countAutomationWords(noticeSuffix);
   const generationPrompt = buildLibraryBaselineGenerationPrompt({
     section: input.section,
     untrustedRule: input.untrustedRule,
     neutralize: input.neutralize,
-    priorBaseline: priorBaseline?.content || undefined,
+    priorBaseline: priorBaseline?.content ? stripLibraryBaselineOmissionNotice(priorBaseline.content) : undefined,
     wordLimit: digestWordLimit,
     maxBytes: digestMaxBytes,
     newerFindings: uniqueNewerFindings,
@@ -499,7 +503,9 @@ async function updateLibraryBaselineLocked(
     }
     try {
       merged = requireBoundedAutomationOutput(
-        typeof generated === 'string' ? { text: generated } : generated,
+        typeof generated === 'string'
+          ? { text: stripLibraryBaselineOmissionNotice(generated) }
+          : { ...generated, text: stripLibraryBaselineOmissionNotice(generated.text) },
         digestMaxBytes,
         'baseline',
       );
@@ -577,7 +583,7 @@ async function updateLibraryBaselineLocked(
     fileName: appended.fileName,
     created: appended.created,
     ...(generationUsage ? { generationUsage } : {}),
-    ...(bootstrapping ? { historyTruncated: true } : {}),
+    ...(bootstrapNotice ? { historyTruncated: true } : {}),
   };
 }
 

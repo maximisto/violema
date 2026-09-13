@@ -281,6 +281,8 @@ export interface AccountLibrarySnapshot {
   appHistoryBeyondWindow?: boolean;
   /** A source failed independently of the shared history byte budget. */
   appEntryReadFailed?: boolean;
+  /** The readable baseline retains a known historical omission across refreshes. */
+  appBaselineHistoryOmitted?: boolean;
   /**
    * Honest, operator-facing caveats about this read that did not stop it,
    * e.g. older findings left outside the window of a never-baselined
@@ -462,6 +464,33 @@ function readDriveNextPageToken(payload: unknown): { valid: true; value?: string
   if (!('nextPageToken' in container) || container.nextPageToken === undefined) return { valid: true };
   const value = asString(container.nextPageToken);
   return value ? { valid: true, value } : { valid: false };
+}
+
+// Fixed marker plus one bounded human-readable disclosure. This is append-only
+// provenance carried outside generated prose, not a growing list of ancestors.
+export const LIBRARY_BASELINE_OMISSION_MARKER = '<!-- violema:baseline-history-omitted:v1 -->';
+export const LIBRARY_BASELINE_OMISSION_WARNING =
+  'This library baseline excludes older findings that were not folded in during its first compaction. '
+  + 'Those files remain in the library folder; later refreshes do not recover them.';
+const GENERIC_BASELINE_OMISSION_NOTICE =
+  '_Bootstrapped baseline: older findings beyond the read window were not folded in; those files remain in the library folder._';
+const LEGACY_BASELINE_OMISSION_NOTICE = /^_Bootstrapped baseline:[\s\S]*?were not folded in; those files remain in the library folder\._$/m;
+
+export function readLibraryBaselineOmissionNotice(content: string | null | undefined): string | undefined {
+  if (!content) return undefined;
+  const notice = content.match(LEGACY_BASELINE_OMISSION_NOTICE)?.[0]?.replace(/[\r\n]+/g, ' ');
+  if (!notice && !content.includes(LIBRARY_BASELINE_OMISSION_MARKER)) return undefined;
+  return notice && Buffer.byteLength(notice, 'utf8') <= 512
+    ? notice
+    : GENERIC_BASELINE_OMISSION_NOTICE;
+}
+
+/** Strip only our reserved provenance framing before or after generation. */
+export function stripLibraryBaselineOmissionNotice(content: string): string {
+  return content
+    .split(LIBRARY_BASELINE_OMISSION_MARKER).join('')
+    .replace(new RegExp(LEGACY_BASELINE_OMISSION_NOTICE.source, 'gm'), '')
+    .trim();
 }
 
 /**
@@ -1091,6 +1120,7 @@ export async function readLibrary(
 
   let unreadableBaselineSeen = false;
   let readableBaselineFound = false;
+  let baselineHistoryOmitted = false;
   let appHistoryBeyondBudget = false;
   let appEntryReadFailed = false;
   let recoveryListingLoaded = false;
@@ -1227,6 +1257,7 @@ export async function readLibrary(
     if (isBaseline) {
       if (body.content?.trim() && !body.truncated && !body.contentError) {
         readableBaselineFound = true;
+        baselineHistoryOmitted = Boolean(readLibraryBaselineOmissionNotice(body.content));
         break;
       }
       unreadableBaselineSeen = true;
@@ -1265,6 +1296,10 @@ export async function readLibrary(
         : listingHasMore ? undefined : false,
       appHistoryBeyondWindow: !readableBaselineFound && (listingHasMore || appHistoryBeyondBudget),
       appEntryReadFailed,
+      ...(baselineHistoryOmitted ? {
+        appBaselineHistoryOmitted: true,
+        warnings: [LIBRARY_BASELINE_OMISSION_WARNING],
+      } : {}),
       sweep,
     },
     now,

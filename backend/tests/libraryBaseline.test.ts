@@ -7,6 +7,7 @@ import {
   ACCOUNT_LIBRARY_SOURCE,
   COMPETITIVE_INTELLIGENCE_SECTION,
   LIBRARY_BASELINE_TITLE_PREFIX,
+  LIBRARY_BASELINE_OMISSION_MARKER,
   MAX_ENTRY_CONTENT_BYTES,
   MAX_RECOVERABLE_APP_HISTORY_BYTES,
   isLibraryBaselineFileName,
@@ -1349,7 +1350,7 @@ test('bootstrap assembly reserves the notice and separators in its byte ceiling'
     const drive = createFakeDrive(Array.from({ length: 4 }, (_, index) => ({
       id: `legacy-${index}`, name: `2026-08-12 — Legacy ${index}.md`, content: 'x'.repeat(30_000),
     })));
-    const notice = '_Bootstrapped baseline: this section had no baseline and more history than one read can cover. '
+    const notice = LIBRARY_BASELINE_OMISSION_MARKER + '\n_Bootstrapped baseline: this section had no baseline and more history than one read can cover. '
       + '"2026-08-12 — Legacy 2.md" and everything older were not folded in; those files remain in the library folder._';
     const digestBytes = MAX_ENTRY_CONTENT_BYTES - 1 - Buffer.byteLength(notice) - 2 + overflow;
     const result = await updateLibraryBaseline({
@@ -1381,4 +1382,80 @@ test('bootstrap generation prompt budgets the notice inside the unchanged 400-un
   const baseline = drive.created.find((file) => isLibraryBaselineFileName(file.name));
   assert.ok(baseline);
   assert.equal(countAutomationWords(baseline.content), 400);
+});
+
+
+test('bootstrap omission provenance survives multiple refreshes and reaches ordinary mission warnings', async () => {
+  const drive = createFakeDrive(Array.from({ length: 4 }, (_, index) => ({
+    id: `legacy-${index}`, name: `2026-08-12 — Legacy ${index}.md`, content: 'x'.repeat(30_000),
+  })));
+  let priorBody = '';
+  for (let refresh = 0; refresh < 4; refresh += 1) {
+    const result = await appendLibraryEntryWithBaseline({
+      workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+      latestFindingsMarkdown: `Fresh fact ${refresh}.`, runId: `omission-${refresh}`,
+      entry: { title: `Fresh ${refresh}`, markdown: `Fresh fact ${refresh}.` },
+    }, { ...drive, generate: async () => refresh === 3 ? `${priorBody}\n\n${priorBody}` : 'Current facts.' });
+    assert.equal(result.baselineResult?.ok, true, JSON.stringify(result.baselineResult));
+    if (!result.baselineResult?.ok) return;
+    assert.equal(result.baselineResult.historyTruncated, true, 'known omissions remain explicit on every successor');
+    const baselines = drive.created.filter((file) => isLibraryBaselineFileName(file.name));
+    priorBody = baselines[baselines.length - 1].content;
+    assert.equal(priorBody.split('<!-- violema:baseline-history-omitted:v1 -->').length - 1, 1);
+    assert.equal(priorBody.split('_Bootstrapped baseline:').length - 1, 1);
+    assert.match(priorBody, /Legacy 2/);
+    const read = await executeQueryData({
+      workspaceId: 'ws_test', source: ACCOUNT_LIBRARY_SOURCE, queryType: ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+      filters: { section: SECTION },
+      clientOverrides: { accountLibraryRead: async (workspace, section, options) =>
+        readLibrary(workspace, section, { ...options, includeOperatorFiles: false }, drive) },
+    });
+    assert.equal(read.ok, true, JSON.stringify(read));
+    if (!read.ok) return;
+    const data = read.data as AccountLibrarySnapshot;
+    assert.equal(data.appBaselineHistoryOmitted, true);
+    assert.equal(data.warnings?.length, 1, 'one warning regardless of refresh count');
+    assert.match(data.warnings[0], /older findings.*not folded in/);
+    assert.equal(data.entries.length, 1, 'ordinary reader still uses the compacted baseline');
+  }
+});
+
+test('legacy bootstrap disclosures are migrated and oversized disclosure metadata stays bounded', async () => {
+  for (const boundary of ['Old findings.md', 'Old\nfindings.md', '古'.repeat(1000)]) {
+    const notice = `_Bootstrapped baseline: this section had no baseline and more history than one read can cover. "${boundary}" and everything older were not folded in; those files remain in the library folder._`;
+    const drive = createFakeDrive([{
+      id: 'legacy-baseline', name: `2026-08-12 — ${LIBRARY_BASELINE_TITLE_PREFIX} 18.30.md`,
+      content: `Old fact.\n\n${notice}`,
+    }]);
+    const legacyRead = await readLibrary('ws_test', SECTION, { includeOperatorFiles: false }, drive);
+    assert.equal(legacyRead.ok && legacyRead.data.appBaselineHistoryOmitted, true, 'old disclosures warn before migration');
+    const result = await updateLibraryBaseline({
+      workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+      latestFindingsMarkdown: 'Fresh fact.',
+    }, { ...drive, generate: async () => 'Current facts.' });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    if (!result.ok) return;
+    assert.equal(result.historyTruncated, true);
+    assert.match(drive.created[0].content, /violema:baseline-history-omitted:v1/);
+    assert.ok(Buffer.byteLength(drive.created[0].content) < 600);
+    const read = await readLibrary('ws_test', SECTION, { includeOperatorFiles: false }, drive);
+    assert.equal(read.ok && read.data.appBaselineHistoryOmitted, true);
+  }
+});
+
+
+test('bootstrap disclosure cannot be lost through a multiline omitted filename', async () => {
+  const drive = createFakeDrive(Array.from({ length: 4 }, (_, index) => ({
+    id: `legacy-${index}`, name: `2026-08-12 — Legacy\n${index}.md`, content: 'x'.repeat(30_000),
+  })));
+  const result = await updateLibraryBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh fact.',
+  }, { ...drive, generate: async () => 'Current facts.' });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  if (!result.ok) return;
+  assert.equal(result.historyTruncated, true);
+  assert.match(drive.created[0].content, /violema:baseline-history-omitted:v1/);
+  const read = await readLibrary('ws_test', SECTION, { includeOperatorFiles: false }, drive);
+  assert.equal(read.ok && read.data.appBaselineHistoryOmitted, true);
 });
