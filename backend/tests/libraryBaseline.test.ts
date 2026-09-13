@@ -1459,3 +1459,112 @@ test('bootstrap disclosure cannot be lost through a multiline omitted filename',
   const read = await readLibrary('ws_test', SECTION, { includeOperatorFiles: false }, drive);
   assert.equal(read.ok && read.data.appBaselineHistoryOmitted, true);
 });
+
+
+test('short and empty token-bearing pages recover all findings before baseline append', async () => {
+  const drive = createFakeDrive([
+    { id: 'fresh', name: '2026-08-13 — Fresh.md', content: 'Fresh finding.' },
+    { id: 'older', name: '2026-08-12 — Older.md', content: 'HIDDEN_SECOND_PAGE_FACT' },
+  ]);
+  const tokens: unknown[] = [];
+  const execute: PartnerComposioExecutor = async (action, input, context) => {
+    if (action !== 'GOOGLEDRIVE_FIND_FILE' || !String(input.fields).includes('nextPageToken')) {
+      return drive.execute(action, input, context);
+    }
+    tokens.push(input.pageToken);
+    if (input.pageToken === undefined) return { successful: true, data: {
+      files: [{ id: 'fresh', name: '2026-08-13 — Fresh.md' }], nextPageToken: ' opaque/+token= ', incompleteSearch: false,
+    } };
+    if (input.pageToken === ' opaque/+token= ') return { successful: true, data: {
+      files: [], nextPageToken: 'empty-page-next', incompleteSearch: false,
+    } };
+    assert.equal(input.pageToken, 'empty-page-next');
+    return { successful: true, data: { files: [{ id: 'older', name: '2026-08-12 — Older.md' }], incompleteSearch: false } };
+  };
+  let prompt = '';
+  const result = await updateLibraryBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh finding.',
+  }, { ...drive, execute, generate: async (_profile, _system, messages) => {
+    prompt = String(messages[0].content); return 'Complete digest.';
+  } });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.match(prompt, /HIDDEN_SECOND_PAGE_FACT/);
+  assert.ok(tokens.includes(' opaque/+token= '), 'provider token is forwarded without normalization');
+  assert.equal(drive.created.length, 1);
+});
+
+test('explicit incompleteSearch prevents partial mission reads and any baseline mutation', async () => {
+  const drive = createFakeDrive([{ id: 'fresh', name: '2026-08-13 — Fresh.md', content: 'Fresh finding.' }]);
+  const execute: PartnerComposioExecutor = async (action, input, context) => {
+    const result = await drive.execute(action, input, context) as { data: Record<string, unknown> };
+    if (action === 'GOOGLEDRIVE_FIND_FILE' && String(input.fields).includes('nextPageToken')) {
+      return { ...result, data: { ...result.data, incompleteSearch: true } };
+    }
+    return result;
+  };
+  const result = await appendLibraryEntryWithBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'New finding.', entry: { title: 'New', markdown: 'New finding.' },
+  }, { ...drive, execute, generate: async () => 'This must not be published.' });
+  assert.equal(result.libraryResult.ok, false);
+  assert.equal(drive.created.length, 0);
+  const read = await executeQueryData({
+    workspaceId: 'ws_test', source: ACCOUNT_LIBRARY_SOURCE, queryType: ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+    filters: { section: SECTION }, clientOverrides: {
+      accountLibraryRead: async (workspace, section, options) => readLibrary(workspace, section,
+        { ...options, includeOperatorFiles: false }, { ...drive, execute }),
+    },
+  });
+  assert.equal(read.ok, false);
+  if (!read.ok) assert.equal(read.can_continue, false);
+});
+
+test('token loops and endless empty pages remain bounded and cannot prove no baseline exists', async () => {
+  for (const loop of [true, false]) {
+    const drive = createFakeDrive([]);
+    let calls = 0;
+    const execute: PartnerComposioExecutor = async (action, input, context) => {
+      if (action !== 'GOOGLEDRIVE_FIND_FILE' || !String(input.fields).includes('nextPageToken')) {
+        return drive.execute(action, input, context);
+      }
+      calls += 1;
+      return { successful: true, data: { files: [], nextPageToken: loop ? 'repeated' : `token-${calls}`, incompleteSearch: false } };
+    };
+    const result = await updateLibraryBaseline({
+      workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+      latestFindingsMarkdown: 'Fresh finding.',
+    }, { ...drive, execute, generate: async () => 'No unsafe baseline.' });
+    assert.equal(result.ok, false);
+    assert.equal(drive.created.length, 0);
+    assert.ok(calls <= 11, `bounded metadata requests: ${calls}`);
+  }
+});
+
+
+test('paginated metadata cannot reach a predecessor beyond the 100-file recovery cap', async () => {
+  const drive = createFakeDrive([]);
+  let listedCount = 0;
+  let requestedBeyondCap = false;
+  const execute: PartnerComposioExecutor = async (action, input, context) => {
+    if (action !== 'GOOGLEDRIVE_FIND_FILE' || !String(input.fields).includes('nextPageToken')) {
+      return drive.execute(action, input, context);
+    }
+    if (input.pageToken === 'beyond-100') requestedBeyondCap = true;
+    const offset = input.pageToken === 'second-50' ? 50 : 0;
+    const count = Math.min(50, Number(input.pageSize));
+    if (Number(input.pageSize) > 10) listedCount += count;
+    return { successful: true, data: {
+      files: Array.from({ length: count }, (_, index) => ({ id: `memo-${offset + index}`, name: `2026-08-13 — Memo ${offset + index}.md` })),
+      nextPageToken: offset === 0 ? 'second-50' : 'beyond-100', incompleteSearch: false,
+    } };
+  };
+  const result = await updateLibraryBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh finding.',
+  }, { ...drive, execute, generate: async () => 'No unsafe baseline.' });
+  assert.equal(result.ok, false);
+  assert.equal(drive.created.length, 0);
+  assert.equal(listedCount, 100);
+  assert.equal(requestedBeyondCap, false);
+});

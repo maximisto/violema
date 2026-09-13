@@ -462,8 +462,8 @@ function readDriveNextPageToken(payload: unknown): { valid: true; value?: string
   const container = isRecord(payload) && isRecord(payload.data) ? payload.data : payload;
   if (!isRecord(container)) return { valid: true };
   if (!('nextPageToken' in container) || container.nextPageToken === undefined) return { valid: true };
-  const value = asString(container.nextPageToken);
-  return value ? { valid: true, value } : { valid: false };
+  const value = container.nextPageToken;
+  return typeof value === 'string' && value.trim() ? { valid: true, value } : { valid: false };
 }
 
 // Fixed marker plus one bounded human-readable disclosure. This is append-only
@@ -1085,20 +1085,32 @@ export async function readLibrary(
   }
   const resolvedFolderId = folderId;
 
-  const listSectionFiles = (pageSize: number) => runDriveAction(
+  const listSectionFiles = (pageSize: number, pageToken?: string) => runDriveAction(
     execute,
     workspaceId,
     FIND_FILE_ACTION,
     {
       q: `'${escapeDriveQueryValue(resolvedFolderId)}' in parents and trashed = false`,
-      fields: 'files(id,name,modifiedTime,createdTime,webViewLink),nextPageToken',
+      fields: 'files(id,name,modifiedTime,createdTime,webViewLink),nextPageToken,incompleteSearch',
       orderBy: 'createdTime desc',
       pageSize,
+      ...(pageToken !== undefined ? { pageToken } : {}),
       spaces: 'drive',
     },
   );
   const listing = await listSectionFiles(limit);
   if (!listing.ok) return listing.failure;
+  const incompleteSearchFailure = (data: unknown): LibraryFailure | null => {
+    const container = isRecord(data) && isRecord(data.data) ? data.data : data;
+    if (isRecord(container) && 'incompleteSearch' in container
+      && container.incompleteSearch !== false) {
+      return libraryFailure('integration_query_failed',
+        'Drive did not complete the library search, so the history could not be verified.');
+    }
+    return null;
+  };
+  const initialSearchFailure = incompleteSearchFailure(listing.data);
+  if (initialSearchFailure) return initialSearchFailure;
 
   // Compaction is content-validated, never filename-trusting. A baseline may
   // still appear in Drive while its export is unreadable; cutting the listing
@@ -1110,8 +1122,10 @@ export async function readLibrary(
     return libraryFailure('integration_query_failed', 'Drive returned an invalid file listing.');
   }
   let files = initialListedFiles.slice(0, limit);
-  // A full page may have history behind it even when the partner omits
-  // Drive's nextPageToken; only a short page proves the listing is complete.
+  // FIND_FILE documents nextPageToken in its selectable response fields.
+  // Native Drive omits it at exhaustion; short length alone is not proof.
+  // Retain the conservative full-page guard for partner normalization, but
+  // arbitrary token stripping cannot be detected from this untyped envelope.
   let listingHasMore = Boolean(initialNextPage.value) || initialListedFiles.length >= limit;
   const appEntries: AccountLibraryEntry[] = [];
   // App entries fill whatever budget the operator sweep above left behind, so
@@ -1125,16 +1139,43 @@ export async function readLibrary(
   let appEntryReadFailed = false;
   let recoveryListingLoaded = false;
   const loadRecoveryListing = async (): Promise<LibraryFailure | null> => {
-    const recoveryListing = await listSectionFiles(MAX_LIBRARY_HISTORY_RECOVERY_FILES);
-    if (!recoveryListing.ok) return recoveryListing.failure;
-    const recoveryListedFiles = readDriveFiles(recoveryListing.data);
-    const recoveryNextPage = readDriveNextPageToken(recoveryListing.data);
-    if (!recoveryListedFiles || !recoveryNextPage.valid) {
-      return libraryFailure('integration_query_failed', 'Drive returned an invalid file listing.');
+    // Widen metadata once, then follow the provider's exact opaque tokens.
+    // Short and even empty pages may precede more results. Both file and
+    // request caps apply; an unfinished chain never proves baseline absence.
+    const recoveredFiles: Record<string, unknown>[] = [];
+    const seenIds = new Set<string>();
+    const seenTokens = new Set<string>();
+    let pageToken: string | undefined;
+    let returnedFileCount = 0;
+    listingHasMore = true;
+    for (let page = 0; page < 10 && returnedFileCount < MAX_LIBRARY_HISTORY_RECOVERY_FILES; page += 1) {
+      const pageSize = MAX_LIBRARY_HISTORY_RECOVERY_FILES - returnedFileCount;
+      const recoveryListing = await listSectionFiles(pageSize, pageToken);
+      if (!recoveryListing.ok) return recoveryListing.failure;
+      const searchFailure = incompleteSearchFailure(recoveryListing.data);
+      if (searchFailure) return searchFailure;
+      const recoveryListedFiles = readDriveFiles(recoveryListing.data);
+      const recoveryNextPage = readDriveNextPageToken(recoveryListing.data);
+      if (!recoveryListedFiles || !recoveryNextPage.valid) {
+        return libraryFailure('integration_query_failed', 'Drive returned an invalid file listing.');
+      }
+      returnedFileCount += recoveryListedFiles.length;
+      for (const file of recoveryListedFiles.slice(0, pageSize)) {
+        const id = String(file.id);
+        if (!seenIds.has(id)) {
+          recoveredFiles.push(file);
+          seenIds.add(id);
+        }
+      }
+      listingHasMore = Boolean(recoveryNextPage.value) || recoveryListedFiles.length >= pageSize;
+      if (!recoveryNextPage.value) break;
+      if (seenTokens.has(recoveryNextPage.value)) {
+        return libraryFailure('integration_query_failed', 'Drive repeated a library page token; history could not be verified.');
+      }
+      seenTokens.add(recoveryNextPage.value);
+      pageToken = recoveryNextPage.value;
     }
-    files = recoveryListedFiles.slice(0, MAX_LIBRARY_HISTORY_RECOVERY_FILES);
-    listingHasMore = Boolean(recoveryNextPage.value)
-      || recoveryListedFiles.length >= MAX_LIBRARY_HISTORY_RECOVERY_FILES;
+    files = recoveredFiles;
     recoveryListingLoaded = true;
     return null;
   };
