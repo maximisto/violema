@@ -5501,14 +5501,10 @@ export default function Dashboard() {
 	                <h1 className="truncate text-[13px] font-semibold tracking-[-0.01em] text-white sm:text-sm">
 	                  {workspaceArea === 'home' ? convoTitle : activeWorkspaceArea.label}
 	                </h1>
-	                <span className="hidden rounded-full border border-green-500/15 bg-green-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-green-300 sm:inline-flex">
-	                  Ready
-	                </span>
 	              </div>
 	              <div className="mt-1 hidden flex-wrap items-center gap-2 sm:flex">
-	                <div className="h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_0_4px_rgba(74,222,128,0.08)]" />
 	                <span className="truncate text-xs text-slate-500">
-	                  {workspaceArea === 'home' ? 'Violema ready' : activeWorkspaceArea.description}
+	                  {workspaceArea === 'home' ? 'Chat with Violema' : activeWorkspaceArea.description}
 	                </span>
 	                {currentMessages.length > 0 && (
 	                  <>

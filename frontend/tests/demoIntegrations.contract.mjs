@@ -79,8 +79,8 @@ assert(
   'public page renders every verified integration',
 );
 assert(
-  page.includes('>Active<'),
-  'public page renders an Active badge',
+  page.includes('>Available<'),
+  'public page labels static capability availability separately from connection state',
 );
 assert(
   !page.includes('NATIVE_NOW') && !page.includes('NEXT_UP'),

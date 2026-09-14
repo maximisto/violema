@@ -95,7 +95,7 @@ export function MissionCommandDashboard({
                 <Bot className="h-3.5 w-3.5" />
                 Mission cockpit
               </span>
-              <span className="rounded-full border border-green-400/20 bg-green-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-green-100">
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${stepStatusClasses[mission.status]}`}>
                 {mission.statusLabel}
               </span>
             </div>
@@ -201,7 +201,7 @@ export function MissionCommandDashboard({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300/80">Founder stack</p>
-                <h3 className="mt-1 text-base font-semibold text-white">Connected context</h3>
+                <h3 className="mt-1 text-base font-semibold text-white">Supported integrations</h3>
               </div>
               <button
                 type="button"
