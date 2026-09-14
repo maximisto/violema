@@ -266,9 +266,9 @@ export interface AccountLibrarySnapshot {
   appEntryHistoryComplete?: boolean;
   /**
    * Whether any baseline file (readable or not) appeared in the listing this
-   * read walked. False means the section has never been compacted: the
-   * legacy case where an incomplete history has no baseline to stop at and
-   * the write lane may bootstrap one from the readable window.
+   * read walked. False requires an exhausted metadata listing with no
+   * baseline; undefined means the bounded listing cannot prove absence.
+   * Only proven absence permits bootstrapping from a partial content window.
    */
   appBaselineListed?: boolean;
   /**
@@ -279,6 +279,10 @@ export interface AccountLibrarySnapshot {
    * wider window would fix.
    */
   appHistoryBeyondWindow?: boolean;
+  /** A source failed independently of the shared history byte budget. */
+  appEntryReadFailed?: boolean;
+  /** The readable baseline retains a known historical omission across refreshes. */
+  appBaselineHistoryOmitted?: boolean;
   /**
    * Honest, operator-facing caveats about this read that did not stop it,
    * e.g. older findings left outside the window of a never-baselined
@@ -458,8 +462,35 @@ function readDriveNextPageToken(payload: unknown): { valid: true; value?: string
   const container = isRecord(payload) && isRecord(payload.data) ? payload.data : payload;
   if (!isRecord(container)) return { valid: true };
   if (!('nextPageToken' in container) || container.nextPageToken === undefined) return { valid: true };
-  const value = asString(container.nextPageToken);
-  return value ? { valid: true, value } : { valid: false };
+  const value = container.nextPageToken;
+  return typeof value === 'string' && value.trim() ? { valid: true, value } : { valid: false };
+}
+
+// Fixed marker plus one bounded human-readable disclosure. This is append-only
+// provenance carried outside generated prose, not a growing list of ancestors.
+export const LIBRARY_BASELINE_OMISSION_MARKER = '<!-- violema:baseline-history-omitted:v1 -->';
+export const LIBRARY_BASELINE_OMISSION_WARNING =
+  'This library baseline excludes older findings that were not folded in during its first compaction. '
+  + 'Those files remain in the library folder; later refreshes do not recover them.';
+const GENERIC_BASELINE_OMISSION_NOTICE =
+  '_Bootstrapped baseline: older findings beyond the read window were not folded in; those files remain in the library folder._';
+const LEGACY_BASELINE_OMISSION_NOTICE = /^_Bootstrapped baseline:[\s\S]*?were not folded in; those files remain in the library folder\._$/m;
+
+export function readLibraryBaselineOmissionNotice(content: string | null | undefined): string | undefined {
+  if (!content) return undefined;
+  const notice = content.match(LEGACY_BASELINE_OMISSION_NOTICE)?.[0]?.replace(/[\r\n]+/g, ' ');
+  if (!notice && !content.includes(LIBRARY_BASELINE_OMISSION_MARKER)) return undefined;
+  return notice && Buffer.byteLength(notice, 'utf8') <= 512
+    ? notice
+    : GENERIC_BASELINE_OMISSION_NOTICE;
+}
+
+/** Strip only our reserved provenance framing before or after generation. */
+export function stripLibraryBaselineOmissionNotice(content: string): string {
+  return content
+    .split(LIBRARY_BASELINE_OMISSION_MARKER).join('')
+    .replace(new RegExp(LEGACY_BASELINE_OMISSION_NOTICE.source, 'gm'), '')
+    .trim();
 }
 
 /**
@@ -1054,20 +1085,32 @@ export async function readLibrary(
   }
   const resolvedFolderId = folderId;
 
-  const listSectionFiles = (pageSize: number) => runDriveAction(
+  const listSectionFiles = (pageSize: number, pageToken?: string) => runDriveAction(
     execute,
     workspaceId,
     FIND_FILE_ACTION,
     {
       q: `'${escapeDriveQueryValue(resolvedFolderId)}' in parents and trashed = false`,
-      fields: 'files(id,name,modifiedTime,createdTime,webViewLink),nextPageToken',
+      fields: 'files(id,name,modifiedTime,createdTime,webViewLink),nextPageToken,incompleteSearch',
       orderBy: 'createdTime desc',
       pageSize,
+      ...(pageToken !== undefined ? { pageToken } : {}),
       spaces: 'drive',
     },
   );
   const listing = await listSectionFiles(limit);
   if (!listing.ok) return listing.failure;
+  const incompleteSearchFailure = (data: unknown): LibraryFailure | null => {
+    const container = isRecord(data) && isRecord(data.data) ? data.data : data;
+    if (isRecord(container) && 'incompleteSearch' in container
+      && container.incompleteSearch !== false) {
+      return libraryFailure('integration_query_failed',
+        'Drive did not complete the library search, so the history could not be verified.');
+    }
+    return null;
+  };
+  const initialSearchFailure = incompleteSearchFailure(listing.data);
+  if (initialSearchFailure) return initialSearchFailure;
 
   // Compaction is content-validated, never filename-trusting. A baseline may
   // still appear in Drive while its export is unreadable; cutting the listing
@@ -1079,8 +1122,10 @@ export async function readLibrary(
     return libraryFailure('integration_query_failed', 'Drive returned an invalid file listing.');
   }
   let files = initialListedFiles.slice(0, limit);
-  // A full page may have history behind it even when the partner omits
-  // Drive's nextPageToken; only a short page proves the listing is complete.
+  // FIND_FILE documents nextPageToken in its selectable response fields.
+  // Native Drive omits it at exhaustion; short length alone is not proof.
+  // Retain the conservative full-page guard for partner normalization, but
+  // arbitrary token stripping cannot be detected from this untyped envelope.
   let listingHasMore = Boolean(initialNextPage.value) || initialListedFiles.length >= limit;
   const appEntries: AccountLibraryEntry[] = [];
   // App entries fill whatever budget the operator sweep above left behind, so
@@ -1089,19 +1134,48 @@ export async function readLibrary(
 
   let unreadableBaselineSeen = false;
   let readableBaselineFound = false;
+  let baselineHistoryOmitted = false;
   let appHistoryBeyondBudget = false;
+  let appEntryReadFailed = false;
   let recoveryListingLoaded = false;
   const loadRecoveryListing = async (): Promise<LibraryFailure | null> => {
-    const recoveryListing = await listSectionFiles(MAX_LIBRARY_HISTORY_RECOVERY_FILES);
-    if (!recoveryListing.ok) return recoveryListing.failure;
-    const recoveryListedFiles = readDriveFiles(recoveryListing.data);
-    const recoveryNextPage = readDriveNextPageToken(recoveryListing.data);
-    if (!recoveryListedFiles || !recoveryNextPage.valid) {
-      return libraryFailure('integration_query_failed', 'Drive returned an invalid file listing.');
+    // Widen metadata once, then follow the provider's exact opaque tokens.
+    // Short and even empty pages may precede more results. Both file and
+    // request caps apply; an unfinished chain never proves baseline absence.
+    const recoveredFiles: Record<string, unknown>[] = [];
+    const seenIds = new Set<string>();
+    const seenTokens = new Set<string>();
+    let pageToken: string | undefined;
+    let returnedFileCount = 0;
+    listingHasMore = true;
+    for (let page = 0; page < 10 && returnedFileCount < MAX_LIBRARY_HISTORY_RECOVERY_FILES; page += 1) {
+      const pageSize = MAX_LIBRARY_HISTORY_RECOVERY_FILES - returnedFileCount;
+      const recoveryListing = await listSectionFiles(pageSize, pageToken);
+      if (!recoveryListing.ok) return recoveryListing.failure;
+      const searchFailure = incompleteSearchFailure(recoveryListing.data);
+      if (searchFailure) return searchFailure;
+      const recoveryListedFiles = readDriveFiles(recoveryListing.data);
+      const recoveryNextPage = readDriveNextPageToken(recoveryListing.data);
+      if (!recoveryListedFiles || !recoveryNextPage.valid) {
+        return libraryFailure('integration_query_failed', 'Drive returned an invalid file listing.');
+      }
+      returnedFileCount += recoveryListedFiles.length;
+      for (const file of recoveryListedFiles.slice(0, pageSize)) {
+        const id = String(file.id);
+        if (!seenIds.has(id)) {
+          recoveredFiles.push(file);
+          seenIds.add(id);
+        }
+      }
+      listingHasMore = Boolean(recoveryNextPage.value) || recoveryListedFiles.length >= pageSize;
+      if (!recoveryNextPage.value) break;
+      if (seenTokens.has(recoveryNextPage.value)) {
+        return libraryFailure('integration_query_failed', 'Drive repeated a library page token; history could not be verified.');
+      }
+      seenTokens.add(recoveryNextPage.value);
+      pageToken = recoveryNextPage.value;
     }
-    files = recoveryListedFiles.slice(0, MAX_LIBRARY_HISTORY_RECOVERY_FILES);
-    listingHasMore = Boolean(recoveryNextPage.value)
-      || recoveryListedFiles.length >= MAX_LIBRARY_HISTORY_RECOVERY_FILES;
+    files = recoveredFiles;
     recoveryListingLoaded = true;
     return null;
   };
@@ -1197,13 +1271,16 @@ export async function readLibrary(
     // A memo cut because the shared history budget (not its own size cap)
     // ran out is history beyond this read's window, which only a baseline
     // can compact. An oversized memo is unreadable regardless of budget.
-    if (
-      !isBaseline
+    const omittedByHistoryBudget = !isBaseline
       && body.truncated
       && knownContent === undefined
-      && fileBudget < maxAppEntryContentBytes
-    ) {
+      && fileBudget < maxAppEntryContentBytes;
+    if (omittedByHistoryBudget) {
       appHistoryBeyondBudget = true;
+    }
+    if (!isBaseline && !omittedByHistoryBudget
+      && (body.truncated || Boolean(body.contentError) || !body.content?.trim())) {
+      appEntryReadFailed = true;
     }
 
     appEntries.push({
@@ -1221,6 +1298,7 @@ export async function readLibrary(
     if (isBaseline) {
       if (body.content?.trim() && !body.truncated && !body.contentError) {
         readableBaselineFound = true;
+        baselineHistoryOmitted = Boolean(readLibraryBaselineOmissionNotice(body.content));
         break;
       }
       unreadableBaselineSeen = true;
@@ -1254,8 +1332,15 @@ export async function readLibrary(
       appEntryHistoryComplete:
         (readableBaselineFound || !listingHasMore)
         && requiredAppSourcesReadable,
-      appBaselineListed: files.some((file) => typeof file.name === 'string' && isLibraryBaselineFileName(file.name)),
+      appBaselineListed: files.some((file) => typeof file.name === 'string' && isLibraryBaselineFileName(file.name))
+        ? true
+        : listingHasMore ? undefined : false,
       appHistoryBeyondWindow: !readableBaselineFound && (listingHasMore || appHistoryBeyondBudget),
+      appEntryReadFailed,
+      ...(baselineHistoryOmitted ? {
+        appBaselineHistoryOmitted: true,
+        warnings: [LIBRARY_BASELINE_OMISSION_WARNING],
+      } : {}),
       sweep,
     },
     now,

@@ -178,12 +178,11 @@ function sanitizeModelAttemptError(error: unknown, route?: ModelRoute): Error {
   if (!route) return safe;
 
   // SDK transports (Anthropic, MiniMax) throw their own error classes. Give
-  // them the same route-aware shape the HTTP routes produce, and treat an
-  // error that carries an HTTP status as a rejected request: nothing was
-  // generated, so its usage is an explicit zero rather than unknown.
+  // them the same route-aware shape as HTTP routes. A status alone does not
+  // prove that an upstream attempt generated nothing.
   const status = safe.status ?? safe.statusCode;
   if (typeof status === 'number') {
-    const named = new ModelRequestError(route, status, safe.message, safe.usage ?? rejectedRequestUsage(route));
+    const named = new ModelRequestError(route, status, safe.message, safe.usage ?? rejectedRequestUsage(route, status));
     if (safe.code) (named as Error & { code?: string }).code = safe.code;
     if (safe.retryable) (named as Error & { retryable?: boolean }).retryable = true;
     return named;
@@ -192,19 +191,74 @@ function sanitizeModelAttemptError(error: unknown, route?: ModelRoute): Error {
   return safe;
 }
 
+/** Read a completed top-level usage object from an otherwise unfinished JSON body. */
+function readCompleteErrorUsagePrefix(bodyText: string, route: ModelRoute): TextGenerationUsage | undefined {
+  if (!bodyText.trimStart().startsWith('{')) return undefined;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let stringStart = 0;
+  let usageStart = -1;
+  for (let index = 0; index < bodyText.length; index += 1) {
+    const character = bodyText[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') {
+        inString = false;
+        if (depth === 1 && usageStart < 0) {
+          try {
+            if (JSON.parse(bodyText.slice(stringStart, index + 1)) === 'usage') {
+              const value = /^\s*:\s*\{/.exec(bodyText.slice(index + 1));
+              if (value) usageStart = index + value[0].length;
+            }
+          } catch {
+            return undefined;
+          }
+        }
+      }
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      stringStart = index;
+    } else if (character === '{' || character === '[') {
+      depth += 1;
+    } else if (character === '}' || character === ']') {
+      depth -= 1;
+      if (usageStart >= 0 && index > usageStart && depth === 1) {
+        try {
+          // Parse the whole prefix to validate its structure and field scope.
+          // Nested cache details and braces inside quoted strings are safe;
+          // incomplete objects or numeric tokens never reach this boundary.
+          const parsed = JSON.parse(`${bodyText.slice(0, index + 1)}}`);
+          return openAIUsage(route, parsed.usage);
+        } catch {
+          return undefined;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 async function readBoundedModelError(
   response: Response,
   route?: ModelRoute,
-): Promise<{ cause: string; usage?: TextGenerationUsage }> {
+): Promise<{ cause: string; usage?: TextGenerationUsage; complete: boolean }> {
   let bodyText = '';
+  let complete = false;
+  const decoder = new TextDecoder();
   try {
     if (response.body) {
       const reader = response.body.getReader();
-      const decoder = new TextDecoder();
       let remaining = MAX_MODEL_ERROR_BODY_BYTES;
       while (remaining > 0) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          complete = true;
+          break;
+        }
         const chunk = value.subarray(0, remaining);
         bodyText += decoder.decode(chunk, { stream: true });
         remaining -= chunk.byteLength;
@@ -213,11 +267,12 @@ async function readBoundedModelError(
           break;
         }
       }
-      bodyText += decoder.decode();
-    }
+    } else complete = true;
   } catch {
-    return { cause: response.statusText || 'provider request failed' };
+    // A failed read does not erase billing already observed in the prefix.
+    // Nor can an incomplete prefix prove that the request had zero usage.
   }
+  bodyText += decoder.decode();
 
   let cause = '';
   let usage: TextGenerationUsage | undefined;
@@ -231,6 +286,9 @@ async function readBoundedModelError(
     else if (typeof parsed.message === 'string') cause = parsed.message;
     if (route) usage = openAIUsage(route, parsed.usage);
   } catch {
+    // Transport EOF does not prove a complete JSON envelope. In particular,
+    // a normally closed but truncated usage object cannot certify zero usage.
+    complete = false;
     // The bounded stream may end mid-envelope. Extract only the two allowlisted
     // structured fields from that prefix; never persist arbitrary raw bytes.
     const messageMatch = /"message"\s*:\s*("(?:\\.|[^"\\])*")/u.exec(bodyText);
@@ -243,21 +301,13 @@ async function readBoundedModelError(
       }
     }
     if (route) {
-      const usageBlock = /"usage"\s*:\s*\{([\s\S]{0,2048})/u.exec(bodyText)?.[1] || '';
-      const readUsageNumber = (field: string) => {
-        const match = new RegExp(`"${field}"\\s*:\\s*(\\d+(?:\\.\\d+)?)`, 'u').exec(usageBlock);
-        return match ? Number(match[1]) : undefined;
-      };
-      usage = openAIUsage(route, {
-        prompt_tokens: readUsageNumber('prompt_tokens'),
-        completion_tokens: readUsageNumber('completion_tokens'),
-        total_tokens: readUsageNumber('total_tokens'),
-      });
+      usage = readCompleteErrorUsagePrefix(bodyText, route);
     }
   }
   return {
     cause: sanitizeModelErrorCause(cause || response.statusText || 'provider request failed'),
     ...(usage ? { usage } : {}),
+    complete,
   };
 }
 
@@ -369,7 +419,7 @@ export function isRetryableModelError(error: unknown, depth = 0): boolean {
   if (error instanceof ModelAttemptHookError) return false;
   if ((error as { retryable?: unknown })?.retryable === true) return true;
   const status = getErrorStatus(error);
-  if (status === 429 || (typeof status === 'number' && status >= 500)) return true;
+  if (status === 408 || status === 429 || (typeof status === 'number' && status >= 500)) return true;
 
   const candidate = error as { cause?: unknown; code?: unknown; name?: unknown; message?: unknown };
   const code = typeof candidate.code === 'string' ? candidate.code : '';
@@ -1055,15 +1105,18 @@ function openAIUsage(
   };
 }
 
-/**
- * Usage for a request the provider rejected with an HTTP error status and no
- * usage body. Nothing was generated, so the truthful figure is an explicit
- * zero, not "unknown": an unknown attempt quarantines the whole automation,
- * which turned every transient 5xx into a paused mission. Ambiguous failures
- * (a 200 error envelope, a body dying mid-stream, a timeout) keep reporting
- * no usage and stay quarantined.
+/** Infer zero only for explicit request rejection, never generic server failures.
+ * Gateway timeouts and internal errors can follow upstream work without a
+ * receipt. Leaving them unknown preserves automation reconciliation, including
+ * when a later retry succeeds. Observed usage always takes precedence.
  */
-function rejectedRequestUsage(route: ModelRoute): TextGenerationUsage {
+function rejectedRequestUsage(route: ModelRoute, status: number): TextGenerationUsage | undefined {
+  const requestRejected = [400, 401, 403, 404, 405, 413, 415, 422, 429].includes(status);
+  const directAnthropic = route.provider === 'anthropic'
+    && (!route.baseUrl || /^https:\/\/api\.anthropic\.com(?:\/|$)/.test(route.baseUrl));
+  // Anthropic documents 529 as overload rejection; do not generalize this
+  // provider-specific status to OpenAI-compatible gateways or custom proxies.
+  if (!requestRejected && !(directAnthropic && status === 529)) return undefined;
   return {
     inputTokens: 0,
     outputTokens: 0,
@@ -1130,9 +1183,14 @@ async function generateWithOpenAI(
       body: JSON.stringify(requestBody),
       signal: options.signal,
     });
-    if (response.status === 429 || response.status >= 500) {
+    if (!response.ok) {
       const failure = await readBoundedModelError(response, route);
-      throw new ModelRequestError(route, response.status, failure.cause, failure.usage ?? rejectedRequestUsage(route));
+      throw new ModelRequestError(
+        route,
+        response.status,
+        failure.cause,
+        failure.usage ?? (failure.complete ? rejectedRequestUsage(route, response.status) : undefined),
+      );
     }
 
     let data: {
@@ -1144,15 +1202,6 @@ async function generateWithOpenAI(
       data = await response.json() as typeof data;
     } catch (error) {
       throw new ModelResponseReadError(route, error);
-    }
-
-    if (!response.ok) {
-      throw new ModelRequestError(
-        route,
-        response.status,
-        data.error?.message || response.statusText,
-        openAIUsage(route, data.usage) ?? rejectedRequestUsage(route),
-      );
     }
 
     // OpenRouter wraps upstream provider failures in an HTTP 200 with an

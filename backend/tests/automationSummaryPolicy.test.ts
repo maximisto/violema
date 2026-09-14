@@ -243,6 +243,50 @@ test('unspaced CJK text cannot bypass the word limit', () => {
   assert.ok(countAutomationWords(hangul) >= 800, 'Hangul syllables are counted per character');
 });
 
+test('deterministic memos truncate CJK evidence without inserting spaces and retain the complete footer', () => {
+  const link = 'https://drive.google.com/file/d/cjk/view';
+  const memo = buildDeterministicAutomationMemo('市场竞争分析'.repeat(100), link);
+  assert.equal(
+    memo,
+    `${'市场竞争分析'.repeat(57)}市\n\n_Full analysis: [open in your Violema Library](${link})_`,
+  );
+  assert.equal(countAutomationWords(memo), 350);
+});
+
+test('summary fallbacks truncate unspaced scripts at the requested visible-unit limit', () => {
+  for (const evidence of ['市场竞争分析', 'きょうそう', '경쟁분석', '𠀀𠀁']) {
+    const source = evidence.repeat(400);
+    const bounded = buildBoundedAutomationSummaryFallback(source, 400);
+    assert.equal(bounded, [...source].slice(0, 400).join(''));
+    assert.equal(countAutomationWords(bounded), 400);
+  }
+  assert.equal(buildBoundedAutomationSummaryFallback('市'.repeat(900)), '市'.repeat(650));
+});
+
+test('fallback truncation uses visible labels and preserves mixed-script order and punctuation', () => {
+  const evidence = '[Alpha市场](https://example.com/source)竞争Beta增长，next-step revenue rose.';
+  assert.equal(countAutomationWords(evidence), 11);
+  assert.equal(buildBoundedAutomationSummaryFallback(evidence, 9), 'Alpha市场竞争Beta增长，next-step');
+  assert.equal(buildBoundedAutomationSummaryFallback(evidence, 10), 'Alpha市场竞争Beta增长，next-step revenue');
+  assert.equal(buildBoundedAutomationSummaryFallback('Revenue grew. Next-step: hire now.', 4), 'Revenue grew. Next-step: hire');
+});
+
+test('memo fallback reserves footer bytes and never splits a supplementary CJK character', () => {
+  const link = `https://example.com/${'a'.repeat(15_900)}`;
+  const memo = buildDeterministicAutomationMemo('𠀀𠀁'.repeat(300), link);
+  const body = memo.split('\n\n')[0];
+  assert.ok(body.length > 0);
+  assert.equal(body, [...'𠀀𠀁'.repeat(300)].slice(0, [...body].length).join(''));
+  assert.ok(Buffer.byteLength(memo, 'utf8') <= 16_000);
+  assert.ok(memo.endsWith(`](${link})_`));
+  assert.doesNotMatch(memo, /\uFFFD/);
+});
+
+test('memo fallback rejects a footer that alone exceeds the memo byte ceiling', () => {
+  const link = `https://example.com/${'a'.repeat(16_000)}`;
+  assert.throws(() => buildDeterministicAutomationMemo('市场分析', link), /16000-byte limit/i);
+});
+
 test('the memo validator enforces the 350-word delivery contract', () => {
   const words = (count: number) => Array.from({ length: count }, (_, index) => `memo${index + 1}`).join(' ');
 

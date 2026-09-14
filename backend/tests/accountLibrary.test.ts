@@ -710,5 +710,5 @@ test('a lost Drive connection never proves a previously created library is absen
   };
   const unavailable = await findLibraryRootFolderId('ws_test', { execute: bridgeOff });
   assert.equal(unavailable.ok, false);
-  if (!unavailable.ok) assert.equal(unavailable.failure.code, 'integration_not_ready');
+  if (!unavailable.ok) assert.equal(unavailable.failure.code, 'integration_query_failed');
 });

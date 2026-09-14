@@ -9,6 +9,8 @@ test('missing, zero-only, partial, and retry-unknown provider usage quarantine t
   const originalDisableScheduler = process.env.VIOLEMA_DISABLE_AUTOMATION_SCHEDULER;
   const originalDemoIds = process.env.DEMO_WORKSPACE_IDS;
   const originalOpenRouter = process.env.OPENROUTER_API_KEY;
+  const routeEnv = ['OPENAI_API_KEY', 'MODEL_MICRO_PROVIDER', 'MODEL_MICRO_MODEL', 'MODEL_MICRO_API_KEY_ENV', 'MODEL_RETRY_DELAYS_MS'];
+  const originalRouteEnv = new Map(routeEnv.map(key => [key, process.env[key]]));
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'violema-unknown-usage-'));
 
   try {
@@ -17,11 +19,30 @@ test('missing, zero-only, partial, and retry-unknown provider usage quarantine t
     process.env.DEMO_WORKSPACE_IDS = 'workspace_unknown_usage';
     process.env.OPENROUTER_API_KEY = 'test-model-readiness-key';
 
+    process.env.OPENAI_API_KEY = 'test-openai-key';
+    process.env.MODEL_MICRO_PROVIDER = 'openai';
+    process.env.MODEL_MICRO_MODEL = 'gpt-4.1-mini';
+    process.env.MODEL_MICRO_API_KEY_ENV = 'OPENAI_API_KEY';
+    process.env.MODEL_RETRY_DELAYS_MS = '0';
     const models = await import('../src/models');
-    type Mode = 'missing' | 'zero' | 'partial' | 'contradictory' | 'retry_then_success' | 'partial_retry_then_success';
+    const realGenerate = models.generateTextDetailed;
+    let transportCalls = 0;
+    t.mock.method(global, 'fetch', async () => {
+      transportCalls += 1;
+      return transportCalls === 1
+        ? mode === 'http_malformed_rejection_then_success'
+          ? new Response('{"error":{"message":"limit"},"usage":{"total_tokens":12', { status: 429 })
+          : new Response(JSON.stringify({ error: { message: 'Gateway timeout' } }), { status: 504 })
+        : new Response(JSON.stringify({ choices: [{ message: { content: 'A complete retry brief.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 600, completion_tokens: 200, total_tokens: 800 } }), { status: 200 });
+    });
+    type Mode = 'missing' | 'zero' | 'partial' | 'contradictory' | 'retry_then_success' | 'partial_retry_then_success' | 'http_timeout_then_success' | 'http_malformed_rejection_then_success';
     let mode: Mode = 'missing';
     t.mock.method(console, 'warn', () => undefined);
     t.mock.method(models, 'generateTextDetailed', async (...args: Parameters<typeof models.generateTextDetailed>) => {
+      if (mode === 'http_timeout_then_success' || mode === 'http_malformed_rejection_then_success') {
+        transportCalls = 0;
+        return realGenerate('micro', args[1], args[2], args[3], args[4], { ...args[5], maxRoutes: 1 });
+      }
       const baseResult = {
         text: '# Provider accounting test\n\nThe brief was generated.',
         stopReason: 'stop',
@@ -124,7 +145,7 @@ test('missing, zero-only, partial, and retry-unknown provider usage quarantine t
       }],
     }, onTrigger);
 
-    for (const scenario of ['missing', 'zero', 'partial', 'contradictory', 'retry_then_success', 'partial_retry_then_success'] as const) {
+    for (const scenario of ['missing', 'zero', 'partial', 'contradictory', 'retry_then_success', 'partial_retry_then_success', 'http_timeout_then_success', 'http_malformed_rejection_then_success'] as const) {
       mode = scenario;
       const priorRunIds = new Set(store.listTaskRuns('workspace_unknown_usage').map((run) => run.id));
       const result = await server.runAutomation(automation);
@@ -148,7 +169,7 @@ test('missing, zero-only, partial, and retry-unknown provider usage quarantine t
         status?: string;
         usage?: { totalTokens?: number };
       }>;
-      const retried = scenario === 'retry_then_success' || scenario === 'partial_retry_then_success';
+      const retried = scenario === 'retry_then_success' || scenario === 'partial_retry_then_success' || scenario === 'http_timeout_then_success' || scenario === 'http_malformed_rejection_then_success';
       assert.equal(calls.length, retried ? 2 : 1);
       if (retried) {
         assert.deepEqual(calls.map((call) => call.status), ['failed', 'succeeded']);
@@ -193,6 +214,10 @@ test('missing, zero-only, partial, and retry-unknown provider usage quarantine t
     else delete process.env.DEMO_WORKSPACE_IDS;
     if (typeof originalOpenRouter === 'string') process.env.OPENROUTER_API_KEY = originalOpenRouter;
     else delete process.env.OPENROUTER_API_KEY;
+    for (const [key, value] of originalRouteEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });

@@ -508,7 +508,7 @@ export default function IntegrationsPage() {
   return (
     <div className={`min-h-screen bg-hero-gradient ${scopeClass}`}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
-      <PublicHeader backHref="/" backLabel="Home" actionHref="/signup?next=%2Fdashboard" actionLabel="Get access" />
+      <PublicHeader backHref="/" backLabel="Home" actionHref="/signup?next=%2Fdashboard" actionLabel="Apply for beta" />
 
       <main className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <section className="rounded-[2rem] border border-navy-700/60 bg-navy-950/40 px-6 py-8 shadow-[0_24px_80px_rgba(3,8,24,0.3)] sm:px-8 lg:px-10">
@@ -523,7 +523,7 @@ export default function IntegrationsPage() {
                 <span className="gradient-text"> One reviewable workflow.</span>
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg">
-                Nine production integrations power Violema’s TechChicago demo workflow: live operating data in, a source-backed founder update out, and explicit approval before delivery.
+                Connect your operating tools to bring source-backed context into recurring workflows, then review and deliver the results.
               </p>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 {[
@@ -556,7 +556,7 @@ export default function IntegrationsPage() {
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Production boundary</p>
                   <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                    Violema reads only the approved, bounded data needed for the workflow. Gmail and Drive stay metadata-only. External delivery stays held until review.
+                    Violema reads bounded data from the tools you connect. Gmail workflows use message metadata; library workflows can read approved Drive content. Review and delivery follow each mission’s policy.
                   </p>
                 </div>
               </div>
@@ -577,10 +577,13 @@ export default function IntegrationsPage() {
                 <Sparkles className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Production verified</p>
-                <h2 className="mt-1 text-2xl font-semibold text-white">Active workflow and delivery integrations</h2>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Workflow availability</p>
+                <h2 className="mt-1 text-2xl font-semibold text-white">Available workflow and delivery integrations</h2>
               </div>
             </div>
+            <p className="mt-4 text-sm leading-6 text-slate-400">
+              Available means Violema supports these workflows. Your workspace’s connection status and permissions are checked separately below.
+            </p>
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               {DEMO_INTEGRATIONS.map(({ id, name, category, detail, description }) => (
                 <div key={id} className="rounded-2xl border border-green-500/15 bg-navy-950/45 p-4">
@@ -591,7 +594,7 @@ export default function IntegrationsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-semibold text-white">{name}</p>
-                        <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-green-300">Active</span>
+                        <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-violet-300">Available</span>
                       </div>
                       <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-violet-300/80">{category}</p>
                       <p className="text-xs text-slate-500">{detail}</p>
@@ -635,10 +638,10 @@ export default function IntegrationsPage() {
 
         <section className="mt-8 grid gap-5 lg:grid-cols-2">
           <div className="rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">After the demos</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Additional integrations</p>
             <h3 className="mt-2 text-2xl font-semibold text-white">Intentionally deferred</h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-500">
-              We froze the connector scope around one product workflow that can be demonstrated end to end.
+              These connectors are not currently available as standard workflow integrations.
             </p>
             <div className="mt-5 space-y-3">
               {DEFERRED_INTEGRATIONS.map((item) => (
@@ -677,7 +680,7 @@ export default function IntegrationsPage() {
             <div>
               <h3 className="text-2xl font-semibold text-white">The honest product line</h3>
               <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-400">
-                Violema is a real, reviewable operating workflow across nine active integrations. The next connector wave comes after this loop is reliable—not before.
+                The integrations above support bounded data access and reviewed delivery. Each workspace needs its own connections and permissions.
               </p>
             </div>
             <div className="flex flex-col gap-3">

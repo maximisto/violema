@@ -122,4 +122,13 @@ assert(
   'The card renders the server-supplied next action instead of inventing a route.',
 );
 
+assert(
+  settingsSource.includes("'drive_needs_reauthorization'")
+    && settingsSource.includes("drive_needs_reauthorization: 'Reauthorize Google Drive'"),
+  'SettingsPage labels insufficient scope as reauthorization, separately from disconnected Drive.',
+);
+assert(
+  /laneState === 'drive_not_connected' \|\| folderDropStatus\?\.laneState === 'drive_needs_reauthorization'/.test(settingsSource),
+  'The server-provided repair action is rendered for disconnected and scope-insufficient Drive.',
+);
 console.log('folderDrop.contract: all assertions passed');

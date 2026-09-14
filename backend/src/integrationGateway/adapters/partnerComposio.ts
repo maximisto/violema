@@ -339,6 +339,13 @@ export function classifyFailure(error: unknown): IntegrationReadinessError['code
     }
   }
 
+  // Missing server configuration cannot be repaired by reconnecting a
+  // customer's grant. Keep it a platform failure even if the detail mentions
+  // an account, authorization, or scope.
+  if (text.includes('not configured') || text.includes('composio_api_key')) {
+    return 'integration_query_failed';
+  }
+
   // Drive reports rate/quota exhaustion as HTTP 403. That is a transient
   // platform failure, not missing OAuth scope; telling the operator to
   // reauthorize cannot fix it and hides the actual outage.
@@ -367,9 +374,6 @@ export function classifyFailure(error: unknown): IntegrationReadinessError['code
     text.includes('connected account') ||
     text.includes('not connected') ||
     text.includes('connection not found') ||
-    // The bridge itself is off (`Composio is not configured`): the lane is
-    // not ready, as opposed to a live lane whose query transiently failed.
-    text.includes('not configured') ||
     text.includes('unauthorized') ||
     text.includes('401')
   ) {

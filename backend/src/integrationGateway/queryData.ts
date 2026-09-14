@@ -354,6 +354,7 @@ export async function executeQueryData(
       && result.data.appEntryHistoryComplete === false
       && result.data.appBaselineListed === false
       && result.data.appHistoryBeyondWindow === true
+      && result.data.appEntryReadFailed !== true
     ) {
       // A section that has never been compacted has no baseline to stop at,
       // so a long history can never read completely and nothing downstream

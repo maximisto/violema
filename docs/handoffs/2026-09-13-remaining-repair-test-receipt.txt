@@ -1,0 +1,103 @@
+LOCAL SYNTHETIC REPAIR EVIDENCE — SEPTEMBER 13, 2026
+Final source head: f8a70b29ca4aaf3eb17069aa35882dae016aab40
+Initial full-review source head: 76e513f6beaf534ce440c373c4874f5aa12e2ee8
+No production-health or deployment claim. Parent-executed checks; independent code reviews are recorded separately.
+
+HTTP error statuses before repair
+not ok 14 - a completed HTTP 408 error without usage remains unknown
+not ok 15 - a completed HTTP 500 error without usage remains unknown
+not ok 16 - a completed HTTP 502 error without usage remains unknown
+not ok 17 - a completed HTTP 503 error without usage remains unknown
+not ok 18 - a completed HTTP 504 error without usage remains unknown
+not ok 19 - a completed HTTP 524 error without usage remains unknown
+not ok 20 - a completed HTTP 529 error without usage remains unknown
+# tests 34
+# pass 27
+# fail 7
+# duration_ms 1594.708542
+
+SDK error statuses before repair
+not ok 7 - an exhausted Anthropic SDK 500 failure preserves route and usage certainty
+not ok 8 - an exhausted Anthropic SDK 504 failure preserves route and usage certainty
+not ok 9 - an exhausted Anthropic SDK 524 failure preserves route and usage certainty
+# tests 9
+# pass 6
+# fail 3
+# duration_ms 1134.829542
+
+Real HTTP timeout/retry through automation before repair
+not ok 1 - missing, zero-only, partial, and retry-unknown provider usage quarantine the automation
+# tests 1
+# pass 0
+# fail 1
+# duration_ms 5047.153375
+
+Provider/accounting focused checks after repair
+# tests 39
+# pass 39
+# fail 0
+# duration_ms 7289.29875
+
+Final full backend suite
+# tests 883
+# pass 883
+# fail 0
+# duration_ms 104250.635666
+
+Final platform suite
+# tests 8
+# pass 8
+# fail 0
+# duration_ms 790.172291
+
+Other verified gates: backend typecheck/build; frontend lint, all 16 contract groups and build; git diff --check; AST graph update.
+CJK worker: 4 reproduced failures, 19 focused checks passed. Library worker: 65 focused checks passed, including arithmetic, legacy/multiline omission provenance, pagination and query warnings. Drive worker: 47 focused backend checks plus frontend contract/build passed.
+
+Fresh full review: code-traced findings reproduced before correction
+not ok 1 - missing, zero-only, partial, and retry-unknown provider usage quarantine the automation
+not ok 30 - normal EOF cannot certify malformed rejection usage: {"error":{"message":"limit"},"usage":{"total_tokens":12
+not ok 31 - normal EOF cannot certify malformed rejection usage: {"error":{"message":"limit"}
+not ok 32 - interrupted HTTP 400 preserves a complete observed usage object
+not ok 33 - interrupted HTTP 408 preserves a complete observed usage object
+# tests 34
+# pass 29
+# fail 5
+# duration_ms 5438.348625
+
+Correction focused suite
+# tests 45
+# pass 45
+# fail 0
+# duration_ms 7591.290625
+
+Final corrected full backend suite at bcf3402a7fbd8d80fd213594b55849613a5d48f2
+# tests 888
+# pass 888
+# fail 0
+# duration_ms 82734.256042
+
+Timeout retry regression before final correction
+not ok 7 - an exhausted Anthropic SDK 408 failure preserves route and usage certainty
+not ok 44 - an interrupted HTTP 408 retries without losing the observed failed-attempt receipt
+# tests 44
+# pass 42
+# fail 2
+# duration_ms 1552.595375
+
+Final timeout/provider/accounting focused checks
+# tests 47
+# pass 47
+# fail 0
+# duration_ms 7425.921625
+
+Final source full backend suite at f8a70b2
+# tests 890
+# pass 890
+# fail 0
+# duration_ms 99087.315166
+
+Final platform suite
+# tests 8
+# pass 8
+# fail 0
+# duration_ms 801.516625

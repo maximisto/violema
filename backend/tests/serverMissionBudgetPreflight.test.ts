@@ -162,10 +162,11 @@ test('manual run returns the mission-budget refusal synchronously and never trig
       if (!url.includes('/chat/completions')) return originalFetch(input, init);
       providerCalls += 1;
       if (providerCalls === 1) {
-        // One transient provider failure: a manual run keeps its retry.
-        return new Response(JSON.stringify({ error: { message: 'upstream hiccup' } }), {
+        // A completed rate-limit rejection: a manual run keeps its retry.
+        // Ambiguous server failures are covered by unknown-usage accounting.
+        return new Response(JSON.stringify({ error: { message: 'rate limit exceeded' } }), {
           headers: { 'content-type': 'application/json' },
-          status: 502,
+          status: 429,
         });
       }
       return new Response(JSON.stringify({
@@ -203,7 +204,7 @@ test('manual run returns the mission-budget refusal synchronously and never trig
     const hardRun = findHardRun();
     assert.ok(hardRun);
     assert.equal(hardRun.status, 'succeeded', `run ended ${hardRun.status}: ${hardRun.error ?? ''}`);
-    assert.equal(providerCalls, 3, 'analysis retried once after the 502, then the summary ran');
+    assert.equal(providerCalls, 3, 'analysis retried once after the 429, then the summary ran');
     assert.ok(Number(hardRun.actualCredits) < hardPlan.manualAuthorizationCredits);
     const settlement = store.listLedgerEntries(user.defaultWorkspaceId).find((entry) =>
       entry.metadata?.holdStatus === 'settled' && entry.referenceId === hardEnvelopeAutomation.id

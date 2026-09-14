@@ -53,8 +53,8 @@ export const DEMO_INTEGRATIONS: DemoIntegration[] = [
     id: 'google-drive',
     name: 'Google Drive',
     category: 'Workflow data',
-    detail: 'Recently changed operating documents',
-    description: 'Read file metadata for approved operating context without downloading document bodies.',
+    detail: 'Operating documents and the Violema Library',
+    description: 'Read file metadata and approved Violema Library content within workflow limits.',
     status: 'active',
   },
   {

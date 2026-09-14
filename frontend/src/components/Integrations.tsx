@@ -7,7 +7,7 @@ import Reveal from './Reveal';
 
 const statusTheme = {
   live: { label: 'Live', dot: 'bg-emerald-400', text: 'text-emerald-200', ring: 'border-emerald-300/30 bg-emerald-300/10', ping: true },
-  ready: { label: 'Ready', dot: 'bg-violet-400', text: 'text-violet-200', ring: 'border-violet-300/28 bg-violet-300/10', ping: false },
+  ready: { label: 'Available', dot: 'bg-violet-400', text: 'text-violet-200', ring: 'border-violet-300/28 bg-violet-300/10', ping: false },
   planned: { label: 'Planned', dot: 'bg-slate-400', text: 'text-[#9aa4ba]', ring: 'border-white/12 bg-white/[0.04]', ping: false },
 } as const;
 
@@ -105,7 +105,7 @@ function OperatorCore() {
 
         <div className="mt-auto pt-6">
           <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-5 text-[#8793ad]">
-            Product names show possible workflow surfaces and statuses. They don&apos;t imply sponsorship, customer relationships, or partnership.
+            These labels describe available workflows, not your workspace’s connection status. Product names don&apos;t imply sponsorship, customer relationships, or partnership.
           </p>
         </div>
       </div>
