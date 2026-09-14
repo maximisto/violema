@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { countAutomationWords } from '../src/platform/automationSummaryPolicy';
 import { test, beforeEach } from 'node:test';
 
 import {
@@ -6,6 +7,7 @@ import {
   ACCOUNT_LIBRARY_SOURCE,
   COMPETITIVE_INTELLIGENCE_SECTION,
   LIBRARY_BASELINE_TITLE_PREFIX,
+  LIBRARY_BASELINE_OMISSION_MARKER,
   MAX_ENTRY_CONTENT_BYTES,
   MAX_RECOVERABLE_APP_HISTORY_BYTES,
   isLibraryBaselineFileName,
@@ -521,6 +523,84 @@ test('a legacy section with no baseline and history beyond the window bootstraps
   assert.equal(after.ok, true);
   if (!after.ok) return;
   assert.equal(after.data.appEntryHistoryComplete, true, 'reads now stop at the bootstrapped baseline');
+});
+
+test('a predecessor beyond 100 files cannot be overwritten by a false first baseline', async () => {
+  const drive = createFakeDrive([
+    ...Array.from({ length: 100 }, (_, index) => ({
+      id: `pending-${index}`, name: `2026-08-13 — Pending ${index}.md`, content: `Finding ${index}.`,
+    })),
+    { id: 'hidden-baseline', name: `2026-08-12 — ${LIBRARY_BASELINE_TITLE_PREFIX} 18.30.md`, content: 'PREDECESSOR_ONLY_FACT' },
+  ]);
+  const result = await updateLibraryBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Newest finding.',
+  }, {
+    execute: drive.execute, fetchText: drive.fetchText,
+    generate: (async () => 'Digest without predecessor.') as never,
+  });
+  assert.equal(result.ok, false, 'incomplete metadata is not proof of baseline absence');
+  assert.equal(drive.created.length, 0, 'preserve the predecessor until the full history can be recovered');
+  const snapshot = await readLibrary('ws_test', SECTION, {
+    limit: 10, includeOperatorFiles: false, requireCompleteAppHistory: true,
+  }, { execute: drive.execute, fetchText: drive.fetchText });
+  assert.equal(snapshot.ok, true);
+  if (!snapshot.ok) return;
+  assert.equal(snapshot.data.appBaselineListed, undefined, 'absence is unknown outside the metadata window');
+  const mission = await executeQueryData({
+    workspaceId: 'ws_test', source: ACCOUNT_LIBRARY_SOURCE, queryType: ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+    filters: { section: SECTION }, clientOverrides: { accountLibraryRead: async () => snapshot },
+  });
+  assert.equal(mission.ok, false, 'mission reads must not certify a partial history');
+  const append = await appendLibraryEntryWithBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh fact.', entry: { title: 'Fresh fact', markdown: 'Fresh fact.' },
+  }, { execute: drive.execute, fetchText: drive.fetchText, generate: (async () => 'Unsafe digest.') as never });
+  assert.equal(append.libraryResult.ok, false, 'the write gate must preserve the unresolved history');
+  assert.equal(drive.created.length, 0);
+});
+
+test('a transient memo failure cannot become permanent omission when older history exhausts the budget', async () => {
+  const newest = { id: 'transient', name: '2026-08-13 — Important newest finding.md', content: 'IMPORTANT_NEW_FACT', unreadable: true };
+  const drive = createFakeDrive([
+    newest,
+    ...Array.from({ length: 3 }, (_, index) => ({
+      id: `older-${index}`, name: `2026-08-12 — Older ${index}.md`, content: `OLD-${index}:`.padEnd(30_000, 'x'),
+    })),
+  ]);
+  const input = {
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh findings.',
+  };
+  let prompt = '';
+  const deps = {
+    execute: drive.execute, fetchText: drive.fetchText,
+    generate: (async (_profile: string, _system: string, messages: Array<{ content: unknown }>) => {
+      prompt = String(messages[0]?.content ?? '');
+      return 'Recovered digest.';
+    }) as never,
+  };
+  const failed = await updateLibraryBaseline(input, deps);
+  assert.equal(failed.ok, false, 'a temporary failure must block compaction, even during bootstrap');
+  assert.equal(drive.created.length, 0);
+  const snapshot = await readLibrary('ws_test', SECTION, {
+    limit: 10, includeOperatorFiles: false, requireCompleteAppHistory: true,
+    maxAppEntryContentBytes: 32_001, maxAppHistoryBytes: MAX_RECOVERABLE_APP_HISTORY_BYTES,
+  }, deps);
+  const mission = await executeQueryData({
+    workspaceId: 'ws_test', source: ACCOUNT_LIBRARY_SOURCE, queryType: ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+    filters: { section: SECTION }, clientOverrides: { accountLibraryRead: async () => snapshot },
+  });
+  assert.equal(mission.ok, false, 'download failure must stop a partial mission brief');
+  const append = await appendLibraryEntryWithBaseline({
+    ...input, entry: { title: 'Fresh findings', markdown: 'Fresh findings.' },
+  }, deps);
+  assert.equal(append.libraryResult.ok, false, 'do not append over a recoverable source failure');
+  assert.equal(drive.created.length, 0);
+  newest.unreadable = false;
+  const recovered = await updateLibraryBaseline(input, deps);
+  assert.equal(recovered.ok, true, JSON.stringify(recovered));
+  assert.match(prompt, /IMPORTANT_NEW_FACT/, 'retry must revisit the formerly unreadable newest memo');
 });
 
 test('a mission read of a legacy section with no baseline proceeds with a warning instead of stopping the run', async () => {
@@ -1262,4 +1342,229 @@ test('baseline file names are recognizable and ordinary entries are not', () => 
     false,
   );
   assert.equal(isLibraryBaselineFileName('2026-08-13 — Espresso findings.md'), false);
+});
+
+
+test('bootstrap assembly reserves the notice and separators in its byte ceiling', async () => {
+  for (const overflow of [0, 1, 2]) {
+    const drive = createFakeDrive(Array.from({ length: 4 }, (_, index) => ({
+      id: `legacy-${index}`, name: `2026-08-12 — Legacy ${index}.md`, content: 'x'.repeat(30_000),
+    })));
+    const notice = LIBRARY_BASELINE_OMISSION_MARKER + '\n_Bootstrapped baseline: this section had no baseline and more history than one read can cover. '
+      + '"2026-08-12 — Legacy 2.md" and everything older were not folded in; those files remain in the library folder._';
+    const digestBytes = MAX_ENTRY_CONTENT_BYTES - 1 - Buffer.byteLength(notice) - 2 + overflow;
+    const result = await updateLibraryBaseline({
+      workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+      latestFindingsMarkdown: 'Fresh fact.',
+    }, { ...drive, generate: async () => 'x'.repeat(digestBytes) });
+    assert.equal(result.ok, overflow === 0, JSON.stringify({ overflow, result }));
+    if (overflow === 0) {
+      assert.equal(Buffer.byteLength(drive.created[0].content), MAX_ENTRY_CONTENT_BYTES - 1);
+      const read = await readLibrary('ws_test', SECTION, { includeOperatorFiles: false }, drive);
+      assert.equal(read.ok && read.data.appEntryHistoryComplete, true);
+    } else assert.equal(drive.created.length, 0, 'oversized assembled baselines never reach Drive');
+  }
+});
+
+test('bootstrap generation prompt budgets the notice inside the unchanged 400-unit contract', async () => {
+  const drive = createFakeDrive(Array.from({ length: 4 }, (_, index) => ({
+    id: `legacy-${index}`, name: `2026-08-12 — Legacy ${index}.md`, content: 'x'.repeat(30_000),
+  })));
+  const result = await appendLibraryEntryWithBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh fact.', entry: { title: 'Fresh findings', markdown: 'Fresh fact.' },
+  }, { ...drive, generate: async (_profile, system) => {
+    const limit = Number(/At most (\d+) words/.exec(system)?.[1]);
+    assert.ok(limit > 0 && limit < 400, 'prompt reserves room for deterministic disclosure');
+    return Array.from({ length: limit }, () => 'fact').join(' ');
+  } });
+  assert.equal(result.baselineResult?.ok, true, JSON.stringify(result.baselineResult));
+  const baseline = drive.created.find((file) => isLibraryBaselineFileName(file.name));
+  assert.ok(baseline);
+  assert.equal(countAutomationWords(baseline.content), 400);
+});
+
+
+test('bootstrap omission provenance survives multiple refreshes and reaches ordinary mission warnings', async () => {
+  const drive = createFakeDrive(Array.from({ length: 4 }, (_, index) => ({
+    id: `legacy-${index}`, name: `2026-08-12 — Legacy ${index}.md`, content: 'x'.repeat(30_000),
+  })));
+  let priorBody = '';
+  for (let refresh = 0; refresh < 4; refresh += 1) {
+    const result = await appendLibraryEntryWithBaseline({
+      workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+      latestFindingsMarkdown: `Fresh fact ${refresh}.`, runId: `omission-${refresh}`,
+      entry: { title: `Fresh ${refresh}`, markdown: `Fresh fact ${refresh}.` },
+    }, { ...drive, generate: async () => refresh === 3 ? `${priorBody}\n\n${priorBody}` : 'Current facts.' });
+    assert.equal(result.baselineResult?.ok, true, JSON.stringify(result.baselineResult));
+    if (!result.baselineResult?.ok) return;
+    assert.equal(result.baselineResult.historyTruncated, true, 'known omissions remain explicit on every successor');
+    const baselines = drive.created.filter((file) => isLibraryBaselineFileName(file.name));
+    priorBody = baselines[baselines.length - 1].content;
+    assert.equal(priorBody.split('<!-- violema:baseline-history-omitted:v1 -->').length - 1, 1);
+    assert.equal(priorBody.split('_Bootstrapped baseline:').length - 1, 1);
+    assert.match(priorBody, /Legacy 2/);
+    const read = await executeQueryData({
+      workspaceId: 'ws_test', source: ACCOUNT_LIBRARY_SOURCE, queryType: ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+      filters: { section: SECTION },
+      clientOverrides: { accountLibraryRead: async (workspace, section, options) =>
+        readLibrary(workspace, section, { ...options, includeOperatorFiles: false }, drive) },
+    });
+    assert.equal(read.ok, true, JSON.stringify(read));
+    if (!read.ok) return;
+    const data = read.data as AccountLibrarySnapshot;
+    assert.equal(data.appBaselineHistoryOmitted, true);
+    assert.equal(data.warnings?.length, 1, 'one warning regardless of refresh count');
+    assert.match(data.warnings[0], /older findings.*not folded in/);
+    assert.equal(data.entries.length, 1, 'ordinary reader still uses the compacted baseline');
+  }
+});
+
+test('legacy bootstrap disclosures are migrated and oversized disclosure metadata stays bounded', async () => {
+  for (const boundary of ['Old findings.md', 'Old\nfindings.md', '古'.repeat(1000)]) {
+    const notice = `_Bootstrapped baseline: this section had no baseline and more history than one read can cover. "${boundary}" and everything older were not folded in; those files remain in the library folder._`;
+    const drive = createFakeDrive([{
+      id: 'legacy-baseline', name: `2026-08-12 — ${LIBRARY_BASELINE_TITLE_PREFIX} 18.30.md`,
+      content: `Old fact.\n\n${notice}`,
+    }]);
+    const legacyRead = await readLibrary('ws_test', SECTION, { includeOperatorFiles: false }, drive);
+    assert.equal(legacyRead.ok && legacyRead.data.appBaselineHistoryOmitted, true, 'old disclosures warn before migration');
+    const result = await updateLibraryBaseline({
+      workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+      latestFindingsMarkdown: 'Fresh fact.',
+    }, { ...drive, generate: async () => 'Current facts.' });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    if (!result.ok) return;
+    assert.equal(result.historyTruncated, true);
+    assert.match(drive.created[0].content, /violema:baseline-history-omitted:v1/);
+    assert.ok(Buffer.byteLength(drive.created[0].content) < 600);
+    const read = await readLibrary('ws_test', SECTION, { includeOperatorFiles: false }, drive);
+    assert.equal(read.ok && read.data.appBaselineHistoryOmitted, true);
+  }
+});
+
+
+test('bootstrap disclosure cannot be lost through a multiline omitted filename', async () => {
+  const drive = createFakeDrive(Array.from({ length: 4 }, (_, index) => ({
+    id: `legacy-${index}`, name: `2026-08-12 — Legacy\n${index}.md`, content: 'x'.repeat(30_000),
+  })));
+  const result = await updateLibraryBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh fact.',
+  }, { ...drive, generate: async () => 'Current facts.' });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  if (!result.ok) return;
+  assert.equal(result.historyTruncated, true);
+  assert.match(drive.created[0].content, /violema:baseline-history-omitted:v1/);
+  const read = await readLibrary('ws_test', SECTION, { includeOperatorFiles: false }, drive);
+  assert.equal(read.ok && read.data.appBaselineHistoryOmitted, true);
+});
+
+
+test('short and empty token-bearing pages recover all findings before baseline append', async () => {
+  const drive = createFakeDrive([
+    { id: 'fresh', name: '2026-08-13 — Fresh.md', content: 'Fresh finding.' },
+    { id: 'older', name: '2026-08-12 — Older.md', content: 'HIDDEN_SECOND_PAGE_FACT' },
+  ]);
+  const tokens: unknown[] = [];
+  const execute: PartnerComposioExecutor = async (action, input, context) => {
+    if (action !== 'GOOGLEDRIVE_FIND_FILE' || !String(input.fields).includes('nextPageToken')) {
+      return drive.execute(action, input, context);
+    }
+    tokens.push(input.pageToken);
+    if (input.pageToken === undefined) return { successful: true, data: {
+      files: [{ id: 'fresh', name: '2026-08-13 — Fresh.md' }], nextPageToken: ' opaque/+token= ', incompleteSearch: false,
+    } };
+    if (input.pageToken === ' opaque/+token= ') return { successful: true, data: {
+      files: [], nextPageToken: 'empty-page-next', incompleteSearch: false,
+    } };
+    assert.equal(input.pageToken, 'empty-page-next');
+    return { successful: true, data: { files: [{ id: 'older', name: '2026-08-12 — Older.md' }], incompleteSearch: false } };
+  };
+  let prompt = '';
+  const result = await updateLibraryBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh finding.',
+  }, { ...drive, execute, generate: async (_profile, _system, messages) => {
+    prompt = String(messages[0].content); return 'Complete digest.';
+  } });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.match(prompt, /HIDDEN_SECOND_PAGE_FACT/);
+  assert.ok(tokens.includes(' opaque/+token= '), 'provider token is forwarded without normalization');
+  assert.equal(drive.created.length, 1);
+});
+
+test('explicit incompleteSearch prevents partial mission reads and any baseline mutation', async () => {
+  const drive = createFakeDrive([{ id: 'fresh', name: '2026-08-13 — Fresh.md', content: 'Fresh finding.' }]);
+  const execute: PartnerComposioExecutor = async (action, input, context) => {
+    const result = await drive.execute(action, input, context) as { data: Record<string, unknown> };
+    if (action === 'GOOGLEDRIVE_FIND_FILE' && String(input.fields).includes('nextPageToken')) {
+      return { ...result, data: { ...result.data, incompleteSearch: true } };
+    }
+    return result;
+  };
+  const result = await appendLibraryEntryWithBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'New finding.', entry: { title: 'New', markdown: 'New finding.' },
+  }, { ...drive, execute, generate: async () => 'This must not be published.' });
+  assert.equal(result.libraryResult.ok, false);
+  assert.equal(drive.created.length, 0);
+  const read = await executeQueryData({
+    workspaceId: 'ws_test', source: ACCOUNT_LIBRARY_SOURCE, queryType: ACCOUNT_LIBRARY_READ_QUERY_TYPE,
+    filters: { section: SECTION }, clientOverrides: {
+      accountLibraryRead: async (workspace, section, options) => readLibrary(workspace, section,
+        { ...options, includeOperatorFiles: false }, { ...drive, execute }),
+    },
+  });
+  assert.equal(read.ok, false);
+  if (!read.ok) assert.equal(read.can_continue, false);
+});
+
+test('token loops and endless empty pages remain bounded and cannot prove no baseline exists', async () => {
+  for (const loop of [true, false]) {
+    const drive = createFakeDrive([]);
+    let calls = 0;
+    const execute: PartnerComposioExecutor = async (action, input, context) => {
+      if (action !== 'GOOGLEDRIVE_FIND_FILE' || !String(input.fields).includes('nextPageToken')) {
+        return drive.execute(action, input, context);
+      }
+      calls += 1;
+      return { successful: true, data: { files: [], nextPageToken: loop ? 'repeated' : `token-${calls}`, incompleteSearch: false } };
+    };
+    const result = await updateLibraryBaseline({
+      workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+      latestFindingsMarkdown: 'Fresh finding.',
+    }, { ...drive, execute, generate: async () => 'No unsafe baseline.' });
+    assert.equal(result.ok, false);
+    assert.equal(drive.created.length, 0);
+    assert.ok(calls <= 11, `bounded metadata requests: ${calls}`);
+  }
+});
+
+
+test('paginated metadata cannot reach a predecessor beyond the 100-file recovery cap', async () => {
+  const drive = createFakeDrive([]);
+  let listedCount = 0;
+  let requestedBeyondCap = false;
+  const execute: PartnerComposioExecutor = async (action, input, context) => {
+    if (action !== 'GOOGLEDRIVE_FIND_FILE' || !String(input.fields).includes('nextPageToken')) {
+      return drive.execute(action, input, context);
+    }
+    if (input.pageToken === 'beyond-100') requestedBeyondCap = true;
+    const offset = input.pageToken === 'second-50' ? 50 : 0;
+    const count = Math.min(50, Number(input.pageSize));
+    if (Number(input.pageSize) > 10) listedCount += count;
+    return { successful: true, data: {
+      files: Array.from({ length: count }, (_, index) => ({ id: `memo-${offset + index}`, name: `2026-08-13 — Memo ${offset + index}.md` })),
+      nextPageToken: offset === 0 ? 'second-50' : 'beyond-100', incompleteSearch: false,
+    } };
+  };
+  const result = await updateLibraryBaseline({
+    workspaceId: 'ws_test', section: SECTION, untrustedRule: RULE, neutralize: NEUTRALIZE,
+    latestFindingsMarkdown: 'Fresh finding.',
+  }, { ...drive, execute, generate: async () => 'No unsafe baseline.' });
+  assert.equal(result.ok, false);
+  assert.equal(drive.created.length, 0);
+  assert.equal(listedCount, 100);
+  assert.equal(requestedBeyondCap, false);
 });

@@ -759,3 +759,16 @@ test('a failed read clears a memo taken before the outage', async () => {
     assert.equal(calls, 3);
   });
 });
+
+test('disabled Composio bridge classifies as a platform failure through the partner adapter', async () => {
+  const { queryPartnerComposio } = await import('../src/integrationGateway/adapters/partnerComposio');
+  const bridge = createComposioBridge(null);
+  const result = await queryPartnerComposio({
+    workspaceId: 'workspace-disabled-bridge', source: 'google_drive', queryType: 'recent_files',
+    execute: bridge.executeAction,
+  });
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error('Expected a platform failure');
+  assert.equal(result.code, 'integration_query_failed');
+  assert.equal(result.nextAction.label, 'Retry Google Drive');
+});

@@ -22,7 +22,7 @@ type Profile = 'micro' | 'default' | 'hard' | 'critical' | 'ops' | 'memory_text'
 type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 type AutoGraduationProfileId = 'cautious' | 'balanced' | 'fast_learning';
 type WorkflowArchetypeId = 'briefing' | 'research' | 'analysis' | 'ops' | 'general';
-type FolderDropLaneState = 'not_configured' | 'drive_not_connected' | 'no_library_yet' | 'needs_share' | 'unavailable' | 'active';
+type FolderDropLaneState = 'not_configured' | 'drive_not_connected' | 'drive_needs_reauthorization' | 'no_library_yet' | 'needs_share' | 'unavailable' | 'active';
 
 interface ProviderStatus {
   configured: boolean;
@@ -257,6 +257,7 @@ const AUTO_GRADUATION_PROFILES: Array<{
 const FOLDER_DROP_LANE_COPY: Record<FolderDropLaneState, string> = {
   not_configured: "Folder drop isn't configured on this server yet.",
   drive_not_connected: 'Connect Google Drive first. Violema creates your Violema Library folder there, and folder drop reads from it.',
+  drive_needs_reauthorization: 'Google Drive is connected but needs additional access. Reauthorize Google Drive, then verify again.',
   no_library_yet:
     "Your Violema Library folder doesn't exist yet. It's created the first time a mission files something there — run a mission with a library step, then come back.",
   needs_share: 'Share your Violema Library folder with the reader address below, then verify.',
@@ -267,6 +268,7 @@ const FOLDER_DROP_LANE_COPY: Record<FolderDropLaneState, string> = {
 const FOLDER_DROP_LANE_LABEL: Record<FolderDropLaneState, string> = {
   not_configured: 'Not configured',
   drive_not_connected: 'Connect Google Drive',
+  drive_needs_reauthorization: 'Reauthorize Google Drive',
   no_library_yet: 'Not created yet',
   needs_share: 'Needs share',
   unavailable: 'Unavailable',
@@ -1107,10 +1109,12 @@ export default function SettingsPage() {
             </div>
           ) : null}
 
-          {!folderDropLoading && folderDropStatus?.laneState === 'drive_not_connected' && folderDropStatus.nextAction ? (
+          {!folderDropLoading && (folderDropStatus?.laneState === 'drive_not_connected' || folderDropStatus?.laneState === 'drive_needs_reauthorization') && folderDropStatus.nextAction ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-500/18 bg-cyan-500/8 px-3 py-2.5">
               <p className="text-[11px] leading-relaxed text-cyan-100">
-                Google Drive is not connected for this workspace yet.
+                {folderDropStatus.laneState === 'drive_needs_reauthorization'
+                  ? 'Google Drive is connected but needs additional permissions.'
+                  : 'Google Drive is not connected for this workspace yet.'}
               </p>
               <button
                 type="button"

@@ -35,6 +35,9 @@ import {
 } from '../models';
 import {
   LIBRARY_BASELINE_TITLE_PREFIX,
+  LIBRARY_BASELINE_OMISSION_MARKER,
+  readLibraryBaselineOmissionNotice,
+  stripLibraryBaselineOmissionNotice,
   MAX_ENTRY_CONTENT_BYTES,
   MAX_LIBRARY_HISTORY_RECOVERY_FILES,
   MAX_RECOVERABLE_APP_ENTRY_CONTENT_BYTES,
@@ -78,9 +81,8 @@ export type UpdateLibraryBaselineResult =
       created: boolean;
       generationUsage?: TextGenerationResult['usage'];
       /**
-       * True when this baseline was bootstrapped for a section that had no
-       * baseline and more history than the recovery window. The baseline
-       * text itself names what was not folded in.
+       * True when this baseline or any predecessor omitted historical
+       * findings during bootstrap. The persisted disclosure survives refreshes.
        */
       historyTruncated?: boolean;
     }
@@ -147,13 +149,19 @@ function fencedBlock(name: string, body: string, neutralize: (text: string) => s
   return `<untrusted_source name='${name}'>\n${neutralize(body)}\n</untrusted_source>`;
 }
 
-export function buildLibraryBaselineSystemPrompt(section: string, untrustedRule: string): string {
+export function buildLibraryBaselineSystemPrompt(
+  section: string,
+  untrustedRule: string,
+  wordLimit = LIBRARY_BASELINE_WORD_LIMIT,
+  maxBytes = LIBRARY_BASELINE_MAX_BYTES,
+): string {
   return (
     `You maintain the compact rolling "current state" baseline of a workspace's ${section} library. ` +
     `Merge the prior baseline and ALL newer findings into ONE up-to-date digest of what is true now: ` +
     `concrete facts, named entities, prices, dates, and open follow-ups. When they conflict, the newest ` +
     `findings win. Keep numbers and dates exact; drop narrative, repetition, and anything superseded. ` +
-    `At most ${LIBRARY_BASELINE_WORD_LIMIT} words of markdown bullets under short headings. ` +
+    `At most ${wordLimit} words of markdown bullets under short headings, and ${maxBytes} UTF-8 bytes. ` +
+    `Count each Han, Hiragana, Katakana, Hangul, Thai, Lao, Khmer, or Myanmar character as one word; count other letter/number runs as words, keeping internal apostrophes and hyphens. ` +
     `Output the digest only, with no commentary. ${untrustedRule}`
   );
 }
@@ -163,10 +171,12 @@ export function buildLibraryBaselineGenerationPrompt(input: {
   untrustedRule: string;
   neutralize: (text: string) => string;
   priorBaseline?: string;
+  wordLimit?: number;
+  maxBytes?: number;
   newerFindings: string[];
 }) {
   return {
-    system: buildLibraryBaselineSystemPrompt(input.section, input.untrustedRule),
+    system: buildLibraryBaselineSystemPrompt(input.section, input.untrustedRule, input.wordLimit, input.maxBytes),
     userContent: [
       fencedBlock('prior baseline', input.priorBaseline?.trim() || '(none recorded yet)', input.neutralize),
       ...input.newerFindings.map((content, index) =>
@@ -452,14 +462,21 @@ async function updateLibraryBaselineLocked(
   if (!newerFindings.includes(findings)) newerFindings.push(findings);
   const uniqueNewerFindings = [...new Set(newerFindings)];
   const bootstrapNotice = bootstrapping
-    ? buildBaselineBootstrapNotice(firstUnfolded?.fileName)
-    : '';
+    ? readLibraryBaselineOmissionNotice(
+      `${LIBRARY_BASELINE_OMISSION_MARKER}\n${buildBaselineBootstrapNotice(firstUnfolded?.fileName)}`,
+    )!
+    : readLibraryBaselineOmissionNotice(priorBaseline?.content) || '';
 
+  const noticeSuffix = bootstrapNotice ? `\n\n${LIBRARY_BASELINE_OMISSION_MARKER}\n${bootstrapNotice}` : '';
+  const digestMaxBytes = LIBRARY_BASELINE_MAX_BYTES - Buffer.byteLength(noticeSuffix, 'utf8');
+  const digestWordLimit = LIBRARY_BASELINE_WORD_LIMIT - countAutomationWords(noticeSuffix);
   const generationPrompt = buildLibraryBaselineGenerationPrompt({
     section: input.section,
     untrustedRule: input.untrustedRule,
     neutralize: input.neutralize,
-    priorBaseline: priorBaseline?.content || undefined,
+    priorBaseline: priorBaseline?.content ? stripLibraryBaselineOmissionNotice(priorBaseline.content) : undefined,
+    wordLimit: digestWordLimit,
+    maxBytes: digestMaxBytes,
     newerFindings: uniqueNewerFindings,
   });
 
@@ -486,8 +503,10 @@ async function updateLibraryBaselineLocked(
     }
     try {
       merged = requireBoundedAutomationOutput(
-        typeof generated === 'string' ? { text: generated } : generated,
-        LIBRARY_BASELINE_MAX_BYTES - Buffer.byteLength(bootstrapNotice, 'utf8'),
+        typeof generated === 'string'
+          ? { text: stripLibraryBaselineOmissionNotice(generated) }
+          : { ...generated, text: stripLibraryBaselineOmissionNotice(generated.text) },
+        digestMaxBytes,
         'baseline',
       );
     } catch (error) {
@@ -503,7 +522,18 @@ async function updateLibraryBaselineLocked(
       message: `The baseline merge failed: ${error instanceof Error ? error.message : 'unknown error'}.`,
     };
   }
-  if (bootstrapNotice) merged = `${merged.trimEnd()}\n\n${bootstrapNotice}`;
+  merged = `${merged.trimEnd()}${noticeSuffix}`;
+  // Validate the exact persisted body as well as the generated portion: the
+  // separator and deterministic disclosure share the reader's byte ceiling.
+  try {
+    merged = requireBoundedAutomationOutput({ text: merged }, LIBRARY_BASELINE_MAX_BYTES, 'baseline');
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'The assembled baseline exceeded its byte limit.',
+      generationRejected: true,
+    };
+  }
   const mergedWords = countAutomationWords(merged);
   if (mergedWords > LIBRARY_BASELINE_WORD_LIMIT) {
     return {
@@ -553,7 +583,7 @@ async function updateLibraryBaselineLocked(
     fileName: appended.fileName,
     created: appended.created,
     ...(generationUsage ? { generationUsage } : {}),
-    ...(bootstrapping ? { historyTruncated: true } : {}),
+    ...(bootstrapNotice ? { historyTruncated: true } : {}),
   };
 }
 
@@ -563,11 +593,12 @@ async function updateLibraryBaselineLocked(
  * write lane bootstraps a first baseline from what it could read.
  */
 function isBaselineBootstrapCase(
-  snapshot: Pick<AccountLibrarySnapshot, 'appBaselineListed' | 'appEntryHistoryComplete' | 'appHistoryBeyondWindow'>,
+  snapshot: Pick<AccountLibrarySnapshot, 'appBaselineListed' | 'appEntryHistoryComplete' | 'appHistoryBeyondWindow' | 'appEntryReadFailed'>,
 ): boolean {
   return snapshot.appBaselineListed === false
     && snapshot.appEntryHistoryComplete === false
-    && snapshot.appHistoryBeyondWindow === true;
+    && snapshot.appHistoryBeyondWindow === true
+    && snapshot.appEntryReadFailed !== true;
 }
 
 function buildBaselineBootstrapNotice(firstUnfoldedFileName?: string): string {

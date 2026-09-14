@@ -51,14 +51,13 @@ export function buildDeterministicAutomationMemo(summaryMarkdown: string, link: 
     .replace(/\[([^\]]+)\]\((?:[^()]|\([^)]*\))+\)/gu, '$1')
     .replace(/https?:\/\/\S+/giu, ' ')
     .replace(/[`*_>#|~]+/gu, ' ');
-  const words = visible.match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu) ?? [];
   const body = boundUtf8Bytes(
-    words.slice(0, AUTOMATION_MEMO_BODY_WORD_LIMIT).join(' '),
+    truncateAutomationWords(visible, AUTOMATION_MEMO_BODY_WORD_LIMIT),
     Math.max(1, AUTOMATION_MEMO_MAX_BYTES - Buffer.byteLength(appendFullAnalysisLink('', link), 'utf8')),
   );
   const linked = appendFullAnalysisLink(body || 'Full analysis is available in the library.', link);
   // Defense in depth for future footer-copy changes.
-  return requireCompleteAutomationSummary({ text: linked }, AUTOMATION_MEMO_WORD_LIMIT);
+  return requireCompleteAutomationSummary({ text: linked }, AUTOMATION_MEMO_WORD_LIMIT, AUTOMATION_MEMO_MAX_BYTES);
 }
 
 /** Evidence characters that earn one extra output token (~¼ token of output headroom per evidence token). */
@@ -147,15 +146,30 @@ export function requireBoundedAutomationOutput(
 const UNSPACED_SCRIPT_CHARACTER =
   /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/gu;
 
+// A spaced word cannot absorb an adjacent unspaced-script character. Use
+// the same units for validation and truncation, including mixed-script text.
+const SPACED_WORD_CHARACTER = `(?!${UNSPACED_SCRIPT_CHARACTER.source})[\\p{L}\\p{N}]`;
+const AUTOMATION_WORD_UNIT = new RegExp(
+  `${UNSPACED_SCRIPT_CHARACTER.source}|(?:${SPACED_WORD_CHARACTER})+(?:['’\\-](?:${SPACED_WORD_CHARACTER})+)*`,
+  'gu',
+);
+
+function truncateAutomationWords(visibleText: string, wordLimit: number): string {
+  let wordCount = 0;
+  let end = 0;
+  for (const match of visibleText.matchAll(AUTOMATION_WORD_UNIT)) {
+    if (wordCount >= wordLimit) return visibleText.slice(0, end).trim();
+    wordCount += 1;
+    end = match.index! + match[0].length;
+  }
+  return wordCount ? visibleText.trim() : '';
+}
+
 export function countAutomationWords(text: string): number {
   const visibleMarkdown = text
     .replace(/\[([^\]]+)\]\((?:[^()]|\([^)]*\))+\)/gu, '$1')
     .replace(/https?:\/\/\S+/giu, ' ');
-  const unspacedCharacters = visibleMarkdown.match(UNSPACED_SCRIPT_CHARACTER)?.length ?? 0;
-  const spacedWords = visibleMarkdown
-    .replace(UNSPACED_SCRIPT_CHARACTER, ' ')
-    .match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
-  return unspacedCharacters + spacedWords;
+  return visibleMarkdown.match(AUTOMATION_WORD_UNIT)?.length ?? 0;
 }
 
 /**
@@ -172,9 +186,8 @@ export function buildBoundedAutomationSummaryFallback(
     .replace(/\[([^\]]+)\]\((?:[^()]|\([^)]*\))+\)/gu, '$1')
     .replace(/https?:\/\/\S+/giu, ' ')
     .replace(/[`*_>#|~]+/gu, ' ');
-  const words = visible.match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu) ?? [];
   const bounded = boundUtf8Bytes(
-    words.slice(0, wordLimit).join(' '),
+    truncateAutomationWords(visible, wordLimit),
     AUTOMATION_SUMMARY_MAX_BYTES,
   ) || 'Automation summary unavailable.';
   return requireCompleteAutomationSummary({ text: bounded }, wordLimit);

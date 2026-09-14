@@ -531,8 +531,9 @@ test('an OpenRouter-only deployment skips an unconfigured Anthropic primary', as
 
 // NF-5 (2026-08-23 re-review): SDK-transport routes (Anthropic, MiniMax) must
 // surface the same route-aware cause the HTTP routes do, and an SDK error
-// that carries an HTTP status is a rejected request with explicit zero usage.
-test('an exhausted Anthropic SDK failure names the provider, model, status, and cause', async () => {
+// with a status must distinguish documented overload rejection from uncertain failures.
+for (const status of [529, 408, 500, 504, 524]) {
+test(`an exhausted Anthropic SDK ${status} failure preserves route and usage certainty`, async () => {
   const originalLoad = moduleWithLoader._load;
   const envKeys = [
     'ANTHROPIC_API_KEY',
@@ -578,7 +579,7 @@ test('an exhausted Anthropic SDK failure names the provider, model, status, and 
             messages = {
               create: async () => {
                 anthropicCalls += 1;
-                throw Object.assign(new Error('Overloaded'), { name: 'InternalServerError', status: 529 });
+                throw Object.assign(new Error('Overloaded'), { name: 'InternalServerError', status });
               },
             };
           },
@@ -606,14 +607,18 @@ test('an exhausted Anthropic SDK failure names the provider, model, status, and 
       (error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         assert.match(message, /anthropic\/claude-sonnet-5/, 'the route is named');
-        assert.match(message, /529/, 'the status is named');
+        assert.ok(message.includes(String(status)), 'the status is named');
         assert.match(message, /Overloaded/, 'the provider cause is kept');
         return true;
       },
     );
-    assert.ok(anthropicCalls >= 2, 'a 529 is retried');
+    assert.ok(anthropicCalls >= 2, 'retryable failures are retried');
     assert.equal(failedUsages.length, anthropicCalls);
     for (const usage of failedUsages) {
+      if (status !== 529) {
+        assert.equal(usage, undefined, 'an SDK server failure has no zero-usage receipt');
+        continue;
+      }
       assert.deepEqual(
         { input: usage?.inputTokens, output: usage?.outputTokens, total: usage?.totalTokens },
         { input: 0, output: 0, total: 0 },
@@ -631,3 +636,5 @@ test('an exhausted Anthropic SDK failure names the provider, model, status, and 
     delete require.cache[require.resolve('../src/models')];
   }
 });
+
+}
