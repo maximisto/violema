@@ -273,6 +273,13 @@
     }
   }
 
+  /* Interior pages reserve the mark for a clear margin outside their 80rem content. */
+  @media (max-width: 1535px) {
+    .page-brand-bleed--gutter {
+      display: none;
+    }
+  }
+
   .btn-primary {
     @apply inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg transition-all duration-200 hover:shadow-lg;
   }

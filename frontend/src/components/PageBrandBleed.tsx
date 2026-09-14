@@ -1,7 +1,7 @@
 import { useLocation } from 'react-router-dom';
 
 /* Marketing-only mark: the product surface stays clean. */
-const PRODUCT_ROUTE_PREFIXES = ['/dashboard', '/dashboard-preview', '/admin', '/settings', '/connect', '/plans'];
+const PRODUCT_ROUTE_PREFIXES = ['/dashboard', '/dashboard-preview', '/admin', '/settings', '/connect', '/plans', '/signup', '/login', '/access-terms'];
 
 export default function PageBrandBleed() {
   const { pathname } = useLocation();
@@ -11,7 +11,7 @@ export default function PageBrandBleed() {
   if (isProductSurface) return null;
   return (
     <img
-      className="page-brand-bleed"
+      className={`page-brand-bleed${pathname === '/' ? '' : ' page-brand-bleed--gutter'}`}
       src="/brand/po-half-logo.png"
       alt=""
       aria-hidden="true"
