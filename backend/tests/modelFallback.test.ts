@@ -532,7 +532,7 @@ test('an OpenRouter-only deployment skips an unconfigured Anthropic primary', as
 // NF-5 (2026-08-23 re-review): SDK-transport routes (Anthropic, MiniMax) must
 // surface the same route-aware cause the HTTP routes do, and an SDK error
 // with a status must distinguish documented overload rejection from uncertain failures.
-for (const status of [529, 500, 504, 524]) {
+for (const status of [529, 408, 500, 504, 524]) {
 test(`an exhausted Anthropic SDK ${status} failure preserves route and usage certainty`, async () => {
   const originalLoad = moduleWithLoader._load;
   const envKeys = [

@@ -419,7 +419,7 @@ export function isRetryableModelError(error: unknown, depth = 0): boolean {
   if (error instanceof ModelAttemptHookError) return false;
   if ((error as { retryable?: unknown })?.retryable === true) return true;
   const status = getErrorStatus(error);
-  if (status === 429 || (typeof status === 'number' && status >= 500)) return true;
+  if (status === 408 || status === 429 || (typeof status === 'number' && status >= 500)) return true;
 
   const candidate = error as { cause?: unknown; code?: unknown; name?: unknown; message?: unknown };
   const code = typeof candidate.code === 'string' ? candidate.code : '';

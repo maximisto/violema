@@ -552,3 +552,24 @@ for (const status of [400, 408, 429]) {
     );
   });
 }
+
+
+test('an interrupted HTTP 408 retries without losing the observed failed-attempt receipt', async () => {
+  let calls = 0;
+  await withOpenAIRouteReturning(
+    () => ++calls === 1
+      ? new Response(new ReadableStream<Uint8Array>({
+        start(controller) { controller.enqueue(new TextEncoder().encode('{"usage":{"prompt_tokens":19,"completion_tokens":2,"total_tokens":21},"error":{"message":"interrupted')); },
+        pull(controller) { controller.error(new Error('synthetic interruption')); },
+      }), { status: 408 })
+      : new Response(JSON.stringify({ choices: [{ message: { content: 'Recovered brief.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } }), { status: 200 }),
+    async ({ generate, fetchCalls }) => {
+      const usages: Array<import('../src/models').TextGenerationUsage | undefined> = [];
+      const result = await generate({ onAttemptFailure: (_attempt, _error, usage) => { usages.push(usage); } }) as import('../src/models').TextGenerationResult;
+      assert.equal(fetchCalls(), 2);
+      assert.equal(result.text, 'Recovered brief.');
+      assert.equal(result.usage?.totalTokens, 5);
+      assert.deepEqual(usages.map(usage => usage?.totalTokens), [21]);
+    },
+  );
+});
