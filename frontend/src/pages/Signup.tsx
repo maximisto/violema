@@ -99,6 +99,7 @@ export default function Signup() {
   const [errorMessage, setErrorMessage] = useState<string | null>(
     signupNotice.kind === 'error' ? signupNotice.message : null,
   );
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [emailFormRecorded, setEmailFormRecorded] = useState(false);
 
@@ -130,6 +131,7 @@ export default function Signup() {
 
     setSubmitting(true);
     setErrorMessage(null);
+    setSubmitError(null);
     setSuccessMessage(null);
     const session = {
       intent: 'signup',
@@ -159,7 +161,7 @@ export default function Signup() {
       if (error instanceof AuthSessionRequestError && error.code === 'access_not_approved') {
         setEmailFormRecorded(true);
       } else {
-        setErrorMessage(error instanceof Error ? error.message : 'Could not create access');
+        setSubmitError(error instanceof Error ? error.message : 'Could not create access');
       }
     } finally {
       setSubmitting(false);
@@ -172,6 +174,7 @@ export default function Signup() {
       return;
     }
     setErrorMessage(null);
+    setSubmitError(null);
     setSuccessMessage(null);
     beginOAuthFlow(provider, {
       intent: 'signup',
@@ -187,17 +190,192 @@ export default function Signup() {
     <div className="min-h-screen bg-hero-gradient">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(168,85,247,0.12),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.06),transparent_28%)]" />
       <PublicHeader backHref="/" backLabel="Home" actionHref="/login" actionLabel="Sign in" />
-      <div className="relative mx-auto flex max-w-7xl flex-col justify-center px-4 py-12 sm:px-6 lg:px-8">
+      <div className="relative mx-auto flex max-w-7xl flex-col justify-center px-4 py-6 sm:px-6 sm:py-12 lg:px-8">
         <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
-          <div className="pt-2">
+          <div className="ui-panel-strong min-w-0 p-5 sm:p-7 lg:col-start-2 lg:row-start-1">
+            {signupNotice.kind === 'applied' ? (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300/80">Controlled beta</p>
+                <h1 className="mt-2 text-2xl font-semibold text-white">{APPLICATION_RECEIVED_TITLE}</h1>
+                {signupNotice.email ? (
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                    Identity verified for <span className="font-medium text-slate-200">{signupNotice.email}</span>. Nothing else is needed from you.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                    Your identity is verified and your application is complete. Nothing else is needed from you.
+                  </p>
+                )}
+                <ol className="mt-6 space-y-3">
+                  {APPLICATION_RECEIVED_STEPS.map((step, index) => (
+                    <li key={step} className="flex gap-3 text-sm leading-relaxed text-slate-300">
+                      <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-emerald-400/25 bg-emerald-400/10 text-xs font-semibold text-emerald-200">
+                        {index + 1}
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-6 rounded-2xl border border-navy-700/80 bg-navy-950/45 p-4 text-xs leading-relaxed text-slate-500">
+                  {APPLICATION_PENDING_NOTE}
+                </p>
+                <Link
+                  to="/"
+                  className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-violet-300 transition-colors hover:text-violet-200"
+                >
+                  Back to violema.com
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            ) : (
+            <>
+            <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Controlled beta</p>
+                <h1 className="mt-2 text-2xl font-semibold text-white">Apply for beta</h1>
+              </div>
+              <Link to="/login" className="text-sm font-medium text-slate-400 transition-colors hover:text-white">
+                Already have access?
+              </Link>
+            </div>
+
+            <div className="mt-6">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">I am joining as</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {PARTICIPANT_OPTIONS.map((option) => (
+                  <label
+                    key={option.id}
+                    className={`cursor-pointer rounded-2xl border p-3 transition-colors focus-within:ring-2 focus-within:ring-violet-300 ${participantType === option.id ? 'border-violet-500/50 bg-violet-500/10' : 'border-navy-700/80 bg-navy-950/45 hover:border-navy-600'}`}
+                  >
+                    <input
+                      type="radio"
+                      name="participantType"
+                      value={option.id}
+                      checked={participantType === option.id}
+                      onChange={() => setParticipantType(option.id)}
+                      className="sr-only"
+                    />
+                    <span className="block text-sm font-semibold text-white">{option.title}</span>
+                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">{option.body}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3 rounded-2xl border border-navy-700/80 bg-navy-950/45 p-4">
+              <label className="flex items-start gap-3 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-navy-700 bg-navy-950 text-violet-500"
+                />
+                <span>
+                  I agree to the <Link to="/terms" className="text-violet-300 hover:text-violet-200">Terms of Service</Link>, including the <Link to="/terms#beta-confidentiality" className="text-violet-300 hover:text-violet-200">Beta Confidentiality and Evaluation Terms</Link>, and the <Link to="/privacy" className="text-violet-300 hover:text-violet-200">Privacy Policy</Link>.
+                </span>
+              </label>
+              <label className="flex items-start gap-3 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={acceptedEducation}
+                  onChange={(e) => setAcceptedEducation(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-navy-700 bg-navy-950 text-violet-500"
+                />
+                <span>
+                  I understand Violema can send messages, run automations, and take actions across connected tools depending on the mode I choose.
+                </span>
+              </label>
+            </div>
+
+            {errorMessage ? (
+              <p role="alert" className="mt-3 text-sm text-rose-300">{errorMessage}</p>
+            ) : null}
+            <p className="mt-3 text-xs leading-relaxed text-slate-400">
+              Access is manually approved. Accept both notices, then apply with Google or Microsoft to verify your identity.
+            </p>
+            <div className="mt-6">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">Verify your identity</p>
+              <div className="mt-3 grid gap-2">
+                {PROVIDER_METHODS.map((item) => (
+                  <AuthProviderButton
+                    key={item.id}
+                    onClick={() => handleProviderAuth(item.id)}
+                    provider={item.id}
+                    icon={item.icon}
+                    note={item.note}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">
+                <span className="h-px flex-1 bg-white/8" />
+                <span>Or request access by email</span>
+                <span className="h-px flex-1 bg-white/8" />
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4">
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-300">Full name</span>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Max Markovtsev"
+                  className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-300">Work email</span>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 py-3 pl-11 pr-4 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40"
+                  />
+                </div>
+              </label>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleContinue}
+              disabled={!canContinue || submitting}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-glow-violet transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submitting ? 'Checking access…' : 'Request access'}
+              <ArrowRight className="h-4 w-4" />
+            </button>
+            {emailFormRecorded ? (
+              <div className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4">
+                <p className="text-sm font-semibold text-amber-100">{EMAIL_FORM_RECORDED_TITLE}</p>
+                <p className="mt-1 text-xs leading-relaxed text-amber-200/85">{EMAIL_FORM_RECORDED_BODY}</p>
+              </div>
+            ) : null}
+            {submitError ? (
+              <p role="alert" className="mt-3 text-center text-sm text-rose-300">{submitError}</p>
+            ) : null}
+            {successMessage ? (
+              <p className="mt-3 text-center text-sm text-emerald-300">{successMessage}</p>
+            ) : null}
+            <p className="mt-3 text-center text-xs text-slate-500">
+              {termsVersion ? `Current beta terms: ${termsVersion}. ` : 'Loading current beta terms… '}
+            </p>
+            </>
+            )}
+          </div>
+          <div className="pt-2 lg:col-start-1 lg:row-start-1">
             <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-4 py-1.5 text-sm font-medium text-violet-300">
               <Lock className="h-3.5 w-3.5" />
               Access Violema
             </div>
-            <h1 className="mt-6 text-4xl font-extrabold leading-tight text-white sm:text-5xl">
-              Start the preview before
-              <span className="gradient-text"> you enter the workspace.</span>
-            </h1>
+            <h2 className="mt-6 text-4xl font-extrabold leading-tight text-white sm:text-5xl">
+              Recurring work,
+              <span className="gradient-text"> with you in control.</span>
+            </h2>
             <p className="mt-4 max-w-xl text-lg leading-relaxed text-slate-400">
               Apply for Violema’s controlled beta to scope recurring work for review, delivery, and cost tracking before production missions connect to your stack.
             </p>
@@ -239,176 +417,6 @@ export default function Signup() {
             </div>
           </div>
 
-          <div className="ui-panel-strong p-6 sm:p-7">
-            {signupNotice.kind === 'applied' ? (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300/80">Controlled beta</p>
-                <h2 className="mt-2 text-2xl font-semibold text-white">{APPLICATION_RECEIVED_TITLE}</h2>
-                {signupNotice.email ? (
-                  <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                    Identity verified for <span className="font-medium text-slate-200">{signupNotice.email}</span>. Nothing else is needed from you.
-                  </p>
-                ) : (
-                  <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                    Your identity is verified and your application is complete. Nothing else is needed from you.
-                  </p>
-                )}
-                <ol className="mt-6 space-y-3">
-                  {APPLICATION_RECEIVED_STEPS.map((step, index) => (
-                    <li key={step} className="flex gap-3 text-sm leading-relaxed text-slate-300">
-                      <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-emerald-400/25 bg-emerald-400/10 text-xs font-semibold text-emerald-200">
-                        {index + 1}
-                      </span>
-                      <span>{step}</span>
-                    </li>
-                  ))}
-                </ol>
-                <p className="mt-6 rounded-2xl border border-navy-700/80 bg-navy-950/45 p-4 text-xs leading-relaxed text-slate-500">
-                  {APPLICATION_PENDING_NOTE}
-                </p>
-                <Link
-                  to="/"
-                  className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-violet-300 transition-colors hover:text-violet-200"
-                >
-                  Back to violema.com
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-            ) : (
-            <>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/70">Registration</p>
-                <h2 className="mt-2 text-2xl font-semibold text-white">Apply for beta</h2>
-              </div>
-              <Link to="/login" className="text-sm font-medium text-slate-400 transition-colors hover:text-white">
-                Already have access?
-              </Link>
-            </div>
-
-            <div className="mt-6">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">I am joining as</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                {PARTICIPANT_OPTIONS.map((option) => (
-                  <label
-                    key={option.id}
-                    className={`cursor-pointer rounded-2xl border p-3 transition-colors ${participantType === option.id ? 'border-violet-500/50 bg-violet-500/10' : 'border-navy-700/80 bg-navy-950/45 hover:border-navy-600'}`}
-                  >
-                    <input
-                      type="radio"
-                      name="participantType"
-                      value={option.id}
-                      checked={participantType === option.id}
-                      onChange={() => setParticipantType(option.id)}
-                      className="sr-only"
-                    />
-                    <span className="block text-sm font-semibold text-white">{option.title}</span>
-                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">{option.body}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">Sign in with</p>
-              <div className="mt-3 grid gap-2">
-                {PROVIDER_METHODS.map((item) => (
-                  <AuthProviderButton
-                    key={item.id}
-                    onClick={() => handleProviderAuth(item.id)}
-                    provider={item.id}
-                    icon={item.icon}
-                    note={item.note}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">
-                <span className="h-px flex-1 bg-white/8" />
-                <span>Or use email</span>
-                <span className="h-px flex-1 bg-white/8" />
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-4">
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-300">Full name</span>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Max Markovtsev"
-                  className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-300">Work email</span>
-                <div className="relative">
-                  <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
-                  <input
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
-                    className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 py-3 pl-11 pr-4 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40"
-                  />
-                </div>
-              </label>
-            </div>
-
-            <div className="mt-6 space-y-3 rounded-2xl border border-navy-700/80 bg-navy-950/45 p-4">
-              <label className="flex items-start gap-3 text-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={acceptedTerms}
-                  onChange={(e) => setAcceptedTerms(e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-navy-700 bg-navy-950 text-violet-500"
-                />
-                <span>
-                  I agree to the <Link to="/terms" className="text-violet-300 hover:text-violet-200">Terms of Service</Link>, including the <Link to="/terms#beta-confidentiality" className="text-violet-300 hover:text-violet-200">Beta Confidentiality and Evaluation Terms</Link>, and the <Link to="/privacy" className="text-violet-300 hover:text-violet-200">Privacy Policy</Link>.
-                </span>
-              </label>
-              <label className="flex items-start gap-3 text-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={acceptedEducation}
-                  onChange={(e) => setAcceptedEducation(e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-navy-700 bg-navy-950 text-violet-500"
-                />
-                <span>
-                  I understand Violema can send messages, run automations, and take actions across connected tools depending on the mode I choose.
-                </span>
-              </label>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleContinue}
-              disabled={!canContinue || submitting}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-glow-violet transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {submitting ? 'Checking access…' : 'Request access'}
-              <ArrowRight className="h-4 w-4" />
-            </button>
-            {emailFormRecorded ? (
-              <div className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4">
-                <p className="text-sm font-semibold text-amber-100">{EMAIL_FORM_RECORDED_TITLE}</p>
-                <p className="mt-1 text-xs leading-relaxed text-amber-200/85">{EMAIL_FORM_RECORDED_BODY}</p>
-              </div>
-            ) : null}
-            {errorMessage ? (
-              <p className="mt-3 text-center text-sm text-rose-300">{errorMessage}</p>
-            ) : null}
-            {successMessage ? (
-              <p className="mt-3 text-center text-sm text-emerald-300">{successMessage}</p>
-            ) : null}
-            <p className="mt-3 text-center text-xs text-slate-500">
-              {termsVersion ? `Current beta terms: ${termsVersion}. ` : 'Loading current beta terms… '}
-              Access is manually approved. Applying with Google or Microsoft verifies your identity and completes the application — you will get a confirmation email when it lands.
-            </p>
-            </>
-            )}
-          </div>
         </div>
       </div>
     </div>

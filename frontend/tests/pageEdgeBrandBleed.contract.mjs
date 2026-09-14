@@ -31,7 +31,7 @@ const staticPages = [
 
 assert(assetHash === expectedAssetHash, 'public asset is the exact supplied Purple Orange half-logo PNG');
 assert(component.includes('src="/brand/po-half-logo.png"'), 'global component uses the supplied half-logo');
-assert(component.includes('className="page-brand-bleed"'), 'global component owns the fixed branding class');
+assert(component.includes('page-brand-bleed${'), 'global component owns the fixed branding class');
 assert(component.includes('alt=""') && component.includes('aria-hidden="true"'), 'global mark remains decorative');
 assert(component.includes('width={206}') && component.includes('height={430}'), 'global mark reserves the source aspect ratio');
 assert(app.includes("import PageBrandBleed from './components/PageBrandBleed'"), 'app imports global branding');
@@ -40,7 +40,7 @@ assert(
   'global branding renders once outside the route switch',
 );
 assert(component.includes('useLocation'), 'global mark is route-aware');
-for (const productPrefix of ["'/dashboard'", "'/dashboard-preview'", "'/admin'", "'/settings'", "'/connect'", "'/plans'"]) {
+for (const productPrefix of ["'/dashboard'", "'/dashboard-preview'", "'/admin'", "'/settings'", "'/connect'", "'/plans'", "'/signup'", "'/login'", "'/access-terms'"]) {
   assert(
     component.includes(productPrefix),
     `product surface ${productPrefix} excluded from the branding mark`,
@@ -64,4 +64,4 @@ for (const pagePath of staticPages) {
   assert(page.includes('src="/brand/po-half-logo.png"'), `${pagePath} uses the supplied half-logo asset`);
 }
 
-console.log('pageEdgeBrandBleed.contract: persistent supplied half-logo verified across all public surfaces');
+console.log('pageEdgeBrandBleed.contract: supplied half-logo preserved with product and entry-form exclusions');

@@ -51,7 +51,6 @@ export function MissionReviews({
   // is about the run, not a send.
   const hasDeliveryLane = mission.hasDeliveryLane;
   const canApprove = hasDeliveryLane && canAct && !deliveryComplete && !hasBlockers && (!reviewRequired || reviewAcknowledged);
-  const deliveryTarget = mission.deliveryLabel || 'configured target';
 
   return (
     <section className="space-y-4">
@@ -70,7 +69,7 @@ export function MissionReviews({
             {preflight?.blockers.map((item) => (
               <div key={item.key} className="rounded-md border border-red-300/15 bg-navy-950/45 p-3">
                 <p className="text-[11px] font-semibold text-red-100">{item.label}</p>
-                <p className="mt-1 text-[10px] leading-4 text-slate-400">{item.detail}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-300">{item.detail}</p>
                 <p className="mt-2 font-mono text-[10px] text-red-200/80">{item.key}</p>
               </div>
             ))}
@@ -93,7 +92,7 @@ export function MissionReviews({
             {warnings.map((item) => (
               <div key={item.key} className="rounded-md border border-amber-300/15 bg-navy-950/45 p-3">
                 <p className="text-[11px] font-semibold text-amber-100">{item.label}</p>
-                <p className="mt-1 text-[10px] leading-4 text-slate-400">{item.detail}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-300">{item.detail}</p>
               </div>
             ))}
           </div>
@@ -106,11 +105,11 @@ export function MissionReviews({
         <p className="mt-2 text-sm leading-6 text-slate-300">{mission.reviewSummary}</p>
         {reviewBody ? (
           <div className="mt-4 rounded-lg border border-violet-300/20 bg-navy-950/55">
-            <div className="flex flex-col gap-3 border-b border-white/10 px-3 py-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex flex-col gap-3 border-b border-white/10 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-200/85">Prepared delivery</p>
                 <h4 className="mt-1 text-sm font-semibold text-white">{mission.artifact.title}</h4>
-                <p className="mt-1 text-[11px] leading-4 text-slate-500">Review this draft before approving delivery to {reviewTarget}.</p>
+                <p className="mt-1 break-words text-xs leading-5 text-slate-400">Review this draft before approving delivery to {reviewTarget}.</p>
               </div>
               <span className={`w-fit rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                 reviewAcknowledged
@@ -120,11 +119,11 @@ export function MissionReviews({
                 {reviewAcknowledged ? 'Reviewed' : 'Review required'}
               </span>
             </div>
-            <div className="max-h-[340px] overflow-auto px-3 py-3">
-              <MarkdownContent text={reviewBody} className="break-words text-[12px] leading-5 text-slate-200 [&_p]:mb-2 [&_p]:text-[12px] [&_li]:text-[12px] [&_td]:text-[12px] [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-[13px]" />
+            <div tabIndex={0} role="region" aria-label="Prepared delivery body" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-300 max-h-[min(60vh,560px)] overflow-auto px-4 py-4">
+              <MarkdownContent text={reviewBody} className="break-words text-sm leading-6 text-slate-200 [&_p]:mb-3 [&_p]:text-sm [&_li]:text-sm [&_td]:text-sm [&_th]:text-xs [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm" />
             </div>
-            <div className="flex flex-col gap-2 border-t border-white/10 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-[10px] leading-4 text-slate-500">
+            <div className="flex flex-col gap-2 border-t border-white/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs leading-5 text-slate-400">
                 Approval sends exactly this prepared delivery body unless changes are requested first.
               </p>
               <button
@@ -145,10 +144,10 @@ export function MissionReviews({
               label: 'Delivery',
               value: !hasDeliveryLane
                 ? NO_DELIVERY_TILE_VALUE
-                : deliveryComplete ? 'Sent' : canAct ? 'Not sent' : deliveryTarget,
+                : deliveryComplete ? 'Sent' : canAct ? 'Not sent' : reviewTarget,
               detail: !hasDeliveryLane
                 ? NO_DELIVERY_TILE_DETAIL
-                : deliveryComplete ? mission.reviewSummary : canAct ? `Held for ${deliveryTarget}` : 'Uses mission policy',
+                : deliveryComplete ? mission.reviewSummary : canAct ? `Held for ${reviewTarget}` : 'Uses mission policy',
             },
             {
               label: 'Next',
@@ -157,13 +156,13 @@ export function MissionReviews({
                 : deliveryComplete ? 'Receipt stored' : canAct ? 'Approve or revise' : 'No action',
               detail: !hasDeliveryLane
                 ? NO_DELIVERY_NEXT_DETAIL
-                : deliveryComplete ? 'No approval is needed now.' : canAct ? 'Approval sends the Slack message.' : 'No review gate is open.',
+                : deliveryComplete ? 'No approval is needed now.' : canAct ? `Approval sends to ${reviewTarget}.` : 'No review gate is open.',
             },
           ].map((item) => (
             <div key={item.label} className="rounded-lg border border-white/10 bg-navy-950/42 px-3 py-2.5">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
               <p className="mt-1 text-[12px] font-semibold text-white">{item.value}</p>
-              <p className="mt-1 truncate text-[10px] text-slate-500" title={item.detail}>{item.detail}</p>
+              <p className="mt-1 break-words text-xs leading-5 text-slate-400" title={item.detail}>{item.detail}</p>
             </div>
           ))}
         </div>
@@ -193,11 +192,11 @@ export function MissionReviews({
               {runWarnings.map((warning) => (
                 <div key={warning.stepId} className="rounded-md border border-amber-300/20 bg-navy-950/45 p-3">
                   <p className="text-[11px] font-semibold text-amber-100">{warning.title}</p>
-                  <p className="mt-1 text-[10px] leading-4 text-slate-400">{warning.message}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-300">{warning.message}</p>
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-[10px] leading-4 text-amber-200/70">
+            <p className="mt-3 text-xs leading-5 text-amber-200/80">
               The delivery itself is still ready. Approving sends it as prepared and does not retry
               the steps listed above.
             </p>
@@ -250,7 +249,7 @@ export function MissionReviews({
             {busyAction === 'rerun' ? 'Requesting...' : 'Rerun mission'}
           </button>
         </div>
-        <p className="mt-3 text-[10px] leading-4 text-slate-500">
+        <p className="mt-3 text-xs leading-5 text-slate-400">
           {!hasDeliveryLane
             ? 'Run output stays in this workspace and the mission library. Rerun creates a fresh run receipt.'
             : deliveryComplete

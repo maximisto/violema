@@ -1,5 +1,4 @@
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
-import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down.js';
 import Menu from 'lucide-react/dist/esm/icons/menu.js';
 import X from 'lucide-react/dist/esm/icons/x.js';
 import { useEffect, useState, type MouseEvent } from 'react';
@@ -96,35 +95,32 @@ export default function Navbar() {
             <ViolemaLogo className="mobile-header-logo xl:h-14 xl:w-[15.5rem]" />
           </button>
 
-          <div className="hidden items-center gap-9 xl:flex">
+          <div className="hidden shrink-0 items-center gap-4 xl:flex 2xl:gap-9">
             {homepageNav.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
                 onClick={(event) => handleNavClick(event, link.href)}
-                className="inline-flex items-center gap-1.5 rounded-xl px-1 py-2 text-base font-medium text-[#dbe2f4] transition duration-200 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                className="inline-flex whitespace-nowrap items-center gap-1.5 rounded-xl px-1 py-2 text-base font-medium text-[#dbe2f4] transition duration-200 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
               >
                 {link.label}
-                {link.label === 'Product' || link.label === 'Use cases' || link.label === 'Resources' ? (
-                  <ChevronDown className="h-3.5 w-3.5" />
-                ) : null}
               </a>
             ))}
           </div>
 
-          <div className="hidden items-center gap-2 xl:flex">
+          <div className="hidden shrink-0 items-center gap-2 xl:flex">
             <ThemeToggle />
             <button
               type="button"
               onClick={() => navigate('/login')}
-              className="min-h-12 rounded-xl border border-slate-500/55 bg-[#070b18]/45 px-8 text-base font-semibold text-[#dbe2f4] transition duration-200 hover:border-violet-200/45 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              className="min-h-12 whitespace-nowrap rounded-xl border border-slate-500/55 bg-[#070b18]/45 px-5 2xl:px-8 text-base font-semibold text-[#dbe2f4] transition duration-200 hover:border-violet-200/45 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
               Sign in
             </button>
             <button
               type="button"
               onClick={() => navigate('/signup?next=%2Fdashboard')}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] px-8 text-base font-bold text-white shadow-[0_18px_55px_rgba(124,58,237,0.28)] transition duration-200 hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              className="inline-flex min-h-12 whitespace-nowrap items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-violet-500 to-[#7c3cff] px-5 2xl:px-8 text-base font-bold text-white shadow-[0_18px_55px_rgba(124,58,237,0.28)] transition duration-200 hover:brightness-110 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
               Apply for beta
               <ArrowRight className="h-4 w-4" />
