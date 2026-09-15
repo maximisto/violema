@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-test('a 150-credit mission pauses before the next call and never settles above 150', async (t) => {
+test('a 180-credit mission pauses before the next call and never settles above 180', async (t) => {
   const originalCwd = process.cwd();
   const originalDisableScheduler = process.env.VIOLEMA_DISABLE_AUTOMATION_SCHEDULER;
   const originalDemoIds = process.env.DEMO_WORKSPACE_IDS;
@@ -52,7 +52,7 @@ test('a 150-credit mission pauses before the next call and never settles above 1
       name: 'Strict budget ceiling test',
       description: 'context '.repeat(800),
       actions: [],
-      credit_budget_per_run: 150,
+      credit_budget_per_run: 180,
       steps: [
         {
           id: 'analysis',
@@ -68,8 +68,10 @@ test('a 150-credit mission pauses before the next call and never settles above 1
         },
       ],
     };
+    // The larger analysis allowance raises preflight. This ceiling still
+    // permits the first call and must stop the next operation before spend.
     const plan = server.buildAutomationExecutionPlan(automation);
-    assert.ok(plan.estimatedCredits < 150, `fixture requires preflight below 150, got ${plan.estimatedCredits}`);
+    assert.ok(plan.estimatedCredits < 180, `fixture requires preflight below 180, got ${plan.estimatedCredits}`);
 
     const result = await server.runAutomation(automation);
     assert.equal(result.ok, false);
@@ -79,15 +81,15 @@ test('a 150-credit mission pauses before the next call and never settles above 1
     const run = store.listTaskRuns('workspace_budget_ceiling')
       .find((candidate) => candidate.metadata?.automationId === 'auto_budget_ceiling');
     assert.ok(run);
-    assert.ok((run.actualCredits ?? Number.POSITIVE_INFINITY) <= 150);
+    assert.ok((run.actualCredits ?? Number.POSITIVE_INFINITY) <= 180);
     const budgetBlock = run.metadata?.creditBudgetBlock as {
       budgetCredits?: number;
       purpose?: string;
       projectedCredits?: number;
     };
-    assert.equal(budgetBlock.budgetCredits, 150);
+    assert.equal(budgetBlock.budgetCredits, 180);
     assert.equal(budgetBlock.purpose, 'summary');
-    assert.ok((budgetBlock.projectedCredits ?? 0) > 150);
+    assert.ok((budgetBlock.projectedCredits ?? 0) > 180);
     const calls = run.metadata?.generationCalls as Array<{ purpose?: string; usage?: unknown }>;
     assert.deepEqual(calls.map((call) => call.purpose), ['analysis']);
     assert.ok(calls[0].usage, 'the first call usage remains accounted');
@@ -96,9 +98,9 @@ test('a 150-credit mission pauses before the next call and never settles above 1
       entry.metadata?.holdStatus === 'settled' && entry.referenceId === 'auto_budget_ceiling'
     );
     assert.ok(settlement);
-    assert.ok(Math.abs(settlement.deltaCredits) <= 150, `settled ${settlement.deltaCredits} credits`);
-    assert.ok(Number(settlement.metadata?.settlementCredits) <= 150);
-    assert.equal(settlement.metadata?.authorizedCredits, 150);
+    assert.ok(Math.abs(settlement.deltaCredits) <= 180, `settled ${settlement.deltaCredits} credits`);
+    assert.ok(Number(settlement.metadata?.settlementCredits) <= 180);
+    assert.equal(settlement.metadata?.authorizedCredits, 180);
     assert.equal((settlement.metadata?.generationCalls as unknown[]).length, 1);
   } finally {
     process.chdir(originalCwd);
@@ -171,7 +173,7 @@ test('a retry attempt is separately authorized and failed-attempt usage stays in
       name: 'Strict retry budget ceiling test',
       description: 'context '.repeat(800),
       actions: [],
-      credit_budget_per_run: 150,
+      credit_budget_per_run: 180,
       steps: [
         {
           id: 'analysis',
@@ -187,8 +189,10 @@ test('a retry attempt is separately authorized and failed-attempt usage stays in
         },
       ],
     };
+    // The larger analysis allowance raises preflight. This ceiling still
+    // permits the first call and must stop the next operation before spend.
     const plan = server.buildAutomationExecutionPlan(automation);
-    assert.ok(plan.estimatedCredits < 150, `fixture requires preflight below 150, got ${plan.estimatedCredits}`);
+    assert.ok(plan.estimatedCredits < 180, `fixture requires preflight below 180, got ${plan.estimatedCredits}`);
 
     const result = await server.runAutomation(automation);
     assert.equal(result.ok, false);
@@ -209,7 +213,7 @@ test('a retry attempt is separately authorized and failed-attempt usage stays in
     assert.ok((calls[0].authorizedTokenCredits ?? 0) > 0);
     assert.equal(calls[0].usage?.totalTokens, 7_000, 'usage from the failed provider attempt must be persisted');
     assert.equal(run.metadata?.creditBudgetBlock && (run.metadata.creditBudgetBlock as { purpose?: string }).purpose, 'analysis');
-    assert.ok((run.actualCredits ?? Number.POSITIVE_INFINITY) <= 150);
+    assert.ok((run.actualCredits ?? Number.POSITIVE_INFINITY) <= 180);
   } finally {
     process.chdir(originalCwd);
     if (typeof originalDisableScheduler === 'string') process.env.VIOLEMA_DISABLE_AUTOMATION_SCHEDULER = originalDisableScheduler;

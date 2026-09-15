@@ -139,6 +139,8 @@ import { resolveAutomationStepSeverity } from './platform/stepSeverity';
 import {
   AUTOMATION_MEMO_MAX_TOKENS,
   AUTOMATION_ANALYSIS_MAX_BYTES,
+  AUTOMATION_ANALYSIS_MAX_TOKENS,
+  AUTOMATION_ANALYSIS_WORD_LIMIT,
   AUTOMATION_EXTRACTION_MAX_BYTES,
   AUTOMATION_MEMO_BODY_WORD_LIMIT,
   AUTOMATION_MEMO_WORD_LIMIT,
@@ -4903,7 +4905,7 @@ export function buildAutomationEvidenceBlock(
 // decoration.
 
 export const AUTOMATION_ANALYZE_SYSTEM_PROMPT =
-  `You are an internal VIOLEMA analyst. Produce a compact, decision-ready analysis based only on the supplied evidence. Be concrete and avoid filler. ${UNTRUSTED_EVIDENCE_PROMPT_RULE}`;
+  `You are an internal VIOLEMA analyst. Produce a compact, decision-ready analysis of at most ${AUTOMATION_ANALYSIS_WORD_LIMIT} words based only on the supplied evidence. Prioritize the three most consequential findings, distinguish confirmed changes from unchanged facts and uncertainty, and end with the practical implication. Use short bullets and at most three source links from the evidence; do not repeat the source material or build a full report. If evidence is extensive, omit lower-priority detail and briefly name what was left out rather than exceeding the length target. Be concrete and avoid filler. ${UNTRUSTED_EVIDENCE_PROMPT_RULE}`;
 
 export const AUTOMATION_SUMMARIZE_SYSTEM_PROMPT =
   `You execute recurring VIOLEMA automations. Turn the provided evidence into a concise, useful markdown output of at most ${AUTOMATION_SUMMARY_WORD_LIMIT} words. If the task is a news update, lead with 3-5 sharp bullets labeled "Golden nuggets" and then add a short summary. If the evidence compares competitors, products, or several entities, include a compact markdown table (for example | Competitor | Move | Why it matters |) built only from the evidence — never invent rows. Cite sources inline as markdown links — when a bullet or row draws on a specific article from the evidence, link a short label like [TechCrunch](https://example.com/article); include two to four such links total and only use URLs that appear in the evidence. If there is operational or metrics data, include a compact section for it. End with a short "Next actions" section containing concrete business moves for the reader drawn from the evidence — never process notes, suggestions about improving this report, or offers of further help. When the evidence lacks a specific datapoint, state what IS known and frame the gap as a concrete follow-up (for example "pricing not yet disclosed — tracking for the next run"); never write bare "no information" placeholders. Output the deliverable only, with no meta commentary before or after it. Be concrete, skim-friendly, and avoid filler. ${UNTRUSTED_EVIDENCE_PROMPT_RULE}`;
@@ -5156,10 +5158,10 @@ export function buildAutomationGenerationProjections(
         modelTier,
         AUTOMATION_ANALYZE_SYSTEM_PROMPT,
         stepBytes + reviewFeedbackBytes + evidenceBytes + 128,
-        500,
+        AUTOMATION_ANALYSIS_MAX_TOKENS,
         stepBytes + reviewFeedbackBytes + estimatedEvidenceBytes + 128,
       );
-      addEvidence(AUTOMATION_ANALYSIS_MAX_BYTES, 500 * 2);
+      addEvidence(AUTOMATION_ANALYSIS_MAX_BYTES, AUTOMATION_ANALYSIS_MAX_TOKENS * 2);
       if (/competitor|competitive|market/i.test(`${step.title} ${step.objective}`)) {
         add(
           step,
@@ -6148,7 +6150,7 @@ async function executeAutomationCore(
           modelTier: step.modelTier || plan.suggestedModelTier,
           system: AUTOMATION_ANALYZE_SYSTEM_PROMPT,
           messages: [{ role: 'user', content: `${step.objective}${buildReviewFeedbackBlock(automation.reviewFeedback)}\n\n${buildAutomationEvidenceBlock(automation, artifacts, stepExecutions, stepErrors)}` }],
-          maxOutputTokens: 500,
+          maxOutputTokens: AUTOMATION_ANALYSIS_MAX_TOKENS,
         });
         const analysisResult = analysisCall.result;
         let markdown: string;
