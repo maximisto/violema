@@ -26,6 +26,11 @@ export const AUTOMATION_SUMMARY_TOKEN_CEILING = 6000;
 export const AUTOMATION_MEMO_WORD_LIMIT = 350;
 export const AUTOMATION_MEMO_MAX_BYTES = 16_000;
 export const AUTOMATION_ANALYSIS_MAX_BYTES = 16_000;
+// The former 500-token ceiling truncated live analysis before it could
+// finish. Leave room for a short comparison plus citations, while sharing
+// the same bounded allowance between generation and credit preflight.
+export const AUTOMATION_ANALYSIS_MAX_TOKENS = 2200;
+export const AUTOMATION_ANALYSIS_WORD_LIMIT = 350;
 export const AUTOMATION_EXTRACTION_MAX_BYTES = 16_000;
 
 /** The fixed library footer consumes seven visible words inside that limit. */
