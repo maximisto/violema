@@ -38,9 +38,9 @@ export const SAMPLE_RUNS: SampleRun[] = [
     runCredits: 56,
     monthlyRuns: 4,
     providerCostUsd: 0.74,
-    approvalState: 'Reviewed',
+    approvalState: 'Example review step',
     sources: ['Pricing pages', 'Launch notes', 'Funding coverage'],
-    ledger: ['Source scan completed', 'Brief drafted', 'Founder approval recorded', 'Slack update sent'],
+    ledger: ['Source scan completed', 'Brief drafted', 'Founder reviews the draft', 'Delivery follows approval'],
     steps: [
       {
         title: 'Search market signals',
@@ -72,9 +72,9 @@ export const SAMPLE_RUNS: SampleRun[] = [
     runCredits: 72,
     monthlyRuns: 8,
     providerCostUsd: 1.08,
-    approvalState: 'Approval gate',
+    approvalState: 'Example approval gate',
     sources: ['Stripe snapshot', 'GitHub blockers', 'Slack queue'],
-    ledger: ['Data read completed', 'Exceptions detected', 'Review requested', 'Digest delivered'],
+    ledger: ['Data read completed', 'Exceptions detected', 'Review the draft', 'Deliver after approval'],
     steps: [
       {
         title: 'Read operating sources',
@@ -94,7 +94,7 @@ export const SAMPLE_RUNS: SampleRun[] = [
     ],
     deliverable: 'Twice-weekly operating digest with owner-ready follow-ups.',
     recommendedPlan: 'Pro at $249/month',
-    buyerTakeaway: 'Recurring multi-source cadence belongs in Pro once the workflow runs every week.',
+    buyerTakeaway: 'Pro provides more credits and capacity as recurring work expands.',
   },
   {
     id: 'pricing-proof-enterprise-readiness',
@@ -106,9 +106,9 @@ export const SAMPLE_RUNS: SampleRun[] = [
     runCredits: 118,
     monthlyRuns: 22,
     providerCostUsd: 2.05,
-    approvalState: 'Policy reviewed',
+    approvalState: 'Custom workflow example',
     sources: ['Workspace metrics', 'CRM activity', 'Support risk'],
-    ledger: ['Admin scope checked', 'Digest assembled', 'Policy review passed', 'Owners notified'],
+    ledger: ['Admin scope checked', 'Digest assembled', 'Review the policy', 'Notify approved destinations'],
     steps: [
       {
         title: 'Check admin scope',
@@ -128,7 +128,7 @@ export const SAMPLE_RUNS: SampleRun[] = [
     ],
     deliverable: 'Daily executive digest with policy review and owner routing.',
     recommendedPlan: 'Enterprise custom',
-    buyerTakeaway: 'Daily cross-workspace proof needs custom controls, mission volume, and security review.',
+    buyerTakeaway: 'An illustrative custom workflow requiring separate scoping, controls and security review.',
   },
 ];
 

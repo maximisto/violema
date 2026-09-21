@@ -78,7 +78,7 @@ export const DEMO_INTEGRATIONS: DemoIntegration[] = [
     name: 'Web search',
     category: 'Workflow data',
     detail: 'Current market and competitor research',
-    description: 'Use live Tavily research to add current external evidence to recurring workflows.',
+    description: 'Research public web sources for current market and competitor evidence.',
     status: 'active',
   },
   {
@@ -93,7 +93,7 @@ export const DEMO_INTEGRATIONS: DemoIntegration[] = [
     id: 'email',
     name: 'Email',
     category: 'Delivery',
-    detail: 'Postmark delivery fallback',
+    detail: 'Email delivery',
     description: 'Send approved operator updates by email when Slack is not the right destination.',
     status: 'active',
   },
@@ -117,6 +117,7 @@ export const IDENTITY_INTEGRATIONS: IdentityIntegration[] = [
 ];
 
 export const DEFERRED_INTEGRATIONS: DeferredIntegration[] = [
+  { id: 'posthog', name: 'PostHog', detail: 'Product analytics; not currently available for standard workflows', status: 'deferred' },
   { id: 'notion', name: 'Notion', detail: 'Workspace knowledge and databases', status: 'deferred' },
   { id: 'hubspot', name: 'HubSpot', detail: 'CRM contacts, deals, and pipeline', status: 'deferred' },
   { id: 'airtable', name: 'Airtable', detail: 'Operating bases and records', status: 'deferred' },

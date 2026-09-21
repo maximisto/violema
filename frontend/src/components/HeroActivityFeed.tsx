@@ -3,10 +3,7 @@ import ShieldAlert from 'lucide-react/dist/esm/icons/shield-alert.js';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles.js';
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 
-// A floating, looping "live activity" card for the hero. It cycles through real
-// workspace events from different actors (Violema, a teammate, Dima) so the hero
-// reads as a live, multi-person operation — and folds the "Approved & delivered"
-// moment into an animated element instead of a static badge.
+// Illustrative activity for the marketing tour, never live customer events.
 
 interface Activity {
   initials: string;
@@ -106,7 +103,7 @@ export default function HeroActivityFeed({ className = '' }: { className?: strin
                 <span className="live-dot absolute inset-0 rounded-full" />
                 <span className="relative h-1 w-1 rounded-full bg-signal-400" />
               </span>
-              <span className="text-telemetry text-[0.4rem] uppercase tracking-[0.14em] text-[#7c8aa3]">Live</span>
+              <span className="text-telemetry text-[0.4rem] uppercase tracking-[0.14em] text-[#7c8aa3]">Example</span>
             </span>
           </div>
           <p className="mt-0.5 truncate text-[0.58rem] leading-snug text-[#c2cadb]">{item.action}</p>
