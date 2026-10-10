@@ -5,7 +5,11 @@ const nav = (route,href,label) => `<a href="${href}"${route===href?' aria-curren
 const external = '<span class="external-glyph" aria-hidden="true">↗</span>';
 const fontFiles = ['instrument-sans-latin-wght-normal.woff2', 'inter-latin-wght-normal.woff2'];
 
-function head(route, title, description) {
+// Pages with evidence interactions preload the modules site.mjs imports, so the bench and the
+// replay enhance without a second round trip.
+const labModules = ['/company-assets/browser/tabs.mjs', '/company-assets/browser/lab.mjs', '/company-assets/browser/render.mjs', '/company-assets/data/corpora.mjs'];
+
+function head(route, title, description, { lab = false } = {}) {
   return [
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -24,6 +28,7 @@ function head(route, title, description) {
     '<link rel="icon" href="/company-assets/violema-icon.svg" type="image/svg+xml">',
     ...fontFiles.map(file => `<link rel="preload" href="/company-assets/fonts/${file}" as="font" type="font/woff2" crossorigin>`),
     '<link rel="stylesheet" href="/company-assets/site.css">',
+    ...(lab ? labModules : []).map(href => `<link rel="modulepreload" href="${href}">`),
   ].join('');
 }
 
@@ -35,8 +40,8 @@ function siteFooter() {
   return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="wordmark footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span><span>Existing workspace: <span class="planned-destination">agent.purpleorange.ai</span> <small>planned destination, not live here</small></span></div></div></footer>`;
 }
 
-export function shell(route, title, description, content) {
-  return `<!doctype html><html lang="en"><head>${head(route, title, description)}</head><body><a class="skip-link" href="#main">Skip to content</a>${siteHeader(route)}<main id="main">${content}</main>${siteFooter()}<script type="module" src="/company-assets/browser/site.mjs"></script></body></html>`;
+export function shell(route, title, description, content, options = {}) {
+  return `<!doctype html><html lang="en"><head>${head(route, title, description, options)}</head><body><a class="skip-link" href="#main">Skip to content</a>${siteHeader(route)}<main id="main">${content}</main>${siteFooter()}<script type="module" src="/company-assets/browser/site.mjs"></script></body></html>`;
 }
 
 // The six records of the method. A real sequence, so the stations are numbered.
@@ -75,7 +80,7 @@ export function homePage(corpora,stress) {
     `<section class="section" aria-labelledby="teaser-heading"><div class="wrap split"><div><p class="label">Evidence lab</p><h2 id="teaser-heading">Open the record.</h2><p class="lede">Two research questions. One way to inspect sources, claims, and the limits between them.</p></div>${teaser(corpora)}</div></section>`,
     `<section class="section" aria-labelledby="research-title"><div class="wrap"><div class="research"><div class="research-aside"><p class="label">Research direction</p><h2 id="research-title">Oryx</h2><span class="pill">In development</span></div><div class="research-body"><h3>Another domain should change the questions, not erase the evidence trail.</h3><p>Oryx is a broader research direction in scientific synthesis, still in development. Separately, the materials packet asks how perovskite stability reports compare under different conditions. It is a transfer specimen for the evidence workflow, not an Oryx product or a quantitative validation.</p><a class="text-link" href="/demo/#corpus-perovskite-stability">Inspect the materials packet</a></div></div></div></section>`,
     `<section class="section closing" aria-labelledby="closing-title"><div class="wrap split"><h2 id="closing-title">Start with a conclusion<br>worth getting right.</h2><div class="split-body"><p class="lede">Walk through the evidence, challenge the assumptions, and identify the next question that needs a defensible answer.</p><div class="actions"><a class="button button-primary" href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></div></div></div></section>`,
-  ].join(''));
+  ].join(''), { lab: true });
 }
 
 export function methodPage(corpora,stress) {
@@ -102,5 +107,5 @@ export function demoPage(corpora,stress) {
     '<noscript><p class="wrap no-js-note">JavaScript is off. Both prepared packets and all claims are shown below; source links and packet downloads remain available. The bias control requires JavaScript.</p></noscript>',
     `<div class="wrap lab-content">${corpora.map(c=>corpusPanel(c,stress)).join('')}</div>`,
     '<section class="wrap demo-closing" aria-label="Scope of this demonstration"><p>This demonstration supports inspection and expert criticism. It is not clinical guidance, a comprehensive literature review, or a claim of validated analysis across arbitrary corpora.</p><a class="text-link" href="/method/">Understand the method</a></section>',
-  ].join(''));
+  ].join(''), { lab: true });
 }
