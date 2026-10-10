@@ -196,3 +196,20 @@ test('method page keeps its three sections, six stations and packet-derived exam
   assert.ok(html.includes(escapeHTML(stressTest.reviewStatus)));
   assert.match(html,/href="\/company-assets\/data\/portability-receipt\.json" download/);
 });
+
+test('demo bench keeps one rail, one dark instrument and one evidence column per corpus',async()=>{
+  const html=await readFile(join(dist,'demo/index.html'),'utf8');
+  assert.match(html,/<nav class="segmented corpus-switch" data-corpus-switch aria-label="Choose a research corpus">/);
+  assert.match(html,/<button class="button button-secondary reset-button" type="button" data-reset hidden>/);
+  for(const corpus of corpora){
+    const panel=corpusPanel(corpus,stressTest);
+    assert.equal((panel.match(/class="instrument bench-instrument"/g)||[]).length,1);
+    for(const claim of corpus.claims){
+      assert.equal((panel.match(new RegExp(`data-claim-panel="${claim.id}"`,'g'))||[]).length,2,'claim and its evidence switch together');
+      assert.ok(panel.includes(`id="claim-heading-${claim.id}"`)&&panel.includes(`id="evidence-${claim.id}"`));
+      assert.ok(panel.includes(escapeHTML(claim.status)));
+    }
+    assert.ok(panel.includes(escapeHTML(corpus.reviewStatus))&&panel.includes(escapeHTML(corpus.scopeNote)));
+  }
+  assert.match(html,/class="table-scroll" tabindex="0" role="region"/);
+});
