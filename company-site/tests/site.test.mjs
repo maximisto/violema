@@ -5,7 +5,7 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { corpora, stressTest } from '../data/corpora.mjs';
-import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel } from '../lib/render.mjs';
+import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen } from '../lib/render.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
@@ -114,8 +114,17 @@ test('downloaded packets stay identical to source and do not leak analysis acros
 });
 
 test('browser module paths and self-hosted stylesheet assets resolve in the generated namespace',async()=>{
-  const browser=await readFile(join(dist,'company-assets/browser/site.mjs'),'utf8');
-  for(const [,relative] of browser.matchAll(/from '([^']+)'/g))assert.ok((await stat(resolve(dist,'company-assets/browser',relative))).isFile());
+  // Follow static and dynamic imports from the entry module through every module it reaches.
+  const seen=new Set(),queue=[join(dist,'company-assets/browser/site.mjs')];
+  while(queue.length){
+    const file=queue.shift();
+    if(seen.has(file))continue;
+    seen.add(file);
+    assert.ok((await stat(file)).isFile(),`${file} exists`);
+    const source=await readFile(file,'utf8');
+    for(const [,relative] of source.matchAll(/(?:from |import\()'([^']+)'/g))queue.push(resolve(dirname(file),relative));
+  }
+  for(const module of ['tabs.mjs','lab.mjs','render.mjs'])assert.ok(seen.has(join(dist,'company-assets/browser',module)),`${module} is reachable from site.mjs`);
   const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
   for(const [,relative] of css.matchAll(/url\('([^']+)'\)/g))assert.ok((await stat(join(dist,relative))).isFile());
   assert.match(css,/prefers-reduced-motion:\s*reduce/);
@@ -131,4 +140,49 @@ test('self-hosted fonts match their recorded checksums and ship with their licen
     assert.equal(createHash('sha256').update(source).digest('hex'),hash,name);
     assert.ok(source.equals(await readFile(join(dist,'company-assets/fonts',name))),`${name} is served unchanged`);
   }
+});
+
+test('interval scale marks come from the saved analysis and the assumed shift',()=>{
+  const position=value=>(4+(value+1.6)/2.2*92).toFixed(3)+'%';
+  for(const bias of [0,.31,.6]){
+    const svg=intervalFigure(stressTest,bias);
+    const scenario=calculateBiasScenario(stressTest,bias);
+    assert.ok(svg.includes(`cx="${position(stressTest.estimate)}" cy="42"`),'saved estimate stays put');
+    assert.ok(svg.includes(`cx="${position(scenario.estimate)}" cy="72"`),'shifted estimate moves by the shift');
+    assert.ok(svg.includes(`x1="${position(scenario.lower)}" y1="72" x2="${position(scenario.upper)}" y2="72"`),'shifted interval keeps both bounds');
+    for(const threshold of stressTest.thresholds)assert.ok(svg.includes(`x1="${position(threshold)}"`),'reference line drawn at its saved threshold');
+  }
+  assert.match(intervalFigure(stressTest),/aria-label="Saved estimate −0\.90, interval −1\.26 to −0\.55 in Hedges’ g; assumed shift 0\.00\."/);
+});
+
+test('the trace draws one lead per cited source, at each equal row centre',()=>{
+  for(const corpus of corpora)for(const claim of corpus.claims){
+    const markup=traceSpecimen(corpus,claim);
+    const rows=claim.sourceIds.length;
+    assert.equal((markup.match(/class="trace-lead"/g)||[]).length,rows);
+    assert.equal((markup.match(/class="trace-trunk"/g)||[]).length,rows);
+    assert.ok(markup.includes(`--rows:${rows}`));
+    claim.sourceIds.forEach((id,i)=>{
+      const source=corpus.sources.find(item=>item.id===id);
+      const centre=((i+.5)/rows*100).toFixed(3);
+      assert.ok(markup.includes(`y1="${centre}%" x2="100%" y2="${centre}%"`));
+      assert.ok(markup.includes(escapeHTML(source.title)));
+      assert.ok(markup.includes(`<code>${escapeHTML(source.id)}</code>`));
+      assert.ok(markup.includes(sourceURL(source.url)));
+    });
+    assert.ok(markup.includes(escapeHTML(claim.text))&&markup.includes(escapeHTML(claim.caveat)));
+    assert.doesNotMatch(markup,/trace-animate/,'only the hero opts into motion');
+  }
+});
+
+test('home instrument is the PsychDoc specimen with a bounded, initially hidden replay control',async()=>{
+  const html=await readFile(join(dist,'index.html'),'utf8');
+  assert.match(html,/<h2 id="specimen-title" class="instrument-title">PsychDoc specimen<\/h2>/);
+  assert.equal((html.match(/class="trace trace-animate"/g)||[]).length,1);
+  assert.match(html,/<div class="bias-control" data-bias-control hidden><label for="hero-bias-range">/);
+  assert.match(html,/id="hero-bias-range" type="range" min="0" max="0\.6" step="0\.01" value="0"/);
+  assert.ok(html.includes('The control adds the same assumed shift to the estimate and both interval endpoints. It does not estimate bias, refit the model, or change the interval width.'));
+  assert.ok(html.includes(escapeHTML(stressTest.direction)));
+  for(const corpus of corpora)assert.ok(html.includes(`href="/demo/#corpus-${corpus.id}"`),'teaser links into the lab');
+  for(const page of ['method/index.html','demo/index.html'])assert.doesNotMatch(await readFile(join(dist,page),'utf8'),/trace-animate/);
 });

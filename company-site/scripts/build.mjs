@@ -32,6 +32,8 @@ for (const [route, markup] of [
 for (const [source, destination] of [
   ['browser/site.css', 'company-assets/site.css'],
   ['browser/site.mjs', 'company-assets/browser/site.mjs'],
+  ['browser/tabs.mjs', 'company-assets/browser/tabs.mjs'],
+  ['browser/lab.mjs', 'company-assets/browser/lab.mjs'],
   ['lib/render.mjs', 'company-assets/browser/render.mjs'],
   ['data/corpora.mjs', 'company-assets/data/corpora.mjs'],
 ]) await copyFile(join(root, source), join(dist, destination));
