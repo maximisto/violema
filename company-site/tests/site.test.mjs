@@ -295,3 +295,16 @@ test('the demo replay states that it always uses Claim 1, beside the control, cl
   assert.equal(demo.split('Saved replay: Claim 1, primary analysis.').length-1,1);
   assert.doesNotMatch(demo,/whichever claim is selected/,'earlier wording is gone');
 });
+
+test('the trial-field caption uses the page tertiary ink, never the instrument ink, at 4.5:1 or more',async()=>{
+  const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
+  const token=name=>css.match(new RegExp(`:root \\{[\\s\\S]*?--${name}: ([^;]+);`))[1].trim();
+  const caption=css.match(/\.trial-field-caption \{[^}]*\}/)[0];
+  assert.match(caption,/color: var\(--page-ink-3\);/);
+  assert.equal(token('page-ink-3'),'var(--ink-3)');
+  const ink3=token('ink-3'),bg=token('bg');
+  assert.equal(ink3,'#626B78');
+  const lum=hex=>{const [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(c=>c<=0.03928?c/12.92:((c+0.055)/1.055)**2.4);return 0.2126*r+0.7152*g+0.0722*b;};
+  const [hi,lo]=[lum(ink3),lum(bg)].sort((a,b)=>b-a);
+  assert.ok((hi+0.05)/(lo+0.05)>=4.5,`caption contrast ${((hi+0.05)/(lo+0.05)).toFixed(2)}`);
+});

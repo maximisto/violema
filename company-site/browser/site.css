@@ -44,6 +44,7 @@
 
   /* Page colours that stay put inside the instrument's re-pointed scope (the hero trial field). */
   --page-ink: var(--ink);
+  --page-ink-3: var(--ink-3);
   --page-accent: var(--accent);
   --page-bg: var(--bg);
 
@@ -678,7 +679,9 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
     margin: 0;
     font-size: var(--text-caption);
     line-height: 1.5;
-    color: var(--ink-3);
+    /* The caption sits on the light page although it lives inside the instrument's markup, so it
+       takes the page's tertiary ink explicitly (4.99:1 on --bg), never the instrument's. */
+    color: var(--page-ink-3);
   }
   .trial-field line { stroke-width: 1; fill: none; }
   .field-base .field-link,
