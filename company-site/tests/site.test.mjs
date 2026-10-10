@@ -62,9 +62,8 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
   assert.doesNotMatch(html,/href="https:\/\/agent\.purpleorange\.ai/);
   assert.match(html,/planned destination, not live here/);
   assert.doesNotMatch(html,/—/,'Public copy uses no em-dashes');
-  assert.doesNotMatch(html,/violema-logo|YOUR AI OPERATOR/i,'The legacy agent logo is gone');
-  assert.match(html,/<a class="wordmark" href="\/" aria-label="Violema home">Violema<\/a>/);
-  assert.match(html,/rel="icon" href="\/company-assets\/violema-icon\.svg"/);
+  assert.match(html,/<a class="brand" href="\/" aria-label="Violema home"><img src="\/company-assets\/violema-logo\.png" width="2172" height="724" alt="Violema"><\/a>/);
+  assert.match(html,/rel="icon" href="\/company-assets\/violema-icon\.png" type="image\/png"/);
   assert.doesNotMatch(html,/\/Users\/|\/private\/tmp\/|OpenRouter\.env|Slack\.env|auth-users/);
   const ids=[...html.matchAll(/\sid="([^\"]+)"/g)].map(match=>match[1]);
   assert.equal(new Set(ids).size,ids.length,'Document IDs must be unique');
@@ -212,4 +211,11 @@ test('demo bench keeps one rail, one dark instrument and one evidence column per
     assert.ok(panel.includes(escapeHTML(corpus.reviewStatus))&&panel.includes(escapeHTML(corpus.scopeNote)));
   }
   assert.match(html,/class="table-scroll" tabindex="0" role="region"/);
+});
+
+test('the header logo and icon are the owner-approved brand files, served unchanged',async()=>{
+  for(const [approved,served] of [['violema-restored-type-20261010.png','violema-logo.png'],['violema-fine-neck-icon-20261010.png','violema-icon.png']]){
+    const source=await readFile(join(root,'brand',approved));
+    assert.ok(source.equals(await readFile(join(dist,'company-assets',served))),`${served} is ${approved}`);
+  }
 });

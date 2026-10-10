@@ -60,7 +60,7 @@
 
   --frame: 1240px;
   --gutter: 40px;
-  --header-height: 64px;
+  --header-height: 100px;
   --section-space: clamp(72px, 9vw, 120px);
 
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -308,18 +308,10 @@ code {
   min-height: var(--header-height);
 }
 
-.wordmark {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  font-family: var(--font-display);
-  font-size: 1.375rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1;
-  color: var(--ink);
-  text-decoration: none;
-}
+/* The approved logo; its "Scientific Evidence" line needs about 240 px to stay legible. */
+.brand { display: inline-flex; align-items: center; flex: none; min-height: 44px; line-height: 0; }
+.brand img { display: block; width: 248px; height: auto; }
+.header-inner { padding-block: 6px; }
 
 .primary-nav { display: flex; align-items: center; gap: 4px; margin-right: -12px; }
 .primary-nav a {
@@ -339,15 +331,22 @@ code {
 .primary-nav a:hover { color: var(--ink); background: var(--surface-2); }
 .primary-nav a[aria-current='page'] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
 
+@media (max-width: 767px) {
+  .brand img { width: 200px; }
+}
 @media (max-width: 599px) {
-  .header-inner { gap: 12px; }
-  .wordmark { font-size: 1.25rem; }
+  :root { --header-height: 72px; }
+  .header-inner { gap: 12px; padding-block: 4px; }
+  .brand img { width: 168px; }
   .primary-nav { gap: 0; margin-right: -6px; }
   .primary-nav a { padding: 0 6px; font-size: 0.875rem; }
 }
-/* Below 360 px the three links no longer fit beside the wordmark; they take a second row. */
-@media (max-width: 359px) {
-  .header-inner { flex-wrap: wrap; gap: 0; padding-block: 2px; }
+/* Below 480 px the links take a second row. Only the logo row scrolls away, so the
+   navigation stays reachable without a tall sticky block. */
+@media (max-width: 479px) {
+  :root { --header-height: 44px; }
+  .site-header { top: -60px; }
+  .header-inner { flex-wrap: wrap; gap: 0; padding-block: 4px 0; }
   .primary-nav { justify-content: space-between; width: calc(100% + 12px); margin-inline: -6px; }
 }
 
@@ -366,7 +365,18 @@ code {
   align-items: start;
   padding-bottom: 32px;
 }
-.footer-wordmark { font-size: 1.75rem; }
+.footer-wordmark {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--ink);
+  text-decoration: none;
+}
 .footer-tagline { margin: 0; font-size: var(--text-small); }
 .footer-nav { display: flex; flex-direction: column; align-items: flex-start; }
 .footer-nav a {

@@ -20,7 +20,8 @@ Open `http://127.0.0.1:4317/`, `/method/` and `/demo/`. `PORT` can override the 
 - `browser/tabs.mjs`: ARIA tabs over plain anchor links (arrow, Home and End keys; links still jump without JavaScript).
 - `browser/lab.mjs`: the assumed-bias replay (home hero and demo) and the bench: corpus switch, claim selection, reset and hash links.
 - `browser/site.css`: colour tokens (light, dark and the always-dark instrument), type scale, layout and the one on-load animation.
-- `assets/`: self-hosted fonts with their licences and the placeholder icon (see below).
+- `assets/`: self-hosted fonts with their licences (see below).
+- `brand/`: the approved logo, its icon, the concepts that led to it and their prompts (see "Scientific logo preview").
 - `docs/design-plan.md`: the design plan: tokens, type, layouts and the instrument's anatomy.
 - `data/`: source packet contract, evidence records, provenance and execution receipts. See `data/provenance.md` for scope and scientific limitations.
 - `scripts/build.mjs`: validates exported packet freshness, then builds only `company-site/dist`.
@@ -35,7 +36,7 @@ Colours are CSS custom properties on `:root`, redefined for `prefers-color-schem
 
 The hero trace is the only on-load motion. Its leads are SVG lines placed by percentage on equal-height source rows, drawn with `stroke-dashoffset` under `@media (scripting: enabled) and (prefers-reduced-motion: no-preference)`; with JavaScript off or reduced motion they are simply drawn. Every mark comes from the packet: the leads are the claim's `sourceIds`, the scale shows the saved estimate, interval and reference thresholds.
 
-## Fonts and icon
+## Fonts
 
 `assets/fonts/` holds the two variable fonts PsychDoc already self-hosts, copied byte for byte from PsychDoc's `app/fonts/` (brand-refresh branch, 2026-10-10) with no download:
 
@@ -46,7 +47,9 @@ The hero trace is the only on-load motion. Its leads are SVG lines placed by per
 
 `assets/fonts/SHA256SUMS` records all four files; a test checks the sums and that the build serves the files and licences unchanged under `/company-assets/fonts/`. Instrument Sans sets the wordmark, headings, navigation and buttons; Inter sets running text.
 
-`assets/violema-icon.svg` is a placeholder favicon (a capital V in the accent on the page ground, with a dark-scheme variant). The header wordmark is live text. Both are placeholders until a chosen mark exists.
+## Logo
+
+The header shows the owner-approved scientific logo and the favicon uses its matching icon. Both live in `brand/` and the build copies them unchanged: `brand/violema-restored-type-20261010.png` to `company-assets/violema-logo.png` and `brand/violema-fine-neck-icon-20261010.png` to `company-assets/violema-icon.png`. Do not edit, regenerate or recolour files under `brand/`; a test checks the served files are byte-identical to the approved ones. The logo is set at about 248 px wide on desktop and 168 px on phones so its "Scientific Evidence" line stays legible.
 
 ## Updating a packet
 
@@ -61,3 +64,7 @@ Run against the built preview. Check all three routes by direct load and refresh
 Automated Node checks cover arithmetic boundaries, packet identity, document IDs/anchors, local links, assets, source protocols, corpus isolation, and meaningful no-JavaScript markup. Browser checks are separate because the package deliberately has no browser automation dependency.
 
 This directory contains no deploy action. The adjacent migration preparation packet owns nginx cutover/rollback instructions. Do not copy the preview to production or remove preview indexing guards without a separate release request.
+
+## Scientific logo preview
+
+The October 10 circuit-hair and glasses concept replaces the operator lockup only in this local company-site bundle. After feedback that three thick strands looked jester-like, layered flowing hair and fine microchip traces were restored; research glasses and the Scientific Evidence descriptor reflect the new positioning. Max then approved this direction and requested an open eye; the current logo and icon use a calm, attentive open eye. The current wordmark restores lighter original-style geometric lettering, adds generous space beside the face, and integrates violet-to-copper color across the name. Both text lines render larger without increased boldness; the subtitle spans the name, and the increased header display sizes remain. The logo and matching icon now use a fine jaw/neck contour instead of the heavy dark band. The preferred pre-neck-edit lettering has been restored with an explicitly authorized direct pixel copy; the portrait and lettering regions are verified against their respective source images. `brand/` preserves the microscope alternative, selected transparent PNG, icon and generation prompts. The existing application brand assets remain intact. These raster concepts still need final vector/small-size refinement before a permanent brand release.

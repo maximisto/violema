@@ -25,7 +25,7 @@ function head(route, title, description, { lab = false } = {}) {
     `<meta property="og:title" content="${e(title)}">`,
     `<meta property="og:description" content="${e(description)}">`,
     `<meta property="og:url" content="https://violema.com${route}">`,
-    '<link rel="icon" href="/company-assets/violema-icon.svg" type="image/svg+xml">',
+    '<link rel="icon" href="/company-assets/violema-icon.png" type="image/png">',
     ...fontFiles.map(file => `<link rel="preload" href="/company-assets/fonts/${file}" as="font" type="font/woff2" crossorigin>`),
     '<link rel="stylesheet" href="/company-assets/site.css">',
     ...(lab ? labModules : []).map(href => `<link rel="modulepreload" href="${href}">`),
@@ -33,11 +33,11 @@ function head(route, title, description, { lab = false } = {}) {
 }
 
 function siteHeader(route) {
-  return `<header class="site-header" data-site-header><div class="wrap header-inner"><a class="wordmark" href="/" aria-label="Violema home">Violema</a><nav class="primary-nav" aria-label="Main navigation">${nav(route, '/method/', 'Method')}${nav(route, '/demo/', 'Evidence lab')}<a href="${psychdoc}">PsychDoc ${external}</a></nav></div></header>`;
+  return `<header class="site-header" data-site-header><div class="wrap header-inner"><a class="brand" href="/" aria-label="Violema home"><img src="/company-assets/violema-logo.png" width="2172" height="724" alt="Violema"></a><nav class="primary-nav" aria-label="Main navigation">${nav(route, '/method/', 'Method')}${nav(route, '/demo/', 'Evidence lab')}<a href="${psychdoc}">PsychDoc ${external}</a></nav></div></header>`;
 }
 
 function siteFooter() {
-  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="wordmark footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span><span>Existing workspace: <span class="planned-destination">agent.purpleorange.ai</span> <small>planned destination, not live here</small></span></div></div></footer>`;
+  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span><span>Existing workspace: <span class="planned-destination">agent.purpleorange.ai</span> <small>planned destination, not live here</small></span></div></div></footer>`;
 }
 
 export function shell(route, title, description, content, options = {}) {

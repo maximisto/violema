@@ -1,0 +1,27 @@
+{
+  "method": "direct RGBA pixel copy, explicitly authorized by Max",
+  "output": "violema-restored-type-20261010.png",
+  "portrait_source": "violema-fine-neck-20261010.png",
+  "lettering_source": "violema-refined-wordmark-20261010.png",
+  "dimensions": [
+    2172,
+    724
+  ],
+  "split_x": 900,
+  "portrait_columns_preserved": [
+    0,
+    899
+  ],
+  "lettering_columns_restored": [
+    900,
+    2171
+  ],
+  "seam_alpha": 0,
+  "portrait_region_byte_equal": true,
+  "lettering_region_byte_equal": true,
+  "png_roundtrip_byte_equal": true,
+  "i_stem_pixels_at_y340": 24,
+  "portrait_region_sha256": "29bd8a87c683754929c040ac4838330de6172e575ab45bb6582c2439288f0a97",
+  "lettering_region_sha256": "47d7259020b757f09f37c58e7fcb5e1d08bec0ff0e11445be7482f6223fd8fe0",
+  "output_file_sha256": "185a7bd683db26c7738dca49148318a2dadf3a113d22744b7a2176f03e62d90a"
+}
