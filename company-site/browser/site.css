@@ -504,6 +504,7 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
 }
 .instrument-foot > span { padding-block: 12px; }
 .instrument-foot code { margin-left: 6px; font-size: 0.75rem; }
+.instrument-foot-action { display: inline-flex; align-items: center; gap: 12px; }
 .instrument-foot a {
   display: inline-flex;
   align-items: center;
