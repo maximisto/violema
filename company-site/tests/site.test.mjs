@@ -289,6 +289,7 @@ test('the demo replay states that it always uses Claim 1, beside the control, cl
   const clinical=corpusPanel(corpora.find(c=>c.id===stressTest.corpusId),stressTest);
   assert.ok(clinical.includes(`${label}<div class="bias-control" data-bias-control hidden>`),'the label sits directly beside the assumed-shift control');
   assert.equal(clinical.split('Saved replay:').length-1,1);
+  assert.match(clinical,/id="bias-range"[^>]*aria-describedby="replay-scope bias-explanation"/);
   assert.doesNotMatch(corpusPanel(corpora.find(c=>c.id==='perovskite-stability'),stressTest),/Saved replay:|replay-scope/);
   const demo=await readFile(join(dist,'demo/index.html'),'utf8');
   assert.equal(demo.split('Saved replay: Claim 1, primary analysis.').length-1,1);
