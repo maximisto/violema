@@ -21,7 +21,7 @@ for (const corpus of corpora) {
   await copyFile(packet,join(dist,'company-assets/data',`${corpus.id}.json`));
 }
 for(const name of ['provenance.md','stage-b-snapshot.json','portability-receipt.json']) await copyFile(join(root,'data',name),join(dist,'company-assets/data',name));
-for(const [source,destination] of [['brand/violema-logo-light-20260729.png','violema-logo.png'],['violema-icon.svg','violema-icon.svg']]) await copyFile(join(frontend,source),join(dist,'company-assets',destination));
+for(const [source,destination] of [['violema-evidence-lens-20261010.png','violema-logo.png'],['violema-evidence-lens-icon-20261010.png','violema-icon.png']]) await copyFile(join(root,'brand',source),join(dist,'company-assets',destination));
 for(const font of ['geist-sans-400','geist-sans-500','geist-sans-600']) await copyFile(join(frontend,'fonts/geist',`${font}.woff2`),join(dist,'company-assets/fonts',`${font}.woff2`));
 await copyFile(join(frontend,'fonts/clash/clash-display-500.woff2'),join(dist,'company-assets/fonts/clash-display-500.woff2'));
 await writeFile(join(dist,'robots.txt'),'User-agent: *\nDisallow: /\n# Local preview: remove noindex and disallow only in a separately approved release.\n');

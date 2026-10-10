@@ -17,7 +17,7 @@ Open `http://127.0.0.1:4317/`, `/method/` and `/demo/`. `PORT` can override the 
 - `lib/pages.mjs`: static page composition and navigation.
 - `lib/render.mjs`: shared evidence renderer, escaped text, safe source links, and bounded additive-shift arithmetic.
 - `browser/site.mjs`: progressive enhancement for corpus selection, claim selection, range control, and reset.
-- `browser/site.css`: responsive typography and layout; fonts and the current logo are copied from the existing frontend.
+- `browser/site.css`: responsive typography and layout; fonts are copied from the existing frontend; the scientific logo lives in `brand/`.
 - `data/`: source packet contract, evidence records, provenance and execution receipts. See `data/provenance.md` for scope and scientific limitations.
 - `scripts/build.mjs`: validates exported packet freshness, then builds only `company-site/dist`.
 - `scripts/preview.mjs`: loopback-only preview server.
@@ -38,3 +38,7 @@ Run against the built preview. Check all three routes by direct load and refresh
 Automated Node checks cover arithmetic boundaries, packet identity, document IDs/anchors, local links, assets, source protocols, corpus isolation, and meaningful no-JavaScript markup. Browser checks are separate because the package deliberately has no browser automation dependency.
 
 This directory contains no deploy action. The adjacent migration preparation packet owns nginx cutover/rollback instructions. Do not copy the preview to production or remove preview indexing guards without a separate release request.
+
+## Scientific logo preview
+
+The October 10 evidence-lens concept replaces the operator lockup only in this local company-site bundle. The female profile, violet hair and source nodes remain recognizable; research glasses and the Scientific Evidence descriptor reflect the new positioning. `brand/` preserves the microscope alternative, selected transparent PNG, icon and generation prompts. The existing application brand assets remain intact. These raster concepts still need final vector/small-size refinement before a permanent brand release.
