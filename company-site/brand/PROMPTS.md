@@ -1,6 +1,6 @@
 # Violema scientific logo concepts — 2026-10-10
 
-**Current preview:** [circuit hair with glasses](violema-circuit-glasses-20261010.png), with a [matching icon](violema-circuit-glasses-icon-20261010.png). Max found the three thick strands jester-like; the revised candidate restores layered hair and fine circuitry from the original. [Correction prompts](CIRCUIT-CORRECTION.md). Earlier versions below are archived exploration.
+**Current preview:** [open-eye logo](violema-open-eye-20261010.png) and [matching icon](violema-open-eye-icon-20261010.png). Max approved the flowing circuit hair and requested an open eye; both assets now use a calm, attentive open eye. [Open-eye prompts](OPEN-EYE.md). The previous [circuit-hair correction](CIRCUIT-CORRECTION.md) and earlier versions remain archived exploration.
 
 Built-in image_gen editing, actual transparent PNG output. Original raster remains untouched. The initial A/B lockups are 2172×724; B was initially selected and is now superseded by the circuit-hair correction above. User requested a microscope/glasses/scientific evolution. The existing profile is the identity reference. These are raster concepts; final vector refinement and a dedicated small-size lockup remain future work.
 
