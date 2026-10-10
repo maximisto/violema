@@ -1,6 +1,6 @@
 # Violema scientific logo concepts — 2026-10-10
 
-**Current preview:** [lighter, spaced wordmark](violema-refined-wordmark-20261010.png) with [open-eye icon](violema-open-eye-icon-20261010.png). Original-style lighter geometric lettering, a generous portrait/name gap and a continuous violet-to-copper transition replace the rejected heavy type and orange hotspots. The subtitle spans the name. [Refinement prompts](REFINED-WORDMARK.md). Earlier variants remain archived.
+**Current preview:** [fine-neck logo](violema-fine-neck-20261010.png) and [matching icon](violema-fine-neck-icon-20261010.png). A fine jaw/neck contour replaces the heavy dark band. The open eye, flowing circuit hair, generous portrait/name gap and light violet-to-copper wordmark remain. [Neck-refinement prompts](NECK-REFINEMENT.md); [preceding typography and spacing correction](REFINED-WORDMARK.md). Earlier variants remain archived.
 
 Built-in image_gen editing, actual transparent PNG output. Original raster remains untouched. The initial A/B lockups are 2172×724; B was initially selected and is now superseded by the circuit-hair correction above. User requested a microscope/glasses/scientific evolution. The existing profile is the identity reference. These are raster concepts; final vector refinement and a dedicated small-size lockup remain future work.
 
