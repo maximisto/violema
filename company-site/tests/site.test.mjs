@@ -186,3 +186,13 @@ test('home instrument is the PsychDoc specimen with a bounded, initially hidden 
   for(const corpus of corpora)assert.ok(html.includes(`href="/demo/#corpus-${corpus.id}"`),'teaser links into the lab');
   for(const page of ['method/index.html','demo/index.html'])assert.doesNotMatch(await readFile(join(dist,page),'utf8'),/trace-animate/);
 });
+
+test('method page keeps its three sections, six stations and packet-derived examples',async()=>{
+  const html=await readFile(join(dist,'method/index.html'),'utf8');
+  for(const id of ['trace','assumptions','transfer'])assert.ok(html.includes(`id="${id}"`));
+  assert.equal((html.match(/class="station"/g)||[]).length,6);
+  const claim=corpora.find(c=>c.id==='psychdoc').claims[0];
+  assert.ok(html.includes(escapeHTML(claim.text))&&html.includes(escapeHTML(claim.caveat))&&html.includes('Limit recorded beside the claim'));
+  assert.ok(html.includes(escapeHTML(stressTest.reviewStatus)));
+  assert.match(html,/href="\/company-assets\/data\/portability-receipt\.json" download/);
+});

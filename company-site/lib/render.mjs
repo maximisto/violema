@@ -47,7 +47,7 @@ export const referenceNote = '<p class="caption">Reference lines are saved analy
 
 // A claim and the source records it cites. Leads are horizontal SVG lines placed by percentage on
 // equal-height source rows, so each meets its row centre at any width without measuring the DOM.
-export function traceSpecimen(corpus, claim, { animate = false } = {}) {
+export function traceSpecimen(corpus, claim, { animate = false, limitLabel = 'What the claim does not establish' } = {}) {
   const sources = claim.sourceIds.map(id => {
     const source = corpus.sources.find(item => item.id === id);
     if (!source) throw new Error(`Unresolved source ${id}`);
@@ -56,7 +56,7 @@ export function traceSpecimen(corpus, claim, { animate = false } = {}) {
   const row = i => ((i + .5) / sources.length * 100).toFixed(3);
   const leads = sources.map((_, i) => `<line class="trace-lead" pathLength="1" x1="0" y1="${row(i)}%" x2="100%" y2="${row(i)}%" style="--i:${i}"/><circle class="trace-pin" cx="0" cy="${row(i)}%" r="2.5"/><circle class="trace-node" cx="100%" cy="${row(i)}%" r="3" style="--i:${i}"/>`).join('');
   const trunk = sources.map((_, i) => `<line class="trace-trunk" pathLength="1" x1="9" y1="0" x2="9" y2="${row(i)}%" style="--i:${i}"/><circle class="trace-node trace-trunk-node" cx="9" cy="${row(i)}%" r="3" style="--i:${i}"/>`).join('');
-  return `<div class="trace${animate ? ' trace-animate' : ''}" data-trace style="--rows:${sources.length}"><div class="trace-claim"><p class="trace-label">Source-linked claim</p><p class="trace-claim-text">${e(claim.text)}</p><p class="trace-label">What the claim does not establish</p><p class="trace-limit">${e(claim.caveat)}</p></div><svg class="trace-lines" aria-hidden="true" focusable="false"><g class="trace-leads">${leads}</g><g class="trace-trunks">${trunk}</g></svg><ol class="trace-sources" aria-label="Linked evidence">${sources.map((source, i) => `<li style="--i:${i}"><a href="${sourceURL(source.url)}" target="_blank" rel="noopener noreferrer"><span class="trace-title">${e(source.title)}</span><span class="external-indicator" aria-label="opens in a new tab">↗</span></a><p class="trace-meta"><span>${e(source.kind)}</span><span>${e(source.year)}</span><code>${e(source.id)}</code></p></li>`).join('')}</ol></div>`;
+  return `<div class="trace${animate ? ' trace-animate' : ''}" data-trace style="--rows:${sources.length}"><div class="trace-claim"><p class="trace-label">Source-linked claim</p><p class="trace-claim-text">${e(claim.text)}</p><p class="trace-label">${e(limitLabel)}</p><p class="trace-limit">${e(claim.caveat)}</p></div><svg class="trace-lines" aria-hidden="true" focusable="false"><g class="trace-leads">${leads}</g><g class="trace-trunks">${trunk}</g></svg><ol class="trace-sources" aria-label="Linked evidence">${sources.map((source, i) => `<li style="--i:${i}"><a href="${sourceURL(source.url)}" target="_blank" rel="noopener noreferrer"><span class="trace-title">${e(source.title)}</span><span class="external-indicator" aria-label="opens in a new tab">↗</span></a><p class="trace-meta"><span>${e(source.kind)}</span><span>${e(source.year)}</span><code>${e(source.id)}</code></p></li>`).join('')}</ol></div>`;
 }
 
 export function sourceList(corpus, ids) {
