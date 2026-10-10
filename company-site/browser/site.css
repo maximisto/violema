@@ -1278,6 +1278,17 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
 .stress-panel > .small { margin-bottom: 10px; }
 .stress-panel > .status-line { margin-bottom: 16px; }
 .stress-panel .scenario-result { margin-top: 12px; }
+.replay-scope {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-nested);
+  font-size: var(--text-caption);
+  color: var(--ink-2);
+}
 .stress-panel .replay-notes { padding-top: 12px; }
 .stress-panel .replay-notes .caption + .caption { margin-top: 8px; }
 .not-applicable h3 { margin-bottom: 10px; font-size: 1.25rem; }

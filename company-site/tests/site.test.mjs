@@ -283,3 +283,14 @@ test('the home page build is deterministic',async()=>{
   assert.equal(homePage(corpora,stressTest,packet),first);
   assert.equal(await readFile(join(dist,'index.html'),'utf8'),first,'a separate build process produced the same bytes');
 });
+
+test('the demo replay states that it always uses Claim 1, beside the control, clinical corpus only',async()=>{
+  const label='<p class="replay-scope" id="replay-scope">Saved replay: Claim 1, primary analysis. Selecting another claim does not change this replay.</p>';
+  const clinical=corpusPanel(corpora.find(c=>c.id===stressTest.corpusId),stressTest);
+  assert.ok(clinical.includes(`${label}<div class="bias-control" data-bias-control hidden>`),'the label sits directly beside the assumed-shift control');
+  assert.equal(clinical.split('Saved replay:').length-1,1);
+  assert.doesNotMatch(corpusPanel(corpora.find(c=>c.id==='perovskite-stability'),stressTest),/Saved replay:|replay-scope/);
+  const demo=await readFile(join(dist,'demo/index.html'),'utf8');
+  assert.equal(demo.split('Saved replay: Claim 1, primary analysis.').length-1,1);
+  assert.doesNotMatch(demo,/whichever claim is selected/,'earlier wording is gone');
+});
