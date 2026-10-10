@@ -25,6 +25,12 @@ Public sources:
 
 The `analysis/stage_b/REVIEW.md` at the pinned commit says the Stage B brief awaits independent review and trial arm-level input verification remains incomplete. A computed result and a matching checksum do not resolve those gaps. The original rerun used package substitutions, documented in that review packet; this preview makes no claim to have repeated that environment.
 
+### Trial records of the saved primary analysis
+
+`sypres-primary-trials.json` lists the 12 trials pooled in the saved primary analysis, one record per label in `stage-b-snapshot.json` `primary.studies` (`primary.k` = 12). Each record has a stable `id` (the label as a slug, for example `davis-2021`), the `study` label exactly as in the snapshot, and the `year`, `doi` and `registration` fields copied verbatim from the `year`, `doi` and `registration_number` columns of the pinned SYPRES CSV (`analysis/stage_b/data/depression-psiloctr-25.1.2.csv`, SHA-256 `237b4a5601bd4de1b1c1b0e335e730677c2b09cd7a3ce2c893df623e9feba793`, read at PsychDoc commit `23a6e348e7a7d7586b6b205da2a2061f3e052520` on 10 October 2026). `csvRows` counts the CSV rows recorded for the label. A blank CSV field would be stored as null; none of the 12 is blank. Some `doi` fields list two DOIs exactly as the CSV does, and one registration is an ANZCTR id (`ACTRN…`), not an NCT id. Nothing is filled in or corrected.
+
+`node scripts/export-trials.mjs --check` (run by every build) fails if the records stop matching `primary.studies`, `primary.k` or the snapshot's pinned CSV hash. With `--csv <path>` or `SYPRES_CSV` set it also re-derives every record from the CSV and fails on any difference. The records identify trials; they are not a re-audit of trial inputs, which remains incomplete.
+
 ### Bias replay semantics
 
 The control adds an assumed nonnegative value to the saved g and both confidence bounds. It preserves interval width and changes no study weights, heterogeneity, variance or source inputs. It is an illustrative replay of the existing declared common additive shift, not an estimated bias correction or new meta-analysis.

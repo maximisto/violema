@@ -232,3 +232,21 @@ test('approved copy: the copyright line and the materials example replace the Or
   assert.doesNotMatch(home,/Oryx/);
   for(const text of ['Second example','Materials research','Curated demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
 });
+
+test('the 12 trial records match primary.studies, primary.k and, when given, the pinned CSV',async()=>{
+  const { checkTrials, trialId } = await import('../scripts/export-trials.mjs');
+  const snapshot=JSON.parse(await readFile(join(root,'data/stage-b-snapshot.json'),'utf8'));
+  const stored=await checkTrials({ csv: process.env.SYPRES_CSV });
+  assert.equal(stored.trials.length,snapshot.primary.k);
+  assert.equal(snapshot.primary.studies.length,snapshot.primary.k);
+  assert.deepEqual(stored.trials.map(t=>t.study),snapshot.primary.studies);
+  assert.deepEqual(stored.trials.map(t=>t.id),snapshot.primary.studies.map(trialId));
+  assert.equal(stored.source.sha256,snapshot.dataSha256);
+  for(const trial of stored.trials){
+    assert.match(trial.study,/ (\d{4})$/);
+    assert.equal(trial.year,Number(trial.study.slice(-4)));
+  }
+  const served=await readFile(join(dist,'company-assets/data/sypres-primary-trials.json'),'utf8');
+  assert.equal(served,await readFile(join(root,'data/sypres-primary-trials.json'),'utf8'));
+  assert.match(await readFile(join(dist,'demo/index.html'),'utf8'),/href="\/company-assets\/data\/sypres-primary-trials\.json" download/);
+});

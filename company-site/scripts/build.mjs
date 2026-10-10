@@ -4,6 +4,7 @@ import { dirname, resolve, join } from 'node:path';
 import { corpora, stressTest } from '../data/corpora.mjs';
 import { homePage, methodPage, demoPage } from '../lib/pages.mjs';
 import { exportCorpora } from './export-corpora.mjs';
+import { checkTrials } from './export-trials.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -23,13 +24,15 @@ const logoFiles = [
 ];
 
 await exportCorpora(undefined, { check: true });
+// Trial records must match primary.studies; with SYPRES_CSV set they are also re-derived from the pinned CSV.
+const trials = await checkTrials({ csv: process.env.SYPRES_CSV });
 // Only the generated company-site directory is removed; application output is separate.
 await rm(dist, { recursive: true, force: true });
 for (const directory of ['method', 'demo', 'company-assets/browser', 'company-assets/data', 'company-assets/fonts']) {
   await mkdir(join(dist, directory), { recursive: true });
 }
 for (const [route, markup] of [
-  ['index.html', homePage(corpora, stressTest)],
+  ['index.html', homePage(corpora, stressTest, trials)],
   ['method/index.html', methodPage(corpora, stressTest)],
   ['demo/index.html', demoPage(corpora, stressTest)],
 ]) await writeFile(join(dist, route), markup);
@@ -47,7 +50,7 @@ for (const corpus of corpora) {
   await access(packet);
   await copyFile(packet, join(dist, 'company-assets/data', `${corpus.id}.json`));
 }
-for (const name of ['provenance.md', 'stage-b-snapshot.json', 'portability-receipt.json']) {
+for (const name of ['provenance.md', 'stage-b-snapshot.json', 'portability-receipt.json', 'sypres-primary-trials.json']) {
   await copyFile(join(root, 'data', name), join(dist, 'company-assets/data', name));
 }
 for (const [source, destination] of fontFiles) await copyFile(join(assets, source), join(dist, 'company-assets', destination));

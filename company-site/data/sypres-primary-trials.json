@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "description": "The 12 trials pooled in the saved primary analysis (SYPRES depression-psiloctr, version 25.1.2). Labels match stage-b-snapshot.json primary.studies; year, doi and registration are copied as recorded in the pinned CSV; null means the CSV field is blank.",
+  "source": {
+    "dataset": "SYPRES depression-psiloctr",
+    "version": "25.1.2",
+    "doi": "https://doi.org/10.5281/zenodo.17657950",
+    "licence": "CC BY 4.0",
+    "file": "analysis/stage_b/data/depression-psiloctr-25.1.2.csv",
+    "sha256": "237b4a5601bd4de1b1c1b0e335e730677c2b09cd7a3ce2c893df623e9feba793",
+    "psychdocCommit": "23a6e348e7a7d7586b6b205da2a2061f3e052520",
+    "exportedAt": "2026-10-10"
+  },
+  "analysis": {
+    "id": "primary",
+    "label": "Primary model (SYPRES, pinned)",
+    "k": 12
+  },
+  "fields": {
+    "doi": "CSV column doi, verbatim (some trials list two DOIs)",
+    "registration": "CSV column registration_number, verbatim (a trial registry id such as NCT or ACTRN)",
+    "csvRows": "Number of CSV rows recorded for this study label"
+  },
+  "trials": [
+    {
+      "id": "back-2024",
+      "study": "Back 2024",
+      "year": 2024,
+      "doi": "10.1001/jamanetworkopen.2024.49026",
+      "registration": "NCT05163496",
+      "csvRows": 2
+    },
+    {
+      "id": "davis-2021",
+      "study": "Davis 2021",
+      "year": 2021,
+      "doi": "10.1001/jamapsychiatry.2020.3285; 10.1177/02698811211073759",
+      "registration": "NCT03181529",
+      "csvRows": 7
+    },
+    {
+      "id": "goodwin-2022",
+      "study": "Goodwin 2022",
+      "year": 2022,
+      "doi": "10.1056/NEJMoa2206443; https://doi.org/10.1016/j.jad.2023.01.108",
+      "registration": "NCT03775200",
+      "csvRows": 87
+    },
+    {
+      "id": "griffiths-2016",
+      "study": "Griffiths 2016",
+      "year": 2016,
+      "doi": "10.1177/0269881116675513",
+      "registration": "NCT00465595",
+      "csvRows": 15
+    },
+    {
+      "id": "lewis-2025",
+      "study": "Lewis 2025",
+      "year": 2025,
+      "doi": "10.1371/journal.pmed.1004519",
+      "registration": "NCT05557643",
+      "csvRows": 3
+    },
+    {
+      "id": "luquiens-2025",
+      "study": "Luquiens 2025",
+      "year": 2025,
+      "doi": "10.1111/add.70152",
+      "registration": "NCT06235411",
+      "csvRows": 4
+    },
+    {
+      "id": "raison-2023",
+      "study": "Raison 2023",
+      "year": 2023,
+      "doi": "10.1001/jama.2023.14530; 10.1001/jama.2024.0828",
+      "registration": "NCT03866174",
+      "csvRows": 22
+    },
+    {
+      "id": "rieser-2025",
+      "study": "Rieser 2025",
+      "year": 2025,
+      "doi": "10.1016/j.eclinm.2025.103149",
+      "registration": "NCT04141501",
+      "csvRows": 6
+    },
+    {
+      "id": "rosenblat-2024",
+      "study": "Rosenblat 2024",
+      "year": 2024,
+      "doi": "10.1016/j.medj.2024.01.005",
+      "registration": "NCT05029466",
+      "csvRows": 6
+    },
+    {
+      "id": "ross-2016",
+      "study": "Ross 2016",
+      "year": 2016,
+      "doi": "10.1177/0269881116675512",
+      "registration": "NCT00957359",
+      "csvRows": 26
+    },
+    {
+      "id": "ross-2025",
+      "study": "Ross 2025",
+      "year": 2025,
+      "doi": "10.1016/j.genhosppsych.2025.08.001",
+      "registration": "ACTRN12619001225101",
+      "csvRows": 6
+    },
+    {
+      "id": "von-rotz-2023",
+      "study": "von Rotz 2023",
+      "year": 2023,
+      "doi": "10.1016/j.eclinm.2022.101809",
+      "registration": "NCT03715127",
+      "csvRows": 14
+    }
+  ]
+}
