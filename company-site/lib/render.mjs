@@ -47,7 +47,7 @@ export const referenceNote = '<p class="caption">Reference lines are saved analy
 
 // A claim and the source records it cites. Leads are horizontal SVG lines placed by percentage on
 // equal-height source rows, so each meets its row centre at any width without measuring the DOM.
-export function traceSpecimen(corpus, claim, { animate = false, limitLabel = 'What the claim does not establish' } = {}) {
+export function traceSpecimen(corpus, claim, { animate = false, limitLabel = 'What the claim does not establish', field = '' } = {}) {
   const sources = claim.sourceIds.map(id => {
     const source = corpus.sources.find(item => item.id === id);
     if (!source) throw new Error(`Unresolved source ${id}`);
@@ -58,7 +58,7 @@ export function traceSpecimen(corpus, claim, { animate = false, limitLabel = 'Wh
   const bus = sources.length > 1 ? `<line class="trace-bus" pathLength="1" x1="0" y1="50%" x2="0" y2="${row(0)}%"/><line class="trace-bus" pathLength="1" x1="0" y1="50%" x2="0" y2="${row(sources.length - 1)}%"/>` : '';
   const leads = bus + sources.map((_, i) => `<line class="trace-lead" pathLength="1" x1="0" y1="${row(i)}%" x2="100%" y2="${row(i)}%" style="--i:${i}"/><circle class="trace-node" cx="100%" cy="${row(i)}%" r="3" style="--i:${i}"/>`).join('') + '<circle class="trace-port" cx="0" cy="50%" r="3.5"/>';
   const trunk = sources.map((_, i) => `<line class="trace-trunk" pathLength="1" x1="9" y1="0" x2="9" y2="${row(i)}%" style="--i:${i}"/><circle class="trace-node trace-trunk-node" cx="9" cy="${row(i)}%" r="3" style="--i:${i}"/>`).join('');
-  return `<div class="trace${animate ? ' trace-animate' : ''}" data-trace style="--rows:${sources.length}"><div class="trace-claim"><p class="trace-label">Source-linked claim</p><p class="trace-claim-text">${e(claim.text)}</p><p class="trace-label">${e(limitLabel)}</p><p class="trace-limit">${e(claim.caveat)}</p></div><svg class="trace-lines" aria-hidden="true" focusable="false"><g class="trace-leads">${leads}</g><g class="trace-trunks">${trunk}</g></svg><ol class="trace-sources" aria-label="Linked evidence">${sources.map(source => `<li><a href="${sourceURL(source.url)}" target="_blank" rel="noopener noreferrer"><span class="trace-title">${e(source.title)}</span><span class="external-indicator" aria-label="opens in a new tab">↗</span></a><p class="trace-meta"><span>${e(source.kind)}</span><span>${e(source.year)}</span><code>${e(source.id)}</code></p></li>`).join('')}</ol></div>`;
+  return `<div class="trace${animate ? ' trace-animate' : ''}" data-trace style="--rows:${sources.length}">${field}<div class="trace-claim"><p class="trace-label">Source-linked claim</p><p class="trace-claim-text">${e(claim.text)}</p><p class="trace-label">${e(limitLabel)}</p><p class="trace-limit">${e(claim.caveat)}</p></div><svg class="trace-lines" aria-hidden="true" focusable="false"><g class="trace-leads">${leads}</g><g class="trace-trunks">${trunk}</g></svg><ol class="trace-sources" aria-label="Linked evidence">${sources.map(source => `<li><a href="${sourceURL(source.url)}" target="_blank" rel="noopener noreferrer"><span class="trace-title">${e(source.title)}</span><span class="external-indicator" aria-label="opens in a new tab">↗</span></a><p class="trace-meta"><span>${e(source.kind)}</span><span>${e(source.year)}</span><code>${e(source.id)}</code></p></li>`).join('')}</ol></div>`;
 }
 
 export function sourceList(corpus, ids) {
@@ -86,4 +86,50 @@ export function corpusPanel(corpus, stress) {
     ? renderStress(stress)
     : '<div class="not-applicable"><h3>No pooled effect is shown for this corpus.</h3><p>The recorded endpoints and testing conditions do not establish a compatible statistical input set. Psychiatric effect sizes and bias thresholds do not transfer to these materials reports.</p></div>';
   return `<article class="corpus-panel" id="corpus-${id}" data-corpus-panel="${id}" aria-labelledby="title-${id}"><header class="corpus-header"><div><p class="label">${e(corpus.domain)}</p><h2 id="title-${id}">${e(corpus.title)}</h2><p class="corpus-question">${e(corpus.question)}</p></div><a class="button button-secondary button-small" href="${packetURL(corpus)}" download>Download packet <span aria-hidden="true">↓</span></a></header><p class="corpus-summary">${e(corpus.summary)}</p><div class="review-banner"><p class="status-line"><strong>${e(corpus.reviewStatus)}</strong></p><p>${e(corpus.scopeNote)}</p></div><div class="bench"><nav class="claim-list" aria-label="Claims in ${e(corpus.title)}"><p class="list-label">Inspect a claim</p>${rail}</nav><div class="instrument bench-instrument">${claims}${analysis}</div><div class="bench-evidence">${evidence}</div></div>${conditionMatrix(corpus)}<section class="lineage-section" aria-labelledby="lineage-${id}"><h3 id="lineage-${id}">How this packet was prepared</h3><ol class="lineage-list">${corpus.lineage.map(step => `<li><strong>${e(step.label)}</strong><span>${e(step.status)}</span>${step.sourceIds?.length ? `<small>Sources: ${step.sourceIds.map(source => `<code>${e(source)}</code>`).join(', ')}</small>` : ''}</li>`).join('')}</ol><details class="provenance-details"><summary>Version and supported operations</summary><p><a href="/company-assets/data/provenance.md" download>Download preparation notes</a> · <a href="/company-assets/data/portability-receipt.json" download>Source-reference check receipt</a></p><p><code>${e(corpus.sourceVersion)}</code></p><ul>${corpus.capabilities.map(item => `<li>${e(item)}</li>`).join('')}</ul><p>Prepared packet with manual source curation. This view does not run live ingestion or automatic full-text extraction.</p></details></section></article>`;
+}
+
+// The hero's trial field: the 12 trials pooled in the saved primary analysis, as small nodes whose
+// hairlines converge, rise beside the instrument and join the claim. Positions come from a seeded
+// generator, so every build is identical. x is a percentage of the field's width (it scales with the
+// copy column); y is in pixels below the claim's midpoint. Desktop only; see site.css.
+const FIELD = { converge: 440, top: 476, bottom: 664, left: 1, right: 80, captionTop: 688, joinBorder: 11.5, joinClaim: 32 };
+
+function seededRandom(text) {
+  let seed = [...text].reduce((hash, character) => Math.imul(hash ^ character.charCodeAt(0), 16777619), 2166136261) >>> 0;
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function fieldLayout(count, seed = 'sypres-primary') {
+  const random = seededRandom(seed);
+  const points = [];
+  // Rejection sampling in a nominal 520 x 188 px box keeps the constellation sparse and even.
+  for (let minimum = 64; points.length < count; minimum -= 4) {
+    for (let attempt = 0; attempt < 4000 && points.length < count; attempt++) {
+      const u = random(), v = random();
+      const candidate = { x: FIELD.left + u * (FIELD.right - FIELD.left), y: FIELD.top + v * (FIELD.bottom - FIELD.top) };
+      if (points.every(p => Math.hypot((p.x - candidate.x) * 5.2, p.y - candidate.y) >= minimum)) points.push(candidate);
+    }
+  }
+  return points.sort((a, b) => a.x - b.x);
+}
+
+export function trialField(packet) {
+  const trials = packet.trials;
+  if (trials.length !== packet.analysis.k) throw new Error('Trial field needs exactly primary.k records');
+  const points = fieldLayout(trials.length);
+  const at = (value, digits = 2) => Number(value.toFixed(digits));
+  // The faint base carries the hairlines only; the lit layer carries one node per trial record.
+  const base = points.map(p => `<line class="field-link" x1="${at(p.x)}%" y1="${at(p.y, 1)}" x2="100%" y2="${FIELD.converge}"/>`).join('');
+  const lit = trials.map((trial, i) => {
+    const p = points[i];
+    return `<line class="field-link" data-trial="${e(trial.id)}" pathLength="1" x1="${at(p.x)}%" y1="${at(p.y, 1)}" x2="100%" y2="${FIELD.converge}" style="--i:${i}"/><circle class="field-node" data-trial="${e(trial.id)}" cx="${at(p.x)}%" cy="${at(p.y, 1)}" r="3" style="--i:${i}"/>`;
+  }).join('');
+  const trunk = `<line class="field-trunk" pathLength="1" x1="100%" y1="${FIELD.converge}" x2="100%" y2="0"/>`;
+  const join = `<svg x="100%" y="0" width="1" height="1" overflow="visible"><line class="field-join" pathLength="1" x1="0" y1="0" x2="${FIELD.joinBorder}" y2="0"/><line class="field-join-inside" pathLength="1" x1="${FIELD.joinBorder}" y1="0" x2="${FIELD.joinClaim}" y2="0"/><circle class="field-port" cx="${FIELD.joinBorder}" cy="0" r="3.5"/></svg>`;
+  return `<div class="trial-field"><svg class="trial-field-graphic" aria-hidden="true" focusable="false"><g class="field-base">${base}<line class="field-trunk" x1="100%" y1="${FIELD.converge}" x2="100%" y2="0"/></g><g class="field-lit">${lit}${trunk}${join}</g></svg><p class="trial-field-caption">The ${trials.length} trials pooled in the saved primary analysis <span class="nowrap">(SYPRES depression-psiloctr, version 25.1.2)</span></p></div>`;
 }

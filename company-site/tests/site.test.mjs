@@ -5,7 +5,8 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { corpora, stressTest } from '../data/corpora.mjs';
-import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen } from '../lib/render.mjs';
+import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen, trialField } from '../lib/render.mjs';
+import { homePage } from '../lib/pages.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
@@ -251,4 +252,34 @@ test('the 12 trial records match primary.studies, primary.k and, when given, the
   const served=await readFile(join(dist,'company-assets/data/sypres-primary-trials.json'),'utf8');
   assert.equal(served,await readFile(join(root,'data/sypres-primary-trials.json'),'utf8'));
   assert.match(await readFile(join(dist,'demo/index.html'),'utf8'),/href="\/company-assets\/data\/sypres-primary-trials\.json" download/);
+});
+
+test('the hero trial field draws exactly the 12 pooled trials and nothing else',async()=>{
+  const snapshot=JSON.parse(await readFile(join(root,'data/stage-b-snapshot.json'),'utf8'));
+  const packet=JSON.parse(await readFile(join(root,'data/sypres-primary-trials.json'),'utf8'));
+  const html=await readFile(join(dist,'index.html'),'utf8');
+  const field=html.match(/<div class="trial-field">[\s\S]*?<\/div>/)[0];
+  const nodes=[...field.matchAll(/<circle class="field-node" data-trial="([^"]+)"/g)].map(m=>m[1]);
+  assert.equal(nodes.length,snapshot.primary.k);
+  assert.equal(nodes.length,snapshot.primary.studies.length);
+  assert.deepEqual(nodes,packet.trials.map(t=>t.id));
+  assert.deepEqual([...new Set([...field.matchAll(/data-trial="([^"]+)"/g)].map(m=>m[1]))],nodes,'every data-trial in the field is one of the 12 records');
+  assert.equal((field.match(/class="field-link" data-trial=/g)||[]).length,12);
+  for(const corpus of corpora)for(const source of corpus.sources)assert.ok(!field.includes(source.id),`field draws no ${source.id}`);
+  assert.match(field,/<svg class="trial-field-graphic" aria-hidden="true" focusable="false">/);
+  assert.match(field,/<p class="trial-field-caption">The 12 trials pooled in the saved primary analysis <span class="nowrap">\(SYPRES depression-psiloctr, version 25\.1\.2\)<\/span><\/p>/);
+  assert.doesNotMatch(field.match(/<p class="trial-field-caption">[\s\S]*?<\/p>/)[0],/aria-hidden/,'the caption stays readable');
+  const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
+  assert.match(css,/\.trial-field \{ display: none; \}/);
+  assert.match(css,/@media \(min-width: 1024px\) \{[\s\S]*?\.trial-field \{\n    display: block;/);
+  assert.equal((html.match(/class="trial-field"/g)||[]).length,1);
+  for(const page of ['method/index.html','demo/index.html'])assert.doesNotMatch(await readFile(join(dist,page),'utf8'),/trial-field/);
+  assert.throws(()=>trialField({...packet,trials:packet.trials.slice(1)}),/primary\.k/);
+});
+
+test('the home page build is deterministic',async()=>{
+  const packet=JSON.parse(await readFile(join(root,'data/sypres-primary-trials.json'),'utf8'));
+  const first=homePage(corpora,stressTest,packet);
+  assert.equal(homePage(corpora,stressTest,packet),first);
+  assert.equal(await readFile(join(dist,'index.html'),'utf8'),first,'a separate build process produced the same bytes');
 });

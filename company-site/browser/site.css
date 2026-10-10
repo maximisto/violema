@@ -42,6 +42,11 @@
   --inst-line-strong: #626C7B;
   --inst-accent: #A79BFF;
 
+  /* Page colours that stay put inside the instrument's re-pointed scope (the hero trial field). */
+  --page-ink: var(--ink);
+  --page-accent: var(--accent);
+  --page-bg: var(--bg);
+
   --shadow-raised: 0 1px 2px rgb(18 22 29 / 0.06), 0 24px 48px -24px rgb(18 22 29 / 0.32);
   --shadow-control: 0 1px 2px rgb(18 22 29 / 0.10);
 
@@ -614,21 +619,98 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
     stroke-dasharray: 1 1;
     stroke-dashoffset: 1;
     animation: trace-draw 700ms cubic-bezier(0.55, 0, 0.25, 1) forwards;
-    animation-delay: calc(500ms + var(--i) * 100ms);
+    animation-delay: calc(var(--trace-offset, 0ms) + 500ms + var(--i) * 100ms);
   }
   .trace-animate:not([data-trace-done]) .trace-bus {
     animation-duration: 320ms;
     animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
-    animation-delay: 240ms;
+    animation-delay: calc(var(--trace-offset, 0ms) + 240ms);
   }
   .trace-animate:not([data-trace-done]) .trace-node {
     opacity: 0;
     animation: trace-arrive 160ms ease-out forwards;
-    animation-delay: calc(500ms + var(--i) * 100ms + 640ms);
+    animation-delay: calc(var(--trace-offset, 0ms) + 500ms + var(--i) * 100ms + 640ms);
   }
 }
 @keyframes trace-draw { to { stroke-dashoffset: 0; } }
 @keyframes trace-arrive { to { opacity: 1; } }
+
+/* Trial field (desktop only): the 12 trials pooled in the saved primary analysis. Their hairlines
+   converge below the copy, rise beside the instrument and join the claim. It sits behind the copy,
+   which keeps an opaque clear zone, and it draws no other corpus. */
+.trace { position: relative; }
+.trial-field { display: none; }
+
+@media (min-width: 1024px) {
+  :root {
+    /* The copy column plus the gap, so the field can align its caption with the copy. */
+    --hero-copy-span: calc(5 * (min(var(--frame), 100vw - 2 * var(--gutter)) - 264px) / 12 + 120px);
+  }
+  .specimen { overflow: visible; }
+  .hero-copy {
+    position: relative;
+    z-index: 1;
+    background: var(--bg);
+    box-shadow: 0 28px 20px -12px var(--bg);
+  }
+  .trial-field {
+    display: block;
+    position: absolute;
+    z-index: 0;
+    top: 50%;
+    right: calc(100% + 12px);
+    width: calc(var(--hero-copy-span) + 20px);
+    height: 700px;
+    pointer-events: none;
+  }
+  .trial-field-graphic { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .trial-field-caption .nowrap { white-space: nowrap; }
+  .trial-field-caption {
+    position: absolute;
+    left: 31px;
+    top: 688px;
+    max-width: calc(var(--hero-copy-span) - 64px);
+    margin: 0;
+    font-size: var(--text-caption);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  .trial-field line { stroke-width: 1; fill: none; }
+  .field-base .field-link,
+  .field-base .field-trunk { stroke: var(--page-ink); stroke-opacity: 0.08; }
+  .field-lit .field-link { stroke: var(--page-accent); stroke-opacity: 0.24; }
+  .field-lit .field-trunk,
+  .field-lit .field-join { stroke: var(--page-accent); stroke-opacity: 0.5; shape-rendering: crispEdges; }
+  .field-lit .field-node { fill: var(--page-accent); fill-opacity: 0.6; }
+  .field-join-inside { stroke: var(--inst-accent); shape-rendering: crispEdges; }
+  .field-port { fill: var(--page-bg); stroke: var(--page-accent); stroke-width: 1.5; }
+}
+
+/* The load moment on desktop: trials light, their hairlines converge, the pooled line rises and
+   joins the claim; then the claim-to-source trace runs. Reduced motion and no JavaScript show the
+   final, lit state at once. */
+@media (min-width: 1024px) and (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .trace-animate { --trace-offset: 1150ms; }
+  .trace-animate:not([data-trace-done]) .field-lit .field-node {
+    opacity: 0;
+    animation: trace-arrive 220ms ease-out forwards;
+    animation-delay: calc(var(--i) * 30ms);
+  }
+  .trace-animate:not([data-trace-done]) .field-lit :is(.field-link, .field-trunk, .field-join, .field-join-inside) {
+    stroke-dasharray: 1 1;
+    stroke-dashoffset: 1;
+    animation: trace-draw 480ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: calc(120ms + var(--i) * 30ms);
+  }
+  .trace-animate:not([data-trace-done]) .field-lit .field-trunk { animation-duration: 380ms; animation-delay: 700ms; }
+  .trace-animate:not([data-trace-done]) .field-lit .field-join { animation-duration: 90ms; animation-delay: 1080ms; animation-timing-function: linear; }
+  .trace-animate:not([data-trace-done]) .field-lit .field-join-inside { animation-duration: 120ms; animation-delay: 1170ms; animation-timing-function: linear; }
+  .trace-animate:not([data-trace-done]) .field-lit .field-port {
+    opacity: 0;
+    animation: trace-arrive 160ms ease-out forwards;
+    animation-delay: 1080ms;
+  }
+}
 
 /* Replay: the saved interval on its scale and the bounded assumed-bias control. */
 .replay { padding: 18px 20px 20px; border-top: 1px solid var(--line); }

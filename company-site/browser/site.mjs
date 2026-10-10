@@ -19,7 +19,7 @@ for (const trace of document.querySelectorAll('.trace-animate')) {
     const lead = event.target.classList?.contains('trace-lead') || event.target.classList?.contains('trace-trunk');
     if (event.animationName === 'trace-draw' && lead && ++finished >= expected) done();
   });
-  setTimeout(done, 4000);
+  setTimeout(done, 5000);
 }
 
 for (const list of document.querySelectorAll('[data-tabs] [data-tablist]')) enhanceTabs(list);
