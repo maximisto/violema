@@ -29,7 +29,8 @@
   --line: #DDE1E7;
   /* Brief value #848D9A gave 2.89:1 on --surface-2; darkened three steps to clear 3:1. */
   --line-strong: #818A97;
-  --accent: #4B3BD1;
+  /* The logo's violet; its orange stays inside the logo. */
+  --accent: #6852A3;
   --accent-ink: #FFFFFF;
 
   --inst-bg: #0B0F17;
