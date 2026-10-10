@@ -5,9 +5,11 @@
 // Check (the build runs this; add --csv or set SYPRES_CSV to also re-derive from the CSV):
 //   node scripts/export-trials.mjs --check [--csv <path>]
 //
-// Each record keeps the study label exactly as in stage-b-snapshot.json primary.studies and the
-// year, doi and registration_number fields exactly as recorded in the CSV. A blank field stays
-// blank (null); nothing is filled in. A study whose rows disagree on a field fails the export.
+// Each record is a trial, never a publication. It keeps the study label exactly as in
+// stage-b-snapshot.json primary.studies, the year and registration_number exactly as recorded in
+// the CSV, and every publication DOI the CSV records for the trial as a list (the doi field split at
+// semicolons, each entry verbatim). A blank field stays blank (null, or an empty list); nothing is
+// filled in or chosen. A trial whose rows disagree on a field fails the export.
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -45,6 +47,7 @@ function parseCsv(text) {
 }
 
 const recorded = value => (value === undefined || value.trim() === '' ? null : value.trim());
+const recordedList = value => (value === null ? [] : value.split(';').map(item => item.trim()).filter(Boolean));
 
 export function deriveTrials(csvText, studies) {
   const [header, ...rows] = parseCsv(csvText);
@@ -67,7 +70,7 @@ export function deriveTrials(csvText, studies) {
       id: trialId(label),
       study: label,
       year: yearValue === null ? null : Number(yearValue),
-      doi: single(doi, 'doi'),
+      dois: recordedList(single(doi, 'doi')),
       registration: single(registration, 'registration_number'),
       csvRows: matches.length,
     };
@@ -86,7 +89,7 @@ async function readCsv(path) {
 export function packetForTrials(snapshot, trials, sha256) {
   return {
     schemaVersion: 1,
-    description: 'The 12 trials pooled in the saved primary analysis (SYPRES depression-psiloctr, version 25.1.2). Labels match stage-b-snapshot.json primary.studies; year, doi and registration are copied as recorded in the pinned CSV; null means the CSV field is blank.',
+    description: 'The 12 trials pooled in the saved primary analysis (SYPRES depression-psiloctr, version 25.1.2). One record per trial, not per publication. Labels match stage-b-snapshot.json primary.studies; year and registration are copied as recorded in the pinned CSV; dois lists every publication DOI the CSV records for the trial. null or an empty list means the CSV field is blank.',
     source: {
       dataset: 'SYPRES depression-psiloctr',
       version: '25.1.2',
@@ -99,7 +102,7 @@ export function packetForTrials(snapshot, trials, sha256) {
     },
     analysis: { id: snapshot.primary.id, label: snapshot.primary.label, k: snapshot.primary.k },
     fields: {
-      doi: 'CSV column doi, verbatim (some trials list two DOIs)',
+      dois: 'CSV column doi split at semicolons, each entry verbatim: every publication DOI recorded for the trial (some trials have more than one); no entry is the trial\'s single source',
       registration: 'CSV column registration_number, verbatim (a trial registry id such as NCT or ACTRN)',
       csvRows: 'Number of CSV rows recorded for this study label',
     },

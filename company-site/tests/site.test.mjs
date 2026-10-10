@@ -243,6 +243,8 @@ test('the 12 trial records match primary.studies, primary.k and, when given, the
   assert.deepEqual(stored.trials.map(t=>t.id),snapshot.primary.studies.map(trialId));
   assert.equal(stored.source.sha256,snapshot.dataSha256);
   for(const trial of stored.trials){
+    assert.ok(Array.isArray(trial.dois)&&trial.dois.length>=1,'every publication DOI is kept as a list');
+    assert.ok(!('doi' in trial),'no single DOI stands for a trial');
     assert.match(trial.study,/ (\d{4})$/);
     assert.equal(trial.year,Number(trial.study.slice(-4)));
   }
