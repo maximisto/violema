@@ -1,0 +1,249 @@
+{
+  "schemaVersion": "1.0.0",
+  "curatedAt": "2026-10-10",
+  "corpus": {
+    "id": "perovskite-stability",
+    "title": "Perovskite · Stability conditions",
+    "domain": "Materials research",
+    "question": "Can these solar-cell stability results be compared on the same terms?",
+    "summary": "Four primary reports and separate ISOS guidance show why time, environment, device identity and endpoint must travel with a claim.",
+    "sourceVersion": "Manual source packet · 2026-10-10.1",
+    "reviewStatus": "Curated demonstration · materials expert review pending",
+    "scopeNote": "A purposive sample, not a systematic review. Selected public passages were read manually; no automated full-text extraction ran. Test conditions and endpoints differ, and some metadata remain unextracted. No compatible pooled analysis or clinical bias slider applies.",
+    "sources": [
+      {
+        "id": "jiang-2023",
+        "title": "Towards linking lab and field lifetimes of perovskite solar cells",
+        "url": "https://doi.org/10.1038/s41586-023-06610-7",
+        "year": 2023,
+        "locator": "Public abstract, especially its final three sentences. Subscription article body was not used for this claim.",
+        "kind": "Primary report · abstract inspected"
+      },
+      {
+        "id": "wang-2024",
+        "title": "Water- and heat-activated dynamic passivation for perovskite photovoltaics",
+        "url": "https://doi.org/10.1038/s41586-024-07705-5",
+        "year": 2024,
+        "locator": "Abstract; “Device performance and stability”; Fig. 4c caption; “Solar-cell characterization” in Methods.",
+        "kind": "Primary report · selected full-text passages inspected"
+      },
+      {
+        "id": "lian-2025",
+        "title": "A supramolecular approach to improve the performance and operational stability of all-perovskite tandem solar cells",
+        "url": "https://doi.org/10.1038/s41467-025-62391-9",
+        "year": 2025,
+        "locator": "Abstract. Claim belongs to the 1.77 eV single-junction cells; the separately reported tandem efficiency is not their stability measurement.",
+        "kind": "Primary report · abstract inspected"
+      },
+      {
+        "id": "zhang-2021",
+        "title": "Multimodal host–guest complexation for efficient and stable perovskite photovoltaics",
+        "url": "https://doi.org/10.1038/s41467-021-23566-2",
+        "year": 2021,
+        "locator": "Abstract; Fig. 5c caption for atmosphere, temperature and illumination. Other experiments are not merged into this claim.",
+        "kind": "Primary report · abstract and figure caption inspected"
+      },
+      {
+        "id": "isos-2020",
+        "title": "Consensus statement for stability assessment and reporting for perovskite photovoltaics based on ISOS procedures",
+        "url": "https://doi.org/10.1038/s41560-019-0529-5",
+        "year": 2020,
+        "locator": "“Checklist for PSC stability studies”, Table 3; discussion of stability figures of merit and Table 5.",
+        "kind": "Reporting guidance · not a device experiment"
+      }
+    ],
+    "claims": [
+      {
+        "id": "perovskite-temperature",
+        "text": "Jiang and colleagues report temperature-dependent operational stability, including more than 1,000 hours at 85 °C and nearly 8,200 hours at 50 °C with a projected 20% degradation.",
+        "status": "Author-reported · abstract scope",
+        "sourceIds": [
+          "jiang-2023"
+        ],
+        "caveat": "The endpoint is projected. These are results from one device study at different temperatures, not interchangeable lifetimes or independent replications. Encapsulation, humidity and stability-sample counts were not extracted from the abstract.",
+        "conditions": [
+          {
+            "label": "Device",
+            "value": "Study-specific p–i–n perovskite stack"
+          },
+          {
+            "label": "Temperature",
+            "value": "85 °C and 50 °C; distinct conditions"
+          },
+          {
+            "label": "Illumination",
+            "value": "Illuminated operation; spectrum not extracted"
+          },
+          {
+            "label": "Environment",
+            "value": "Humidity and encapsulation not extracted"
+          },
+          {
+            "label": "Endpoint",
+            "value": "Projected 20% degradation; not a common measured T80"
+          }
+        ]
+      },
+      {
+        "id": "perovskite-humid-heat",
+        "text": "The encapsulated HUBLA device retained 88% of its initial efficiency after 1,000 hours of maximum-power-point tracking at 85 °C and about 30% relative humidity.",
+        "status": "Author-reported · selected passages checked",
+        "sourceIds": [
+          "wang-2024"
+        ],
+        "caveat": "This is the Fig. 4c experiment in air, not the paper’s separate unencapsulated nitrogen experiment. The stability device’s initial efficiency is 23.0%, not the champion efficiency.",
+        "conditions": [
+          {
+            "label": "Device",
+            "value": "HUBLA p–i–n device; Fig. 4c"
+          },
+          {
+            "label": "Temperature",
+            "value": "85 °C"
+          },
+          {
+            "label": "Illumination",
+            "value": "1 sun; maximum-power-point tracking"
+          },
+          {
+            "label": "Environment",
+            "value": "Air; about 30% RH; encapsulated"
+          },
+          {
+            "label": "Endpoint",
+            "value": "88% of initial PCE at 1,000 h"
+          }
+        ]
+      },
+      {
+        "id": "perovskite-wide-bandgap",
+        "text": "Lian and colleagues report 95% efficiency retention after 1,000 hours of maximum-power-point tracking for their 1.77 eV perovskite cells.",
+        "status": "Author-reported · abstract scope",
+        "sourceIds": [
+          "lian-2025"
+        ],
+        "caveat": "This stability claim concerns the single-junction wide-bandgap cells. The abstract separately reports tandem efficiency. Temperature, atmosphere, encapsulation and sample counts were not extracted for this packet.",
+        "conditions": [
+          {
+            "label": "Device",
+            "value": "Supramolecular-engineered 1.77 eV cells"
+          },
+          {
+            "label": "Temperature",
+            "value": "Not extracted from abstract"
+          },
+          {
+            "label": "Illumination",
+            "value": "Maximum-power-point tracking; spectrum not extracted"
+          },
+          {
+            "label": "Environment",
+            "value": "Humidity and encapsulation not extracted"
+          },
+          {
+            "label": "Endpoint",
+            "value": "95% of initial efficiency at 1,000 h"
+          }
+        ]
+      },
+      {
+        "id": "perovskite-inert-operation",
+        "text": "The host–guest-treated cells retained over 95% of their performance during 500 hours of continuous operation without encapsulation.",
+        "status": "Author-reported · abstract and caption scope",
+        "sourceIds": [
+          "zhang-2021"
+        ],
+        "caveat": "Fig. 5c specifies nitrogen and 25 °C. An unencapsulated test in nitrogen is not an ambient-air humidity test or an outdoor lifetime demonstration.",
+        "conditions": [
+          {
+            "label": "Device",
+            "value": "Host–guest-treated perovskite device; Fig. 5c"
+          },
+          {
+            "label": "Temperature",
+            "value": "25 °C"
+          },
+          {
+            "label": "Illumination",
+            "value": "AM1.5G, 100 mW/cm²; maximum-power-point tracking"
+          },
+          {
+            "label": "Environment",
+            "value": "Nitrogen; unencapsulated"
+          },
+          {
+            "label": "Endpoint",
+            "value": "Over 95% performance retention at 500 h"
+          }
+        ]
+      },
+      {
+        "id": "perovskite-reporting",
+        "text": "ISOS guidance calls for explicit ageing conditions, device information and sample counts so stability reports can be interpreted and compared.",
+        "status": "Reporting guidance · not experimental evidence",
+        "sourceIds": [
+          "isos-2020"
+        ],
+        "caveat": "A reporting framework does not make these four experiments statistically compatible. Missing metadata, different devices and different endpoints prevent a defensible pooled estimate in this packet.",
+        "conditions": [
+          {
+            "label": "Role",
+            "value": "Reporting framework, separate from primary reports"
+          },
+          {
+            "label": "Inspect",
+            "value": "Temperature, atmosphere, illumination and encapsulation"
+          },
+          {
+            "label": "Preserve",
+            "value": "Device/sample identity and normalization baseline"
+          },
+          {
+            "label": "Do not infer",
+            "value": "Shared conditions from a shared “stable” label"
+          }
+        ]
+      }
+    ],
+    "lineage": [
+      {
+        "id": "perovskite-reports",
+        "label": "Four primary reports → four experiment-specific claims",
+        "sourceIds": [
+          "jiang-2023",
+          "wang-2024",
+          "lian-2025",
+          "zhang-2021"
+        ],
+        "status": "Manually selected; study independence not adjudicated"
+      },
+      {
+        "id": "perovskite-guidance",
+        "label": "ISOS reporting framework",
+        "sourceIds": [
+          "isos-2020"
+        ],
+        "status": "Guidance is not counted as an experiment"
+      },
+      {
+        "id": "perovskite-comparison",
+        "label": "Conditions compared; incompatible endpoints kept separate",
+        "sourceIds": [
+          "jiang-2023",
+          "wang-2024",
+          "lian-2025",
+          "zhang-2021",
+          "isos-2020"
+        ],
+        "status": "No pooled estimate; no source extraction automation"
+      }
+    ],
+    "capabilities": [
+      "Source-linked claims",
+      "Condition comparison",
+      "Explicit missing metadata",
+      "No compatible pooled analysis"
+    ]
+  },
+  "analysis": null
+}

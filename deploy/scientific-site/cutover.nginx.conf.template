@@ -1,0 +1,255 @@
+# INERT PREPARATION ONLY. Do not include alongside the active vhost.
+# Rendered by deploy/scientific-site/render.mjs; see migration handoff.
+# One EXISTING backend/state/scheduler. No second process is created.
+# TLS paths are prerequisites, NOT evidence certificates exist.
+# Place these map directives in nginx http context, never inside server.
+map "$request_method:$request_uri" $scientific_browser_redirect {
+    default "";
+    "~^(?:GET|HEAD):/(?:login|signup|access-terms|plans|pricing|settings(?:/billing)?|connect/slack|integrations|admin|dashboard(?:/agents)?|runs/[A-Za-z0-9_-]+)/?$" "https://agent.purpleorange.ai$request_uri#";
+    "~^(?:GET|HEAD):/(?:plans|pricing)\?(?:section=topups|plan=(?:pro|team)|checkout=(?:success|cancel))$" "https://agent.purpleorange.ai$request_uri#";
+    "~^(?:GET|HEAD):/dashboard\?(?:panel=schedules|checkout=(?:success|cancel))$" "https://agent.purpleorange.ai$request_uri#";
+    "~^(?:GET|HEAD):/(?:login|signup|access-terms|connect/slack)\?next=(?:%2[Ff]|/)(?:dashboard|plans|pricing)$" "https://agent.purpleorange.ai$request_uri#";
+}
+map $uri $scientific_protected_path {
+    default 0;
+    "~*(?:^/(?:backend|frontend|deploy|company-site|docs|node_modules)(?:/|$)|(?:^|/)\.[^/]*(?:/|$)|(?:\.(?:bak|map|env|rtf)$)|^/(?:AGENTS|CLAUDE)\.md$)" 1;
+}
+server {
+    listen 80;
+    server_name violema.com www.violema.com agent.purpleorange.ai;
+    # Return-only if is intentional: protect source paths before ^~ locations.
+    if ($scientific_protected_path) { return 404; }
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin always;
+    location = /api {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+    location ^~ /api/ {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+    location / {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        return 308 https://$host$request_uri;
+    }
+}
+server {
+    listen 443 ssl;
+    server_name violema.com www.violema.com;
+    ssl_certificate /etc/letsencrypt/live/violema.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/violema.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    # Return-only if is intentional: protect source paths before ^~ locations.
+    if ($scientific_protected_path) { return 404; }
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin always;
+    location = /api {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+    location ^~ /api/ {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+    root /var/www/nexus/company-site/dist;
+    location = / {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /index.html =404;
+    }
+    location = /index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /index.html =404;
+    }
+    location = /method {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /method/index.html =404;
+    }
+    location = /method/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /method/index.html =404;
+    }
+    location = /demo {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /demo/index.html =404;
+    }
+    location = /demo/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /demo/index.html =404;
+    }
+    location = /robots.txt {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /robots.txt =404;
+    }
+    location = /sitemap.xml {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /sitemap.xml =404;
+    }
+    location = /llms.txt {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /llms.txt =404;
+    }
+    location ^~ /company-assets/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files $uri =404;
+    }
+    location ^~ /assets/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    location ^~ /brand/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    location ^~ /fonts/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    location ^~ /seo/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    location ^~ /blog/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    location ^~ /ai-agents-for-founders/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    location = /blog {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    location = /ai-agents-for-founders {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    location = /po-logo.png {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    location = /violema-icon.svg {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    location = /violema-mark.svg {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    location = /33bbbde5b8700c2c95901a438260d51d.txt {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/nexus/frontend/dist;
+        try_files $uri $uri/index.html =404;
+    }
+    # Unknown/sensitive queries stay on the original host; no token transfer.
+    location ~ "^(?:/(?:login|signup|access-terms|plans|pricing|settings(?:/billing)?|connect/slack|integrations|admin|dashboard(?:/agents)?|runs/[A-Za-z0-9_-]+)|/(?:faq|privacy|terms))/?$" {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        if ($scientific_browser_redirect != "") { return 302 $scientific_browser_redirect; }
+        root /var/www/nexus/frontend/dist;
+        try_files /index.html =404;
+    }
+    # Scientific routes never fall through into the legacy SPA.
+    location / { return 404; }
+}
+server {
+    listen 443 ssl;
+    server_name agent.purpleorange.ai;
+    ssl_certificate /etc/letsencrypt/live/agent.purpleorange.ai/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/agent.purpleorange.ai/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    # Return-only if is intentional: protect source paths before ^~ locations.
+    if ($scientific_protected_path) { return 404; }
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin always;
+    location = /api {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+    location ^~ /api/ {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+    root /var/www/nexus/frontend/dist;
+    index index.html;
+    location / {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files $uri $uri/ /index.html;
+    }
+}

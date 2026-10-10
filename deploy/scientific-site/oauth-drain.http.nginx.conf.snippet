@@ -1,0 +1,10 @@
+# INERT, TEMPORARY, HTTP-CONTEXT SNIPPET. Not included by either template.
+# Include ONCE directly inside http {}, never in server/location context.
+# Pair with oauth-drain.nginx.conf.snippet in every backend-facing server.
+# $uri is nginx's normalized path, without query arguments. ~* matches the
+# case-insensitive, non-strict Express start route, including a trailing slash.
+# Do not replace the server guard with regex locations: ^~ /api/ skips them.
+map $uri $scientific_oauth_drain_retry_after {
+    default "";
+    "~*^/api/auth/(?:google|microsoft)/start/?$" 900;
+}
