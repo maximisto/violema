@@ -17,13 +17,27 @@ Open `http://127.0.0.1:4317/`, `/method/` and `/demo/`. `PORT` can override the 
 - `lib/pages.mjs`: static page composition and navigation.
 - `lib/render.mjs`: shared evidence renderer, escaped text, safe source links, and bounded additive-shift arithmetic.
 - `browser/site.mjs`: progressive enhancement for corpus selection, claim selection, range control, and reset.
-- `browser/site.css`: responsive typography and layout; fonts and the current logo are copied from the existing frontend.
+- `browser/site.css`: responsive typography and layout.
+- `assets/`: self-hosted fonts with their licences and the placeholder icon (see below).
 - `data/`: source packet contract, evidence records, provenance and execution receipts. See `data/provenance.md` for scope and scientific limitations.
 - `scripts/build.mjs`: validates exported packet freshness, then builds only `company-site/dist`.
 - `scripts/preview.mjs`: loopback-only preview server.
 - `tests/`: source-contract, arithmetic, renderer, metadata and generated-output tests.
 
 The generated routes are `dist/index.html`, `dist/method/index.html`, and `dist/demo/index.html`. Every company browser asset and downloadable packet lives under `dist/company-assets/`; the legacy application's `/assets/` and `/brand/` paths remain available for migration compatibility. Build output is ignored by Git.
+
+## Fonts and icon
+
+`assets/fonts/` holds the two variable fonts PsychDoc already self-hosts, copied byte for byte from PsychDoc's `app/fonts/` (brand-refresh branch, 2026-10-10) with no download:
+
+| File | Origin package | Licence |
+| --- | --- | --- |
+| `instrument-sans-latin-wght-normal.woff2` | `@fontsource-variable/instrument-sans@5.3.0`, latin subset | SIL Open Font License 1.1, `LICENSE-instrument-sans.txt` |
+| `inter-latin-wght-normal.woff2` | `@fontsource-variable/inter@5.3.0`, latin subset | SIL Open Font License 1.1, `LICENSE-inter.txt` |
+
+`assets/fonts/SHA256SUMS` records all four files; a test checks the sums and that the build serves the files and licences unchanged under `/company-assets/fonts/`. Instrument Sans sets the wordmark, headings, navigation and buttons; Inter sets running text.
+
+`assets/violema-icon.svg` is a placeholder favicon (a capital V in the accent on the page ground, with a dark-scheme variant). The header wordmark is live text. Both are placeholders until a chosen mark exists.
 
 ## Updating a packet
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, stat, readdir } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { corpora, stressTest } from '../data/corpora.mjs';
 import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel } from '../lib/render.mjs';
 
@@ -109,4 +110,14 @@ test('browser module paths and self-hosted stylesheet assets resolve in the gene
   assert.match(css,/prefers-reduced-motion:reduce/);
   assert.match(css,/:focus-visible/);
   assert.ok(!(await readdir(dist)).includes('assets'),'Legacy app asset namespace is preserved');
+});
+
+test('self-hosted fonts match their recorded checksums and ship with their licences',async()=>{
+  const sums=(await readFile(join(root,'assets/fonts/SHA256SUMS'),'utf8')).trim().split('\n').map(line=>line.split(/\s+/));
+  assert.deepEqual(sums.map(([,name])=>name).sort(),['LICENSE-instrument-sans.txt','LICENSE-inter.txt','instrument-sans-latin-wght-normal.woff2','inter-latin-wght-normal.woff2']);
+  for(const [hash,name] of sums){
+    const source=await readFile(join(root,'assets/fonts',name));
+    assert.equal(createHash('sha256').update(source).digest('hex'),hash,name);
+    assert.ok(source.equals(await readFile(join(dist,'company-assets/fonts',name))),`${name} is served unchanged`);
+  }
 });

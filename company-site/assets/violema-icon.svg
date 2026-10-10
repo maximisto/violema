@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>Violema placeholder icon</title>
+  <style>
+    .ground { fill: #F5F6F8; }
+    .mark { fill: #4B3BD1; }
+    @media (prefers-color-scheme: dark) {
+      .ground { fill: #0E1117; }
+      .mark { fill: #A79BFF; }
+    }
+  </style>
+  <rect class="ground" width="32" height="32" rx="7"/>
+  <path class="mark" d="M6.5 7h4.1L16 21.2 21.4 7h4.1l-7.4 18h-4.2z"/>
+</svg>

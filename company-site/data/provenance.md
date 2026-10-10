@@ -70,3 +70,7 @@ node --test tests/corpora.test.mjs
 ```
 
 The ordinary site build does not depend on that checkout. Generated JSON packets are checked against the module, and the receipt is checked against the adapter and packet hashes. Adapter time and analyst/review hours were not instrumented; this result does not establish a measured cost or speed of domain transfer. Qualified scientific review remains outstanding.
+
+## Typefaces
+
+The site self-hosts Instrument Sans and Inter as variable WOFF2 files, latin subset, from `@fontsource-variable/instrument-sans@5.3.0` and `@fontsource-variable/inter@5.3.0`. They were copied from PsychDoc's vendored `app/fonts/` directory, not downloaded, and are distributed under the SIL Open Font License 1.1 with the licence texts beside them in `assets/fonts/`. Checksums are in `assets/fonts/SHA256SUMS`.
