@@ -3,7 +3,13 @@
 Owner direction, 2026-10-10: a little wow, but clean and easy to work with, like a 21st-century lab.
 Violema is the method company; PsychDoc is its first application. The two sites read as one family
 (Instrument Sans and Inter, a dark instrument window on a light page) while Violema keeps its own
-palette: cool lab greys and one indigo accent.
+palette: cool lab greys and the approved logo's violet as the one accent.
+
+Update, 2026-10-10 (owner-approved logo): the header carries the approved scientific logo from
+`brand/` instead of the typographic placeholder, the accent is the logo's violet `#6852A3`, and the
+site ships in the light theme only, because the logo's ink subtitle disappears on dark grounds and no
+reversed logo exists yet. Dark page tokens return once a reversed logo is approved; the instrument
+stays dark as designed.
 
 ## Principles
 
@@ -20,9 +26,10 @@ palette: cool lab greys and one indigo accent.
 
 ## Tokens
 
-Light on `:root`, dark under `prefers-color-scheme: dark`; the instrument is dark in both.
+Light on `:root` (`color-scheme: light`); the instrument is dark. The dark column is parked until a
+reversed logo is approved and is not in the stylesheet.
 
-| Role | Light | Dark |
+| Role | Light (shipped) | Dark (parked) |
 | --- | --- | --- |
 | `--bg` page ground | `#F5F6F8` | `#0E1117` |
 | `--surface` cards, statement band | `#FFFFFF` | `#151A22` |
@@ -32,16 +39,20 @@ Light on `:root`, dark under `prefers-color-scheme: dark`; the instrument is dar
 | `--ink-3` tertiary text | `#626B78` | `#8C96A4` |
 | `--line` decorative hairlines | `#DDE1E7` | `#252C37` |
 | `--line-strong` control borders | `#818A97` (brief `#848D9A`) | `#626C7B` (brief `#5E6877`) |
-| `--accent` fills, links, focus | `#4B3BD1` | `#A79BFF` |
+| `--accent` fills, links, focus | `#6852A3`, the logo's violet (brief `#4B3BD1`) | to be chosen with the reversed logo |
 | `--accent-ink` text on accent | `#FFFFFF` | `#0E1117` |
+
+`#6852A3` gives 6.32:1 under white text, 5.84:1 as link text on `--bg`, 6.32:1 on `--surface` and
+5.44:1 on `--surface-2`. The logo's orange is used only inside the logo.
 
 Instrument: `--inst-bg #0B0F17`, `--inst-surface #111725`, `--inst-ink #E6EAF0`,
 `--inst-ink-2 #9AA4B2`, `--inst-line #263040`, `--inst-accent #A79BFF`, plus one added
 `--inst-line-strong #626C7B` for the slider track and control borders inside the instrument
 (`--inst-line` is 1.4:1, decorative only).
 
-`--line-strong` was darkened by three steps in each theme because the brief values give 2.89:1 and
-2.83:1 against `--surface-2`, where the segmented controls sit. Both now clear 3:1 on every ground.
+`--line-strong` was darkened by three steps (light) and lightened by four (parked dark) because the
+brief values give 2.89:1 and 2.83:1 against `--surface-2`, where the segmented controls sit. Both now
+clear 3:1 on every ground.
 Shadows are tokens too (`--shadow-raised`), tinted to the ground, used only on the hero instrument
 and the selected segment, which really are raised.
 
@@ -50,7 +61,9 @@ status tags, 1 px borders everywhere, 2 px accent focus ring at 2 px offset.
 
 ## Type
 
-- Instrument Sans (variable, 600 max): wordmark, display, headings, navigation, buttons, segment labels.
+- Instrument Sans (variable, 600 max): display, headings, navigation, buttons, segment labels, the footer name.
+- The header uses the approved logo image (`brand/violema-restored-type-20261010.png`), about 248 px wide
+  on desktop and 168 px on phones so its "Scientific Evidence" line stays legible.
 - Inter (variable): running text, captions, table cells.
 - `ui-monospace, SFMono-Regular, Menlo, monospace`: source record ids, commit ids, hashes, versions.
 - Display `clamp(2.75rem, 5.2vw, 4.5rem)`, line-height 1.02, -0.02em, 600.
@@ -66,7 +79,7 @@ phones. Text is left aligned throughout; nothing is centred except inside the in
 ### Home
 
 ```
-┌ Violema ─────────────────────────────── Method   Evidence lab   PsychDoc ↗ ┐ 64 px, sticky
+┌ [logo] ──────────────────────────────── Method   Evidence lab   PsychDoc ↗ ┐ ~100 px, sticky
 │                                                                              │
 │ Scientific evidence systems        ┌ PsychDoc specimen ── [status pill] ───┐ │
 │ Know which                         │ claim ─┬──────── source 1  id  year   │ │
@@ -103,7 +116,8 @@ phones. Text is left aligned throughout; nothing is centred except inside the in
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Phones: the hero stacks copy then instrument; the trace becomes claim above sources with a vertical
+Phones: the header puts the links on a second row and only the logo row scrolls away, so the
+navigation stays reachable; the hero stacks copy then instrument; the trace becomes claim above sources with a vertical
 trunk on the left that branches to each source; the protocol becomes a vertical list on a hairline.
 
 ### Method
