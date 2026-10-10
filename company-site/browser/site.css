@@ -385,6 +385,7 @@ code {
   font-size: var(--text-caption);
 }
 .footer-meta small { color: var(--ink-3); }
+.footer-copyright { margin: 20px 0 0; font-size: var(--text-caption); color: var(--ink-3); }
 .planned-destination { color: var(--ink); }
 
 @media (max-width: 767px) {

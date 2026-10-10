@@ -222,3 +222,13 @@ test('the header logo and icon are the owner-approved brand files, served unchan
     assert.ok(source.equals(await readFile(join(dist,'company-assets',served))),`${served} is ${approved}`);
   }
 });
+
+test('approved copy: the copyright line and the materials example replace the Oryx card',async()=>{
+  for(const [,file] of pages){
+    const html=await readFile(join(dist,file),'utf8');
+    assert.equal((html.match(/<p class="footer-copyright">Copyright 2026 Violema, Inc\.<\/p>/g)||[]).length,1);
+  }
+  const home=await readFile(join(dist,'index.html'),'utf8');
+  assert.doesNotMatch(home,/Oryx/);
+  for(const text of ['Second example','Materials research','Curated demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
+});
