@@ -16,7 +16,8 @@ for (const trace of document.querySelectorAll('.trace-animate')) {
   const expected = trace.querySelectorAll('.trace-lead').length;
   let finished = 0;
   trace.addEventListener('animationend', event => {
-    if (event.animationName === 'trace-draw' && ++finished >= expected) done();
+    const lead = event.target.classList?.contains('trace-lead') || event.target.classList?.contains('trace-trunk');
+    if (event.animationName === 'trace-draw' && lead && ++finished >= expected) done();
   });
   setTimeout(done, 4000);
 }
