@@ -322,22 +322,27 @@ code {
 .primary-nav a:hover { color: var(--ink); background: var(--surface-2); }
 .primary-nav a[aria-current='page'] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
 
+/* Narrow headers: the approved logo, unchanged, takes the widest space the header allows while
+   the navigation stays on one line. A legible phone lockup needs a new asset (see design plan). */
 @media (max-width: 767px) {
-  .brand img { width: 200px; }
+  .brand { flex: 1 1 auto; min-width: 0; }
+  .brand img { width: 100%; max-width: 248px; }
+  .primary-nav { flex: none; }
 }
 @media (max-width: 599px) {
   :root { --header-height: 72px; }
   .header-inner { gap: 12px; padding-block: 4px; }
-  .brand img { width: 168px; }
   .primary-nav { gap: 0; margin-right: -6px; }
   .primary-nav a { padding: 0 6px; font-size: 0.875rem; }
 }
-/* Below 480 px the links take a second row. Only the logo row scrolls away, so the
-   navigation stays reachable without a tall sticky block. */
+/* Below 480 px the links take their own row and the logo spans the full width above them.
+   Only the logo row scrolls away (the logo is 3:1), so the navigation stays reachable. */
 @media (max-width: 479px) {
   :root { --header-height: 44px; }
-  .site-header { top: -60px; }
+  .site-header { top: calc(-1 * ((100vw - 2 * var(--gutter)) / 3 + 4px)); }
   .header-inner { flex-wrap: wrap; gap: 0; padding-block: 4px 0; }
+  .brand { flex-basis: 100%; }
+  .brand img { max-width: none; }
   .primary-nav { justify-content: space-between; width: calc(100% + 12px); margin-inline: -6px; }
 }
 
