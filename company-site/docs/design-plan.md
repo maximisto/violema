@@ -145,9 +145,10 @@ then the instrument, then evidence, then the table.
 ```
 ┌ header: "PsychDoc specimen" (h2)                    [claim.status pill] ┐
 ├ trace ──────────────────────────────────────────────────────────────────┤
-│ claim card            │ leads │ ol of claim.sourceIds, equal rows         │
-│  label, claim.text,   │ ───●  │  title (link ↗), kind, year, id in mono   │
-│  caveat               │ ───●  │                                           │
+│                       ┌──────● ol of claim.sourceIds, equal rows        │
+│ claim card  ──────────○──────●  title (link ↗), kind, year, id in mono    │
+│  label, text, limit   ├──────●                                            │
+│                       └──────●                                            │
 ├ replay (data-bias-root) ────────────────────────────────────────────────┤
 │ "Saved estimate and interval"  unit, direction                           │
 │ legend: Saved result (dot), Assumed shift (capped bar)                   │
@@ -159,7 +160,9 @@ then the instrument, then evidence, then the table.
 ```
 
 - The leads are horizontal SVG lines placed by percentage on equal-height source rows, so they meet
-  each row's centre at any width without measuring the DOM. `pathLength="1"` and a CSS
+  each row's centre at any width without measuring the DOM. A short bus on the claim card's edge
+  joins them; it grows outward from the card's midpoint first. On phones the claim sits above the
+  sources and a vertical trunk branches to each row instead. `pathLength="1"` and a CSS
   stroke-dashoffset animation draw them in order (700 ms each, 100 ms stagger) only under
   `@media (scripting: enabled) and (prefers-reduced-motion: no-preference)`. With JavaScript off or
   reduced motion the lines are simply drawn. After the run, a class pins the drawn state so a layout
@@ -188,5 +191,8 @@ then the instrument, then evidence, then the table.
   section keeps its copy and links instead.
 - Rejected: monospace small labels and middle-dot meta strings as chrome. Mono is limited to
   identifiers; middle dots appear only where they are part of packet text.
-- Accessory to remove at the end: the arrow icon after every internal link and button. Only links
-  that leave the site keep "↗".
+- Dropped from the old site while building: the arrow icon after every internal link and button.
+  Only links that leave the site keep "↗".
+- Accessory removed after the screenshot critique: source rows that faded in as their leads arrived.
+  It read as a loading state and briefly lowered text contrast; the leads and their end nodes are
+  enough.

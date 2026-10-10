@@ -14,17 +14,26 @@ Open `http://127.0.0.1:4317/`, `/method/` and `/demo/`. `PORT` can override the 
 
 ## Layout
 
-- `lib/pages.mjs`: static page composition and navigation.
-- `lib/render.mjs`: shared evidence renderer, escaped text, safe source links, and bounded additive-shift arithmetic.
-- `browser/site.mjs`: progressive enhancement for corpus selection, claim selection, range control, and reset.
-- `browser/site.css`: responsive typography and layout.
+- `lib/pages.mjs`: page shell (wordmark header, footer, metadata), the protocol stations, and the three routes.
+- `lib/render.mjs`: shared evidence renderer: escaped text, safe source links, bounded additive-shift arithmetic, the interval scale, the trace specimen (a claim joined to its cited source records), the bias control and the demo bench.
+- `browser/site.mjs`: entry module on every page: header state, pinning the hero trace once drawn, segmented controls; it imports `lab.mjs` only where a replay or the bench exists.
+- `browser/tabs.mjs`: ARIA tabs over plain anchor links (arrow, Home and End keys; links still jump without JavaScript).
+- `browser/lab.mjs`: the assumed-bias replay (home hero and demo) and the bench: corpus switch, claim selection, reset and hash links.
+- `browser/site.css`: colour tokens (light, dark and the always-dark instrument), type scale, layout and the one on-load animation.
 - `assets/`: self-hosted fonts with their licences and the placeholder icon (see below).
+- `docs/design-plan.md`: the design plan: tokens, type, layouts and the instrument's anatomy.
 - `data/`: source packet contract, evidence records, provenance and execution receipts. See `data/provenance.md` for scope and scientific limitations.
 - `scripts/build.mjs`: validates exported packet freshness, then builds only `company-site/dist`.
 - `scripts/preview.mjs`: loopback-only preview server.
 - `tests/`: source-contract, arithmetic, renderer, metadata and generated-output tests.
 
-The generated routes are `dist/index.html`, `dist/method/index.html`, and `dist/demo/index.html`. Every company browser asset and downloadable packet lives under `dist/company-assets/`; the legacy application's `/assets/` and `/brand/` paths remain available for migration compatibility. Build output is ignored by Git.
+The generated routes are `dist/index.html`, `dist/method/index.html`, and `dist/demo/index.html`. Every company browser asset and downloadable packet lives under `dist/company-assets/`; the legacy application's `/assets/` and `/brand/` paths remain available for migration compatibility. The build no longer reads anything from `frontend/`. Build output is ignored by Git.
+
+## Design system
+
+Colours are CSS custom properties on `:root`, redefined for `prefers-color-scheme: dark`; components use only tokens. The instrument (hero specimen, method examples, demo bench) is dark in both themes: `.instrument` re-points the shared tokens to the `--inst-*` values, so components inside it need no special cases. One accent, no gradients, glows or glass; shadows only on raised objects. Instrument Sans sets display, headings, navigation and buttons; Inter sets running text; the system monospace stack is reserved for identifiers (record ids, commits, hashes, versions). See `docs/design-plan.md` for values and contrast notes.
+
+The hero trace is the only on-load motion. Its leads are SVG lines placed by percentage on equal-height source rows, drawn with `stroke-dashoffset` under `@media (scripting: enabled) and (prefers-reduced-motion: no-preference)`; with JavaScript off or reduced motion they are simply drawn. Every mark comes from the packet: the leads are the claim's `sourceIds`, the scale shows the saved estimate, interval and reference thresholds.
 
 ## Fonts and icon
 
@@ -47,7 +56,7 @@ The JavaScript renderer reads the same frozen data module as the static build. W
 
 ## Browser acceptance
 
-Run against the built preview. Check all three routes by direct load and refresh at desktop, 390px and 320px widths. Verify corpus and claim links with mouse and keyboard, range changes including endpoints, materials isolation, reset, packet downloads, reduced motion and a no-JavaScript load. Table overflow is intentionally contained inside the keyboard-focusable comparison region; the page itself must not overflow horizontally. Inspect console and network failures.
+Run against the built preview. Check all three routes by direct load and refresh at 1440, 1024, 768, 390 and 320 px widths, in light and dark colour schemes. Verify corpus and claim links with mouse and keyboard, the segmented controls' arrow keys, range changes including endpoints on the home hero and the demo, materials isolation, reset, packet downloads, reduced motion (the hero trace appears drawn), a no-JavaScript load (drawn trace, static interval, every claim and table), focus rings on every control, 44 px targets on phones and text contrast of at least 4.5:1. Table overflow is intentionally contained inside the keyboard-focusable comparison region; the page itself must not overflow horizontally. Inspect console and network failures.
 
 Automated Node checks cover arithmetic boundaries, packet identity, document IDs/anchors, local links, assets, source protocols, corpus isolation, and meaningful no-JavaScript markup. Browser checks are separate because the package deliberately has no browser automation dependency.
 
