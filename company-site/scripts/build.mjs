@@ -7,7 +7,6 @@ import { exportCorpora } from './export-corpora.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
-const frontend = resolve(root, '../frontend/public');
 const assets = join(root, 'assets');
 
 // Self-hosted brand assets owned by company-site (see README "Fonts and icon").
@@ -46,12 +45,6 @@ for (const name of ['provenance.md', 'stage-b-snapshot.json', 'portability-recei
   await copyFile(join(root, 'data', name), join(dist, 'company-assets/data', name));
 }
 for (const [source, destination] of brandFiles) await copyFile(join(assets, source), join(dist, 'company-assets', destination));
-// Legacy brand files still referenced by the current markup; removed with the wordmark header.
-await copyFile(join(frontend, 'brand/violema-logo-light-20260729.png'), join(dist, 'company-assets/violema-logo.png'));
-for (const font of ['geist-sans-400', 'geist-sans-500', 'geist-sans-600']) {
-  await copyFile(join(frontend, 'fonts/geist', `${font}.woff2`), join(dist, 'company-assets/fonts', `${font}.woff2`));
-}
-await copyFile(join(frontend, 'fonts/clash/clash-display-500.woff2'), join(dist, 'company-assets/fonts/clash-display-500.woff2'));
 await writeFile(join(dist, 'robots.txt'), 'User-agent: *\nDisallow: /\n# Local preview: remove noindex and disallow only in a separately approved release.\n');
 await writeFile(join(dist, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ['/', '/method/', '/demo/'].map(path => `<url><loc>https://violema.com${path}</loc></url>`).join('') + '</urlset>\n');
 await writeFile(join(dist, 'llms.txt'), '# Violema scientific company preview\n\nPrepared scientific evidence demonstration; independent review pending.\n\n- [Method](https://violema.com/method/): source, claim, assumption, review and version records.\n- [Evidence lab](https://violema.com/demo/): two manually curated packets; shared presentation, not universal scientific validity.\n- [PsychDoc](https://psychdoc.ai/): canonical first scientific application.\n\nThe existing founder-agent application has a planned destination at agent.purpleorange.ai. This preview does not perform that migration.\n');

@@ -61,6 +61,10 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
   assert.match(html,/id="main"/);
   assert.doesNotMatch(html,/href="https:\/\/agent\.purpleorange\.ai/);
   assert.match(html,/planned destination, not live here/);
+  assert.doesNotMatch(html,/—/,'Public copy uses no em-dashes');
+  assert.doesNotMatch(html,/violema-logo|YOUR AI OPERATOR/i,'The legacy agent logo is gone');
+  assert.match(html,/<a class="wordmark" href="\/" aria-label="Violema home">Violema<\/a>/);
+  assert.match(html,/rel="icon" href="\/company-assets\/violema-icon\.svg"/);
   assert.doesNotMatch(html,/\/Users\/|\/private\/tmp\/|OpenRouter\.env|Slack\.env|auth-users/);
   const ids=[...html.matchAll(/\sid="([^\"]+)"/g)].map(match=>match[1]);
   assert.equal(new Set(ids).size,ids.length,'Document IDs must be unique');
@@ -74,6 +78,13 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
     assert.ok((await stat(local)).isFile(),`${href} exists`);
     if(anchor){const target=await readFile(local,'utf8');assert.ok(target.includes(`id="${anchor}"`),`Missing local target ${href}`);}
   }
+});
+
+test('titles use the house separators',async()=>{
+  const title=async file=>(await readFile(join(dist,file),'utf8')).match(/<title>([^<]+)<\/title>/)[1];
+  assert.equal(await title('index.html'),'Violema: scientific conclusions, with their evidence attached');
+  assert.equal(await title('method/index.html'),'The method | Violema');
+  assert.equal(await title('demo/index.html'),'Evidence lab | Violema');
 });
 
 test('all claims, cited sources and condition tables exist before JavaScript',async()=>{
@@ -107,7 +118,7 @@ test('browser module paths and self-hosted stylesheet assets resolve in the gene
   for(const [,relative] of browser.matchAll(/from '([^']+)'/g))assert.ok((await stat(resolve(dist,'company-assets/browser',relative))).isFile());
   const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
   for(const [,relative] of css.matchAll(/url\('([^']+)'\)/g))assert.ok((await stat(join(dist,relative))).isFile());
-  assert.match(css,/prefers-reduced-motion:reduce/);
+  assert.match(css,/prefers-reduced-motion:\s*reduce/);
   assert.match(css,/:focus-visible/);
   assert.ok(!(await readdir(dist)).includes('assets'),'Legacy app asset namespace is preserved');
 });
