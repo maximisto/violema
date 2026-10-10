@@ -1,6 +1,6 @@
 # Violema scientific logo concepts — 2026-10-10
 
-**Current preview:** [larger violet/orange wordmark](violema-warm-wordmark-20261010.png) with [open-eye icon](violema-open-eye-icon-20261010.png). The larger subtitle spans the brand name; the portrait retains its open eye, glasses and flowing circuit hair. [Wordmark prompts and display sizes](WARM-WORDMARK.md). Earlier [open-eye](OPEN-EYE.md) and [circuit-hair](CIRCUIT-CORRECTION.md) versions remain archived.
+**Current preview:** [lighter, spaced wordmark](violema-refined-wordmark-20261010.png) with [open-eye icon](violema-open-eye-icon-20261010.png). Original-style lighter geometric lettering, a generous portrait/name gap and a continuous violet-to-copper transition replace the rejected heavy type and orange hotspots. The subtitle spans the name. [Refinement prompts](REFINED-WORDMARK.md). Earlier variants remain archived.
 
 Built-in image_gen editing, actual transparent PNG output. Original raster remains untouched. The initial A/B lockups are 2172×724; B was initially selected and is now superseded by the circuit-hair correction above. User requested a microscope/glasses/scientific evolution. The existing profile is the identity reference. These are raster concepts; final vector refinement and a dedicated small-size lockup remain future work.
 
