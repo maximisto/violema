@@ -64,6 +64,7 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
   assert.doesNotMatch(html,/—/,'Public copy uses no em-dashes');
   assert.match(html,/<a class="brand" href="\/" aria-label="Violema home"><img src="\/company-assets\/violema-logo\.png" width="2172" height="724" alt="Violema"><\/a>/);
   assert.match(html,/rel="icon" href="\/company-assets\/violema-icon\.png" type="image\/png"/);
+  assert.match(html,/<meta name="color-scheme" content="light">/);
   assert.doesNotMatch(html,/\/Users\/|\/private\/tmp\/|OpenRouter\.env|Slack\.env|auth-users/);
   const ids=[...html.matchAll(/\sid="([^\"]+)"/g)].map(match=>match[1]);
   assert.equal(new Set(ids).size,ids.length,'Document IDs must be unique');
@@ -128,6 +129,8 @@ test('browser module paths and self-hosted stylesheet assets resolve in the gene
   for(const [,relative] of css.matchAll(/url\('([^']+)'\)/g))assert.ok((await stat(join(dist,relative))).isFile());
   assert.match(css,/prefers-reduced-motion:\s*reduce/);
   assert.match(css,/:focus-visible/);
+  assert.doesNotMatch(css,/prefers-color-scheme/,'Light only until a reversed logo is approved');
+  assert.match(css,/:root \{\n  color-scheme: light;/);
   assert.ok(!(await readdir(dist)).includes('assets'),'Legacy app asset namespace is preserved');
 });
 
