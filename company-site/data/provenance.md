@@ -31,6 +31,10 @@ The `analysis/stage_b/REVIEW.md` at the pinned commit says the Stage B brief awa
 
 `node scripts/export-trials.mjs --check` (run by every build) fails if the records stop matching `primary.studies`, `primary.k` or the snapshot's pinned CSV hash. With `--csv <path>` or `SYPRES_CSV` set it also re-derives every record from the CSV and fails on any difference. The records identify trials; they are not a re-audit of trial inputs, which remains incomplete.
 
+### The hero trial field
+
+On desktop (1024 px and wider) the home page draws a faint field of 12 small nodes below the hero copy, one per record in `sypres-primary-trials.json` (each node carries its record's `data-trial` id). The nodes are trials, not publications. Hairlines from the 12 nodes converge beside the instrument, rise along its edge and join the featured claim, because those trials are the inputs to the saved primary analysis that the claim reports. Node positions come from a fixed-seed generator, so every build draws the same layout; positions carry no meaning beyond membership. The field draws no other corpus: no PsychDoc synthesis or citation-graph records and no materials records. It is `aria-hidden`; a visible caption beside it reads "The 12 trials pooled in the saved primary analysis (SYPRES depression-psiloctr, version 25.1.2)". Trial names and identifiers stay in the downloadable records, not on screen.
+
 ### Bias replay semantics
 
 The control adds an assumed nonnegative value to the saved g and both confidence bounds. It preserves interval width and changes no study weights, heterogeneity, variance or source inputs. It is an illustrative replay of the existing declared common additive shift, not an estimated bias correction or new meta-analysis.

@@ -5,6 +5,7 @@ This isolated Node-built static bundle does not change the existing frontend, ba
 ```sh
 cd company-site
 node scripts/export-corpora.mjs --check
+node scripts/export-trials.mjs --check   # add --csv <pinned SYPRES CSV> to re-derive the records
 npm run build
 npm test
 npm run preview
@@ -24,7 +25,8 @@ Open `http://127.0.0.1:4317/`, `/method/` and `/demo/`. `PORT` can override the 
 - `brand/`: the approved logo, its icon, the concepts that led to it and their prompts (see "Scientific logo preview").
 - `docs/design-plan.md`: the design plan: tokens, type, layouts and the instrument's anatomy.
 - `data/`: source packet contract, evidence records, provenance and execution receipts. See `data/provenance.md` for scope and scientific limitations.
-- `scripts/build.mjs`: validates exported packet freshness, then builds only `company-site/dist`.
+- `scripts/export-trials.mjs`: exports and checks the 12 trial records of the saved primary analysis (`data/sypres-primary-trials.json`) against `stage-b-snapshot.json` and, given `--csv` or `SYPRES_CSV`, the pinned SYPRES CSV.
+- `scripts/build.mjs`: validates exported packet and trial-record freshness, then builds only `company-site/dist`.
 - `scripts/preview.mjs`: loopback-only preview server.
 - `tests/`: source-contract, arithmetic, renderer, metadata and generated-output tests.
 
@@ -33,6 +35,8 @@ The generated routes are `dist/index.html`, `dist/method/index.html`, and `dist/
 ## Design system
 
 Colours are CSS custom properties on `:root`; components use only tokens. The site ships in the light theme only (`color-scheme: light`) until a reversed logo is approved, because the approved logo's ink subtitle disappears on dark grounds; the parked dark values are in `docs/design-plan.md`. The accent is the logo's violet `#6852A3`. The instrument (hero specimen, method examples, demo bench) is dark by design: `.instrument` re-points the shared tokens to the `--inst-*` values, so components inside it need no special cases. One accent, no gradients, glows or glass; shadows only on raised objects. Instrument Sans sets display, headings, navigation and buttons; Inter sets running text; the system monospace stack is reserved for identifiers (record ids, commits, hashes, versions). See `docs/design-plan.md` for values and contrast notes.
+
+On desktop the hero also draws a faint field of the 12 trials pooled in the saved primary analysis, one node per trial record; it lights in the same load moment, before the trace. See `data/provenance.md` for what it draws and does not draw.
 
 The hero trace is the only on-load motion. Its leads are SVG lines placed by percentage on equal-height source rows, drawn with `stroke-dashoffset` under `@media (scripting: enabled) and (prefers-reduced-motion: no-preference)`; with JavaScript off or reduced motion they are simply drawn. Every mark comes from the packet: the leads are the claim's `sourceIds`, the scale shows the saved estimate, interval and reference thresholds.
 

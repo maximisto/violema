@@ -110,7 +110,7 @@ phones. Text is left aligned throughout; nothing is centred except inside the in
 │                             question, summary, counts, review status         │
 │                             Try the evidence lab                             │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ Oryx  [In development]      quiet two-column card                            │
+│ Materials research [Curated demonstration]  quiet two-column card            │
 │ Start with a conclusion worth getting right.   [Request a briefing ↗]        │
 │ footer: wordmark · tagline · links · preview status line                     │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -185,6 +185,28 @@ then the instrument, then evidence, then the table.
   a readable size from 320 px to 1440 px instead of shrinking with a viewBox.
 - Only the hero trace animates. The method page reuses the same trace statically.
 
+## Trial field (desktop hero)
+
+From 1024 px the white below the copy holds the 12 trials pooled in the saved primary analysis
+(`data/sypres-primary-trials.json`, one node per trial record, seeded layout). Hairlines converge
+beside the instrument, a single line rises along its left edge and joins the claim at a port on the
+claim card's left side, mirroring the trace's port on the right. In the load moment the trials light
+violet, their hairlines converge, the line rises, and only then does the claim-to-source trace run:
+trials, pooled analysis, claim, sources (about 2.5 s, once). Reduced motion and no JavaScript show
+the lit state. The copy column keeps an opaque clear zone (`--bg` with a soft lower edge) so the
+field never sits under text. The field is anchored to the trace's midpoint, which is the claim's
+midpoint, so the join stays exact at any desktop width; the caption aligns with the copy column.
+Weights: ink 8% for the base hairlines, violet 24% hairlines and 60% nodes when lit, 50% for the
+rising line. It draws no other corpus.
+
+## Phone logo
+
+The approved logo stays as it is: no redraw, crop or new lockup during integration. On phones it
+fills the widest space the header allows (full width above the navigation row below 480 px), which
+renders its subtitle about 7.8, 8.9 and 9.7 px tall at 320, 360 and 390 px. A properly legible
+phone lockup (subtitle removed or enlarged) needs a new asset exported from the approved master and
+approved by Max; that is a later, separate review. No `<picture>` source is added until it exists.
+
 ## Interaction
 
 - Corpus switches (home teaser, demo) are links to anchors without JavaScript and become an ARIA
@@ -193,7 +215,8 @@ then the instrument, then evidence, then the table.
 - Claim selection keeps link semantics and `aria-current`; the centre claim and its evidence switch
   together.
 - The bias slider keeps its bounds, step and limit text; reset returns to the first corpus, first
-  claim and zero shift.
+  claim and zero shift. On the bench a scope line beside the control states that the replay always
+  uses Claim 1, the primary analysis, whichever claim is selected (Astra's wording).
 - The header gains its hairline once the page scrolls.
 
 ## Review against the brief
