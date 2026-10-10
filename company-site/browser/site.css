@@ -168,7 +168,7 @@ a:hover { text-decoration-thickness: 2px; }
   outline-offset: 2px;
 }
 
-code, .mono {
+code {
   font-family: var(--font-mono);
   font-size: 0.8125rem;
   letter-spacing: 0;
@@ -409,7 +409,6 @@ code, .mono {
   margin-bottom: 48px;
 }
 
-.grid-12,
 .hero-grid,
 .split,
 .statement-grid,
