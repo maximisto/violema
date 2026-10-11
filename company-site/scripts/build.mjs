@@ -42,6 +42,8 @@ for (const [source, destination] of [
   ['browser/site.mjs', 'company-assets/browser/site.mjs'],
   ['browser/tabs.mjs', 'company-assets/browser/tabs.mjs'],
   ['browser/lab.mjs', 'company-assets/browser/lab.mjs'],
+  ['browser/evidence-map.mjs', 'company-assets/browser/evidence-map.mjs'],
+  ['lib/evidence-map.mjs', 'company-assets/browser/evidence-map-render.mjs'],
   ['lib/render.mjs', 'company-assets/browser/render.mjs'],
   ['data/corpora.mjs', 'company-assets/data/corpora.mjs'],
 ]) await copyFile(join(root, source), join(dist, destination));
@@ -51,7 +53,7 @@ for (const corpus of corpora) {
   await access(packet);
   await copyFile(packet, join(dist, 'company-assets/data', `${corpus.id}.json`));
 }
-for (const name of ['provenance.md', 'stage-b-snapshot.json', 'portability-receipt.json', 'sypres-primary-trials.json']) {
+for (const name of ['provenance.md', 'stage-b-snapshot.json', 'portability-receipt.json', 'sypres-primary-trials.json', 'evidence-map.json']) {
   await copyFile(join(root, 'data', name), join(dist, 'company-assets/data', name));
 }
 for (const [source, destination] of fontFiles) await copyFile(join(assets, source), join(dist, 'company-assets', destination));
