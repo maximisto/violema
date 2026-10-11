@@ -41,12 +41,12 @@ test('the method page explains the system after the six stations and before the 
   assert.match(next, /Nothing is agreed yet/);
 });
 
-test('the method page states where PsychDoc uses AI, as its AI policy does', () => {
+test('the method page states where AI is used, quoting PsychDoc’s AI policy', () => {
   const how = section('how-it-works');
   const ai = f.aiPolicy;
   assert.equal(ai.url, 'https://psychdoc.ai/policies/ai-use');
   assert.ok(how.includes(`href="${ai.url}"`), 'links the policy');
-  assert.match(how, /<h3>Where PsychDoc uses AI<\/h3>/);
+  assert.match(how, /<h3>Where AI is used in this method<\/h3><p>PsychDoc, its first application, states this in its AI policy, updated 11 October 2026: “/);
   for (const line of [ai.intro, ...ai.helps, ai.decides]) assert.ok(how.includes(escapeHTML(line)), line);
   assert.ok(ai.helps[0].startsWith('Searching for candidate papers'), 'searching comes first');
   assert.ok(ai.helps[1].startsWith('Screening candidate papers'));
