@@ -95,6 +95,7 @@ The "How it works" section on `/method/` prints figures from `data/how-it-works.
 | 22 papers from 15 research programs | `lib/synthesis/trust.ts`, `computeTrust` |
 | Shao 2021: about a third of the day-one new spines remained at day 34 | `lib/content/specimen-copy.ts` |
 | No signed expert review | `provenance.reviewedBy` is empty in the synthesis |
+| Where PsychDoc uses AI: the five "Where AI helps" steps and the editorial-judgment line, updated 11 October 2026 | `lib/policies/content.ts`, `aiUsePolicy`, at commit `cd43890` of the same pull request; "this site" in the last step reads "PsychDoc" here |
 
 Every study added to the synthesis must be listed as a seed (`tests/schema.test.ts`); a person adds them in the same update. The keyword searches were run by an AI agent during the 10 October 2026 review, not on a schedule.
 

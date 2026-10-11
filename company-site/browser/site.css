@@ -1256,11 +1256,14 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
 .how-rules ul { display: grid; gap: 10px; list-style: none; }
 .how-rules strong { display: block; font-family: var(--font-display); font-size: var(--text-caption); color: var(--ink); }
 .how-rules p { margin-top: 14px; }
+.how-ai { grid-column: 1 / -1; padding-top: 40px; border-top: 1px solid var(--line); }
+.how-ai ul { display: grid; gap: 8px; max-width: 66ch; margin: 0 0 1em; padding-left: 24px; list-style: disc; font-size: var(--text-small); line-height: 1.6; color: var(--ink-2); }
 .how-more { margin: 24px 0 0; }
 .how-table { margin-top: 40px; }
 .how-table th[scope='row'] { width: 18%; }
 @media (max-width: 959px) {
   .how-facts { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .how-ai { padding-top: 28px; }
 }
 
 /* ---------- Demo: the bench ---------- */

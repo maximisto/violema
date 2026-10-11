@@ -55,4 +55,21 @@ export const howItWorks = Object.freeze({
     Object.freeze({ claimId: 'c-mouse-spines-persist', source: 'Shao 2021', venue: 'Neuron', lab: 'Kwan' }),
     Object.freeze({ claimId: 'c-healthy-sv2a', source: 'Johansen 2026', venue: 'Translational Psychiatry', lab: 'Knudsen' }),
   ]),
+  // lib/policies/content.ts aiUsePolicy at commit cd43890 of the same pull request (updated 2026-10-11): the
+  // "Where AI helps" list and the editorial-judgment line of "Where AI does not decide", verbatim except that
+  // "this site" in the last list line names PsychDoc. The searching and screening lines reach psychdoc.ai only
+  // when that pull request merges.
+  aiPolicy: Object.freeze({
+    url: 'https://psychdoc.ai/policies/ai-use',
+    updatedAt: '2026-10-11',
+    intro: 'We use AI models, including models made by Anthropic and OpenAI, for these steps:',
+    helps: Object.freeze([
+      'Searching for candidate papers: writing and running keyword searches on literature databases, with each query and its hit count recorded. The weekly citation scan is code, not an AI model.',
+      'Screening candidate papers: drafting the written rules for a screening pass, a verdict on each paper and the reason for it.',
+      'Drafting claim text, relations and plain-language summaries from the sources.',
+      'Automated stress tests: AI agents with separate briefs look for errors, confounds and overstatement in a posed reading.',
+      'Writing the code that builds PsychDoc and checks its content.',
+    ]),
+    decides: 'Nothing is published until the publisher approves the change. Counts on the trust panel are computed by code. Which studies to include, the tier of each claim and every posed reading are editorial judgments.',
+  }),
 });

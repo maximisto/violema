@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { howItWorks as f } from '../data/how-it-works.mjs';
 import { howItWorksSection, crossFieldSection, loopDiagram, crossFieldDiagram } from '../lib/how-it-works.mjs';
+import { escapeHTML } from '../lib/render.mjs';
 
 const method = await readFile(new URL('../dist/method/index.html', import.meta.url), 'utf8');
 const css = await readFile(new URL('../browser/site.css', import.meta.url), 'utf8');
@@ -38,6 +39,19 @@ test('the method page explains the system after the six stations and before the 
   const next = section('cross-field');
   assert.match(next, /<span class="pill">Planned<\/span>/);
   assert.match(next, /Nothing is agreed yet/);
+});
+
+test('the method page states where PsychDoc uses AI, as its AI policy does', () => {
+  const how = section('how-it-works');
+  const ai = f.aiPolicy;
+  assert.equal(ai.url, 'https://psychdoc.ai/policies/ai-use');
+  assert.ok(how.includes(`href="${ai.url}"`), 'links the policy');
+  assert.match(how, /<h3>Where PsychDoc uses AI<\/h3>/);
+  for (const line of [ai.intro, ...ai.helps, ai.decides]) assert.ok(how.includes(escapeHTML(line)), line);
+  assert.ok(ai.helps[0].startsWith('Searching for candidate papers'), 'searching comes first');
+  assert.ok(ai.helps[1].startsWith('Screening candidate papers'));
+  assert.match(ai.helps[0], /The weekly citation scan is code, not an AI model\./);
+  assert.ok(!ai.helps.some(line => /this site/.test(line)), 'on violema.com "this site" would name the wrong site');
 });
 
 test('each diagram is an accessible figure that scrolls inside its own region', () => {
