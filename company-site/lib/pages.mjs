@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { evidenceMapSection } from './evidence-map.mjs';
+import { legalPolicies, legalUpdatedAt } from './legal.mjs';
 import { escapeHTML as e, sourceURL, corpusPanel, intervalFigure, calculateBiasScenario, chartLegend, biasControl, biasExplanation, referenceNote, scenarioSummary, traceSpecimen } from './render.mjs';
 
 const psychdoc = 'https://psychdoc.ai';
@@ -42,11 +43,19 @@ function siteHeader(route) {
 }
 
 function siteFooter() {
-  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span><a href="/login">Existing workspace sign in</a></div><p class="footer-copyright">Copyright 2026 Violema, Inc.</p></div></footer>`;
+  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span><a href="/login">Existing workspace sign in</a></div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
 }
 
 export function shell(route, title, description, content, options = {}) {
   return `<!doctype html><html lang="en"><head>${head(route, title, description, options)}</head><body><a class="skip-link" href="#main">Skip to content</a>${siteHeader(route)}<main id="main">${content}</main>${siteFooter()}<script type="module" src="/company-assets/browser/site.mjs"></script></body></html>`;
+}
+
+export function legalPage(slug) {
+  const policy = legalPolicies.find(item => item.slug === slug);
+  if (!policy) throw new Error(`Unknown website policy: ${slug}`);
+  const effectiveDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${legalUpdatedAt}T00:00:00Z`));
+  const sections = policy.sections.map(section => `<section id="${e(section.id)}" class="legal-section" aria-labelledby="${e(section.id)}-title"><h2 id="${e(section.id)}-title">${e(section.title)}</h2>${section.html}</section>`).join('');
+  return shell(`/legal/${slug}/`, `${policy.title} | Violema`, policy.description, `<article class="wrap legal-document"><nav class="legal-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span aria-current="page">${e(policy.title)}</span></nav><header class="legal-heading"><p class="label">Violema, Inc. · Delaware corporation</p><h1>${e(policy.title)}</h1><p class="lede">${e(policy.summary)}</p><p class="caption">Effective date: <time datetime="${e(legalUpdatedAt)}">${e(effectiveDate)}</time></p></header><nav class="legal-contents" aria-label="On this page"><p>On this page</p><ol>${policy.sections.map(section => `<li><a href="#${e(section.id)}">${e(section.title)}</a></li>`).join('')}</ol></nav><div class="legal-body">${sections}</div></article>`);
 }
 
 // The six records of the method. A real sequence, so the stations are numbered.
@@ -90,7 +99,7 @@ function teaser(corpora) {
 export function homePage(corpora,stress,trials) {
   const corpus=corpora.find(c=>c.id===stress.corpusId);
   return shell('/','Violema: scientific conclusions, with their evidence attached','Violema builds scientific evidence systems that connect claims to sources, expose consequential assumptions, and keep conclusions open to review.',[
-    `<section class="hero" aria-labelledby="hero-title"><div class="wrap hero-grid"><div class="hero-copy"><p class="label">Scientific evidence systems</p><h1 id="hero-title">Know which conclusions hold.<br>And why.</h1><p class="lede">Violema connects scientific claims to their sources, makes consequential assumptions visible, and keeps the record open to review.</p><div class="actions"><a class="button button-primary" href="${psychdoc}">Explore PsychDoc ${external}</a><a class="button button-secondary" href="/review/">Review the science</a></div><p class="hero-note">First application: neuropsychiatric evidence.<br>Built to be inspected, challenged, and improved.</p></div>${evidenceHero(corpus, trials)}</div></section>`,
+    `<section class="hero" aria-labelledby="hero-title"><div class="wrap hero-grid"><div class="hero-copy"><p class="label hero-category"><span class="category-dot" aria-hidden="true"></span>Scientific evidence systems</p><h1 id="hero-title">Know which conclusions hold.<br>And why.</h1><p class="lede">Violema connects scientific claims to their sources, makes consequential assumptions visible, and keeps the record open to review.</p><div class="actions"><a class="button button-primary" href="${psychdoc}">Explore PsychDoc ${external}</a><a class="button button-secondary" href="/review/">Review the science</a></div><p class="hero-note">First application: neuropsychiatric evidence.<br>Built to be inspected, challenged, and improved.</p></div>${evidenceHero(corpus, trials)}</div></section>`,
     evidenceMapSection(evidenceMap, evidenceMapHash),
     `<section class="statement" aria-label="Why the links matter"><div class="wrap statement-grid"><p class="statement-text">A paper is a source.<br>A conclusion is a chain of reasoning.</p><p class="statement-body">We make the links inspectable: which study supports a claim, what a model assumes, and where an interpretation stops.</p></div></section>`,
     `<section class="section" aria-labelledby="protocol-title"><div class="wrap"><div class="section-head"><div><p class="label">The method</p><h2 id="protocol-title">Keep the reasoning<br>close to the evidence.</h2></div><a class="text-link" href="/method/">Inspect the workflow</a></div>${protocol()}<div class="uses"><a class="use" href="/method/#trace"><h3>Trace the claim</h3><p>Move from a conclusion to the supporting publication, recorded conditions, and limits.</p></a><a class="use" href="/method/#assumptions"><h3>Expose the assumption</h3><p>Distinguish what the source reports from what an analysis assumes.</p></a><a class="use" href="/method/#transfer"><h3>Test what transfers</h3><p>Switch research questions while keeping source identity and review status explicit.</p></a></div></div></section>`,

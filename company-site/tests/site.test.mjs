@@ -10,7 +10,7 @@ import { homePage } from '../lib/pages.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
-const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html'],['/review/','review/index.html']];
+const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html'],['/review/','review/index.html'],['/legal/terms/','legal/terms/index.html'],['/legal/privacy/','legal/privacy/index.html']];
 const decode = value => value.replaceAll('&amp;','&');
 
 test('additive replay preserves original result and interval width throughout declared domain',()=>{
@@ -74,13 +74,33 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
     const href=decode(match[1]);
     if(href.startsWith('#')){assert.ok(ids.includes(href.slice(1)),`Missing anchor ${href}`);continue;}
     if(!href.startsWith('/'))continue;
-    if(href==='/login')continue; // Served by the preserved application, outside this static bundle.
+    if(['/login','/terms','/privacy'].includes(href))continue; // Served by the preserved application, outside this static bundle.
     const [path,anchor]=href.split('#');
     let local=join(dist,path);
     if((await stat(local)).isDirectory())local=join(local,'index.html');
     assert.ok((await stat(local)).isFile(),`${href} exists`);
     if(anchor){const target=await readFile(local,'utf8');assert.ok(target.includes(`id="${anchor}"`),`Missing local target ${href}`);}
   }
+});
+
+test('website policies are reachable from every company footer without replacing workspace policies',async()=>{
+  for(const [,file] of pages){
+    const html=await readFile(join(dist,file),'utf8');
+    const footer=html.match(/<footer class="site-footer">[\s\S]*?<\/footer>/)[0];
+    for(const route of ['/legal/terms/','/legal/privacy/'])assert.ok(footer.includes(`href="${route}"`));
+  }
+  for(const slug of ['terms','privacy']){
+    const html=await readFile(join(dist,'legal',slug,'index.html'),'utf8');
+    assert.match(html,/Violema, Inc\./);
+    assert.match(html,/Delaware corporation/);
+    assert.ok(html.includes(`href="/${slug}"`),'Original workspace policy remains linked');
+    assert.doesNotMatch(html,/<form[ >]|\[Address\]|\[Company|12.month retention/);
+  }
+  const entries=await readdir(dist);
+  assert.ok(!entries.includes('terms')&&!entries.includes('privacy'),'Company bundle does not shadow app policy paths');
+  const sitemap=await readFile(join(dist,'sitemap.xml'),'utf8');
+  assert.match(sitemap,/<loc>https:\/\/violema\.com\/legal\/terms\/<\/loc>/);
+  assert.match(sitemap,/<loc>https:\/\/violema\.com\/legal\/privacy\/<\/loc>/);
 });
 
 test('titles use the house separators',async()=>{

@@ -402,7 +402,10 @@ code {
   font-size: var(--text-caption);
 }
 .footer-meta small { color: var(--ink-3); }
-.footer-copyright { margin: 20px 0 0; font-size: var(--text-caption); color: var(--ink-3); }
+.footer-end { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; margin-top: 20px; }
+.footer-copyright { margin: 0; font-size: var(--text-caption); color: var(--ink-3); }
+.footer-legal { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.footer-legal a { display: inline-flex; align-items: center; min-height: 44px; font-size: var(--text-caption); color: var(--ink); text-underline-offset: 4px; }
 .footer-meta > a { color: var(--ink-2); }
 
 @media (max-width: 767px) {
@@ -479,6 +482,8 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
 .hero-grid { align-items: start; }
 .hero-copy { grid-column: 1 / span 5; padding-top: clamp(8px, 3vw, 48px); }
 .hero-copy h1 { margin-bottom: 24px; }
+.hero-category { display: flex; align-items: center; gap: 10px; }
+.category-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .hero-note { margin-top: 32px; font-size: var(--text-small); color: var(--ink-3); }
 .specimen { grid-column: 6 / span 7; }
 
@@ -526,6 +531,30 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
   .assembly-claim { padding: 18px; }
   .evidence-hero-caption { flex-direction: column; gap: 8px; padding: 16px 20px; }
   .evidence-hero-caption a { margin-left: 0; min-height: 36px; display: inline-flex; align-items: center; }
+}
+
+/* ---------- Public website policies ---------- */
+
+.legal-document { max-width: 780px; padding-top: clamp(32px, 5vw, 64px); }
+.legal-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 36px; font-size: var(--text-small); color: var(--ink-3); }
+.legal-breadcrumb a { display: inline-flex; align-items: center; min-height: 44px; }
+.legal-heading { padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.legal-heading h1 { font-size: clamp(2.4rem, 5vw, 3.75rem); margin-bottom: 24px; }
+.legal-heading .caption { margin: 20px 0 0; }
+.legal-contents { margin-top: 28px; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+.legal-contents > p { font-size: var(--text-small); font-weight: 600; margin-bottom: 12px; }
+.legal-contents ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; list-style: none; padding: 0; }
+.legal-contents a { display: inline-flex; align-items: center; min-height: 44px; font-size: var(--text-small); text-underline-offset: 4px; }
+.legal-section { padding-top: 40px; }
+.legal-section h2 { font-size: clamp(1.4rem, 3vw, 1.8rem); margin-bottom: 18px; }
+.legal-body { color: var(--ink-2); }
+.legal-body h2 { color: var(--ink); }
+.legal-body a { color: var(--accent); text-underline-offset: 4px; overflow-wrap: anywhere; }
+.legal-body ul { padding-left: 24px; list-style: disc; margin-bottom: 20px; }
+.legal-body li { padding-left: 3px; margin-bottom: 10px; }
+@media (max-width: 599px) {
+  .legal-contents { padding: 18px; }
+  .legal-contents ol { grid-template-columns: 1fr; }
 }
 
 /* ---------- Physician review ---------- */
