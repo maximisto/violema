@@ -92,3 +92,9 @@ test('map text and embedded JSON cannot escape their HTML contexts', () => {
   assert.match(html, /\\u003c\/script>/);
   assert.throws(() => evidenceMapSection({ ...data, schemaVersion: 2 }, hash), /versioned evidence map/);
 });
+
+test('the README records the version and hash of the map it ships', async () => {
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  assert.ok(readme.includes(`The source synthesis was updated on ${data.synthesis.updatedAt}`));
+  assert.ok(readme.includes(`SHA-256 \`${hash}\``), 'README hash matches data/evidence-map.json');
+});

@@ -3,7 +3,7 @@
   "synthesis": {
     "slug": "psilocybin-rewiring",
     "title": "Does one dose of psilocybin rewire the brain?",
-    "updatedAt": "2026-10-05",
+    "updatedAt": "2026-10-10",
     "evidenceUrl": "https://psychdoc.ai/evidence/psilocybin-rewiring"
   },
   "papers": [
@@ -207,6 +207,307 @@
       "href": "https://doi.org/10.1038/s41398-026-04285-y",
       "claimIds": [
         "c-healthy-sv2a"
+      ]
+    },
+    {
+      "id": "pasquini-2026",
+      "label": "Pasquini 2026",
+      "title": "Modeled Long-Term Effects of Psilocybin on Dynamic Activity and Effective Connectivity of Fronto-Striatal-Thalamic Circuits",
+      "authors": [
+        "Pasquini, L.",
+        "Vohryzek, J.",
+        "Escrichs, A.",
+        "Perl, Y. S.",
+        "Ponce-Alvarez, A.",
+        "Idesis, S.",
+        "Girn, M.",
+        "Roseman, L.",
+        "Mitchell, J. M.",
+        "Gazzaley, A.",
+        "Kringelbach, M.",
+        "Nutt, D. J.",
+        "Lyons, T.",
+        "Carhart-Harris, R. L.",
+        "Deco, G."
+      ],
+      "year": 2026,
+      "venue": "Human Brain Mapping",
+      "doi": "10.1002/hbm.70596",
+      "url": "https://doi.org/10.1002/hbm.70596",
+      "href": "https://doi.org/10.1002/hbm.70596",
+      "claimIds": [
+        "c-same-program",
+        "c-healthy-fst-dynamics"
+      ]
+    },
+    {
+      "id": "bhagavan-2026",
+      "label": "Bhagavan 2026",
+      "title": "Sustained Effects of Low-to-Moderate Doses of Psilocybin on Brain Connectivity",
+      "authors": [
+        "Bhagavan, C.",
+        "Dandash, O.",
+        "Carter, O.",
+        "Bryson, A.",
+        "Kanaan, R. A."
+      ],
+      "year": 2026,
+      "venue": "medRxiv (preprint)",
+      "doi": "10.64898/2026.04.17.26351147",
+      "url": "https://doi.org/10.64898/2026.04.17.26351147",
+      "href": "https://doi.org/10.64898/2026.04.17.26351147",
+      "claimIds": [
+        "c-healthy-low-dose-week"
+      ]
+    },
+    {
+      "id": "madsen-2024",
+      "label": "Madsen 2024",
+      "title": "CCH attack frequency reduction after psilocybin correlates with hypothalamic functional connectivity",
+      "authors": [
+        "Madsen, M. K.",
+        "Petersen, A. S.",
+        "Stenbaek, D. S.",
+        "Sørensen, I. M.",
+        "Schiønning, H.",
+        "Fjeld, T.",
+        "Nykjaer, C. H.",
+        "Larsen, S. M. U.",
+        "Grzywacz, M.",
+        "Mathiesen, T.",
+        "Klausen, I. L.",
+        "Overgaard-Hansen, O.",
+        "Brendstrup-Brix, K.",
+        "Linnet, K.",
+        "Johansen, S. S.",
+        "Fisher, P. M.",
+        "Jensen, R. H.",
+        "Knudsen, G. M."
+      ],
+      "year": 2024,
+      "venue": "Headache",
+      "doi": "10.1111/head.14656",
+      "url": "https://doi.org/10.1111/head.14656",
+      "href": "https://doi.org/10.1111/head.14656",
+      "claimIds": [
+        "c-cluster-headache-week"
+      ]
+    },
+    {
+      "id": "brendstrup-brix-2026",
+      "label": "Brendstrup-Brix 2026",
+      "title": "Effects of psilocybin on sleep quality and brain microstructure in chronic cluster headache",
+      "authors": [
+        "Brendstrup-Brix, K.",
+        "Ozenne, B.",
+        "Fisher, P. M.",
+        "Stenbæk, D. S.",
+        "Petersen, A. S.",
+        "Armand, S.",
+        "McCulloch, D. E.",
+        "Marstrand-Joergensen, M. R.",
+        "Ulv Larsen, S. M.",
+        "Johansen, A.",
+        "Jensen, R. H.",
+        "Knudsen, G. M.",
+        "Madsen, M. K."
+      ],
+      "year": 2026,
+      "venue": "Journal of Psychopharmacology",
+      "doi": "10.1177/02698811261449380",
+      "url": "https://doi.org/10.1177/02698811261449380",
+      "href": "https://doi.org/10.1177/02698811261449380",
+      "claimIds": [
+        "c-cluster-headache-week"
+      ]
+    },
+    {
+      "id": "harding-2025",
+      "label": "Harding 2025",
+      "title": "Dissociable effects of psilocybin and escitalopram for depression on processing of musical surprises",
+      "authors": [
+        "Harding, R.",
+        "Singer, N.",
+        "Wall, M. B.",
+        "Hendler, T.",
+        "Erritzoe, D.",
+        "Nutt, D.",
+        "Carhart-Harris, R.",
+        "Roseman, L."
+      ],
+      "year": 2025,
+      "venue": "Molecular Psychiatry",
+      "doi": "10.1038/s41380-025-03035-8",
+      "url": "https://doi.org/10.1038/s41380-025-03035-8",
+      "href": "https://doi.org/10.1038/s41380-025-03035-8",
+      "claimIds": [
+        "c-same-program",
+        "c-patients-music-fmri"
+      ]
+    },
+    {
+      "id": "farre-colomes-2026",
+      "label": "Farré-Colomés 2026",
+      "title": "Psilocybin effects on brain functional connectivity: a systematic review of fMRI studies",
+      "authors": [
+        "Farré-Colomés, À.",
+        "Rublinetska, O.",
+        "Soto-Angona, Ó."
+      ],
+      "year": 2026,
+      "venue": "Discover Mental Health",
+      "doi": "10.1007/s44192-026-00384-w",
+      "url": "https://doi.org/10.1007/s44192-026-00384-w",
+      "href": "https://doi.org/10.1007/s44192-026-00384-w",
+      "claimIds": [
+        "c-reviews-follow-up"
+      ]
+    },
+    {
+      "id": "sabbah-2026",
+      "label": "Sabbah 2026",
+      "title": "Temporal dynamics in neuroimaging as correlates of therapeutic response to psilocybin in major depressive disorder: A systematic review and critical appraisal",
+      "authors": [
+        "Sabbah, S. G.",
+        "Li, S.",
+        "Wong, S.",
+        "Le, G. H.",
+        "Badulescu, S.",
+        "Hawco, C.",
+        "Rosenblat, J. D.",
+        "McIntyre, R. S."
+      ],
+      "year": 2026,
+      "venue": "Journal of Affective Disorders",
+      "doi": "10.1016/j.jad.2025.120335",
+      "url": "https://doi.org/10.1016/j.jad.2025.120335",
+      "href": "https://doi.org/10.1016/j.jad.2025.120335",
+      "claimIds": [
+        "c-reviews-follow-up"
+      ]
+    },
+    {
+      "id": "kramer-2026",
+      "label": "Kramer 2026",
+      "title": "Psychedelics produce enduring behavioral effects and functional plasticity through mechanisms independent of structural plasticity",
+      "authors": [
+        "Kramer, H. M.",
+        "Hibicke, M.",
+        "Middleton, J.",
+        "Jaster, A. M.",
+        "Kristensen, J. L.",
+        "Nichols, C. D."
+      ],
+      "year": 2026,
+      "venue": "Neuropsychopharmacology",
+      "doi": "10.1038/s41386-025-02272-3",
+      "url": "https://doi.org/10.1038/s41386-025-02272-3",
+      "href": "https://doi.org/10.1038/s41386-025-02272-3",
+      "claimIds": [
+        "c-rat-months-function"
+      ]
+    },
+    {
+      "id": "gudmundsen-2026",
+      "label": "Gudmundsen 2026",
+      "title": "Serotonergic psychedelics induce distinct patterns of metabolic activity and covariance within biologically informed rat brain networks",
+      "authors": [
+        "Gudmundsen, F.",
+        "Czurylo, J.",
+        "Rijsketic, D. R.",
+        "Vo, C. T.",
+        "Fortunato, J.",
+        "Jessen, N. S.",
+        "Woodruff, S.",
+        "Baun, C.",
+        "Herth, M. M.",
+        "Shalgunov, V.",
+        "Heifets, B. D.",
+        "Fisher, P. M.",
+        "Palner, M."
+      ],
+      "year": 2026,
+      "venue": "Nature Communications",
+      "doi": "10.1038/s41467-026-75890-0",
+      "url": "https://doi.org/10.1038/s41467-026-75890-0",
+      "href": "https://doi.org/10.1038/s41467-026-75890-0",
+      "claimIds": [
+        "c-rat-metabolism-week"
+      ]
+    },
+    {
+      "id": "keenan-2026",
+      "label": "Keenan 2026",
+      "title": "Effects of a single dose of psilocybin on diet-induced weight loss in obese mice",
+      "authors": [
+        "Keenan, R. J.",
+        "Haque, R. T.",
+        "Jin, X.",
+        "Mustafa, T.",
+        "Homman-Ludiye, J.",
+        "Elysee, K.",
+        "Wee, Z. S.",
+        "Simonds, S. E.",
+        "Foldi, C. J.",
+        "Cowley, M. A."
+      ],
+      "year": 2026,
+      "venue": "Translational Psychiatry",
+      "doi": "10.1038/s41398-026-03995-7",
+      "url": "https://doi.org/10.1038/s41398-026-03995-7",
+      "href": "https://doi.org/10.1038/s41398-026-03995-7",
+      "claimIds": [
+        "c-mouse-synapse-month-null"
+      ]
+    },
+    {
+      "id": "sahoo-2026",
+      "label": "Sahoo 2026",
+      "title": "Sex-dependent developmental changes in behavior, brain structure, functional connectivity, and sensory perception following exposure to psilocybin during adolescence",
+      "authors": [
+        "Sahoo, I.",
+        "Masadi, S.",
+        "Maheswari, A.",
+        "Utama, R.",
+        "Abeer, M. I.",
+        "Soltanpour, S.",
+        "Nasseef, M. T.",
+        "Chukwuemeka, T.",
+        "Sinhal, N.",
+        "Pandit, J.",
+        "Ortiz, R. J.",
+        "Cavallaro, N.",
+        "Brengel, E.",
+        "Kulkarni, P. P.",
+        "Gitcho, M. A.",
+        "Ferris, C. F."
+      ],
+      "year": 2026,
+      "venue": "Neuropsychopharmacology",
+      "doi": "10.1038/s41386-026-02356-8",
+      "url": "https://doi.org/10.1038/s41386-026-02356-8",
+      "href": "https://doi.org/10.1038/s41386-026-02356-8",
+      "claimIds": [
+        "c-adolescent-repeated"
+      ]
+    },
+    {
+      "id": "garcia-cabrerizo-2025",
+      "label": "García-Cabrerizo 2025",
+      "title": "Psilocybin as a fast-acting and long-lasting antidepressant for adolescence: Proposing NeuroD1 as a biomarker of its long-term plasticity",
+      "authors": [
+        "García-Cabrerizo, R.",
+        "Beruete-Fresnillo, I.",
+        "Bergas-Cladera, P.",
+        "García-Fuster, M. J."
+      ],
+      "year": 2025,
+      "venue": "Biomedicine & Pharmacotherapy",
+      "doi": "10.1016/j.biopha.2025.118720",
+      "url": "https://doi.org/10.1016/j.biopha.2025.118720",
+      "href": "https://doi.org/10.1016/j.biopha.2025.118720",
+      "claimIds": [
+        "c-adolescent-repeated"
       ]
     }
   ],
@@ -442,14 +743,16 @@
     {
       "id": "c-same-program",
       "number": 11,
-      "text": "Three of the human studies here come from one research program (Carhart-Harris and colleagues), so they are not independent replications; two other human findings (Siegel, Goodwin) each list him as one co-author among many.",
+      "text": "Five of the human studies here come from one research program (Carhart-Harris and colleagues), so they are not independent replications; two other human findings (Siegel, Goodwin) each list him as one co-author among many.",
       "tier": "established",
-      "basis": "Lyons, Daws and the 2021 escitalopram trial share a lead or senior author (Carhart-Harris) and several co-authors (Erritzoe, Nutt, and others), and part of Daws's imaging comes from that trial's patients. Siegel (33 authors) and Goodwin (74 authors) each list Carhart-Harris mid-list. Verifiable authorship and data facts.",
+      "basis": "Lyons, Daws and the 2021 escitalopram trial share a lead or senior author (Carhart-Harris) and several co-authors (Erritzoe, Nutt, and others), and part of Daws's imaging comes from that trial's patients. Pasquini re-analyses the Lyons sample, and Harding re-analyses the escitalopram trial; both list Carhart-Harris and Nutt. The five papers rest on three samples (the Lyons volunteers, the escitalopram trial, and Daws's open-label trial). Siegel (33 authors) and Goodwin (74 authors) each list Carhart-Harris mid-list. Verifiable authorship and data facts. (Version 2.2 changed “Three” to “Five” when Pasquini and Harding were added.)",
       "posedAsQuestion": false,
       "sourceIds": [
         "lyons-2026",
         "daws-2022",
-        "carhart-harris-2021"
+        "carhart-harris-2021",
+        "pasquini-2026",
+        "harding-2025"
       ],
       "studyTypes": [
         "other"
@@ -508,6 +811,242 @@
         }
       ],
       "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-healthy-sv2a"
+    },
+    {
+      "id": "c-healthy-fst-dynamics",
+      "number": 14,
+      "text": "Re-analysing the same healthy volunteers as Lyons, a study that also used computational modelling found activity in fronto-striatal-thalamic circuits more dynamic four weeks after 25 mg than four weeks after the 1 mg control dose, but only a trend against the pre-dose baseline; the authors call the evidence weak to moderate.",
+      "tier": "preliminary",
+      "basis": "Pasquini: secondary analysis of the Lyons trial's resting fMRI, 25 psychedelic-naive adults in a fixed order (1 mg, then 25 mg four weeks later; no placebo, no randomized order). Dynamic functional homogeneity across 28 fronto-striatal-thalamic regions was lower four weeks after 25 mg than four weeks after 1 mg (t(24) = 2.87, p = 0.008) and trended lower than baseline (t(24) = 1.92, p = 0.06); the paper reads lower homogeneity as more dynamic, more variable activity across a scan, and its Methods say FDR correction “was used to adjust p-values, unless specified otherwise”, without saying which applies to these t-tests. Whole-brain homogeneity fell at both later scans, which the authors attribute to order effects. The modelled drop in structure-function coupling was stable across repeated simulations, which the authors say “do not represent independent biological samples”; its group-level permutation test was a trend (p = 0.064). The effective-connectivity results rest only on stability statistics across simulations. Same sample and program as Lyons (Lyons and Carhart-Harris are co-authors), so not independent. Full text read; CC BY-NC 4.0, cited only.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "pasquini-2026"
+      ],
+      "studyTypes": [
+        "healthy"
+      ],
+      "populations": [
+        "Healthy volunteers"
+      ],
+      "methods": [
+        {
+          "id": "e-functional",
+          "label": "Functional brain activity"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-healthy-fst-dynamics"
+    },
+    {
+      "id": "c-healthy-low-dose-week",
+      "number": 15,
+      "text": "In ten healthy volunteers given low-to-moderate doses (5 to 20 mg; a preprint), brain connectivity one week after a dose showed one dose-dependent increase within a network that survived correction, and none of the 77 dose-dependent changes in single connections did; how strongly the dose altered conscious state was linked to wider connectivity changes, many surviving correction at the network level.",
+      "tier": "preliminary",
+      "basis": "Bhagavan: medRxiv preprint, not peer reviewed. Ten healthy volunteers each received three doses between 5 and 20 mg in randomized, blinded order at least a week apart; resting fMRI at baseline and one week after a single dose (registered ACTRN12621000560897). Per the abstract: 77 dose-dependent edge changes (76 increases, 1 decrease, of 1275) with none surviving correction; one dose-dependent between-network increase (of 21) and one within-network increase (of 7), the latter surviving correction; changes in conscious state were associated with connectivity change, many surviving correction. Abstract only: the full text was unreachable, so the network involved and effect sizes are not checked.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "bhagavan-2026"
+      ],
+      "studyTypes": [
+        "healthy"
+      ],
+      "populations": [
+        "Healthy volunteers"
+      ],
+      "methods": [
+        {
+          "id": "e-functional",
+          "label": "Functional brain activity"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-healthy-low-dose-week"
+    },
+    {
+      "id": "c-cluster-headache-week",
+      "number": 16,
+      "text": "In small open-label studies of chronic cluster headache, patients given three doses of 0.14 mg/kg a week apart showed no statistically significant average change in brain microstructure one week after the last dose (11 patients), while in 10 patients a change in hypothalamic connectivity tracked how much their attacks fell.",
+      "tier": "preliminary",
+      "basis": "Madsen 2024: 10 patients, 0.14 mg/kg in weeks five, six and seven, fMRI the day before the first dose and one week after the last; attacks fell 31% on average (SD 31), and the change in hypothalamic-diencephalic connectivity correlated with the change in attack frequency (R = -0.81, pFWER = 0.03). Brendstrup-Brix 2026: 11 patients on the same schedule (EPOCH trial, NCT04280055), diffusion MRI before and one week after; psilocybin “was not associated with statistically significant changes in brain microstructure or water diffusivity”, though most patients showed lower white-matter diffusivity and neurite volume. Abstracts only (full texts unreachable); whether the two samples overlap is not checked. No placebo. One Copenhagen program, the same as Johansen 2026 (Knudsen and Madsen are authors on all three).",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "madsen-2024",
+        "brendstrup-brix-2026"
+      ],
+      "studyTypes": [
+        "patients"
+      ],
+      "populations": [
+        "Cluster headache patients"
+      ],
+      "methods": [
+        {
+          "id": "e-structural",
+          "label": "Structural markers"
+        },
+        {
+          "id": "e-functional",
+          "label": "Functional brain activity"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-cluster-headache-week"
+    },
+    {
+      "id": "c-patients-music-fmri",
+      "number": 17,
+      "text": "In depression patients from the escitalopram trial, task fMRI three weeks after the second psilocybin session showed less surprise-related activity in the ventromedial prefrontal cortex and angular gyrus than in patients on escitalopram, and, within the psilocybin group, more activity in sensory regions, which did not differ significantly from escitalopram.",
+      "tier": "preliminary",
+      "basis": "Harding: secondary analysis of the phase II psilocybin versus escitalopram trial (NCT03429075), 22 psilocybin and 19 escitalopram patients with usable fMRI, scanned the day before the first dose and six weeks later, three weeks after the second psilocybin session. Ventromedial prefrontal treatment-by-time interaction F(1,39) = 7.074, p = 0.0113; the within-group decrease after psilocybin t(21) = 2.195, p = 0.0395, with no correction across the three regions of interest described. No significant change in the nucleus accumbens or superior temporal gyrus, and no significant correlation between these regions and anhedonia or music ratings; whole-brain maps cluster-corrected; baseline vmPFC differed between groups at trend level (p = 0.081). Surprise-related affective ratings showed no significant change after psilocybin (they fell after escitalopram). A published correction changed the abstract to “decreased activation in the ventromedial prefrontal cortex”; this claim follows the correction. One song, one task. Same trial and program as Carhart-Harris 2021 and part of Daws 2022. Full text read; CC BY 4.0, cited only.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "harding-2025"
+      ],
+      "studyTypes": [
+        "patients"
+      ],
+      "populations": [
+        "Depression patients"
+      ],
+      "methods": [
+        {
+          "id": "e-functional",
+          "label": "Functional brain activity"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-patients-music-fmri"
+    },
+    {
+      "id": "c-reviews-follow-up",
+      "number": 18,
+      "text": "Two 2026 systematic reviews flag limits in human follow-up imaging: one found follow-up scans lacking in most psilocybin fMRI studies, with lasting effects reported up to four weeks; the other, in depression, grouped some network changes as “Longer-term changes (5+ weeks)” without saying in its abstract whether that is when scans were taken, and warned that many studies reuse overlapping datasets.",
+      "tier": "preliminary",
+      "basis": "Farré-Colomés (full text read): 36 articles from 20 datasets, published between February 2012 and July 2024; “follow-up scanning timepoints were lacking in most of the studies”, and studies with follow-up scans suggest effects “lasting up to 4 weeks after intake”; PRISMA, not preregistered, no named risk-of-bias tool. Sabbah (abstract only, full text unreachable): 11 studies in depression, PROSPERO-registered; early (0 to 4 weeks) changes included lower modularity and higher integration, and “Longer-term changes (5+ weeks)” included higher prefronto-parietal and salience-network connectivity; “Many studies reused overlapping datasets with high exploratory flexibility and risk of bias.” Which studies carry the 5+ week finding is not checked. Farré-Colomés, covering depression studies to July 2024, says none “incorporated follow-up fMRI scans” and that a vmPFC-IPC increase “predicted treatment response at 5 weeks”, so Sabbah's 5+ weeks may be outcome timing rather than scan timing. Two separate teams.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "farre-colomes-2026",
+        "sabbah-2026"
+      ],
+      "studyTypes": [
+        "other"
+      ],
+      "populations": [
+        "Humans"
+      ],
+      "methods": [
+        {
+          "id": "e-functional",
+          "label": "Functional brain activity"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-reviews-follow-up"
+    },
+    {
+      "id": "c-rat-months-function",
+      "number": 19,
+      "text": "In rats, a single dose of psilocybin or of the 5-HT2A agonist 25CN-NBOH reduced immobility in a forced swim test for at least three months; several months after treatment, prefrontal layer 5 neurons still showed changed resting potential, firing and synaptic excitation, while synaptic density and spine types in treated rats did not differ from controls.",
+      "tier": "preliminary",
+      "basis": "Kramer (Nichols lab): per the abstract, there were “no overt behavioral differences between psilocybin and 25CN-NBOH treated animals” and functional plasticity “was evident for both psychedelics”; the microscopy and gene-expression nulls compare “control and psychedelic-treated” animals, and the abstract does not say whether psilocybin was tested on its own for them. Brain-slice electrophysiology found functional plasticity “several months after treatment”; microscopy of the recorded neurons found no differences in synaptic density or spine classification, and gene expression for several synaptic markers did not differ. Abstract only: the full text was unreachable, so sample sizes, exact timepoints and effect sizes are not checked. The longest-lasting change after a single dose reported in this synthesis, from a lab separate from the mouse spine studies.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "kramer-2026"
+      ],
+      "studyTypes": [
+        "animal"
+      ],
+      "populations": [
+        "Rats"
+      ],
+      "methods": [
+        {
+          "id": "e-functional",
+          "label": "Functional brain activity"
+        },
+        {
+          "id": "e-structural",
+          "label": "Structural markers"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-rat-months-function"
+    },
+    {
+      "id": "c-rat-metabolism-week",
+      "number": 20,
+      "text": "In rats, one week after a single dose, psilocybin on its own changed relative brain glucose uptake in few measures: uptake rose in the insula and the across-rat correlation between prefrontal and insula uptake strengthened, and no whole-brain cluster survived correction for psilocybin alone; the paper's headline one-week hypometabolism pools psilocybin with LSD and 2C-B.",
+      "tier": "preliminary",
+      "basis": "Gudmundsen: 12 Long Evans rats of both sexes per drug group (11 analysed for LSD), [18F]FDG-PET at baseline, acutely and one week after 1 mg/kg psilocybin given under the skin, each group compared with its own baseline (no drug-versus-saline contrast described; the saline cohort showed no change between repeated scans). Uptake is normalized to the whole-brain mean, so it is relative. Insula mean change in normalized uptake 0.16 (adjusted p < 0.05); prefrontal-insula covariance (a correlation across rats, not a within-brain connection) change ΔZ = 1.53 (adjusted p = 0.04); thalamus-prefrontal change not significant after correction (adjusted p = 0.61). “Psilocybin produced no acute or persistent clusters surviving FDR correction.” The paper's Results (“despite not reaching significance in individual drug contrasts”) and Discussion (“significantly reduced for psilocybin”) disagree about psilocybin's own change in the pooled one-week clusters. Full text read; CC BY-NC-ND 4.0, cited only.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "gudmundsen-2026"
+      ],
+      "studyTypes": [
+        "animal"
+      ],
+      "populations": [
+        "Rats"
+      ],
+      "methods": [
+        {
+          "id": "e-molecular",
+          "label": "Molecular markers"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-rat-metabolism-week"
+    },
+    {
+      "id": "c-mouse-synapse-month-null",
+      "number": 21,
+      "text": "In diet-induced obese male mice given one dose, synaptic protein puncta counts (PSD-95, synapsin-1) in prefrontal cortex and hypothalamus did not differ from controls 30 days later.",
+      "tier": "preliminary",
+      "basis": "Keenan: male C57BL/6J mice made obese on a high-fat diet, one 1 mg/kg intraperitoneal dose, then either kept on the high-fat diet or switched to low-fat chow; brains taken 30 days later; 5 to 6 mice per group, between groups rather than repeated imaging. “Psilocybin had no influence on positive puncta of synapsin-1, PSD-95 or co-localisation of both proteins (i.e., synapses)” in the three regions. The authors note that spine density peaks around day 7, so by day 30 a difference “may not have been substantial enough to be detected with the methods used here”. Puncta counts are not spine counts. Full text read; CC BY-NC-ND 4.0, cited only.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "keenan-2026"
+      ],
+      "studyTypes": [
+        "animal"
+      ],
+      "populations": [
+        "Mice"
+      ],
+      "methods": [
+        {
+          "id": "e-molecular",
+          "label": "Molecular markers"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-mouse-synapse-month-null"
+    },
+    {
+      "id": "c-adolescent-repeated",
+      "number": 22,
+      "text": "In two studies, repeated dosing in adolescent rodents was followed by brain differences weeks to months later whose meaning is unclear: mice dosed five times in adolescence showed smaller regional brain volumes, altered diffusion and higher connectivity on MRI as adults, and rats dosed daily for a week showed a hippocampal neurogenesis marker (NeuroD1) that paralleled antidepressant-like behaviour, measured 16 days after treatment.",
+      "tier": "preliminary",
+      "basis": "Sahoo (full text read): 28 mice, an approximate dose of 3.0 mg/kg by gavage every other day on postnatal days 40 to 50; MRI from day 85 to day 176. Normalized regional volumes fell in both sexes (males p < 0.001, females p < 0.05) and pooled diffusion measures rose (p < 0.0001); no area-level sex-by-treatment effect survived FDR correction, no standardized effect sizes are given, the regional tests state no correction and appear to pair brain areas rather than animals, the resting-state sample (10 versus 11) pooled the sexes, and the paper's timeline is internally inconsistent. Funded by Ekam Imaging, in which two authors hold a partnership interest. García-Cabrerizo (abstract only): adolescent Sprague-Dawley rats of both sexes, 0.3 or 1 mg/kg by mouth daily for 7 days; hippocampal neurogenesis markers measured 1 and 16 days after treatment, with NeuroD1 paralleling antidepressant-like effects seen up to 15 days. Repeated dosing in development, not one adult dose; two separate labs.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "sahoo-2026",
+        "garcia-cabrerizo-2025"
+      ],
+      "studyTypes": [
+        "animal"
+      ],
+      "populations": [
+        "Mice",
+        "Rats"
+      ],
+      "methods": [
+        {
+          "id": "e-structural",
+          "label": "Structural markers"
+        },
+        {
+          "id": "e-functional",
+          "label": "Functional brain activity"
+        },
+        {
+          "id": "e-molecular",
+          "label": "Molecular markers"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-adolescent-repeated"
     }
   ],
   "relations": [
@@ -600,12 +1139,56 @@
       "posedAsQuestion": false
     },
     {
+      "id": "r-same-sample-fst",
+      "from": "c-healthy-fst-dynamics",
+      "to": "c-healthy-absent",
+      "kind": "measures-differently",
+      "label": "measures differently",
+      "statement": "Same healthy-volunteer sample (25 in the re-analysis; Lyons enrolled 28), a different analysis: where the primary report found enduring functional change “largely absent” at one month, a re-analysis finds activity in fronto-striatal-thalamic circuits more dynamic four weeks after 25 mg than four weeks after 1 mg, only a trend against baseline, and calls the evidence weak to moderate. One program re-reading its own data, not a replication.",
+      "basis": "Pasquini reuses the Lyons sample and fMRI; Lyons and Carhart-Harris are authors on both.",
+      "tier": "preliminary",
+      "posedAsQuestion": false
+    },
+    {
+      "id": "r-function-without-spines",
+      "from": "c-rat-months-function",
+      "to": "c-mouse-spines-persist",
+      "kind": "measures-differently",
+      "label": "measures differently",
+      "statement": "Different species, timepoint and method: in mice, more spines a month after one dose; in rats given psilocybin or 25CN-NBOH, several months after one dose, changed neuron function with no difference in synaptic density or spine types (the abstract does not say whether the structural result holds for psilocybin alone). The rat study's authors read this as “enduring function plasticity rather than structural plasticity”; neither study measured at the other's timepoint.",
+      "basis": "Kramer (rats, slice electrophysiology and microscopy, months; abstract only) against Shao (mice, two-photon imaging, one month). Separate labs. The structural null is reported for “psychedelic-treated” rats; the abstract does not separate the two drugs.",
+      "tier": "preliminary",
+      "posedAsQuestion": false
+    },
+    {
+      "id": "r-synapse-month-null",
+      "from": "c-mouse-synapse-month-null",
+      "to": "c-mouse-spines-persist",
+      "kind": "measures-differently",
+      "label": "measures differently",
+      "statement": "Around the one-month mark, two-photon imaging found higher spine density in healthy mice, while synaptic protein puncta counts in obese mice found no difference. Different measures, populations and labs, and the second study's authors say that, because spine density peaks around day 7, by day 30 a difference may have been too small for their methods to detect.",
+      "basis": "Keenan (obese male mice, PSD-95 and synapsin-1 puncta, 30 days, 5 to 6 mice per group, between groups) against Shao (mice, repeated spine imaging of the same dendrites, about a month). Puncta counts are not spine counts.",
+      "tier": "preliminary",
+      "posedAsQuestion": false
+    },
+    {
+      "id": "r-same-trial-music",
+      "from": "c-patients-music-fmri",
+      "to": "c-patients-integration",
+      "kind": "measures-differently",
+      "label": "measures differently",
+      "statement": "Same trial, a different task: alongside the resting-state integration finding, task fMRI in the escitalopram trial's patients shows changed brain responses to musical surprise three weeks after the second session; unlike the integration finding, these did not track symptoms. It adds a measure at the same three-week horizon, not an independent confirmation or a longer follow-up.",
+      "basis": "Harding and part of Daws come from the same trial (NCT03429075) and program; in that trial both scanned three weeks after the second psilocybin session (Daws also used an open-label trial). Harding found no significant correlation between these regions and anhedonia or music ratings.",
+      "tier": "preliminary",
+      "posedAsQuestion": false
+    },
+    {
       "id": "insight",
       "from": "c-patients-integration",
       "to": "c-healthy-absent",
       "kind": "population-difference",
       "label": "population difference",
-      "statement": "Read across the nine studies in version 2.0, the “does it rewire the brain?” conflict may largely be explained by three axes: population (global network change in patients, imaged up to three weeks after the second of two doses; in healthy volunteers after one dose, so far only narrower lasting changes, such as weaker hippocampus–default-mode coupling for weeks), measure (lasting structural change is shown mainly in mice, so this axis overlaps species; in humans, some functional changes last weeks while most reset), and species (mechanism is clearest in mice). Two questions this raises for the field: is the broad human signal a psilocybin-specific response of the depressed brain rather than a general effect of the drug? And since three of the five human findings come from one research program and the other two share a co-author with it, how much is independent replication versus one network refining its own result? (Caveats that could also explain the split: population is confounded with dose, psychological support and timing (patients had two doses with support and were scanned at up to three weeks, healthy volunteers one dose at one month) and the one healthy-volunteer study scanning at weeks, Siegel, did find a lasting change; every human imaging sample here is small; brain integration may follow mood improvement rather than drive it; and in patients, neither brain nor symptom effects are established beyond about three weeks.) Johansen 2026, added in version 2.1, found no significant overall increase in human synaptic density one week after a dose; this reading has not yet been re-tested against it.",
+      "statement": "Read across the nine studies in version 2.0, the “does it rewire the brain?” conflict may largely be explained by three axes: population (global network change in patients, imaged up to three weeks after the second of two doses; in healthy volunteers after one dose, so far only narrower lasting changes, such as weaker hippocampus–default-mode coupling for weeks), measure (lasting structural change is shown mainly in mice, so this axis overlaps species; in humans, some functional changes last weeks while most reset), and species (mechanism is clearest in mice). Two questions this raises for the field: is the broad human signal a psilocybin-specific response of the depressed brain rather than a general effect of the drug? And since three of the five human findings come from one research program and the other two share a co-author with it, how much is independent replication versus one network refining its own result? (Caveats that could also explain the split: population is confounded with dose, psychological support and timing (patients had two doses with support and were scanned at up to three weeks, healthy volunteers one dose at one month) and the one healthy-volunteer study scanning at weeks, Siegel, did find a lasting change; every human imaging sample here is small; brain integration may follow mood improvement rather than drive it; and in patients, neither brain nor symptom effects are established beyond about three weeks.) Johansen 2026, added in version 2.1, found no significant overall increase in human synaptic density one week after a dose; this reading has not yet been re-tested against it, nor against the twelve studies added in version 2.2.",
       "basis": "PsychDoc's cross-source reading, offered to the field as a question, not asserted as fact.",
       "tier": "oryx-interpretation",
       "posedAsQuestion": true
@@ -703,6 +1286,18 @@
       "kind": "source-for"
     },
     {
+      "id": "source-for:pasquini-2026:c-same-program",
+      "from": "pasquini-2026",
+      "to": "c-same-program",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:harding-2025:c-same-program",
+      "from": "harding-2025",
+      "to": "c-same-program",
+      "kind": "source-for"
+    },
+    {
       "id": "source-for:psiconnect-2025:c-psiconnect",
       "from": "psiconnect-2025",
       "to": "c-psiconnect",
@@ -713,6 +1308,78 @@
       "from": "johansen-2026",
       "to": "c-healthy-sv2a",
       "kind": "source-for"
+    },
+    {
+      "id": "source-for:pasquini-2026:c-healthy-fst-dynamics",
+      "from": "pasquini-2026",
+      "to": "c-healthy-fst-dynamics",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:bhagavan-2026:c-healthy-low-dose-week",
+      "from": "bhagavan-2026",
+      "to": "c-healthy-low-dose-week",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:madsen-2024:c-cluster-headache-week",
+      "from": "madsen-2024",
+      "to": "c-cluster-headache-week",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:brendstrup-brix-2026:c-cluster-headache-week",
+      "from": "brendstrup-brix-2026",
+      "to": "c-cluster-headache-week",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:harding-2025:c-patients-music-fmri",
+      "from": "harding-2025",
+      "to": "c-patients-music-fmri",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:farre-colomes-2026:c-reviews-follow-up",
+      "from": "farre-colomes-2026",
+      "to": "c-reviews-follow-up",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:sabbah-2026:c-reviews-follow-up",
+      "from": "sabbah-2026",
+      "to": "c-reviews-follow-up",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:kramer-2026:c-rat-months-function",
+      "from": "kramer-2026",
+      "to": "c-rat-months-function",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:gudmundsen-2026:c-rat-metabolism-week",
+      "from": "gudmundsen-2026",
+      "to": "c-rat-metabolism-week",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:keenan-2026:c-mouse-synapse-month-null",
+      "from": "keenan-2026",
+      "to": "c-mouse-synapse-month-null",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:sahoo-2026:c-adolescent-repeated",
+      "from": "sahoo-2026",
+      "to": "c-adolescent-repeated",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:garcia-cabrerizo-2025:c-adolescent-repeated",
+      "from": "garcia-cabrerizo-2025",
+      "to": "c-adolescent-repeated",
+      "kind": "source-for"
     }
   ],
   "scan": {
@@ -721,7 +1388,7 @@
     "screened": null,
     "included": null,
     "seedCount": 5,
-    "currentSeedCount": 10,
+    "currentSeedCount": 22,
     "coverageMatches": false
   }
 }

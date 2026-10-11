@@ -90,3 +90,24 @@ test('a recorded expert review cannot ship under copy that says there is none', 
   assert.throws(() => howItWorksSection({ ...f, expertReviews: 1 }), /expert review copy/);
   assert.doesNotThrow(() => crossFieldSection(f));
 });
+
+test('the method page figures agree with the frozen version 2.2 evidence map', async () => {
+  const map = JSON.parse(await readFile(new URL('../data/evidence-map.json', import.meta.url), 'utf8'));
+  assert.equal(map.papers.length, f.independence.papers);
+  assert.equal(map.claims.length, f.claims.total);
+  assert.equal(map.claims.filter(claim => claim.tier === 'preliminary').length, f.claims.preliminary);
+  assert.equal(map.relations.length, f.claims.relations);
+  assert.equal(map.relations.filter(relation => relation.posedAsQuestion).length, f.claims.posed);
+  assert.equal(map.scan.candidates, f.scan.candidates);
+  assert.equal(map.scan.seedCount, f.scan.seeds);
+  assert.equal(map.scan.scannedAt.slice(0, 10), f.scan.date);
+  assert.equal(map.scan.currentSeedCount, f.independence.papers, 'every study in the synthesis is a seed for the next scan');
+  for (const item of f.converging) {
+    const claim = map.claims.find(entry => entry.id === item.claimId);
+    assert.ok(claim, item.claimId);
+    const paper = map.papers.find(entry => entry.id === claim.sourceIds[0]);
+    assert.equal(paper.venue, item.venue);
+    assert.equal(paper.year, Number(item.source.slice(-4)));
+    assert.equal(paper.authors.at(-1).split(',')[0].trim(), item.lab, 'last author names the lab');
+  }
+});

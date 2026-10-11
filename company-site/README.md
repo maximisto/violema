@@ -79,13 +79,17 @@ The October 10 circuit-hair and glasses concept replaces the operator lockup onl
 
 The homepage map uses the canonical PsychDoc export copied unchanged to `data/evidence-map.json`.
 Its SHA-256 is embedded in `data-map-sha256`; the exact JSON is also served as a download.
-The source synthesis was updated on 2026-10-05. From the PsychDoc checkout, run
+The source synthesis was updated on 2026-10-10 (version 2.2). The current copy is the export at PsychDoc
+commit `ec643e7` (pull request 15), SHA-256 `807cb27a2bcfb46e1a050c5bd2b39eb14c9a02c29c073934e406a2c81d8234b3`.
+From the PsychDoc checkout, run
 `npx tsx scripts/export-evidence-map.ts`, verify the export there, then copy
 that file here before building. The company-site build intentionally fails if this input is absent.
 
 Paper-to-claim edges are recorded source memberships. Claim-to-claim edges are authored relationships;
 posed questions use dashed strokes. There is no citation-network or embedding layer in this version.
-Positions are stable layout choices and do not encode causality, similarity or effect size. Study/method
+Positions are stable layout choices and do not encode causality, similarity or effect size. Nodes sit at a
+percentage of the field height and the lines stretch with it; below 1200 px and again below 480 px the field is
+lengthened so paper names that wrap keep their own row. Study/method
 filters use explicit registry metadata. All papers, claims and relationships remain available in the
 HTML text alternative without JavaScript. The existing 12-trial saved-analysis hero is separate.
 
