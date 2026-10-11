@@ -25,3 +25,5 @@ for (const trace of document.querySelectorAll('.trace-animate')) {
 for (const list of document.querySelectorAll('[data-tabs] [data-tablist]')) enhanceTabs(list);
 
 if (document.querySelector('[data-bias-root], [data-corpus-panel]')) import('./lab.mjs');
+
+if (document.querySelector('[data-evidence-map]')) import('./evidence-map.mjs');

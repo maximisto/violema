@@ -1,0 +1,727 @@
+{
+  "schemaVersion": 1,
+  "synthesis": {
+    "slug": "psilocybin-rewiring",
+    "title": "Does one dose of psilocybin rewire the brain?",
+    "updatedAt": "2026-10-05",
+    "evidenceUrl": "https://psychdoc.ai/evidence/psilocybin-rewiring"
+  },
+  "papers": [
+    {
+      "id": "lyons-2026",
+      "label": "Lyons 2026",
+      "title": "Human brain changes after first psilocybin use",
+      "authors": [
+        "Lyons, T.",
+        "Spriggs, M.",
+        "…",
+        "Carhart-Harris, R. L."
+      ],
+      "year": 2026,
+      "venue": "Nature Communications",
+      "doi": "10.1038/s41467-026-71962-3",
+      "url": "https://www.nature.com/articles/s41467-026-71962-3",
+      "href": "https://doi.org/10.1038/s41467-026-71962-3",
+      "claimIds": [
+        "c-healthy-absent",
+        "c-window-myth",
+        "c-same-program"
+      ]
+    },
+    {
+      "id": "daws-2022",
+      "label": "Daws 2022",
+      "title": "Increased global integration in the brain after psilocybin therapy for depression",
+      "authors": [
+        "Daws, R. E.",
+        "Timmermann, C.",
+        "…",
+        "Carhart-Harris, R."
+      ],
+      "year": 2022,
+      "venue": "Nature Medicine",
+      "doi": "10.1038/s41591-022-01744-z",
+      "url": "https://www.nature.com/articles/s41591-022-01744-z",
+      "href": "https://doi.org/10.1038/s41591-022-01744-z",
+      "claimIds": [
+        "c-patients-integration",
+        "c-patients-duration",
+        "c-same-program"
+      ]
+    },
+    {
+      "id": "jiang-2026",
+      "label": "Jiang 2026",
+      "title": "Psilocybin triggers an activity-dependent rewiring of large-scale cortical networks",
+      "authors": [
+        "Jiang, Q.",
+        "Shao, L.-X.",
+        "…",
+        "Kwan, A. C."
+      ],
+      "year": 2026,
+      "venue": "Cell",
+      "doi": "10.1016/j.cell.2025.11.009",
+      "url": "https://www.cell.com/cell/fulltext/S0092-8674(25)01305-4",
+      "href": "https://doi.org/10.1016/j.cell.2025.11.009",
+      "claimIds": [
+        "c-mouse-mechanism"
+      ]
+    },
+    {
+      "id": "nardou-2023",
+      "label": "Nardou 2023",
+      "title": "Psychedelics reopen the social reward learning critical period",
+      "authors": [
+        "Nardou, R.",
+        "Sawyer, E.",
+        "…",
+        "Dölen, G."
+      ],
+      "year": 2023,
+      "venue": "Nature",
+      "doi": "10.1038/s41586-023-06204-3",
+      "url": "https://www.nature.com/articles/s41586-023-06204-3",
+      "href": "https://doi.org/10.1038/s41586-023-06204-3",
+      "claimIds": [
+        "c-mouse-window",
+        "c-window-myth"
+      ]
+    },
+    {
+      "id": "psiconnect-2025",
+      "label": "Novelli 2025",
+      "title": "PsiConnect: A Multimodal Neuroimaging Study of Psilocybin-Induced Changes in Brain and Behaviour",
+      "authors": [
+        "Novelli, L.",
+        "Stoliker, D.",
+        "…",
+        "Razi, A."
+      ],
+      "year": 2025,
+      "venue": "bioRxiv (preprint)",
+      "doi": "10.1101/2025.04.11.643415",
+      "url": "https://www.biorxiv.org/content/10.1101/2025.04.11.643415v1",
+      "href": "https://doi.org/10.1101/2025.04.11.643415",
+      "claimIds": [
+        "c-psiconnect"
+      ]
+    },
+    {
+      "id": "carhart-harris-2021",
+      "label": "Carhart-Harris 2021",
+      "title": "Trial of Psilocybin versus Escitalopram for Depression",
+      "authors": [
+        "Carhart-Harris, R.",
+        "Giribaldi, B.",
+        "…",
+        "Nutt, D."
+      ],
+      "year": 2021,
+      "venue": "New England Journal of Medicine",
+      "doi": "10.1056/NEJMoa2032994",
+      "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2032994",
+      "href": "https://doi.org/10.1056/nejmoa2032994",
+      "claimIds": [
+        "c-rct-escitalopram",
+        "c-same-program"
+      ]
+    },
+    {
+      "id": "goodwin-2022",
+      "label": "Goodwin 2022",
+      "title": "Single-Dose Psilocybin for a Treatment-Resistant Episode of Major Depression",
+      "authors": [
+        "Goodwin, G. M.",
+        "Aaronson, S. T.",
+        "…",
+        "Carhart-Harris, R. L.",
+        "…",
+        "Malievskaia, E."
+      ],
+      "year": 2022,
+      "venue": "New England Journal of Medicine",
+      "doi": "10.1056/NEJMoa2206443",
+      "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2206443",
+      "href": "https://doi.org/10.1056/nejmoa2206443",
+      "claimIds": [
+        "c-trd-single-dose"
+      ]
+    },
+    {
+      "id": "shao-2021",
+      "label": "Shao 2021",
+      "title": "Psilocybin induces rapid and persistent growth of dendritic spines in frontal cortex in vivo",
+      "authors": [
+        "Shao, L.-X.",
+        "Liao, C.",
+        "…",
+        "Kwan, A. C."
+      ],
+      "year": 2021,
+      "venue": "Neuron",
+      "doi": "10.1016/j.neuron.2021.06.008",
+      "url": "https://doi.org/10.1016/j.neuron.2021.06.008",
+      "href": "https://doi.org/10.1016/j.neuron.2021.06.008",
+      "claimIds": [
+        "c-window-myth",
+        "c-mouse-spines-persist"
+      ]
+    },
+    {
+      "id": "siegel-2024",
+      "label": "Siegel 2024",
+      "title": "Psilocybin desynchronizes the human brain",
+      "authors": [
+        "Siegel, J. S.",
+        "Subramanian, S.",
+        "…",
+        "Carhart-Harris, R. L.",
+        "…",
+        "Dosenbach, N. U. F."
+      ],
+      "year": 2024,
+      "venue": "Nature",
+      "doi": "10.1038/s41586-024-07624-5",
+      "url": "https://www.nature.com/articles/s41586-024-07624-5",
+      "href": "https://doi.org/10.1038/s41586-024-07624-5",
+      "claimIds": [
+        "c-healthy-hippocampus"
+      ]
+    },
+    {
+      "id": "johansen-2026",
+      "label": "Johansen 2026",
+      "title": "Psilocybin’s effect on human brain synaptic plasticity",
+      "authors": [
+        "Johansen, A.",
+        "Plavén-Sigray, P.",
+        "Madsen, M. K.",
+        "…",
+        "Knudsen, G. M."
+      ],
+      "year": 2026,
+      "venue": "Translational Psychiatry",
+      "doi": "10.1038/s41398-026-04285-y",
+      "url": "https://www.nature.com/articles/s41398-026-04285-y",
+      "href": "https://doi.org/10.1038/s41398-026-04285-y",
+      "claimIds": [
+        "c-healthy-sv2a"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "id": "c-healthy-absent",
+      "number": 1,
+      "text": "In healthy volunteers, a single 25 mg dose left enduring functional brain changes “largely absent” one month later, though some diffusion-imaging and network-modularity signals persisted; what lasted was mainly psychological: well-being and insight.",
+      "tier": "preliminary",
+      "basis": "Lyons: within-subjects, 28 enrolled, exploratory, not pre-registered. “Largely absent” is the authors' phrasing.",
+      "wouldChangeIf": "A pre-registered, adequately powered study in healthy volunteers finds enduring functional brain change at one month or later. That would move this from preliminary to active debate; an independent replication of the null would move it toward established.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "lyons-2026"
+      ],
+      "studyTypes": [
+        "healthy"
+      ],
+      "populations": [
+        "Healthy volunteers"
+      ],
+      "methods": [
+        {
+          "id": "e-functional",
+          "label": "Functional brain activity"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-healthy-absent"
+    },
+    {
+      "id": "c-patients-integration",
+      "number": 2,
+      "text": "In depression patients given two doses with psychological support, psilocybin increased global brain integration (lower network modularity), and the size of that change tracked the antidepressant response.",
+      "tier": "preliminary",
+      "basis": "Daws: two trials; correlational; subscription article (facts cited, figures not reused).",
+      "wouldChangeIf": "An independent research program fails to find increased global integration in depression patients, or finds it without any link to antidepressant response. A second independent replication would move this toward established.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "daws-2022"
+      ],
+      "studyTypes": [
+        "patients"
+      ],
+      "populations": [
+        "Depression patients"
+      ],
+      "methods": [
+        {
+          "id": "e-integration",
+          "label": "Network integration / modularity"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-patients-integration"
+    },
+    {
+      "id": "c-patients-duration",
+      "number": 3,
+      "text": "Those integration changes were seen up to three weeks after the second of two doses; the study did not establish how much longer they last.",
+      "tier": "preliminary",
+      "basis": "Daws: fMRI at baseline and ~3 weeks post-dose; longer-term durability not measured.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "daws-2022"
+      ],
+      "studyTypes": [
+        "patients"
+      ],
+      "populations": [
+        "Depression patients"
+      ],
+      "methods": [
+        {
+          "id": "e-integration",
+          "label": "Network integration / modularity"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-patients-duration"
+    },
+    {
+      "id": "c-mouse-mechanism",
+      "number": 4,
+      "text": "In mice, one dose drives activity-dependent structural rewiring: dendritic-spine remodeling in frontal cortex that strengthens some routes and weakens recurrent cortical loops, and that depends on the drug-evoked neural activity itself.",
+      "tier": "preliminary",
+      "basis": "Jiang: C57BL/6 mice, rabies-tracing; silencing a presynaptic region during dosing disrupts the rewiring, evidence it is activity-dependent.",
+      "wouldChangeIf": "An independent lab fails to replicate activity-dependent spine remodeling, or shows the rewiring survives silencing of presynaptic input. Either would move the mechanism from preliminary to active debate.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "jiang-2026"
+      ],
+      "studyTypes": [
+        "animal"
+      ],
+      "populations": [
+        "Mice"
+      ],
+      "methods": [
+        {
+          "id": "e-structural",
+          "label": "Structural markers"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-mouse-mechanism"
+    },
+    {
+      "id": "c-mouse-window",
+      "number": 5,
+      "text": "In mice, psychedelics reopen a “critical period” for social-reward learning, and the window's length is proportional to each drug's acute subjective duration: roughly two weeks for psilocybin, up to four for ibogaine.",
+      "tier": "preliminary",
+      "basis": "Nardou/Dölen: shared across psychedelics; mechanism via oxytocin-mediated LTD and extracellular-matrix remodeling. Durations are the paper's mouse findings.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "nardou-2023"
+      ],
+      "studyTypes": [
+        "animal"
+      ],
+      "populations": [
+        "Mice"
+      ],
+      "methods": [],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-mouse-window"
+    },
+    {
+      "id": "c-window-myth",
+      "number": 6,
+      "text": "The popular “psilocybin opens a four-week window that rewires your brain” collapses different things: it appears to borrow ibogaine's four-week mouse figure (psilocybin's was ~2 weeks) or to stretch a one-month mouse spine result, and it merges a behavior-specific mouse finding with human brain imaging, none of which is the same claim.",
+      "tier": "preliminary",
+      "basis": "The mouse critical-period result is about social-reward learning, not general brain rewiring; the four-week figure is ibogaine's, not psilocybin's; human durable functional change is modest at best (Lyons).",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "nardou-2023",
+        "lyons-2026",
+        "shao-2021"
+      ],
+      "studyTypes": [
+        "other"
+      ],
+      "populations": [],
+      "methods": [
+        {
+          "id": "e-functional",
+          "label": "Functional brain activity"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-window-myth"
+    },
+    {
+      "id": "c-healthy-hippocampus",
+      "number": 7,
+      "text": "In seven healthy adults scanned repeatedly before, during and after a 25 mg dose, psilocybin acutely desynchronized brain networks far more than an active control (methylphenidate). Most changes faded, but weaker coupling between the anterior hippocampus and the default-mode network persisted for weeks.",
+      "tier": "preliminary",
+      "basis": "Siegel: precision functional mapping (many repeated scans of a few people rather than one scan of many); n = 7; the only study here with a psychoactive control. Washington University group; Carhart-Harris is one co-author of 33, so it counts as a separate program tied to the Imperial one. Participants were scanned for three weeks after the dose; at an open-label revisit 6 to 12 months later the coupling was back at baseline, though that sample (n = 4) was not powered for small changes.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "siegel-2024"
+      ],
+      "studyTypes": [
+        "healthy"
+      ],
+      "populations": [
+        "Healthy volunteers"
+      ],
+      "methods": [
+        {
+          "id": "e-functional",
+          "label": "Functional brain activity"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-healthy-hippocampus"
+    },
+    {
+      "id": "c-trd-single-dose",
+      "number": 8,
+      "text": "In the largest trial here (233 people with treatment-resistant depression), a single 25 mg dose reduced depression scores more than a 1 mg control at three weeks; 10 mg did not separate from control, and a lasting benefit beyond three weeks was not established.",
+      "tier": "preliminary",
+      "basis": "Goodwin: phase 2b, randomized, double-blind, three doses (25, 10, 1 mg) with psychological support, after participants stopped their antidepressants; primary outcome MADRS change at week 3. Sponsor-funded (COMPASS Pathways). Adverse events, including suicidal ideation or self-injury, occurred in every dose group. A clinical outcome, not brain imaging.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "goodwin-2022"
+      ],
+      "studyTypes": [
+        "patients"
+      ],
+      "populations": [
+        "Depression patients"
+      ],
+      "methods": [],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-trd-single-dose"
+    },
+    {
+      "id": "c-rct-escitalopram",
+      "number": 9,
+      "text": "In a six-week double-blind trial of 59 people with moderate-to-severe depression, two 25 mg doses of psilocybin did not significantly beat daily escitalopram on the primary depression score; secondary measures leaned toward psilocybin but were not corrected for multiple comparisons.",
+      "tier": "preliminary",
+      "basis": "Carhart-Harris 2021: phase 2, active comparator (escitalopram plus 1 mg psilocybin); primary outcome QIDS-SR-16 at week 6, which may be short for escitalopram to reach full effect. A clinical outcome, not imaging. Included because part of Daws's imaging comes from this trial's patients.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "carhart-harris-2021"
+      ],
+      "studyTypes": [
+        "patients"
+      ],
+      "populations": [
+        "Depression patients"
+      ],
+      "methods": [],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-rct-escitalopram"
+    },
+    {
+      "id": "c-mouse-spines-persist",
+      "number": 10,
+      "text": "In mice, a single dose increased the density and size of dendritic spines in frontal cortex within a day, and the higher spine density was still measurable about a month later.",
+      "tier": "preliminary",
+      "basis": "Shao: chronic two-photon imaging of the same dendrites in living mice before and after one dose. Kwan lab: the same lab as Jiang 2026, so the two mouse rewiring papers are one program.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "shao-2021"
+      ],
+      "studyTypes": [
+        "animal"
+      ],
+      "populations": [
+        "Mice"
+      ],
+      "methods": [
+        {
+          "id": "e-structural",
+          "label": "Structural markers"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-mouse-spines-persist"
+    },
+    {
+      "id": "c-same-program",
+      "number": 11,
+      "text": "Three of the human studies here come from one research program (Carhart-Harris and colleagues), so they are not independent replications; two other human findings (Siegel, Goodwin) each list him as one co-author among many.",
+      "tier": "established",
+      "basis": "Lyons, Daws and the 2021 escitalopram trial share a lead or senior author (Carhart-Harris) and several co-authors (Erritzoe, Nutt, and others), and part of Daws's imaging comes from that trial's patients. Siegel (33 authors) and Goodwin (74 authors) each list Carhart-Harris mid-list. Verifiable authorship and data facts.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "lyons-2026",
+        "daws-2022",
+        "carhart-harris-2021"
+      ],
+      "studyTypes": [
+        "other"
+      ],
+      "populations": [
+        "Humans"
+      ],
+      "methods": [],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-same-program"
+    },
+    {
+      "id": "c-psiconnect",
+      "number": 12,
+      "text": "A large multimodal human study (PsiConnect, 62 participants, follow-up to one year) is mapping psilocybin's effects across imaging methods, but it is a preprint, and not yet a settled result.",
+      "tier": "preliminary",
+      "basis": "bioRxiv preprint (not peer-reviewed), CC-BY-NC-ND; a dataset/methods contribution rather than a specific finding.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "psiconnect-2025"
+      ],
+      "studyTypes": [
+        "other"
+      ],
+      "populations": [
+        "Humans"
+      ],
+      "methods": [
+        {
+          "id": "e-functional",
+          "label": "Functional brain activity"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-psiconnect"
+    },
+    {
+      "id": "c-healthy-sv2a",
+      "number": 13,
+      "text": "In 15 healthy adults, one dose did not significantly increase synaptic density one week later overall, measured by SV2A PET in frontal cortex and hippocampus. In an exploratory comparison, participants dosed in a therapy-like room showed a greater frontal increase than those dosed in an MRI scanner; the hippocampal difference was smaller, with an interval that included zero.",
+      "tier": "preliminary",
+      "basis": "Johansen: [11C]UCB-J PET at baseline and one week after 0.3 mg/kg psilocybin, in an open-label, single-arm study with no placebo. The VT analysis, run at an interim look on the 12 participants with complete arterial blood data, found no significant increase (mean change: frontal cortex 0.3 mL/cm3, SD 2.6; hippocampus 0.3 mL/cm3, SD 2.0; one-sided p = 0.29 and 0.33), and the study was stopped for futility; BPND, computed for all 15, showed no significant increase either (mean change: frontal cortex −0.01, SD 0.35; hippocampus 0.01, SD 0.28). Setting difference in the change in VT: frontal cortex 3.0 mL/cm3 (95% CI 0.4 to 5.5), hippocampus 1.9 mL/cm3 (95% CI −0.3 to 3.9); the authors call it preliminary and hypothesis-generating. With no placebo arm, the authors note they may have underestimated an increase, because other SV2A studies saw drops at a second scan. The room group's own change in VT: frontal cortex 1.1 mL/cm3 (95% CI −0.5 to 2.7), hippocampus 0.8 mL/cm3 (95% CI −0.5 to 2.1). The Methods list participants 1 to 5 as dosed in the scanner and 6 to 15 in the room; the main text does not say how setting was allocated. SV2A density is a marker of synaptic density in living people, not a count of dendritic spines.",
+      "wouldChangeIf": "A larger or independently replicated PET study finding a significant overall increase in synaptic density after one dose would move the human question to active debate. A preregistered test of the setting effect would show whether the subgroup difference holds.",
+      "posedAsQuestion": false,
+      "sourceIds": [
+        "johansen-2026"
+      ],
+      "studyTypes": [
+        "healthy"
+      ],
+      "populations": [
+        "Healthy volunteers"
+      ],
+      "methods": [
+        {
+          "id": "e-structural",
+          "label": "Structural markers"
+        }
+      ],
+      "href": "https://psychdoc.ai/evidence/psilocybin-rewiring#c-healthy-sv2a"
+    }
+  ],
+  "relations": [
+    {
+      "id": "r-population-split",
+      "from": "c-patients-integration",
+      "to": "c-healthy-absent",
+      "kind": "population-difference",
+      "label": "population difference",
+      "statement": "The headline conflict (“it rewires the brain” vs “changes are largely absent”) partly tracks who was dosed: broad network change lasting weeks has been reported in patients; in healthy volunteers, lasting change has been narrower (Siegel) or largely absent (Lyons). Dose count, psychological support and timing differ too.",
+      "basis": "Two different populations and analyses; the field genuinely debates whether durable change is population-specific or a general drug effect.",
+      "tier": "active-debate",
+      "posedAsQuestion": false
+    },
+    {
+      "id": "r-measure-split",
+      "from": "c-healthy-absent",
+      "to": "c-mouse-mechanism",
+      "kind": "measures-differently",
+      "label": "measures differently",
+      "statement": "The studies also split by what they measure: structural markers (spines, white-matter) can persist while functional day-to-day activity resets, though here the clearest structural persistence is in mice, so this split overlaps species. “Rewiring” and “function returned to baseline” can both be true.",
+      "basis": "Structural vs functional measures answer different questions on different timescales.",
+      "tier": "active-debate",
+      "posedAsQuestion": false
+    },
+    {
+      "id": "r-mechanism-for",
+      "from": "c-mouse-mechanism",
+      "to": "c-patients-integration",
+      "kind": "mechanism-for",
+      "label": "mechanism for",
+      "statement": "The mouse rewiring is one candidate mechanism for the human network changes, but that is a cross-species inference, not a demonstration in humans.",
+      "basis": "Mechanism shown in mice by one lab (Jiang, Shao); human evidence is imaging-level and correlational. Nardou's oxytocin-dependent critical-period mechanism is a rival candidate.",
+      "tier": "preliminary",
+      "posedAsQuestion": false
+    },
+    {
+      "id": "r-healthy-narrow",
+      "from": "c-healthy-hippocampus",
+      "to": "c-healthy-absent",
+      "kind": "measures-differently",
+      "label": "measures differently",
+      "statement": "Partly in tension, same population: a dense-scanning study of seven healthy adults found one functional change (weaker hippocampus–default-mode coupling) lasting weeks, where the group study found enduring functional change “largely absent” at a month. Different designs and timepoints; together they are consistent with narrow lasting change, or with changes that fade between a few weeks and a month.",
+      "basis": "Siegel (n = 7, many scans each, weeks) and Lyons (28 enrolled, group analysis, one month) ask the same question with different instruments. Separate programs, tied by one shared co-author (Carhart-Harris).",
+      "tier": "active-debate",
+      "posedAsQuestion": false
+    },
+    {
+      "id": "r-trial-horizon",
+      "from": "c-trd-single-dose",
+      "to": "c-patients-duration",
+      "kind": "extends",
+      "label": "extends",
+      "statement": "A larger, sponsor-funded, single-dose trial from a separate program (one shared co-author) reports patient effects at the same three-week mark and did not establish a lasting benefit beyond it; Daws's imaging stops at three weeks. The shared horizon is partly by design.",
+      "basis": "Goodwin measures symptoms and followed patients past week 3; Daws measures brain networks and did not image beyond three weeks. Agreement on timescale, not on mechanism.",
+      "tier": "preliminary",
+      "posedAsQuestion": false
+    },
+    {
+      "id": "r-same-patients",
+      "from": "c-rct-escitalopram",
+      "to": "c-patients-integration",
+      "kind": "measures-differently",
+      "label": "measures differently",
+      "statement": "Same patients, two measures: part of Daws's integration finding comes from a trial where psilocybin did not clearly beat escitalopram on its primary depression score. The integration signal is evidence about the brain, not proof of a better treatment.",
+      "basis": "Daws analyzed imaging from two trials, one of them Carhart-Harris 2021. One program, so this is context, not independent support.",
+      "tier": "preliminary",
+      "posedAsQuestion": false
+    },
+    {
+      "id": "r-spines-to-networks",
+      "from": "c-mouse-mechanism",
+      "to": "c-mouse-spines-persist",
+      "kind": "extends",
+      "label": "extends",
+      "statement": "Jiang's network-scale rewiring builds on the same lab's finding that the new spines persist for a month: one lab refining its own result, not an independent replication.",
+      "basis": "Shao and Jiang share the senior author (Kwan) and several co-authors.",
+      "tier": "preliminary",
+      "posedAsQuestion": false
+    },
+    {
+      "id": "r-sv2a-vs-spines",
+      "from": "c-healthy-sv2a",
+      "to": "c-mouse-spines-persist",
+      "kind": "measures-differently",
+      "label": "measures differently",
+      "statement": "The most direct human test of the synapse-growth idea so far found no significant overall increase in synaptic density one week after a dose, while mice show more and larger dendritic spines within a day that last a month. Different species, measures and timepoints, and the human study is small; an exploratory setting comparison points the other way in the frontal cortex.",
+      "basis": "Johansen (human SV2A PET, n = 15, one week) against Shao (mouse two-photon spine imaging, one month). SV2A PET and spine counts are different measures of synapses.",
+      "tier": "preliminary",
+      "posedAsQuestion": false
+    },
+    {
+      "id": "insight",
+      "from": "c-patients-integration",
+      "to": "c-healthy-absent",
+      "kind": "population-difference",
+      "label": "population difference",
+      "statement": "Read across the nine studies in version 2.0, the “does it rewire the brain?” conflict may largely be explained by three axes: population (global network change in patients, imaged up to three weeks after the second of two doses; in healthy volunteers after one dose, so far only narrower lasting changes, such as weaker hippocampus–default-mode coupling for weeks), measure (lasting structural change is shown mainly in mice, so this axis overlaps species; in humans, some functional changes last weeks while most reset), and species (mechanism is clearest in mice). Two questions this raises for the field: is the broad human signal a psilocybin-specific response of the depressed brain rather than a general effect of the drug? And since three of the five human findings come from one research program and the other two share a co-author with it, how much is independent replication versus one network refining its own result? (Caveats that could also explain the split: population is confounded with dose, psychological support and timing (patients had two doses with support and were scanned at up to three weeks, healthy volunteers one dose at one month) and the one healthy-volunteer study scanning at weeks, Siegel, did find a lasting change; every human imaging sample here is small; brain integration may follow mood improvement rather than drive it; and in patients, neither brain nor symptom effects are established beyond about three weeks.) Johansen 2026, added in version 2.1, found no significant overall increase in human synaptic density one week after a dose; this reading has not yet been re-tested against it.",
+      "basis": "PsychDoc's cross-source reading, offered to the field as a question, not asserted as fact.",
+      "tier": "oryx-interpretation",
+      "posedAsQuestion": true
+    }
+  ],
+  "sourceLinks": [
+    {
+      "id": "source-for:lyons-2026:c-healthy-absent",
+      "from": "lyons-2026",
+      "to": "c-healthy-absent",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:daws-2022:c-patients-integration",
+      "from": "daws-2022",
+      "to": "c-patients-integration",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:daws-2022:c-patients-duration",
+      "from": "daws-2022",
+      "to": "c-patients-duration",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:jiang-2026:c-mouse-mechanism",
+      "from": "jiang-2026",
+      "to": "c-mouse-mechanism",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:nardou-2023:c-mouse-window",
+      "from": "nardou-2023",
+      "to": "c-mouse-window",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:nardou-2023:c-window-myth",
+      "from": "nardou-2023",
+      "to": "c-window-myth",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:lyons-2026:c-window-myth",
+      "from": "lyons-2026",
+      "to": "c-window-myth",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:shao-2021:c-window-myth",
+      "from": "shao-2021",
+      "to": "c-window-myth",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:siegel-2024:c-healthy-hippocampus",
+      "from": "siegel-2024",
+      "to": "c-healthy-hippocampus",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:goodwin-2022:c-trd-single-dose",
+      "from": "goodwin-2022",
+      "to": "c-trd-single-dose",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:carhart-harris-2021:c-rct-escitalopram",
+      "from": "carhart-harris-2021",
+      "to": "c-rct-escitalopram",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:shao-2021:c-mouse-spines-persist",
+      "from": "shao-2021",
+      "to": "c-mouse-spines-persist",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:lyons-2026:c-same-program",
+      "from": "lyons-2026",
+      "to": "c-same-program",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:daws-2022:c-same-program",
+      "from": "daws-2022",
+      "to": "c-same-program",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:carhart-harris-2021:c-same-program",
+      "from": "carhart-harris-2021",
+      "to": "c-same-program",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:psiconnect-2025:c-psiconnect",
+      "from": "psiconnect-2025",
+      "to": "c-psiconnect",
+      "kind": "source-for"
+    },
+    {
+      "id": "source-for:johansen-2026:c-healthy-sv2a",
+      "from": "johansen-2026",
+      "to": "c-healthy-sv2a",
+      "kind": "source-for"
+    }
+  ],
+  "scan": {
+    "scannedAt": "2026-09-28T12:17:52.838Z",
+    "candidates": 521,
+    "screened": null,
+    "included": null,
+    "seedCount": 5,
+    "currentSeedCount": 10,
+    "coverageMatches": false
+  }
+}
