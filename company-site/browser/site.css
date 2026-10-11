@@ -29,9 +29,10 @@
   --line: #DDE1E7;
   /* Brief value #848D9A gave 2.89:1 on --surface-2; darkened three steps to clear 3:1. */
   --line-strong: #818A97;
-  /* The logo's violet; its orange stays inside the logo. */
+  /* Approved violet with a restrained copper accent for the source-to-claim illustration. */
   --accent: #6852A3;
   --accent-ink: #FFFFFF;
+  --copper: #CD936B;
 
   --inst-bg: #0B0F17;
   --inst-surface: #111725;
@@ -330,6 +331,11 @@ code {
   .brand img { width: 100%; max-width: 248px; }
   .primary-nav { flex: none; }
 }
+@media (min-width: 480px) and (max-width: 767px) {
+  .header-inner { flex-wrap: wrap; padding-block: 8px; gap: 4px; }
+  .brand { flex-basis: 100%; }
+  .primary-nav { width: 100%; justify-content: space-between; }
+}
 @media (max-width: 599px) {
   :root { --header-height: 72px; }
   .header-inner { gap: 12px; padding-block: 4px; }
@@ -397,7 +403,7 @@ code {
 }
 .footer-meta small { color: var(--ink-3); }
 .footer-copyright { margin: 20px 0 0; font-size: var(--text-caption); color: var(--ink-3); }
-.planned-destination { color: var(--ink); }
+.footer-meta > a { color: var(--ink-2); }
 
 @media (max-width: 767px) {
   .footer-main { grid-template-columns: 1fr; gap: 20px; }
@@ -476,10 +482,92 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
 .hero-note { margin-top: 32px; font-size: var(--text-small); color: var(--ink-3); }
 .specimen { grid-column: 6 / span 7; }
 
+/* The source assembly is the homepage's one visual gesture. Every record comes from the
+   pinned primary-analysis packet; the grouped lines encode inclusion, not effect magnitude. */
+.evidence-hero {
+  grid-column: 6 / span 7;
+  margin: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-raised);
+  border-radius: 20px;
+}
+.evidence-hero-top { padding: 24px 28px 18px; border-bottom: 1px solid var(--line); }
+.evidence-hero-top > p { margin: 0 0 4px; font-family: var(--font-display); font-size: 1.5rem; line-height: 1.25; }
+.source-assembly { padding: 24px 28px 28px; }
+.assembly-label { margin-bottom: 12px; color: var(--ink-2); font-size: var(--text-caption); }
+.trial-records { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; list-style: none; }
+.trial-records li { display: flex; gap: 8px; align-items: center; min-height: 34px; font-size: var(--text-caption); line-height: 1.3; white-space: nowrap; }
+.record-node { width: 7px; height: 7px; flex: none; border: 1px solid var(--inst-accent); border-radius: 50%; background: var(--inst-bg); box-shadow: 0 0 0 4px rgb(167 155 255 / 0.08); }
+.assembly-convergence { width: 100%; height: 100px; overflow: visible; }
+.assembly-line { fill: none; stroke: var(--inst-accent); stroke-width: 1.25; stroke-opacity: 0.48; }
+.assembly-convergence circle { fill: var(--copper); }
+.assembly-claim { padding: 22px 24px; border: 1px solid rgb(205 147 107 / 0.6); border-radius: 10px; background: var(--inst-surface); }
+.assembly-claim .assembly-label { color: var(--copper); margin-bottom: 8px; }
+.assembly-claim-text { font-family: var(--font-display); font-size: clamp(1.2rem, 1.8vw, 1.55rem); line-height: 1.4; text-wrap: pretty; }
+.assembly-limit { margin-top: 12px; font-size: var(--text-caption); line-height: 1.5; color: var(--ink-2); }
+.evidence-hero-caption { display: flex; align-items: start; gap: 20px; padding: 18px 28px 22px; border-top: 1px solid var(--line); font-size: var(--text-caption); line-height: 1.5; color: var(--ink-2); }
+.evidence-hero-caption > span { max-width: 36ch; }
+.evidence-hero-caption a { margin-left: auto; flex: none; padding-block: 3px; color: var(--inst-accent); }
+
 @media (max-width: 959px) {
   .hero-copy,
-  .specimen { grid-column: 1 / -1; }
+  .specimen,
+  .evidence-hero { grid-column: 1 / -1; }
   .specimen { margin-top: 16px; }
+  .hero-copy { max-width: 680px; }
+  .evidence-hero { width: 100%; max-width: 720px; }
+}
+@media (max-width: 599px) {
+  .evidence-hero-top { padding: 20px; }
+  .source-assembly { padding: 20px; }
+  .trial-records { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+  .trial-records li { min-height: 30px; }
+  .assembly-convergence { height: 80px; }
+  .assembly-claim { padding: 18px; }
+  .evidence-hero-caption { flex-direction: column; gap: 8px; padding: 16px 20px; }
+  .evidence-hero-caption a { margin-left: 0; min-height: 36px; display: inline-flex; align-items: center; }
+}
+
+/* ---------- Physician review ---------- */
+
+.review-head h1 { max-width: 17ch; }
+.review-head .lede { max-width: 52ch; }
+.review-intro { display: flex; align-items: center; gap: 32px; max-width: 780px; margin-top: 28px; }
+.review-intro > p { margin: 0; max-width: 48ch; font-size: var(--text-small); color: var(--ink-2); }
+.review-intro .button { flex: none; }
+.review-layout { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: clamp(32px, 4vw, 64px); align-items: start; }
+.review-layout .specimen { grid-column: auto; margin-top: 0; }
+.review-guide h2 { margin-bottom: 32px; }
+.review-steps { list-style: none; counter-reset: review-step; }
+.review-steps > li { position: relative; padding-left: 34px; margin-bottom: 30px; counter-increment: review-step; }
+.review-steps > li::before { content: counter(review-step); position: absolute; left: 0; top: 0; color: var(--accent); font-family: var(--font-display); font-weight: 600; font-size: 1.125rem; }
+.review-steps h3 { font-size: 1.1875rem; margin-bottom: 8px; }
+.review-steps p { color: var(--ink-2); font-size: var(--text-small); margin-bottom: 8px; }
+.review-steps a { font-size: var(--text-small); }
+.review-scope, .review-next { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: clamp(32px, 4vw, 64px); padding: clamp(24px, 4vw, 48px); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+.review-scope p { color: var(--ink-2); }
+.review-questions { padding-left: 24px; }
+.review-questions > li { padding-left: 8px; padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid var(--line); }
+.review-questions > li:last-child { border-bottom: 0; margin-bottom: 0; }
+.review-questions li::marker { color: var(--accent); font-family: var(--font-display); font-weight: 600; }
+.review-questions h3 { margin-bottom: 10px; }
+.review-questions p { color: var(--ink-2); }
+.review-next { grid-template-columns: minmax(0, 6fr) minmax(0, 4fr); }
+.review-next h2, .review-next h3 { margin-bottom: 20px; }
+.review-next > :last-child { border-left: 1px solid var(--line); padding-left: 32px; }
+.review-next .text-link { display: flex; }
+@media (max-width: 1023px) {
+  .review-layout { grid-template-columns: minmax(0, 1fr); }
+  .review-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
+}
+@media (max-width: 767px) {
+  .review-scope, .review-next { grid-template-columns: minmax(0, 1fr); }
+  .review-next > :last-child { border-left: 0; border-top: 1px solid var(--line); padding-left: 0; padding-top: 24px; }
+}
+@media (max-width: 599px) {
+  .review-intro { align-items: start; flex-direction: column; gap: 20px; }
+  .review-steps { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .review-layout .specimen { min-width: 0; }
 }
 
 /* ---------- The instrument ---------- */
@@ -641,84 +729,7 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
 @keyframes trace-draw { to { stroke-dashoffset: 0; } }
 @keyframes trace-arrive { to { opacity: 1; } }
 
-/* Trial field (desktop only): the 12 trials pooled in the saved primary analysis. Their hairlines
-   converge below the copy, rise beside the instrument and join the claim. It sits behind the copy,
-   which keeps an opaque clear zone, and it draws no other corpus. */
 .trace { position: relative; }
-.trial-field { display: none; }
-
-@media (min-width: 1024px) {
-  :root {
-    /* The copy column plus the gap, so the field can align its caption with the copy. */
-    --hero-copy-span: calc(5 * (min(var(--frame), 100vw - 2 * var(--gutter)) - 264px) / 12 + 120px);
-  }
-  .specimen { overflow: visible; }
-  .hero-copy {
-    position: relative;
-    z-index: 1;
-    background: var(--bg);
-    box-shadow: 0 28px 20px -12px var(--bg);
-  }
-  .trial-field {
-    display: block;
-    position: absolute;
-    z-index: 0;
-    top: 50%;
-    right: calc(100% + 12px);
-    width: calc(var(--hero-copy-span) + 20px);
-    height: 700px;
-    pointer-events: none;
-  }
-  .trial-field-graphic { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-  .trial-field-caption .nowrap { white-space: nowrap; }
-  .trial-field-caption {
-    position: absolute;
-    left: 31px;
-    top: 688px;
-    max-width: calc(var(--hero-copy-span) - 64px);
-    margin: 0;
-    font-size: var(--text-caption);
-    line-height: 1.5;
-    /* The caption sits on the light page although it lives inside the instrument's markup, so it
-       takes the page's tertiary ink explicitly (4.99:1 on --bg), never the instrument's. */
-    color: var(--page-ink-3);
-  }
-  .trial-field line { stroke-width: 1; fill: none; }
-  .field-base .field-link,
-  .field-base .field-trunk { stroke: var(--page-ink); stroke-opacity: 0.08; }
-  .field-lit .field-link { stroke: var(--page-accent); stroke-opacity: 0.24; }
-  .field-lit .field-trunk,
-  .field-lit .field-join { stroke: var(--page-accent); stroke-opacity: 0.5; shape-rendering: crispEdges; }
-  .field-lit .field-node { fill: var(--page-accent); fill-opacity: 0.6; }
-  .field-join-inside { stroke: var(--inst-accent); shape-rendering: crispEdges; }
-  .field-port { fill: var(--page-bg); stroke: var(--page-accent); stroke-width: 1.5; }
-}
-
-/* The load moment on desktop: trials light, their hairlines converge, the pooled line rises and
-   joins the claim; then the claim-to-source trace runs. Reduced motion and no JavaScript show the
-   final, lit state at once. */
-@media (min-width: 1024px) and (scripting: enabled) and (prefers-reduced-motion: no-preference) {
-  .trace-animate { --trace-offset: 1150ms; }
-  .trace-animate:not([data-trace-done]) .field-lit .field-node {
-    opacity: 0;
-    animation: trace-arrive 220ms ease-out forwards;
-    animation-delay: calc(var(--i) * 30ms);
-  }
-  .trace-animate:not([data-trace-done]) .field-lit :is(.field-link, .field-trunk, .field-join, .field-join-inside) {
-    stroke-dasharray: 1 1;
-    stroke-dashoffset: 1;
-    animation: trace-draw 480ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    animation-delay: calc(120ms + var(--i) * 30ms);
-  }
-  .trace-animate:not([data-trace-done]) .field-lit .field-trunk { animation-duration: 380ms; animation-delay: 700ms; }
-  .trace-animate:not([data-trace-done]) .field-lit .field-join { animation-duration: 90ms; animation-delay: 1080ms; animation-timing-function: linear; }
-  .trace-animate:not([data-trace-done]) .field-lit .field-join-inside { animation-duration: 120ms; animation-delay: 1170ms; animation-timing-function: linear; }
-  .trace-animate:not([data-trace-done]) .field-lit .field-port {
-    opacity: 0;
-    animation: trace-arrive 160ms ease-out forwards;
-    animation-delay: 1080ms;
-  }
-}
 
 /* Replay: the saved interval on its scale and the bounded assumed-bias control. */
 .replay { padding: 18px 20px 20px; border-top: 1px solid var(--line); }

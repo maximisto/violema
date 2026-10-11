@@ -5,12 +5,12 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { corpora, stressTest } from '../data/corpora.mjs';
-import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen, trialField } from '../lib/render.mjs';
+import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen } from '../lib/render.mjs';
 import { homePage } from '../lib/pages.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
-const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html']];
+const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html'],['/review/','review/index.html']];
 const decode = value => value.replaceAll('&amp;','&');
 
 test('additive replay preserves original result and interval width throughout declared domain',()=>{
@@ -58,10 +58,11 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
   assert.match(html,/<html lang="en">/);
   assert.match(html,/<meta name="description" content="[^\"]{40,}/);
   assert.ok(html.includes(`rel="canonical" href="https://violema.com${route}"`));
-  assert.match(html,/noindex,nofollow/);
+  assert.ok(html.includes(`<meta name="robots" content="${route === '/review/' ? 'noindex,follow' : 'index,follow'}">`));
   assert.match(html,/id="main"/);
   assert.doesNotMatch(html,/href="https:\/\/agent\.purpleorange\.ai/);
-  assert.match(html,/planned destination, not live here/);
+  assert.match(html,/href="\/login">Existing workspace sign in<\/a>/);
+  assert.doesNotMatch(html,/planned destination, not live here/);
   assert.doesNotMatch(html,/—/,'Public copy uses no em-dashes');
   assert.match(html,/<a class="brand" href="\/" aria-label="Violema home"><img src="\/company-assets\/violema-logo\.png" width="2172" height="724" alt="Violema"><\/a>/);
   assert.match(html,/rel="icon" href="\/company-assets\/violema-icon\.png" type="image\/png"/);
@@ -73,6 +74,7 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
     const href=decode(match[1]);
     if(href.startsWith('#')){assert.ok(ids.includes(href.slice(1)),`Missing anchor ${href}`);continue;}
     if(!href.startsWith('/'))continue;
+    if(href==='/login')continue; // Served by the preserved application, outside this static bundle.
     const [path,anchor]=href.split('#');
     let local=join(dist,path);
     if((await stat(local)).isDirectory())local=join(local,'index.html');
@@ -178,16 +180,20 @@ test('the trace draws one lead per cited source, at each equal row centre',()=>{
   }
 });
 
-test('home instrument is the PsychDoc specimen with a bounded, initially hidden replay control',async()=>{
-  const html=await readFile(join(dist,'index.html'),'utf8');
+test('the physician review has the actual claim, sources and bounded replay',async()=>{
+  const html=await readFile(join(dist,'review/index.html'),'utf8');
   assert.match(html,/<h2 id="specimen-title" class="instrument-title">PsychDoc specimen<\/h2>/);
-  assert.equal((html.match(/class="trace trace-animate"/g)||[]).length,1);
-  assert.match(html,/<div class="bias-control" data-bias-control hidden><label for="hero-bias-range">/);
-  assert.match(html,/id="hero-bias-range" type="range" min="0" max="0\.6" step="0\.01" value="0"/);
+  assert.match(html,/<div class="bias-control" data-bias-control hidden><label for="review-bias-range">/);
+  assert.match(html,/id="review-bias-range" type="range" min="0" max="0\.6" step="0\.01" value="0"/);
   assert.ok(html.includes('The control adds the same assumed shift to the estimate and both interval endpoints. It does not estimate bias, refit the model, or change the interval width.'));
+  const claim=corpora.find(c=>c.id==='psychdoc').claims[0];
+  assert.ok(html.includes(escapeHTML(claim.text))&&html.includes(escapeHTML(claim.caveat)));
   assert.ok(html.includes(escapeHTML(stressTest.direction)));
-  for(const corpus of corpora)assert.ok(html.includes(`href="/demo/#corpus-${corpus.id}"`),'teaser links into the lab');
-  for(const page of ['method/index.html','demo/index.html'])assert.doesNotMatch(await readFile(join(dist,page),'utf8'),/trace-animate/);
+  assert.match(html,/https:\/\/psychdoc\.ai\/evidence\/psilocybin-rewiring#c-mouse-spines-persist/);
+  assert.match(html,/comparison does not currently include animal findings/);
+  assert.match(html,/Do not include patient information/);
+  assert.doesNotMatch(html,/<form|<textarea|type="email"/);
+  assert.doesNotMatch(await readFile(join(dist,'index.html'),'utf8'),/data-bias-root|data-bias-control/,'dense review controls live on the review page');
 });
 
 test('method page keeps its three sections, six stations and packet-derived examples',async()=>{
@@ -254,27 +260,24 @@ test('the 12 trial records match primary.studies, primary.k and, when given, the
   assert.match(await readFile(join(dist,'demo/index.html'),'utf8'),/href="\/company-assets\/data\/sypres-primary-trials\.json" download/);
 });
 
-test('the hero trial field draws exactly the 12 pooled trials and nothing else',async()=>{
+test('the homepage illustration includes exactly the 12 recorded trials and the source-linked primary claim',async()=>{
   const snapshot=JSON.parse(await readFile(join(root,'data/stage-b-snapshot.json'),'utf8'));
   const packet=JSON.parse(await readFile(join(root,'data/sypres-primary-trials.json'),'utf8'));
   const html=await readFile(join(dist,'index.html'),'utf8');
-  const field=html.match(/<div class="trial-field">[\s\S]*?<\/div>/)[0];
-  const nodes=[...field.matchAll(/<circle class="field-node" data-trial="([^"]+)"/g)].map(m=>m[1]);
+  const field=html.match(/<figure class="evidence-hero instrument"[\s\S]*?<\/figure>/)[0];
+  const nodes=[...field.matchAll(/<li data-trial="([^"]+)"/g)].map(m=>m[1]);
   assert.equal(nodes.length,snapshot.primary.k);
-  assert.equal(nodes.length,snapshot.primary.studies.length);
   assert.deepEqual(nodes,packet.trials.map(t=>t.id));
-  assert.deepEqual([...new Set([...field.matchAll(/data-trial="([^"]+)"/g)].map(m=>m[1]))],nodes,'every data-trial in the field is one of the 12 records');
-  assert.equal((field.match(/class="field-link" data-trial=/g)||[]).length,12);
-  for(const corpus of corpora)for(const source of corpus.sources)assert.ok(!field.includes(source.id),`field draws no ${source.id}`);
-  assert.match(field,/<svg class="trial-field-graphic" aria-hidden="true" focusable="false">/);
-  assert.match(field,/<p class="trial-field-caption">The 12 trials pooled in the saved primary analysis <span class="nowrap">\(SYPRES depression-psiloctr, version 25\.1\.2\)<\/span><\/p>/);
-  assert.doesNotMatch(field.match(/<p class="trial-field-caption">[\s\S]*?<\/p>/)[0],/aria-hidden/,'the caption stays readable');
-  const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
-  assert.match(css,/\.trial-field \{ display: none; \}/);
-  assert.match(css,/@media \(min-width: 1024px\) \{[\s\S]*?\.trial-field \{\n    display: block;/);
-  assert.equal((html.match(/class="trial-field"/g)||[]).length,1);
-  for(const page of ['method/index.html','demo/index.html'])assert.doesNotMatch(await readFile(join(dist,page),'utf8'),/trial-field/);
-  assert.throws(()=>trialField({...packet,trials:packet.trials.slice(1)}),/primary\.k/);
+  for(const trial of packet.trials)assert.ok(field.includes(escapeHTML(trial.study)));
+  assert.equal((field.match(/class="assembly-line"/g)||[]).length,snapshot.primary.k);
+  const primary=corpora.find(c=>c.id==='psychdoc').claims[0];
+  assert.ok(field.includes(escapeHTML(primary.text)));
+  assert.ok(field.includes(escapeHTML(primary.caveat)),'the headline result retains its interpretation limit');
+  assert.match(field,/Lines show inclusion in this saved analysis/);
+  assert.match(field,/href="\/review\/#review-specimen"/);
+  assert.equal((html.match(/class="evidence-hero instrument"/g)||[]).length,1);
+  for(const page of ['method/index.html','demo/index.html','review/index.html'])assert.doesNotMatch(await readFile(join(dist,page),'utf8'),/evidence-hero instrument/);
+  assert.throws(()=>homePage(corpora,stressTest,{...packet,trials:packet.trials.slice(1)}),/primary\.k/);
 });
 
 test('the home page build is deterministic',async()=>{
@@ -296,15 +299,12 @@ test('the demo replay states that it always uses Claim 1, beside the control, cl
   assert.doesNotMatch(demo,/whichever claim is selected/,'earlier wording is gone');
 });
 
-test('the trial-field caption uses the page tertiary ink, never the instrument ink, at 4.5:1 or more',async()=>{
-  const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
-  const token=name=>css.match(new RegExp(`:root \\{[\\s\\S]*?--${name}: ([^;]+);`))[1].trim();
-  const caption=css.match(/\.trial-field-caption \{[^}]*\}/)[0];
-  assert.match(caption,/color: var\(--page-ink-3\);/);
-  assert.equal(token('page-ink-3'),'var(--ink-3)');
-  const ink3=token('ink-3'),bg=token('bg');
-  assert.equal(ink3,'#626B78');
-  const lum=hex=>{const [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(c=>c<=0.03928?c/12.92:((c+0.055)/1.055)**2.4);return 0.2126*r+0.7152*g+0.0722*b;};
-  const [hi,lo]=[lum(ink3),lum(bg)].sort((a,b)=>b-a);
-  assert.ok((hi+0.05)/(lo+0.05)>=4.5,`caption contrast ${((hi+0.05)/(lo+0.05)).toFixed(2)}`);
+test('the release is discoverable while the physician walkthrough remains noindex',async()=>{
+  const robots=await readFile(join(dist,'robots.txt'),'utf8');
+  assert.match(robots,/Allow: \//);
+  assert.doesNotMatch(robots,/Disallow: \//);
+  const sitemap=await readFile(join(dist,'sitemap.xml'),'utf8');
+  for(const route of ['/','/method/','/demo/'])assert.ok(sitemap.includes(`<loc>https://violema.com${route}</loc>`));
+  assert.doesNotMatch(sitemap,/\/review\//);
+  assert.match(await readFile(join(dist,'review/index.html'),'utf8'),/<meta name="robots" content="noindex,follow">/);
 });

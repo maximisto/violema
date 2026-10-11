@@ -11,6 +11,14 @@ site ships in the light theme only, because the logo's ink subtitle disappears o
 reversed logo exists yet. Dark page tokens return once a reversed logo is approved; the instrument
 stays dark as designed.
 
+## Release update: separate home and physician walkthrough
+
+On 2026-10-10 Max requested a company homepage with a stronger hero visual and a separate page for the physician review. This supersedes the earlier dense home instrument and desktop-only trial field below. The homepage now shows all 12 pinned trial labels and a source-assembly diagram on desktop, tablet and phone. Its curves encode inclusion in the saved primary analysis, not effect magnitude or citation. Restrained copper `#CD936B` identifies the claim boundary against the existing violet source lines. No new logo pixels, fonts or packet data are introduced.
+
+The full primary claim, four source links and bounded replay now live in `/review/`, accompanied by a four-step review path, animal/human scope note and five concrete feedback questions. This page is public but noindex, with no named advisor, appointment, affiliation or submission form. Home, method and demo are indexable; the local preview server still sends a noindex header. The `/login` footer link belongs to the preserved application.
+
+There is no automatic hero animation in this release. Existing evidence and method content remains available on its original routes. The earlier anatomy and motion notes below document the prior iteration.
+
 ## Principles
 
 1. **The page is a bench; the instrument is the only dark object on it.** Everything else is light,

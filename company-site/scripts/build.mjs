@@ -2,7 +2,7 @@ import { mkdir, writeFile, copyFile, rm, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { corpora, stressTest } from '../data/corpora.mjs';
-import { homePage, methodPage, demoPage } from '../lib/pages.mjs';
+import { homePage, methodPage, demoPage, reviewPage } from '../lib/pages.mjs';
 import { exportCorpora } from './export-corpora.mjs';
 import { checkTrials } from './export-trials.mjs';
 
@@ -28,13 +28,14 @@ await exportCorpora(undefined, { check: true });
 const trials = await checkTrials({ csv: process.env.SYPRES_CSV });
 // Only the generated company-site directory is removed; application output is separate.
 await rm(dist, { recursive: true, force: true });
-for (const directory of ['method', 'demo', 'company-assets/browser', 'company-assets/data', 'company-assets/fonts']) {
+for (const directory of ['method', 'demo', 'review', 'company-assets/browser', 'company-assets/data', 'company-assets/fonts']) {
   await mkdir(join(dist, directory), { recursive: true });
 }
 for (const [route, markup] of [
   ['index.html', homePage(corpora, stressTest, trials)],
   ['method/index.html', methodPage(corpora, stressTest)],
   ['demo/index.html', demoPage(corpora, stressTest)],
+  ['review/index.html', reviewPage(corpora, stressTest)],
 ]) await writeFile(join(dist, route), markup);
 for (const [source, destination] of [
   ['browser/site.css', 'company-assets/site.css'],
@@ -55,7 +56,7 @@ for (const name of ['provenance.md', 'stage-b-snapshot.json', 'portability-recei
 }
 for (const [source, destination] of fontFiles) await copyFile(join(assets, source), join(dist, 'company-assets', destination));
 for (const [source, destination] of logoFiles) await copyFile(join(root, 'brand', source), join(dist, 'company-assets', destination));
-await writeFile(join(dist, 'robots.txt'), 'User-agent: *\nDisallow: /\n# Local preview: remove noindex and disallow only in a separately approved release.\n');
+await writeFile(join(dist, 'robots.txt'), 'User-agent: *\nAllow: /\n\nSitemap: https://violema.com/sitemap.xml\n');
 await writeFile(join(dist, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ['/', '/method/', '/demo/'].map(path => `<url><loc>https://violema.com${path}</loc></url>`).join('') + '</urlset>\n');
-await writeFile(join(dist, 'llms.txt'), '# Violema scientific company preview\n\nPrepared scientific evidence demonstration; independent review pending.\n\n- [Method](https://violema.com/method/): source, claim, assumption, review and version records.\n- [Evidence lab](https://violema.com/demo/): two manually curated packets; shared presentation, not universal scientific validity.\n- [PsychDoc](https://psychdoc.ai/): canonical first scientific application.\n\nThe existing founder-agent application has a planned destination at agent.purpleorange.ai. This preview does not perform that migration.\n');
-console.log(`Built three static pages and ${corpora.length} source packets in company-site/dist.`);
+await writeFile(join(dist, 'llms.txt'), '# Violema\n\nScientific evidence systems that connect claims to sources, make consequential assumptions visible, and keep the record open to review. Prepared demonstrations remain subject to independent scientific review.\n\n- [Method](https://violema.com/method/): source, claim, assumption, review and version records.\n- [Evidence lab](https://violema.com/demo/): two manually curated packets; shared presentation, not universal scientific validity.\n- [PsychDoc](https://psychdoc.ai/): first scientific application.\n\nThe existing workspace sign-in remains at https://violema.com/login.\n');
+console.log(`Built four static pages and ${corpora.length} source packets in company-site/dist.`);
