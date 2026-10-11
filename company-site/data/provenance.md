@@ -81,6 +81,25 @@ node --test tests/corpora.test.mjs
 
 The ordinary site build does not depend on that checkout. Generated JSON packets are checked against the module, and the receipt is checked against the adapter and packet hashes. Adapter time and analyst/review hours were not instrumented; this result does not establish a measured cost or speed of domain transfer. Qualified scientific review remains outstanding.
 
+## Method page figures
+
+The "How it works" section on `/method/` prints figures from `data/how-it-works.mjs`. They were read on 11 October 2026 from PsychDoc commit `ec08ae5d41689b7275477184157f88d086e2b74b` (psilocybin synthesis version 2.2 of 2026-10-11, pull request 15, read before it merged). The page presents them as a dated snapshot. Nothing was estimated or rounded.
+
+| Figure | PsychDoc source |
+| --- | --- |
+| Weekly scan, Mondays 06:00 UTC | `.github/workflows/corpus-refresh.yml` |
+| 100 most cited papers kept per seed | `lib/synthesis/discover.ts`, `citingWorks` |
+| 5 seeds, 521 candidates, 34 linked to two or more seeds, scan of 28 September 2026 | `content/corpus/psilocybin-rewiring/2026-09-28.json` |
+| 6 rules, version `c8662963b`; 335 records screened (161 scan candidates from 2024 to 2026, 174 search records); 20 included, 300 excluded, 15 pending; 360 scan candidates without a verdict; searches found 19 included records, the scan 3, the scan alone 1 | `content/corpus/psilocybin-rewiring/2026-10-10.screening.json` |
+| 23 claims, 22 preliminary; 13 relations, 1 posed as a question; the open question in the planned diagram, verbatim | `lib/content/insights/psilocybin-rewiring.ts` |
+| 24 papers from 15 research programs, with the 2026-09-28 scan's author lists (Goodwin and Raison share two authors) | `lib/synthesis/trust.ts`, `computeTrust` |
+| Rats claim box: "No synaptic density change detected; not reported per drug" | `c-rat-months-function` in the synthesis, whose abstract-only basis does not split the structural result by drug |
+| Shao 2021: about a third of the day-one new spines remained at day 34 | `lib/content/specimen-copy.ts` |
+| No signed expert review | `provenance.reviewedBy` is empty in the synthesis |
+| Where PsychDoc uses AI: the five "Where AI helps" steps and the editorial-judgment line, updated 11 October 2026 | `lib/policies/content.ts`, `aiUsePolicy`, at commit `cd43890` of the same pull request; "this site" in the last step reads "PsychDoc" here |
+
+Every study added to the synthesis must be listed as a seed (`tests/schema.test.ts`); a person adds them in the same update. The keyword searches were run by an AI agent during the 10 October 2026 review, not on a schedule.
+
 ## Typefaces
 
 The site self-hosts Instrument Sans and Inter as variable WOFF2 files, latin subset, from `@fontsource-variable/instrument-sans@5.3.0` and `@fontsource-variable/inter@5.3.0`. They were copied from PsychDoc's vendored `app/fonts/` directory, not downloaded, and are distributed under the SIL Open Font License 1.1 with the licence texts beside them in `assets/fonts/`. Checksums are in `assets/fonts/SHA256SUMS`.

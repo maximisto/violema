@@ -1200,6 +1200,72 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
   .capability { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ---------- How it works (method page) ---------- */
+/* Two schematic figures, light and flat on the page; only tokens colour them. Each SVG keeps a minimum
+   width at which its smallest text (12.5 px in the viewBox) still renders at 12 px or more. Narrower than
+   that, the figure scrolls inside its own focusable region and the page never scrolls sideways. */
+
+.how-head { align-items: end; }
+.how-head .split-body > p:not(.lede) { color: var(--ink-2); }
+.how-head .status-line { margin-top: 20px; }
+.how-status { margin: 16px 0 0; }
+
+.diagram { min-width: 0; margin: 48px 0 0; }
+.diagram-legend { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 0 0 16px; list-style: none; font-size: var(--text-caption); line-height: 1.45; color: var(--ink-2); }
+.diagram-legend li { display: inline-flex; align-items: center; gap: 10px; }
+.role-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; border-radius: 4px; background: var(--surface-2); color: var(--ink); font-weight: 500; }
+.outline-key { flex: none; width: 28px; height: 18px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
+.outline-key-planned { border: 1.5px dashed var(--accent); }
+.diagram-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+.diagram-scroll > svg { width: 100%; min-width: 960px; height: auto; }
+.diagram-hint { display: none; margin: 10px 0 0; font-size: var(--text-caption); color: var(--ink-3); }
+.diagram figcaption { max-width: 72ch; margin-top: 14px; font-size: var(--text-small); line-height: 1.6; color: var(--ink-2); }
+@media (max-width: 1009px) {
+  .diagram-hint { display: block; }
+}
+
+.dg { font-family: var(--font-body); }
+.dg-box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+.dg-box-planned { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.dg-box-posed { fill: color-mix(in oklab, var(--accent) 6%, var(--surface)); stroke: var(--accent); stroke-width: 1.5; }
+.dg-tag rect { fill: var(--surface-2); }
+.dg-tag text { fill: var(--ink); font-size: 12.5px; font-weight: 500; }
+.dg-tag-planned rect { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; }
+.dg-tag-posed rect { fill: var(--surface); }
+.dg-tag-planned text, .dg-tag-posed text { fill: var(--accent); font-weight: 600; }
+.dg-number { fill: var(--ink-3); font-family: var(--font-display); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dg-title { fill: var(--ink); font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+.dg-text { fill: var(--ink-2); font-size: 13px; }
+.dg-text-ink { fill: var(--ink); font-size: 13px; }
+.dg-small { fill: var(--ink-3); font-size: 12.5px; }
+.dg-figure { fill: var(--ink); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dg-rule { stroke: var(--line); stroke-width: 1; }
+.dg-label { fill: var(--ink-2); font-size: 13px; font-weight: 500; }
+.dg-label-accent { fill: var(--accent); font-weight: 600; }
+.dg-edge { fill: none; stroke: var(--line-strong); stroke-width: 1.5; }
+.dg-edge-loop { fill: none; stroke: var(--accent); stroke-width: 2; }
+.dg-edge-planned { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.dg-head { fill: var(--line-strong); }
+.dg-head-accent { fill: var(--accent); }
+
+.how-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 56px; margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--line); }
+.how-fact h3 { margin-bottom: 12px; font-size: 1.1875rem; }
+.how-fact p { font-size: var(--text-small); line-height: 1.6; color: var(--ink-2); }
+.how-rules { font-size: var(--text-small); color: var(--ink-2); }
+.how-rules summary { display: list-item; min-height: 44px; padding-block: 10px; cursor: pointer; color: var(--accent); font-family: var(--font-display); font-weight: 600; }
+.how-rules ul { display: grid; gap: 10px; list-style: none; }
+.how-rules strong { display: block; font-family: var(--font-display); font-size: var(--text-caption); color: var(--ink); }
+.how-rules p { margin-top: 14px; }
+.how-ai { grid-column: 1 / -1; padding-top: 40px; border-top: 1px solid var(--line); }
+.how-ai ul { display: grid; gap: 8px; max-width: 66ch; margin: 0 0 1em; padding-left: 24px; list-style: disc; font-size: var(--text-small); line-height: 1.6; color: var(--ink-2); }
+.how-more { margin: 24px 0 0; }
+.how-table { margin-top: 40px; }
+.how-table th[scope='row'] { width: 18%; }
+@media (max-width: 959px) {
+  .how-facts { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .how-ai { padding-top: 28px; }
+}
+
 /* ---------- Demo: the bench ---------- */
 
 .demo-head .split > :first-child { grid-column: 1 / span 7; }
@@ -1491,7 +1557,15 @@ tr > *:last-child { border-right: 0; }
 .map-legend .map-key-question { border-color: var(--accent); border-top-style: dashed; }
 .map-workspace { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr); align-items: start; }
 .map-field-wrap { min-width: 0; padding: 24px 20px 20px 24px; }
-.map-field { height: var(--map-height); min-height: 150px; position: relative; isolation: isolate; }
+/* Nodes sit at a percentage of the field height and the lines stretch with it, so narrower screens can
+   lengthen the field to give labels that wrap to two or three lines their own row. */
+.map-field { --map-stretch: 1; height: calc(var(--map-height) * var(--map-stretch)); min-height: 150px; position: relative; isolation: isolate; }
+@media (max-width: 1199px) {
+  .map-field { --map-stretch: 1.3; }
+}
+@media (max-width: 479px) {
+  .map-field { --map-stretch: 1.6; }
+}
 .map-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .map-edge { fill: none; stroke: var(--line-strong); stroke-width: 1.2; opacity: .3; cursor: pointer; pointer-events: stroke; }
 .map-edge-relation { stroke: var(--accent); }
