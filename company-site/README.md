@@ -11,11 +11,12 @@ npm test
 npm run preview
 ```
 
-Open `http://127.0.0.1:4317/`, `/method/`, `/demo/` and `/review/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method and demo HTML is indexable for the owner-authorized release; robots.txt allows crawling and the sitemap lists those three routes. The physician review page uses `noindex,follow` and is excluded from the sitemap. This is discoverability control, not authentication. Missing static paths return 404 locally. The footer link `/login` belongs to the preserved production application and is not part of this bundle.
+Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/legal/terms/` and `/legal/privacy/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method, demo and website policy HTML is indexable for the owner-authorized release; robots.txt allows crawling and the sitemap lists those five routes. The physician review page uses `noindex,follow` and is excluded from the sitemap. This is discoverability control, not authentication. Missing static paths return 404 locally. The links `/login`, `/terms` and `/privacy` belong to the preserved production application and are not part of this bundle.
 
 ## Layout
 
-- `lib/pages.mjs`: page shell (wordmark header, footer, metadata), the protocol stations, and the four routes.
+- `lib/pages.mjs`: page shell (wordmark header, footer, metadata), the protocol stations, and the six routes.
+- `lib/legal.mjs`: public website terms and privacy copy; separate from legacy workspace policies.
 - `lib/render.mjs`: shared evidence renderer: escaped text, safe source links, bounded additive-shift arithmetic, the interval scale, the trace specimen (a claim joined to its cited source records), the bias control and the demo bench.
 - `browser/site.mjs`: entry module on every page: header state, pinning the hero trace once drawn, segmented controls; it imports `lab.mjs` only where a replay or the bench exists.
 - `browser/tabs.mjs`: ARIA tabs over plain anchor links (arrow, Home and End keys; links still jump without JavaScript).
@@ -30,7 +31,7 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/` and `/review/`. `PORT` can o
 - `scripts/preview.mjs`: loopback-only preview server.
 - `tests/`: source-contract, arithmetic, renderer, metadata and generated-output tests.
 
-The generated routes are `dist/index.html`, `dist/method/index.html`, `dist/demo/index.html`, and `dist/review/index.html`. Every company browser asset and downloadable packet lives under `dist/company-assets/`; the legacy application's `/assets/` and `/brand/` paths remain available for migration compatibility. The build no longer reads anything from `frontend/`. Build output is ignored by Git.
+The generated routes are `dist/index.html`, `dist/method/index.html`, `dist/demo/index.html`, `dist/review/index.html`, `dist/legal/terms/index.html`, and `dist/legal/privacy/index.html`. Every company browser asset and downloadable packet lives under `dist/company-assets/`; the legacy application's `/assets/` and `/brand/` paths remain available for migration compatibility. The build no longer reads anything from `frontend/`. Build output is ignored by Git.
 
 ## Design system
 
@@ -63,7 +64,7 @@ The JavaScript renderer reads the same frozen data module as the static build. W
 
 ## Browser acceptance
 
-Run against the built preview. Check all four routes by direct load and refresh at 1440, 1024, 768, 390 and 320 px widths in the light theme, and confirm a dark colour-scheme preference still renders the light page with the dark instrument. Verify corpus and claim links with mouse and keyboard, the segmented controls' arrow keys, range changes including endpoints on the physician review page and the demo, materials isolation, reset, packet downloads, reduced motion (the static source illustration stays visible), a no-JavaScript load (drawn trace, static interval, every claim and table), focus rings on every control, 44 px targets on phones and text contrast of at least 4.5:1. Table overflow is intentionally contained inside the keyboard-focusable comparison region; the page itself must not overflow horizontally. Inspect console and network failures.
+Run against the built preview. Check all six routes by direct load and refresh at 1440, 1024, 768, 390 and 320 px widths in the light theme, and confirm a dark colour-scheme preference still renders the light page with the dark instrument. Verify corpus and claim links with mouse and keyboard, the segmented controls' arrow keys, range changes including endpoints on the physician review page and the demo, materials isolation, reset, packet downloads, reduced motion (the static source illustration stays visible), a no-JavaScript load (drawn trace, static interval, every claim and table), focus rings on every control, 44 px targets on phones and text contrast of at least 4.5:1. Table overflow is intentionally contained inside the keyboard-focusable comparison region; the page itself must not overflow horizontally. Inspect console and network failures.
 
 Automated Node checks cover arithmetic boundaries, packet identity, document IDs/anchors, local links, assets, source protocols, corpus isolation, and meaningful no-JavaScript markup. Browser checks are separate because the package deliberately has no browser automation dependency.
 
@@ -86,3 +87,11 @@ posed questions use dashed strokes. There is no citation-network or embedding la
 Positions are stable layout choices and do not encode causality, similarity or effect size. Study/method
 filters use explicit registry metadata. All papers, claims and relationships remain available in the
 HTML text alternative without JavaScript. The existing 12-trial saved-analysis hero is separate.
+
+### Website legal pages
+
+The public company policies identify Violema, Inc., a Delaware corporation, as directed by the owner. They describe the scientific pages separately from the existing workspace and separately operated PsychDoc. Privacy copy reflects static, self-hosted assets and local controls, while allowing for ordinary hosting requests and voluntary correspondence. No arbitrary numeric retention promise, reviewer endorsement, or compliance certification is added.
+
+The existing publicly listed `legal@violema.com` and `privacy@violema.com` addresses are used in the drafts. Confirm monitoring before publication. The policy text has not been reviewed by counsel. Guidance consulted: [Delaware Online Privacy and Protection Act, §1205C](https://delcode.delaware.gov/title6/c012c/index.html) and [FTC data-handling guidance](https://www.ftc.gov/business-guidance/resources/protecting-personal-information-guide-business).
+
+`release/legal-pages-20261011/` prepares a local release packet for these exact new routes and preserves `/terms` and `/privacy` for the workspace. Its README documents baseline guards and owner-authorized deployment steps. Preparing a packet does not deploy it.
