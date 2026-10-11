@@ -36,6 +36,9 @@ test('the method page explains the system after the six stations and before the 
   for (const text of [`${f.scan.seeds} seeds, ${f.scan.candidates} candidates`, `${f.screening.records} records: ${f.screening.included} included,`, `${f.claims.total} claims, ${f.claims.preliminary} preliminary`, `${f.independence.programs} research programs`, `the searches found ${f.screening.foundBySearch} and the citation scan ${f.screening.foundByScan}`, `The other ${f.screening.unscreened} scan candidates have no verdict yet`, `keeps the ${f.scan.citingKept} most cited`])
     assert.ok(how.includes(text), text);
   assert.match(how, /Signed expert review is invited and has not been done/);
+  // Author overlap is a prompt to check cohort and data independence, never itself called non-independence.
+  assert.match(how, /one authorship group is flagged: its sources share authors\. That is a prompt to check whether their cohorts and data are independent, not a finding that they are not\./);
+  assert.doesNotMatch(how, /flagged as convergent but not independent/);
   assert.match(how, /adding them automatically is planned/);
   assert.match(how, /Running the searches on a schedule is planned/);
   const next = section('cross-field');

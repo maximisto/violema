@@ -83,7 +83,7 @@ The ordinary site build does not depend on that checkout. Generated JSON packets
 
 ## Method page figures
 
-The "How it works" section on `/method/` prints figures from `data/how-it-works.mjs`. They were read on 11 October 2026 from PsychDoc commit `852db31f12ad97f81875a2fa049e88bec5ff4140` (psilocybin synthesis version 2.2 of 2026-10-11, pull request 15, read before it merged). The page presents them as a dated snapshot. Nothing was estimated or rounded.
+The "How it works" section on `/method/` prints figures from `data/how-it-works.mjs`. They were read on 11 October 2026 from PsychDoc commit `ec08ae5d41689b7275477184157f88d086e2b74b` (psilocybin synthesis version 2.2 of 2026-10-11, pull request 15, read before it merged). The page presents them as a dated snapshot. Nothing was estimated or rounded.
 
 | Figure | PsychDoc source |
 | --- | --- |

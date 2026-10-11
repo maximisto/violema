@@ -80,7 +80,7 @@ The October 10 circuit-hair and glasses concept replaces the operator lockup onl
 The homepage map uses the canonical PsychDoc export copied unchanged to `data/evidence-map.json`.
 Its SHA-256 is embedded in `data-map-sha256`; the exact JSON is also served as a download.
 The source synthesis was updated on 2026-10-11 (version 2.2). The current copy is the export at PsychDoc
-commit `852db31` (pull request 15), SHA-256 `5003d6f5c29c36d87c9ff5ec7a90d8302f6cc279f3347c09b7593b9066146ee1`.
+commit `ec08ae5` (pull request 15), SHA-256 `fd8199f1b36fccfb27d3a2928d4b0190c6413e3618b1a32177a552d33571252d`.
 From the PsychDoc checkout, run
 `npx tsx scripts/export-evidence-map.ts`, verify the export there, then copy
 that file here before building. The company-site build intentionally fails if this input is absent.
@@ -95,7 +95,7 @@ HTML text alternative without JavaScript. The existing 12-trial saved-analysis h
 
 ### How it works (method page)
 
-`/method/#how-it-works` shows the evidence system as PsychDoc, the first application, runs it: eight steps and the seed loop, then the planned cross-field question with its contribution record (`/method/#cross-field`). Every number comes from `data/how-it-works.mjs`, which copies PsychDoc's psilocybin synthesis version 2.2 of 2026-10-11 (pull request 15, commit `852db31`, read before that pull request merged) and names the PsychDoc file behind each value; `data/provenance.md` lists them. The page calls the figures a dated snapshot of a provisional synthesis without signed expert review, which stays true after PsychDoc publishes the version. Planned parts are dashed and labelled. No expert review is claimed; the section refuses to build if the facts record one, so the copy has to change first. The "See each step in detail" link goes to `https://psychdoc.ai/how-it-works`, which exists once PsychDoc pull request 15 merges.
+`/method/#how-it-works` shows the evidence system as PsychDoc, the first application, runs it: eight steps and the seed loop, then the planned cross-field question with its contribution record (`/method/#cross-field`). Every number comes from `data/how-it-works.mjs`, which copies PsychDoc's psilocybin synthesis version 2.2 of 2026-10-11 (pull request 15, commit `ec08ae5`, read before that pull request merged) and names the PsychDoc file behind each value; `data/provenance.md` lists them. The page calls the figures a dated snapshot of a provisional synthesis without signed expert review, which stays true after PsychDoc publishes the version. Planned parts are dashed and labelled. No expert review is claimed; the section refuses to build if the facts record one, so the copy has to change first. The "See each step in detail" link goes to `https://psychdoc.ai/how-it-works`, which exists once PsychDoc pull request 15 merges.
 
 Each diagram keeps a minimum width at which its smallest text renders at 12 px or more. Narrower than that, it scrolls inside its own focusable region; the page itself does not scroll sideways. `tests/how-it-works.test.mjs` checks the figures add up, the accessible figure markup, the house voice, token-only colours and the 12 px floor.
 

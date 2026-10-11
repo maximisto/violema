@@ -8,7 +8,7 @@ export const howItWorks = Object.freeze({
     slug: 'psilocybin-rewiring',
     version: '2.2',
     updatedAt: '2026-10-11',
-    commit: '852db31f12ad97f81875a2fa049e88bec5ff4140',
+    commit: 'ec08ae5d41689b7275477184157f88d086e2b74b',
     pullRequest: 'https://github.com/maximisto/psychdoc-ai/pull/15',
     walkthrough: 'https://psychdoc.ai/how-it-works',
   }),
