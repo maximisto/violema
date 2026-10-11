@@ -17,6 +17,7 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/legal/terms/`
 
 - `lib/pages.mjs`: page shell (wordmark header, footer, metadata), the protocol stations, and the six routes.
 - `lib/legal.mjs`: public website terms and privacy copy; separate from legacy workspace policies.
+- `lib/how-it-works.mjs`: the method page's "How it works" and "Where this is going" sections: two inline SVG diagrams of PsychDoc's evidence system, coloured only through tokens, with their figures read from `data/how-it-works.mjs`.
 - `lib/render.mjs`: shared evidence renderer: escaped text, safe source links, bounded additive-shift arithmetic, the interval scale, the trace specimen (a claim joined to its cited source records), the bias control and the demo bench.
 - `browser/site.mjs`: entry module on every page: header state, pinning the hero trace once drawn, segmented controls; it imports `lab.mjs` only where a replay or the bench exists.
 - `browser/tabs.mjs`: ARIA tabs over plain anchor links (arrow, Home and End keys; links still jump without JavaScript).
@@ -87,6 +88,12 @@ posed questions use dashed strokes. There is no citation-network or embedding la
 Positions are stable layout choices and do not encode causality, similarity or effect size. Study/method
 filters use explicit registry metadata. All papers, claims and relationships remain available in the
 HTML text alternative without JavaScript. The existing 12-trial saved-analysis hero is separate.
+
+### How it works (method page)
+
+`/method/#how-it-works` shows the evidence system as PsychDoc, the first application, runs it: eight steps and the seed loop, then the planned cross-field question with its contribution record (`/method/#cross-field`). Every number comes from `data/how-it-works.mjs`, which copies PsychDoc's psilocybin synthesis version 2.2 (pull request 15, commit `ec643e7`, in review and not yet published) and names the PsychDoc file behind each value; `data/provenance.md` lists them. The page says the version is in review. Planned parts are dashed and labelled. No expert review is claimed; the section refuses to build if the facts record one, so the copy has to change first. The "See each step in detail" link goes to `https://psychdoc.ai/how-it-works`, which exists once PsychDoc pull request 15 merges.
+
+Each diagram keeps a minimum width at which its smallest text renders at 12 px or more. Narrower than that, it scrolls inside its own focusable region; the page itself does not scroll sideways. `tests/how-it-works.test.mjs` checks the figures add up, the accessible figure markup, the house voice, token-only colours and the 12 px floor.
 
 ### Website legal pages
 
