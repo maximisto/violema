@@ -1,0 +1,11 @@
+# INERT, TEMPORARY, SERVER-CONTEXT SNIPPET. Not included by either template.
+# First include oauth-drain.http.nginx.conf.snippet ONCE in http context.
+# Insert THIS guard directly in EVERY old/new/alias server reaching the backend,
+# before its location blocks. Do not put it inside a location or another if.
+# Server rewrite runs before location selection, including ^~ /api/ proxies.
+# Empty map values suppress this header for callbacks and other requests.
+# Requires explicit cutover authorization; see the handoff for ordering.
+add_header Retry-After $scientific_oauth_drain_retry_after always;
+if ($scientific_oauth_drain_retry_after) {
+    return 503 "Sign-in is briefly paused for a workspace address change. Retry sign-in after 15 minutes.\n";
+}

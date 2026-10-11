@@ -1,0 +1,42 @@
+--- a/backend/src/server.ts
++++ b/backend/src/server.ts
+@@ -442,6 +442,7 @@
+   'http://localhost:5173',
+   'http://127.0.0.1:5173',
+   'https://violema.com',
++  'https://agent.purpleorange.ai',
+   'https://www.violema.com',
+   'http://violema.com',
+   'http://www.violema.com',
+--- a/backend/src/reviewNotificationEmail.ts
++++ b/backend/src/reviewNotificationEmail.ts
+@@ -26,7 +26,7 @@
+       '',
+       `${input.missionName} just finished a run and prepared a draft. Nothing has been sent — it is holding for your approval.`,
+       '',
+-      'Review it here: https://violema.com/dashboard — open the Reviews tab.',
++      'Review it here: https://agent.purpleorange.ai/dashboard — open the Reviews tab.',
+       '',
+       'Approve to deliver it as prepared, or request changes and it will redraft. If your browser fights the Google sign-in, use "Email me a sign-in link" on the login page.',
+       '',
+--- a/backend/src/betaApplicationEmail.ts
++++ b/backend/src/betaApplicationEmail.ts
+@@ -39,7 +39,7 @@
+       '',
+       '1. A human reviews every application. There is no automated approval.',
+       '2. You will get an email at this address when you are approved.',
+-      '3. After approval, sign in at https://violema.com/login with the same account you applied with. If your browser fights the Google sign-in flow, use "Email me a sign-in link" on the same page.',
++      '3. After approval, sign in at https://agent.purpleorange.ai/login with the same account you applied with. If your browser fights the Google sign-in flow, use "Email me a sign-in link" on the same page.',
+       '',
+       'Until then, signing in will keep telling you the application is under review — that is expected, not an error.',
+       '',
+--- a/frontend/src/lib/credits.ts
++++ b/frontend/src/lib/credits.ts
+@@ -318,6 +318,6 @@
+     'Try Violema: the reviewable AI operator for research, automations, and delegated work.',
+     `Workspace: ${snapshot.workspaceName}`,
+     `New users get a bonus, and I get ${formatCredits(snapshot.referralBonus)} credits when you join.`,
+-    'Start here: https://violema.com',
++    'Start here: https://agent.purpleorange.ai',
+   ].join('\n');
+ }

@@ -1,0 +1,77 @@
+{
+  "psychdocCommit": "3001296325cb95d64fcca6e412eb10b48264144a",
+  "sourceArtifact": "analysis/stage_b/results/stability.json",
+  "sourceSha256": "7289ec7d89f6df0061d2aa7508f58c4d46c37a611a5838162470596ff1e1ace1",
+  "declarationSha256": "5c3bff63ca9c694f40dec1bf4349381711692bfa0542e3337d95cf5f06a421ef",
+  "dataSha256": "237b4a5601bd4de1b1c1b0e335e730677c2b09cd7a3ce2c893df623e9feba793",
+  "primary": {
+    "id": "primary",
+    "label": "Primary model (SYPRES, pinned)",
+    "kind": "reproduction",
+    "k": 12,
+    "g": -0.9030829073153204,
+    "ci": [
+      -1.256109404142053,
+      -0.5500564104885878
+    ],
+    "pi": [
+      -1.728336164481643,
+      -0.07782965014899756
+    ],
+    "studies": [
+      "Back 2024",
+      "Davis 2021",
+      "Goodwin 2022",
+      "Griffiths 2016",
+      "Lewis 2025",
+      "Luquiens 2025",
+      "Raison 2023",
+      "Rieser 2025",
+      "Rosenblat 2024",
+      "Ross 2016",
+      "Ross 2025",
+      "von Rotz 2023"
+    ],
+    "note": "",
+    "shift": null,
+    "class": "stable",
+    "includes_no_effect": false,
+    "class_secondary": "stable"
+  },
+  "subgroup": {
+    "id": "mdd-trd",
+    "label": "MDD or TRD only",
+    "kind": "filter",
+    "k": 5,
+    "g": -0.929472598719158,
+    "ci": [
+      -1.866981396860587,
+      0.008036199422270962
+    ],
+    "pi": [
+      -2.9970620736175504,
+      1.1381168761792346
+    ],
+    "studies": [
+      "Davis 2021",
+      "Goodwin 2022",
+      "Raison 2023",
+      "Rosenblat 2024",
+      "von Rotz 2023"
+    ],
+    "note": "",
+    "shift": null,
+    "class": "sensitive",
+    "includes_no_effect": true,
+    "class_secondary": "sensitive"
+  },
+  "thresholds": [
+    -0.24,
+    -0.5
+  ],
+  "biasRange": [
+    0,
+    0.6
+  ],
+  "replayOnly": true
+}
