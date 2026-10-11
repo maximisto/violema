@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { howItWorks as f } from '../data/how-it-works.mjs';
-import { howItWorksSection, crossFieldSection, loopDiagram, crossFieldDiagram } from '../lib/how-it-works.mjs';
+import { howItWorksSection, crossFieldSection, loopDiagram, crossFieldDiagram, wrapText } from '../lib/how-it-works.mjs';
 import { escapeHTML } from '../lib/render.mjs';
 
 const method = await readFile(new URL('../dist/method/index.html', import.meta.url), 'utf8');
@@ -28,7 +28,9 @@ test('the method page explains the system after the six stations and before the 
   assert.ok(order.every(index => index > 0));
   assert.deepEqual([...order].sort((a, b) => a - b), order);
   const how = section('how-it-works');
-  assert.match(how, /version 2\.2, which is in review and not yet published/);
+  assert.match(how, /a snapshot of PsychDoc’s psilocybin synthesis, version 2\.2 of 11 October 2026: a provisional synthesis that has not had signed expert review/);
+  // Release order publishes PsychDoc first, so the page must not call the version unpublished or in review.
+  assert.doesNotMatch(how, /not yet published|in review/);
   assert.match(how, /the first application of this method/);
   assert.ok(how.includes(`href="${f.synthesis.walkthrough}"`), 'links the detailed PsychDoc page');
   for (const text of [`${f.scan.seeds} seeds, ${f.scan.candidates} candidates`, `${f.screening.records} records: ${f.screening.included} included,`, `${f.claims.total} claims, ${f.claims.preliminary} preliminary`, `${f.independence.programs} research programs`, `the searches found ${f.screening.foundBySearch} and the citation scan ${f.screening.foundByScan}`, `The other ${f.screening.unscreened} scan candidates have no verdict yet`, `keeps the ${f.scan.citingKept} most cited`])
@@ -62,6 +64,15 @@ test('each diagram is an accessible figure that scrolls inside its own region', 
     assert.match(body, /<figcaption>[^<]{80,}<\/figcaption>$/);
   }
   assert.match(css, /\.diagram-scroll \{[^}]*overflow-x: auto;/);
+});
+
+test('the planned diagram carries the open question verbatim and the rats claim as a nondetection, not split by drug', () => {
+  const cross = crossFieldDiagram(f);
+  const text = [...cross.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(m => m[1]).join(' ');
+  assert.ok(text.includes(wrapText(f.openQuestion, 33).join(' ')), 'every word of the open question, in order');
+  assert.match(f.openQuestion, /no structural difference detected at the sampled follow-up/);
+  assert.match(text, /No synaptic density change detected; not reported per drug\./);
+  assert.doesNotMatch(text, /without spine growth|did not differ/);
 });
 
 test('planned parts are drawn as planned', () => {
@@ -116,6 +127,7 @@ test('the method page figures agree with the frozen version 2.2 evidence map', a
   assert.equal(map.scan.seedCount, f.scan.seeds);
   assert.equal(map.scan.scannedAt.slice(0, 10), f.scan.date);
   assert.equal(map.scan.currentSeedCount, f.independence.papers, 'every study in the synthesis is a seed for the next scan');
+  assert.equal(map.synthesis.updatedAt, f.synthesis.updatedAt, 'the snapshot date the page prints is the map\'s');
   for (const item of f.converging) {
     const claim = map.claims.find(entry => entry.id === item.claimId);
     assert.ok(claim, item.claimId);

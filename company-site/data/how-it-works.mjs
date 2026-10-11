@@ -1,12 +1,14 @@
-// Figures printed by the method page's "How it works" section. Every value is copied from PsychDoc's
-// psilocybin synthesis, version 2.2: maximisto/psychdoc-ai pull request 15, commit ec643e7, in review and
-// not yet published. The comment above each group names the PsychDoc file it was read from; provenance.md
+// Figures printed by the method page's "How it works" section: a dated snapshot of PsychDoc's psilocybin
+// synthesis, version 2.2 of 2026-10-11, copied from maximisto/psychdoc-ai pull request 15 at the commit named in
+// `synthesis.commit`, before that pull request merged. The page says which version and date they describe; PsychDoc
+// shows the current state. The comment above each group names the PsychDoc file it was read from; provenance.md
 // lists them too. Nothing here is estimated or rounded.
 export const howItWorks = Object.freeze({
   synthesis: Object.freeze({
     slug: 'psilocybin-rewiring',
     version: '2.2',
-    commit: 'ec643e70621c08ab39024c1c5d470d1b5ca71586',
+    updatedAt: '2026-10-11',
+    commit: '852db31f12ad97f81875a2fa049e88bec5ff4140',
     pullRequest: 'https://github.com/maximisto/psychdoc-ai/pull/15',
     walkthrough: 'https://psychdoc.ai/how-it-works',
   }),
@@ -40,11 +42,14 @@ export const howItWorks = Object.freeze({
     foundByScan: 3,
     scanOnly: 1,
   }),
-  // lib/content/insights/psilocybin-rewiring.ts: 22 claims (tiers 21 preliminary, 1 established), 13 relations,
+  // lib/content/insights/psilocybin-rewiring.ts: 23 claims (tiers 22 preliminary, 1 established), 13 relations,
   // 1 posed as a question.
-  claims: Object.freeze({ total: 22, preliminary: 21, relations: 13, posed: 1 }),
-  // lib/synthesis/trust.ts computeTrust: independence.programs over the 22 sources.
-  independence: Object.freeze({ papers: 22, programs: 15 }),
+  claims: Object.freeze({ total: 23, preliminary: 22, relations: 13, posed: 1 }),
+  // lib/synthesis/trust.ts computeTrust with the 2026-09-28 scan: independence.programs over the 24 sources
+  // (Goodwin and Raison share two authors and count as one program).
+  independence: Object.freeze({ papers: 24, programs: 15 }),
+  // lib/content/insights/psilocybin-rewiring.ts openQuestions: the open question the planned diagram poses, verbatim.
+  openQuestion: 'Does the lasting change in neuron function seen in rats months after one dose of psilocybin or 25CN-NBOH, with no structural difference detected at the sampled follow-up, hold for psilocybin on its own and in other labs, and is there a human counterpart?',
   // provenance.reviewedBy is empty: no signed expert review yet.
   expertReviews: 0,
   // The three real claims the planned diagram draws together: first source, its venue, and the last author's
