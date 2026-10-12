@@ -7,7 +7,7 @@ export const corpora = [
     question: 'Which parts of a psilocybin depression result survive an assumed bias shift?',
     summary: 'Inspect a saved analysis, its population limits and the assumptions that change its interpretation.',
     sourceVersion: 'PsychDoc 3001296 · SYPRES 25.1.2 · packet 2026-10-10.1',
-    reviewStatus: 'Prepared demonstration · Stage B awaits independent scientific review',
+    reviewStatus: 'Curated demonstration · Stage B awaits independent scientific review',
     scopeNote: 'A replay of saved results from a mixed-population dataset. Trial-level source-input audit remains incomplete. This is evidence education, not treatment advice; neither the packet nor the slider establishes clinical benefit for an individual.',
     sources: [
       { id: 'sypres-paper', title: 'A living systematic review, meta-analysis and open-data resource of randomized controlled trials of psilocybin treatment for symptoms of depression', url: 'https://doi.org/10.1038/s44220-026-00630-8', year: 2026, locator: 'Public abstract; article Methods, Results and Supplement were not re-audited for this packet.', kind: 'Published meta-analysis' },
@@ -34,7 +34,7 @@ export const corpora = [
     question: 'Can these solar-cell stability results be compared on the same terms?',
     summary: 'Four primary reports and separate ISOS guidance show why time, environment, device identity and endpoint must travel with a claim.',
     sourceVersion: 'Manual source packet · 2026-10-10.1',
-    reviewStatus: 'Prepared demonstration · materials expert review pending',
+    reviewStatus: 'Curated demonstration · materials expert review pending',
     scopeNote: 'A purposive sample, not a systematic review. Selected public passages were read manually; no automated full-text extraction ran. Test conditions and endpoints differ, and some metadata remain unextracted. No compatible pooled analysis or clinical bias slider applies.',
     sources: [
       { id: 'jiang-2023', title: 'Towards linking lab and field lifetimes of perovskite solar cells', url: 'https://doi.org/10.1038/s41586-023-06610-7', year: 2023, locator: 'Public abstract, especially its final three sentences. Subscription article body was not used for this claim.', kind: 'Primary report · abstract inspected' },
