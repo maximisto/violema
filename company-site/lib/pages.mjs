@@ -28,6 +28,7 @@ function head(route, title, description, { lab = false } = {}) {
     '<meta name="color-scheme" content="light">',
     '<meta name="theme-color" content="#F5F6F8">',
     `<link rel="canonical" href="https://violema.com${route}">`,
+    '<script type="application/ld+json">{"@context":"https://schema.org","@type":"Corporation","@id":"https://violema.com/#organization","name":"Violema","legalName":"Violema, Inc.","url":"https://violema.com/"}</script>',
     '<meta property="og:type" content="website">',
     '<meta property="og:site_name" content="Violema">',
     `<meta property="og:title" content="${e(title)}">`,

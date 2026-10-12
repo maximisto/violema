@@ -6,6 +6,7 @@ This file is the fastest way to get productive on VIOLEMA without re-learning th
 
 - Product: `VIOLEMA`
 - Company: `Purple Orange LLC`
+- Current scientific-site operator (2026-10-12): PsychDoc and violema.com are operated by Violema, Inc., a Delaware corporation; the legacy agent app is moving to Purple Orange Agent under Purple Orange LLC at agent.purpleorange.ai.
 - Current public app URL: `https://nexus.purpleorange.io`
 - Intended final domain: `https://violema.com`
 - GitHub repo: `https://github.com/maximisto/violema`
