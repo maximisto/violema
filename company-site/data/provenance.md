@@ -1,6 +1,6 @@
 # Scientific demo packet provenance
 
-Packet version: `2026-10-10.1`. Curated on 10 October 2026.
+Packet version: `2026-10-10.1`. Prepared on 10 October 2026.
 
 These two frozen packets share one source/claim/condition contract and one presentation adapter. Claims were selected and paraphrased manually from the passages identified below. No live ingestion, automated full-text extraction, complete literature search, new statistical model fit or qualified human scientific review was performed for this website build.
 
@@ -43,7 +43,7 @@ The thresholds `-0.24` and `-0.50`, and the range `0` to `0.60`, are inherited f
 
 ## Materials: four reports, separate guidance
 
-The packet is a purposive comparability demonstration. Sources were chosen to show differing temperatures, atmospheres, encapsulation and stability endpoints. Publication independence, device batches and sample sizes were not adjudicated. “Not extracted” means not present in this curated packet, not necessarily unreported by the authors. No paper figures or full article text are redistributed.
+The packet is a purposive comparability demonstration. Sources were chosen to show differing temperatures, atmospheres, encapsulation and stability endpoints. Publication independence, device batches and sample sizes were not adjudicated. “Not extracted” means not present in this prepared packet, not necessarily unreported by the authors. No paper figures or full article text are redistributed.
 
 | Source | Passage actually used | Scope boundary |
 | --- | --- | --- |

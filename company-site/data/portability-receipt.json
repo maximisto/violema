@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "checkedAt": "2026-10-10",
+  "checkedAt": "2026-10-12",
   "psychdocCommit": "3001296325cb95d64fcca6e412eb10b48264144a",
   "sourceHashes": {
     "lib/content/schema.ts": "95ed8614c1d4e9be9f79f6c96a855c2ea70d212c03fafe6cd3f3b2ad73caeb5d",
@@ -8,7 +8,7 @@
     "lib/synthesis/corpus.ts": "e07f56ef2eff364d5de80da1f3478121c2dcdf884b0d4e986ab95ba6754c3955",
     "analysis/stage_b/results/stability.json": "7289ec7d89f6df0061d2aa7508f58c4d46c37a611a5838162470596ff1e1ace1"
   },
-  "packetModuleSha256": "5c29205920b042ab88af3bc883f6a1d100cee6c3be9e4722ba3ffb95ebf21a75",
+  "packetModuleSha256": "cddba7477a214927a045533bfa5687ff815d308e7f3f448f6d6a3ec0170d5807",
   "adapterSha256": "f7ae628d491d5c78023efdf3df7d763e107e8fc8ad6e93f20c05bbee98b380f9",
   "execution": "Existing tsx executes unchanged, hash-checked PsychDoc schema.ts and trust.ts with the same new presentation adapter for both packets.",
   "coreEdits": 0,

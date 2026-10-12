@@ -257,7 +257,7 @@ test('approved copy: the copyright line and the materials example replace the Or
   }
   const home=await readFile(join(dist,'index.html'),'utf8');
   assert.doesNotMatch(home,/Oryx/);
-  for(const text of ['Second example','Materials research','Curated demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
+  for(const text of ['Second example','Materials research','Prepared demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
 });
 
 test('the 12 trial records match primary.studies, primary.k and, when given, the pinned CSV',async()=>{

@@ -1,4 +1,4 @@
-export const legalUpdatedAt = '2026-10-11';
+export const legalUpdatedAt = '2026-10-12';
 
 export const legalPolicies = [
   {
@@ -11,7 +11,7 @@ export const legalPolicies = [
         id: 'scope',
         title: '1. Who we are and what these terms cover',
         html: `<p>Violema, Inc., a Delaware corporation ("Violema," "we," or "us"), operates this public scientific website. These terms cover the homepage, Method, Evidence lab, For reviewers, these legal pages, and associated evidence downloads. Please read them before using these materials.</p>
-<p>Existing Violema workspace services have separate <a href="/terms">workspace terms</a> and a <a href="/privacy">workspace privacy policy</a>. PsychDoc at psychdoc.ai is separately operated by Purple Orange LLC and has its own <a href="https://psychdoc.ai/policies/terms">terms</a> and <a href="https://psychdoc.ai/policies/privacy">privacy policy</a>. These website terms do not replace those agreements.</p>`,
+<p>Existing Violema workspace services have separate <a href="/terms">workspace terms</a> and a <a href="/privacy">workspace privacy policy</a>. PsychDoc at psychdoc.ai is a division of Violema, Inc. and has its own <a href="https://psychdoc.ai/policies/terms">terms</a> and <a href="https://psychdoc.ai/policies/privacy">privacy policy</a>, which govern information you provide there. These website terms do not replace those agreements.</p>`,
       },
       {
         id: 'scientific-materials',
@@ -24,7 +24,7 @@ export const legalPolicies = [
         id: 'permitted-use',
         title: '3. Using the website and its materials',
         html: `<p>You may browse, link to, download, and use the materials for lawful research, evaluation, and educational purposes, subject to any license identified with a particular item. When sharing excerpts, preserve relevant attribution, source links, and limitations. Do not present altered results as our original work or imply our endorsement.</p>
-<p>Do not interfere with the website, introduce malicious code, evade access controls, unlawfully obtain information, or infringe others' rights. Automated access must not disrupt availability or bypass technical restrictions.</p>
+<p>Do not interfere with the website, introduce malicious code, evade access controls, unlawfully obtain information, or infringe others' rights. Automated access must not impair availability or bypass technical restrictions.</p>
 <p>Violema or its licensors retain rights in the site's original content, software, and branding. Papers, datasets, software, images, and other third-party materials remain subject to their owners' rights and applicable licenses. A download or citation does not grant rights we do not own. Nothing here restricts fair use or other rights provided by law.</p>`,
       },
       {
@@ -58,7 +58,7 @@ export const legalPolicies = [
         id: 'scope',
         title: '1. Operator and scope',
         html: `<p>Violema, Inc., a Delaware corporation, is responsible for the information practices described here. This policy covers the public scientific homepage, Method, Evidence lab, For reviewers, these legal pages, evidence downloads, and related correspondence.</p>
-<p>Existing workspace services are covered by their separate <a href="/privacy">workspace privacy policy</a>. A scientific briefing link takes you to psychdoc.ai, separately operated by Purple Orange LLC under its <a href="https://psychdoc.ai/policies/privacy">privacy policy</a>. This policy does not govern information you provide there.</p>`,
+<p>Existing workspace services are covered by their separate <a href="/privacy">workspace privacy policy</a>. A scientific briefing link takes you to psychdoc.ai, run by PsychDoc, a division of Violema, Inc., under its own <a href="https://psychdoc.ai/policies/privacy">privacy policy</a>. This policy does not govern information you provide there.</p>`,
       },
       {
         id: 'information',

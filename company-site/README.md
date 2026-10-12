@@ -101,7 +101,7 @@ Each diagram keeps a minimum width at which its smallest text renders at 12 px o
 
 ### Website legal pages
 
-The public company policies identify Violema, Inc., a Delaware corporation, as directed by the owner. They describe the scientific pages separately from the existing workspace and separately operated PsychDoc. Privacy copy reflects static, self-hosted assets and local controls, while allowing for ordinary hosting requests and voluntary correspondence. No arbitrary numeric retention promise, reviewer endorsement, or compliance certification is added.
+The public company policies identify Violema, Inc., a Delaware corporation, as directed by the owner. They describe the scientific pages separately from the existing workspace and PsychDoc, a division of Violema, Inc. with its own terms and privacy policy. Privacy copy reflects static, self-hosted assets and local controls, while allowing for ordinary hosting requests and voluntary correspondence. No arbitrary numeric retention promise, reviewer endorsement, or compliance certification is added.
 
 The existing publicly listed `legal@violema.com` and `privacy@violema.com` addresses are used in the drafts. Confirm monitoring before publication. The policy text has not been reviewed by counsel. Guidance consulted: [Delaware Online Privacy and Protection Act, §1205C](https://delcode.delaware.gov/title6/c012c/index.html) and [FTC data-handling guidance](https://www.ftc.gov/business-guidance/resources/protecting-personal-information-guide-business).
 

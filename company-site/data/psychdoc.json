@@ -8,7 +8,7 @@
     "question": "Which parts of a psilocybin depression result survive an assumed bias shift?",
     "summary": "Inspect a saved analysis, its population limits and the assumptions that change its interpretation.",
     "sourceVersion": "PsychDoc 3001296 · SYPRES 25.1.2 · packet 2026-10-10.1",
-    "reviewStatus": "Curated demonstration · Stage B awaits independent scientific review",
+    "reviewStatus": "Prepared demonstration · Stage B awaits independent scientific review",
     "scopeNote": "A replay of saved results from a mixed-population dataset. Trial-level source-input audit remains incomplete. This is evidence education, not treatment advice; neither the packet nor the slider establishes clinical benefit for an individual.",
     "sources": [
       {
