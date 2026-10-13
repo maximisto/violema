@@ -1,3 +1,5 @@
+import { DEMO_INTEGRATIONS, DEFERRED_INTEGRATIONS } from './demoIntegrations';
+
 export type HomepageNavItem = {
   label: string;
   href: string;
@@ -90,18 +92,18 @@ export const homepageNav: HomepageNavItem[] = [
   { label: 'Product', href: '#features' },
   { label: 'Use cases', href: '#how-it-works' },
   { label: 'Integrations', href: '/integrations' },
-  { label: 'Beta access', href: '#beta-access' },
+  { label: 'Pricing', href: '/pricing' },
   { label: 'Resources', href: '/blog/' },
 ];
 
 export const heroCopy = {
   eyebrow: 'Runs the week so you can build',
-  headline: 'AI agents for founder work.',
+  headline: 'Your weekly founder brief, ready for review.',
   subhead:
-    'Violema turns recurring founder workflows into source-linked missions with review gates, delivery, run history, and visible costs.',
+    'Bring revenue, delivery progress and market signals into one source-linked brief. Review the draft, approve delivery to Slack, and see what each run cost.',
   primaryCta: 'Apply for beta',
   secondaryCta: 'Book workflow audit',
-  surfaceNote: 'Slack ready today. Discord, Telegram, and iMessage coming soon.',
+  surfaceNote: 'Controlled beta · Slack and web · Application and approval required.',
 };
 
 export const heroBullets: HeroBullet[] = [
@@ -114,7 +116,7 @@ export const heroBullets: HeroBullet[] = [
 export const proofPoints = [
   {
     title: 'Schedule with confidence',
-    body: 'Set once. Run on time.',
+    body: 'Set the cadence. Track each run.',
   },
   {
     title: 'Approve with control',
@@ -189,14 +191,14 @@ export const workflowDemos: WorkflowDemo[] = [
     cost: '38 credits',
     accent: 'violet',
     artifact: 'Revenue brief with risks and next actions',
-    sources: ['Stripe subscriptions', 'PostHog activation', 'Slack sales notes'],
+    sources: ['Stripe subscriptions', 'GitHub delivery progress', 'Approved Drive notes'],
     approval: 'Approve churn language before delivery?',
     delivery: 'Posted to #founder-ops with source links',
     messages: [
       {
         from: 'system',
         label: 'Violema',
-        body: 'Weekly revenue run started. Pulling Stripe, PostHog, and sales notes.',
+        body: 'Weekly revenue run started. Pulling Stripe, GitHub, and approved operating notes.',
         meta: '9:00 AM',
       },
       {
@@ -342,10 +344,10 @@ export const workflowPreview = {
   status: 'Sample run',
   trigger: 'Monday 9:00 AM',
   cost: '38 credits',
-  evidence: ['Stripe subscriptions', 'PostHog activation', 'Slack sales notes'],
+  evidence: ['Stripe subscriptions', 'GitHub delivery progress', 'Approved Drive notes'],
   steps: [
     { label: 'Trigger', detail: 'Revenue workflow starts on schedule', state: 'Done' },
-    { label: 'Inputs', detail: 'Stripe, PostHog, and Slack evidence collected', state: 'Done' },
+    { label: 'Inputs', detail: 'Stripe, GitHub, and approved document evidence collected', state: 'Done' },
     { label: 'Approval', detail: 'Founder reviews churn note before delivery', state: 'Needs review' },
     { label: 'Delivery', detail: 'Approved brief posts to the revenue channel', state: 'Queued' },
   ],
@@ -434,149 +436,23 @@ export const governanceSignals: GovernanceSignal[] = [
 ];
 
 export const integrations: IntegrationItem[] = [
-  { name: 'Slack', category: 'Delivery', status: 'live' },
   { name: 'Web app', category: 'Control surface', status: 'live' },
-  { name: 'Email', category: 'Delivery', status: 'ready' },
-  { name: 'Stripe', category: 'Revenue', status: 'ready' },
-  { name: 'GitHub', category: 'Engineering', status: 'ready' },
-  { name: 'Linear', category: 'Product', status: 'ready' },
-  { name: 'PostHog', category: 'Product analytics', status: 'ready' },
-  { name: 'Google Drive', category: 'Knowledge', status: 'ready' },
-  { name: 'Notion', category: 'Knowledge', status: 'planned' },
-  { name: 'HubSpot', category: 'CRM', status: 'planned' },
-  { name: 'Salesforce', category: 'CRM', status: 'planned' },
-  { name: 'Discord', category: 'Delivery', status: 'planned' },
-  { name: 'Telegram', category: 'Delivery', status: 'planned' },
-  { name: 'iMessage', category: 'Delivery', status: 'planned' },
+  ...DEMO_INTEGRATIONS.map((item): IntegrationItem => ({
+    name: item.name, category: item.category, status: item.id === 'slack' ? 'live' : 'ready',
+  })),
+  ...DEFERRED_INTEGRATIONS.map((item): IntegrationItem => ({
+    name: item.name, category: item.detail, status: 'planned',
+  })),
 ];
 
 export const connectedSystems: ConnectedSystem[] = [
-  {
-    name: 'Violema Web',
-    shortName: 'V',
-    category: 'Control room',
-    status: 'live',
-    description: 'Build, replay, approve, and inspect runs.',
-    lane: 'operator',
-    tone: 'violet',
-  },
-  {
-    name: 'Slack',
-    shortName: 'SL',
-    category: 'Delivery',
-    status: 'live',
-    description: 'Approve and receive workflow output where the team already works.',
-    lane: 'delivery',
-    tone: 'violet',
-  },
-  {
-    name: 'Email',
-    shortName: 'EM',
-    category: 'Delivery',
-    status: 'ready',
-    description: 'Route reviewed briefs and follow-up drafts to inbox workflows.',
-    lane: 'delivery',
-    tone: 'amber',
-  },
-  {
-    name: 'Stripe',
-    shortName: 'ST',
-    category: 'Revenue',
-    status: 'ready',
-    description: 'Bring subscription, failed payment, and revenue signals into recurring runs.',
-    lane: 'input',
-    tone: 'emerald',
-  },
-  {
-    name: 'PostHog',
-    shortName: 'PH',
-    category: 'Product analytics',
-    status: 'ready',
-    description: 'Connect activation and usage patterns to founder briefs.',
-    lane: 'input',
-    tone: 'cyan',
-  },
-  {
-    name: 'GitHub',
-    shortName: 'GH',
-    category: 'Engineering',
-    status: 'ready',
-    description: 'Turn shipped work and code changes into release intelligence.',
-    lane: 'input',
-    tone: 'slate',
-  },
-  {
-    name: 'Linear',
-    shortName: 'LN',
-    category: 'Product',
-    status: 'ready',
-    description: 'Use issues, cycles, and release notes as structured product context.',
-    lane: 'input',
-    tone: 'violet',
-  },
-  {
-    name: 'Google Drive',
-    shortName: 'GD',
-    category: 'Knowledge',
-    status: 'ready',
-    description: 'Pull approved docs, research, and operating context into runs.',
-    lane: 'input',
-    tone: 'amber',
-  },
-  {
-    name: 'Notion',
-    shortName: 'NO',
-    category: 'Knowledge',
-    status: 'planned',
-    description: 'Use team knowledge bases as source material for reviewed work.',
-    lane: 'input',
-    tone: 'slate',
-  },
-  {
-    name: 'HubSpot',
-    shortName: 'HS',
-    category: 'CRM',
-    status: 'planned',
-    description: 'Connect pipeline context to follow-up and account monitoring.',
-    lane: 'input',
-    tone: 'amber',
-  },
-  {
-    name: 'Salesforce',
-    shortName: 'SF',
-    category: 'CRM',
-    status: 'planned',
-    description: 'Bring enterprise account context into governed workflow runs.',
-    lane: 'input',
-    tone: 'cyan',
-  },
-  {
-    name: 'Discord',
-    shortName: 'DC',
-    category: 'Delivery',
-    status: 'planned',
-    description: 'Route reviewed community work into team and customer channels.',
-    lane: 'delivery',
-    tone: 'violet',
-  },
-  {
-    name: 'Telegram',
-    shortName: 'TG',
-    category: 'Delivery',
-    status: 'planned',
-    description: 'Approve briefs and alerts from mobile-first team workflows.',
-    lane: 'delivery',
-    tone: 'cyan',
-  },
-  {
-    name: 'iMessage',
-    shortName: 'IM',
-    category: 'Delivery',
-    status: 'planned',
-    description: 'Bring lightweight founder approvals to personal work channels later.',
-    lane: 'delivery',
-    tone: 'emerald',
-  },
+  { name: 'Violema Web', shortName: 'V', category: 'Control room', status: 'live',
+    description: 'Schedule, review and inspect your work.', lane: 'operator', tone: 'violet' },
+  ...DEMO_INTEGRATIONS.map((item): ConnectedSystem => ({
+    name: item.name, shortName: item.name.slice(0, 2), category: item.category,
+    status: item.id === 'slack' ? 'live' : 'ready', description: item.description,
+    lane: item.category === 'Delivery' ? 'delivery' : 'input', tone: 'violet',
+  })),
 ];
 
 export const betaAccessSteps: BetaAccessStep[] = [
@@ -593,7 +469,7 @@ export const betaAccessSteps: BetaAccessStep[] = [
   {
     label: 'Price',
     title: 'Pick the right plan',
-    body: 'Start at $79 for the first reliable mission, move to $249 Pro for recurring operating cadence, or go custom for Enterprise.',
+    body: 'Start at $79 for the first reliable mission, move to $249 Pro for more recurring work, or go custom for Enterprise.',
   },
 ];
 
@@ -608,24 +484,24 @@ export const comparisonRows = [
   {
     label: 'Primary promise',
     violema: 'Recurring work with review, delivery, and proof',
-    aiEmployee: 'Broad agent support for ad hoc tasks',
+    aiEmployee: 'Flexible research, tool use and recurring tasks',
     automation: 'Rules that run when inputs are predictable',
   },
   {
     label: 'Best fit',
     violema: 'Founder, ops, revenue, research, and product workflows',
-    aiEmployee: 'General requests inside chat',
+    aiEmployee: 'Teams configuring their own agent workflows',
     automation: 'Stable deterministic processes',
   },
   {
     label: 'Control model',
     violema: 'Approvals, run logs, source links, retries, and credits',
-    aiEmployee: 'Conversation history and workspace permissions',
-    automation: 'Trigger logic and error notifications',
+    aiEmployee: 'Scheduling, permissions and review tools vary by product',
+    automation: 'Triggers, logs, approvals and error handling vary by product',
   },
   {
-    label: 'Violema advantage',
-    violema: 'Inspectability for work that repeats',
+    label: 'Approach',
+    violema: 'Founder workflows scoped with you during onboarding',
     aiEmployee: 'Breadth',
     automation: 'Predictability',
   },

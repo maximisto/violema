@@ -1,10 +1,10 @@
 import Reveal from './Reveal';
 
 const metrics = [
-  { stat: '6', cap: 'Stage runs', body: 'Trigger, research, analysis, draft, review, deliver — every time.' },
-  { stat: '100%', cap: 'Source-linked', body: 'Every output ships with its evidence trail attached.' },
+  { stat: '6', cap: 'Stage runs', body: 'Follow the workflow from trigger through review and delivery.' },
+  { stat: 'Read', cap: 'Source-linked briefs', body: 'Inspect the supporting sources before acting on a brief.' },
   { stat: '1-tap', cap: 'Approvals', body: 'Approve or request changes from Slack in seconds.' },
-  { stat: '0', cap: 'Black boxes', body: 'Retries and failures show exactly what happened.' },
+  { stat: 'Track', cap: 'Run history', body: 'Review recorded stages, warnings and costs in the run history.' },
 ];
 
 export default function SignalBand() {

@@ -23,7 +23,7 @@ function FooterGuardBand() {
             Book a free AI workflow audit
           </h3>
           <p className="mt-2 text-sm leading-6 text-[#aeb7cd]">
-            Twenty minutes on your recurring work — a human runs the audit, Dima guards the review gate.
+            A short call about your recurring work — a human runs the audit, Dima guards the review gate.
           </p>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 lg:justify-start">
             <a
@@ -49,7 +49,7 @@ function FooterGuardBand() {
               {VIOLEMA_VOICE_NUMBER ? 'Voice agent · live' : 'Voice agent · arriving'}
             </span>
             <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-slate-400">Text agent · soon</span>
-            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-slate-400">Email briefings · soon</span>
+            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-slate-400">Email delivery · available</span>
           </div>
         </div>
         <img
