@@ -1,3 +1,39 @@
+## October 15 mobile hero release — authorized
+
+Max approved the mobile hero refinement and explicitly requested push and deployment.
+
+1. Verify the current source and production predecessor; prepare a guarded successor using the established static release helper.
+2. Run the site build/tests, nine release safety checks and independent review; commit explicit paths and push a focused PR through CI.
+3. Merge the checked source, upload the exact public packet, and activate with the current release retained for rollback.
+4. Verify public hashes, preserved legacy/backend state and live mobile Safari behavior in both themes; archive receipts and update the vault.
+
+Bound: at most three attempts per failing step, stop on unexplained source/server drift. No legacy application deployment or backend restart.
+
+## October 15 mobile hero closing composition — local refinement
+
+Follow-up after owner unlock: native Safari390×844 visually confirms this local composition in light and dark themes. The live menu close bug also passes native Safari close in both themes, Escape/focus return and close after theme switching. The previous lock-related verification limitation is resolved; this hero refinement remains local and undeployed.
+
+Owner brief: make the mobile product signature feel like a deliberate ending to the hero copy; preserve the approved desktop design.
+
+Design plan: retain paper #F5F6F8, ink #12161D, supporting ink #4A5260 and violet #6852A3; dark surface #10131A and ink #ECECF0 keep the existing theme roles. Instrument Sans / Inter and the 16 px minimum caption stay. Use a centered product signature between quiet section rules, with the external arrow attached to its caption. No new assets or motion.
+
+Alternatives considered:
+```
+A / centered signature       B / compact horizontal row
+One method. Many applications.  First application | logo ->
+       PsychDoc.AI
+    Our first application. ↗
+```
+A directly resolves the scattered alignment in the owner's screenshot and retains the full approved logo at a readable size. B would squeeze the wordmark and caption on narrow phones. Keep the hero heading and primary action left aligned; apply the closing composition only below 768 px.
+
+Execution: (1) capture existing desktop geometry, (2) implement the mobile CSS composition, (3) build/test and inspect phone widths in both themes plus unchanged desktop, (4) record the local result and review screenshot. Native Safari remains unavailable while the Mac is locked; use the in-app browser for responsive verification. No new deployment is authorized by this design request.
+
+Completed locally: centered the approved wordmark and caption, moved the external arrow beside the caption, and added balanced spacing with a closing rule. CSS is limited to widths below 768 px. No HTML, assets, copy, motion or desktop layout changes.
+
+Validation: build and all 72 tests pass; whitespace diff clean. In-app browser checks at 320/390/430/767/768/1584 px in both themes report no horizontal overflow, loaded correct logos and 16 px captions. The 1584 px desktop signature geometry matches the recorded pre-change geometry exactly. Keyboard focus reaches the 224×89 px product link with a visible outline; its destination remains https://psychdoc.ai. Mobile menu opens and closes in the in-app browser. No captured console warnings/errors. Native Safari remains locked, so no post-change native Safari pass is claimed. Graph refreshed: 2,863 nodes / 5,635 edges / 237 communities.
+
+Visual critique: the centered lockup now supplies a deliberate pause between the primary action and evidence demonstration, and the arrow belongs visibly to the product caption. The headline/CTA hierarchy and approved desktop alignment are preserved. Screenshots and responsive audit: `violema-mobile-hero-closing-light.png`, `violema-mobile-hero-closing-dark.png`, `violema-mobile-hero-closing-audit.json` under the task visualization folder. Preview http://127.0.0.1:4326/. No commit, push or deployment.
+
 # Violema experience progress
 
 ## Safari mobile menu closure
