@@ -1,3 +1,15 @@
+## October 15 mobile hero caption spacing — release follow-up
+
+The owner reports a remaining blank dark area below the hero claim. Live browser geometry identifies a 30ch flex basis on the source note that becomes a 303px vertical reservation when the caption switches to a column below 600px. Its text needs only 68px, leaving a 245px gap before the link. Native Safari Responsive Design Mode also shows the empty footer.
+
+1. Restrict the horizontal flex basis to row layouts, preserving desktop composition and mobile type size.
+2. Build/test, measure the entire card at phone widths and the breakpoint, and verify live/local Safari mobile and desktop themes, product logo and menu closure.
+3. Review and publish this scoped correction to the authorized mobile hero release using the guarded static release path; verify public bytes and record recovery receipts.
+
+Bound: three attempts per failing step; stop on unexplained source/server drift. No backend or legacy app changes.
+
+Local validation: build and all 72 site tests pass; nine release safety tests and independent review pass. At 320/390/430/599 px the footer follows the source note content with a 14.5px text-to-link gap; no horizontal overflow. At 600/768/1584 px the row layout remains. A direct 1584px local/live comparison gives identical hero, product signature, footer and endnote geometry. Native Safari390×844 shows the compact footer and working menu open/close. Live verification and release receipts follow activation.
+
 ## October 15 mobile hero release — authorized
 
 Max approved the mobile hero refinement and explicitly requested push and deployment.
