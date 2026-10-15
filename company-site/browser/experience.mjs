@@ -2,13 +2,6 @@ import { enhancePlayback } from './playback.mjs';
 
 const trace = document.querySelector('[data-trace-story]');
 if (trace) enhancePlayback(trace, [...trace.querySelectorAll('.trial-records, .assembly-convergence, .assembly-claim')], 3400, 'Replay trace');
-const method = document.querySelector('[data-method-explorer]');
-if (method) {
-  const steps = [...method.querySelectorAll('.method-stations > a')];
-  steps.forEach((step, index) => step.style.setProperty('--seq', index));
-  enhancePlayback(method, steps, 1500, 'Replay sequence');
-}
-
 // Navigation reports the chapter crossing the upper reading band; scrolling remains native.
 const chapterLinks = [...document.querySelectorAll('.chapter-nav a')];
 if ('IntersectionObserver' in window) {

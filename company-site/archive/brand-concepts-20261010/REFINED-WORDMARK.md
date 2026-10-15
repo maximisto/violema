@@ -1,3 +1,5 @@
+> Historical design record. These concepts are retired. Use [the approved asset list](../../brand/README.md) for current work.
+
 # Refined spacing, original-style weight and integrated color — 2026-10-10
 
 Max rejected the heavier wordmark, tight face/name gap and orange hotspots. This correction uses the original logo as the typography/color reference, retains the open-eye scientific portrait, restores lighter geometric letterforms, adds a generous internal gap and makes one violet-to-deeper-copper transition across the name. The larger subtitle retains the brand-name optical width. Header display widths remain 252/216/210px; larger rendering does not rely on bold weight.

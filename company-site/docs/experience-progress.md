@@ -1,5 +1,41 @@
 # Violema experience progress
 
+## October 15 refinement release — authorized
+
+Max explicitly requested push and deployment of all latest Violema updates after local approval.
+
+1. Verify the current diff, build/tests and live predecessor; preserve unrelated checkouts.
+2. Prepare and test the static successor against the current experience release, with unchanged nginx bytes and a guarded rollback.
+3. Review, commit/push the company-site changes, complete CI and merge the release.
+4. Activate the exact merged artifact; verify all public bytes, route variants, live desktop/mobile interactions and preserved legacy surfaces.
+5. Archive recovery receipts and update the vault's production record.
+
+Stop condition: the reviewed revision is on main and its exact public artifact is verified at violema.com. Maximum three attempts per failing step; investigate rather than bypass drift guards.
+
+## Hero product signature follow-up
+
+Replaced the loose family paragraph and duplicate product CTA with “One method. Many applications.” and a single linked PsychDoc.AI signature, captioned “Our first application.” The current two-leaf wordmark is copied unchanged in its light/dark SVG variants from PsychDoc’s diagram-motion worktree; both path sets were checked against the live psychdoc.ai header. The older root-checkout brain icon was rejected by the owner and removed before completion.
+
+Verified loaded SVGs, correct theme visibility, 16 px caption, keyboard focus and the https://psychdoc.ai destination. Desktop and 320/390 px phone layouts have no horizontal overflow. Build and all 71 existing tests pass; diff check clean. Screenshot: `violema-psychdoc-product-signature.png` in the task’s visualization directory. Local only; no commit, push or deployment.
+
+## October 15 legibility and playback follow-up — verified locally
+
+Approved identity stays: Instrument Sans / Inter, light paper surfaces, violet accents and the existing dark theme. The problem is supporting-text hierarchy, not heading scale or missing imagery. Apply the supplied frontend-design and imagegen-frontend-web guidance on readable supporting copy, clear scan order and restrained density.
+
+1. Audit rendered text across all six routes, including notes, legends, controls, footer and mobile overrides. Set a 16 px ordinary-text floor, with 17 px body/supporting prose; only spatially constrained diagram labels are exceptions.
+2. Reflow metadata, source notes and controls to fit that type. Keep substantive limits beside their claims, and keep prose measures around 66–72 characters.
+3. Remove the misleading homepage method Replay control (it only fades the labels). Give both six-step overviews a bounded entrance while preserving direct manual selection and reduced-motion behavior. Keep replay for the actual connected diagrams.
+4. Build/test, audit actual desktop/mobile rendering and both themes, inspect screenshots, and record the result. No new production deployment is authorized by this refinement request.
+
+Critique: the existing 11–13 px text rules undermine the scientific caveats and make the hierarchy depend on unreadability. Enlarge those specific roles and give them space; retain the approved heading scale and assets.
+
+Completed: caption/control floor 16 px, supporting prose 17 px, source-note/code/footer fixes, readable metadata and link spacing, two-column phone navigation and method choices. Dense map labels now have a 12 px minimum; SVG labels keep their existing spatial scale. Scientific packets and approved brand files are unchanged. Homepage Replay sequence removed; manual tabs remain. Both six-step overviews now use one bounded entrance. The larger Method diagrams already had card/connector playback, which was verified and retained.
+
+Validation: build and 71 tests pass; diff check clean. Actual DOM font audit of six routes in both themes at 320/390/1440 px reports no ordinary text below 16 px and no page overflow (36 combinations). Additional home/Method/lab checks at 375/768/1024/1920 px pass. Verified mobile Assumption tab content, source disclosures, expanded full-map copy, and Method entrance with 0–0.9 second stagger; no captured console warnings/errors. Reduced-motion and control-free entrance behavior pass actual-module tests; OS reduced-motion and native Safari were not rechecked this turn. Independent diff review found no blockers. Graph updated: 2,804 nodes / 5,456 edges / 240 communities.
+
+Screenshots and JSON audit: `/Users/maximisto/.codex/visualizations/2026/10/15/01a13f94-7d5d-7bc3-add6-306115271346/violema-legible-evidence-desktop.png`, `violema-legible-mobile-method.png`, `violema-font-audit.json` in the same directory. Preview remains http://127.0.0.1:4326/. No commit, push, merge or deployment in this follow-up.
+
+
 ## October 15 authorized release
 
 Max explicitly requested push and deployment after approving the local experience and logo shimmer.
@@ -70,3 +106,11 @@ Desktop light, desktop dark applications and phone evidence screenshots are save
 ## Owner follow-up: icon control and supplied dark logo
 
 Replaced the dropdown with a 44×44 sun/moon button, accessible destination label and tooltip. The saved preference and light first-visit default remain. Added the owner's `violema-dark-bk-logo.png` unchanged as `brand/violema-dark-bk-logo-20261015.png`; dark mode now uses it directly without a light mount. Build and all 65 tests pass. Browser verified reload persistence, click/Space/Enter, correct visible/loaded logo, 320/390/768/1280 px layout and no console warnings/errors. Local only.
+
+## Owner follow-up: archive retired brand assets
+
+Moved ten superseded Violema images and eight historical notes/provenance files out of the active brand directory into `company-site/archive/brand-concepts-20261010/`. Historical notes are marked retired; approved-file links still resolve. `company-site/brand/README.md` lists the five approved Violema/PsychDoc artworks and their build destinations.
+
+In the historical PsychDoc primary checkout (`/Users/maximisto/psychdoc-ai-starter`, branch `docs/hero-imagery`), moved the obsolete neon-brain image to `public/archive/retired-brand/psychdoc-neon-brain-retired.png`. Updated its single NavBar path so that historical preview remains intact. Added the unchanged current two-leaf SVGs to `public/brand/` and explicit current/retired asset guides. Current PsychDoc worktrees were not changed.
+
+Validation: every moved asset preserved its bytes; all 39 generated Violema files remain byte-identical to the pre-cleanup build. Build and 71 tests pass. Brand/archive Markdown links resolve; whitespace checks pass in both checkouts. The historical PsychDoc image path resolves and matches the original image hash; no PsychDoc build or test suite was run for this path-only maintenance. No commit, push or deployment.

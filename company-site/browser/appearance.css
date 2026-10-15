@@ -68,7 +68,7 @@
 .instrument :focus-visible { outline-color: var(--inst-accent); }
 @media (max-width: 1023px) {
   .header-inner { gap: 12px; }
-  .primary-nav a { padding-inline: 8px; font-size: .875rem; }
+  .primary-nav a { padding-inline: 8px; font-size: var(--text-caption); }
 }
 @media (max-width: 767px) {
   :root { --header-height: 52px; }
@@ -77,7 +77,7 @@
   .brand { grid-column: 1; grid-row: 1; min-height: 0; align-self: center; }
   .brand img { width: 248px; max-width: 100%; }
   .primary-nav { grid-column: 1 / -1; grid-row: 2; width: 100%; margin: 0; justify-content: space-between; min-height: 48px; }
-  .primary-nav a { padding-inline: 4px; font-size: .8125rem; }
+  .primary-nav a { padding-inline: 0; font-size: var(--text-caption); }
   .theme-control { grid-column: 2; grid-row: 1; }
 }
 @media (max-width: 359px) {
@@ -85,8 +85,25 @@
   .header-inner { grid-template-rows: 80px 48px; }
   .brand { --brand-width: 200px; }
   .brand img { width: 200px; }
-  .primary-nav a { padding-inline: 2px; font-size: .75rem; white-space: nowrap; }
+  .primary-nav a { padding-inline: 2px; font-size: var(--text-caption); white-space: nowrap; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; }
 }
+
+/* Reflow navigation instead of shrinking its text to fit a phone. */
+@media (max-width: 479px) {
+  :root { --header-height: 100px; }
+  .header-inner { grid-template-rows: 96px auto; }
+  .primary-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; padding-block: 4px; }
+  .primary-nav a { min-height: 44px; padding-inline: 0; }
+}
+@media (max-width: 359px) {
+  .header-inner { grid-template-rows: 80px auto; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-step-sequence][data-stage='playing'] [data-step] { animation: step-arrive 650ms both; animation-delay: calc(var(--seq) * 180ms); }
+  [data-step-sequence][data-stage='following'] [data-step][data-played] { animation: step-arrive 650ms both; }
+}
+[data-step]:focus-within { animation: none !important; opacity: 1; }
+@keyframes step-arrive { from { opacity: .3; transform: translateY(5px); } to { opacity: 1; transform: none; } }

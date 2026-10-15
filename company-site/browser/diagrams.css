@@ -1,7 +1,7 @@
 /* Interactive detail panels keep the existing, source-labelled SVGs intact. */
-.diagram-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 40px; min-height: 44px; color: var(--ink-2); font-size: .875rem; }
+.diagram-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 40px; min-height: 44px; color: var(--ink-2); font-size: var(--text-caption); }
 .diagram-toolbar > p { margin: 0; }
-.diagram-toolbar button, .diagram-detail button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--ink); background: var(--surface); font: 500 .8125rem var(--font-display); cursor: pointer; }
+.diagram-toolbar button, .diagram-detail button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--ink); background: var(--surface); font: 500 var(--text-caption) var(--font-display); cursor: pointer; }
 .diagram-toolbar button:hover, .diagram-detail button:hover { border-color: var(--accent); color: var(--accent); }
 .diagram-explorer .diagram { margin-top: 16px; }
 [data-diagram-part][role='button'] { cursor: pointer; outline: none; }
@@ -12,7 +12,7 @@
 .diagram-detail-head .label { margin: 0; color: var(--accent); }
 .diagram-detail h3 { font-size: 1.5rem; max-width: 38ch; margin: 16px 0; }
 .diagram-detail h3:focus { outline: none; }
-.diagram-detail > p { max-width: 86ch; color: var(--ink-2); }
+.diagram-detail > p { max-width: 66ch; color: var(--ink-2); }
 .diagram-detail .text-link { display: inline-flex; align-items: center; min-height: 44px; }
 .method-row > .wrap > .how-head .label, .method-copy > .label { font-size: 1.125rem; font-weight: 600; color: var(--accent); }
 @media (prefers-reduced-motion: no-preference) {
@@ -31,4 +31,10 @@
   .diagram-detail { padding: 18px; }
   .diagram-toolbar { align-items: start; }
   .diagram-toolbar button { flex: none; }
+}
+
+@media (max-width: 479px) {
+  .diagram-toolbar { flex-wrap: wrap; gap: 12px; }
+  .diagram-legend li { align-items: start; }
+  .role-chip { flex: none; }
 }

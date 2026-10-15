@@ -1,8 +1,10 @@
+> Historical design record. These concepts are retired. Use [the approved asset list](../../brand/README.md) for current work.
+
 # Exact restoration of the preferred lettering — 2026-10-10
 
 Max clarified that the typography immediately before the neckline edit was correct and requested its restoration while retaining the fine neck. After a generated attempt drifted, Max explicitly authorized direct pixel editing. The selected result uses that authorized method, not image regeneration.
 
-Current [logo](violema-restored-type-20261010.png), unchanged [fine-neck icon](violema-fine-neck-icon-20261010.png), and [verification receipt](restored-type-verification.json).
+Current [logo](../../brand/violema-restored-type-20261010.png), unchanged [fine-neck icon](../../brand/violema-fine-neck-icon-20261010.png), and [verification receipt](restored-type-verification.json).
 
 ## Exact composition
 

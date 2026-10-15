@@ -1,3 +1,5 @@
+> Historical design record. These concepts are retired. Use [the approved asset list](../../brand/README.md) for current work.
+
 # Circuit-hair correction — 2026-10-10
 
 User feedback: the three-lock version looks like a joker/jester. Restore the original flowing hair and fine microchip traces while retaining glasses. Built-in image_gen editing; true transparent PNGs. Earlier concepts remain archived.

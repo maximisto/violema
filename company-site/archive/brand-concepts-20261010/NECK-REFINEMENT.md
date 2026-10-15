@@ -1,8 +1,10 @@
+> Historical design record. These concepts are retired. Use [the approved asset list](../../brand/README.md) for current work.
+
 # Fine jaw and neck contour — 2026-10-10
 
 Max found the neckline too heavy. Built-in image_gen replaced the broad dark under-jaw wedge and neck band with a fine contour in the logo and icon. The first neck edit also thickened the type, so it was rejected; a further targeted type correction restored a light weight. The final main I stem measures 17px at source row340, versus24px in the preceding lighter wordmark and28px in the rejected neck edit. This is a raster refinement, not a pixel-identical vector edit.
 
-Current [logo](violema-fine-neck-20261010.png) and [matching icon](violema-fine-neck-icon-20261010.png). The wider portrait/name gap, open eye, glasses, circuit hair and continuous violet-to-copper direction remain. Earlier assets remain archived.
+Current [logo](violema-fine-neck-20261010.png) and [matching icon](../../brand/violema-fine-neck-icon-20261010.png). The wider portrait/name gap, open eye, glasses, circuit hair and continuous violet-to-copper direction remain. Earlier assets remain archived.
 
 ## Initial neck edit
 
