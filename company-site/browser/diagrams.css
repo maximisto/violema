@@ -16,17 +16,19 @@
 .diagram-detail .text-link { display: inline-flex; align-items: center; min-height: 44px; }
 .method-row > .wrap > .how-head .label, .method-copy > .label { font-size: 1.125rem; font-weight: 600; color: var(--accent); }
 @media (prefers-reduced-motion: no-preference) {
-  [data-diagram][data-stage='playing'] [data-diagram-part] { animation: diagram-part 650ms both; animation-delay: calc(var(--seq) * 340ms); }
+  /* Animate outlines, never whole SVG groups: labels remain fully painted. */
+  [data-diagram][data-stage='playing'] [data-diagram-part] > rect { animation: diagram-outline 1100ms ease-out; animation-delay: calc(var(--seq) * 340ms); }
   [data-diagram][data-stage='playing'] [data-diagram-edge] { stroke-dasharray: 1; animation: diagram-line 650ms both; animation-delay: calc(200ms + var(--seq) * 340ms); }
-  [data-diagram][data-stage='playing'] .dg-edge-planned { animation: diagram-part 1200ms 1200ms both; }
-  [data-diagram][data-stage='following'] [data-diagram-part][data-played] { animation: diagram-part 650ms both; }
+  [data-diagram][data-stage='playing'] .dg-edge-planned { animation: diagram-dashes 1200ms 1200ms; }
+  [data-diagram][data-stage='following'] [data-diagram-part][data-played] > rect { animation: diagram-outline 1100ms ease-out; }
   .diagram-detail:not([hidden]) { animation: diagram-detail 200ms ease-out; }
 }
 /* Keyboard interaction must never be dimmed by a running sequence. */
-[data-diagram-part]:is(:focus-within, [aria-expanded='true']) { animation: none !important; opacity: 1; }
-@keyframes diagram-part { from { opacity: .18; } to { opacity: 1; } }
+[data-diagram-part]:is(:focus-within, [aria-expanded='true']) > rect { animation: none !important; }
+@keyframes diagram-outline { from { stroke: var(--accent); stroke-width: 3; } }
+@keyframes diagram-dashes { from { stroke-dashoffset: 12; } to { stroke-dashoffset: 0; } }
 @keyframes diagram-line { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-@keyframes diagram-detail { from { opacity: .65; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes diagram-detail { from { transform: translateY(4px); } to { transform: none; } }
 @media (max-width: 767px) {
   .diagram-detail { padding: 18px; }
   .diagram-toolbar { align-items: start; }

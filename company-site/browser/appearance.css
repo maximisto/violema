@@ -103,4 +103,4 @@
   [data-step-sequence][data-stage='following'] [data-step][data-played] { animation: step-arrive 650ms both; }
 }
 [data-step]:focus-within { animation: none !important; opacity: 1; }
-@keyframes step-arrive { from { opacity: .3; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes step-arrive { from { transform: translateY(5px); } to { transform: none; } }

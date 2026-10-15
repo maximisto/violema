@@ -6,7 +6,7 @@ const chapterLabel = (number, text) => `<p class="chapter-label"><span aria-hidd
 function guidedEvidence(corpus) {
   const claim = corpus.claims[0];
   const sources = claim.sourceIds.map(id => corpus.sources.find(source => source.id === id));
-  return `<div class="evidence-guide instrument" data-tabs>
+  return `<div class="evidence-guide" data-tabs>
     <div class="guide-topline"><span>PsychDoc / saved primary analysis</span><span class="record-status">Prepared record</span></div>
     <nav class="guide-tabs" data-tablist aria-label="Follow one conclusion">
       <a href="#guide-claim"><span>01</span> The claim</a>
