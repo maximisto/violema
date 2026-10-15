@@ -51,7 +51,11 @@ if (header) {
     });
     navigation.addEventListener('click', event => { if (event.target.closest('a')) setOpen(false); });
     document.addEventListener('click', event => { if (!header.contains(event.target)) setOpen(false); });
-    header.addEventListener('focusout', event => { if (!header.contains(event.relatedTarget)) setOpen(false); });
+    header.addEventListener('focusout', event => {
+      // Safari blurs the link before a pointer-clicked button, without focusing it.
+      // Let that click toggle the menu once; only close on a known focus departure.
+      if (event.relatedTarget && !header.contains(event.relatedTarget)) setOpen(false);
+    });
     mobile.addEventListener('change', () => setOpen(false));
     window.addEventListener('pageshow', () => setOpen(false));
   }

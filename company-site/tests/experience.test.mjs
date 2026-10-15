@@ -245,6 +245,11 @@ test('mobile navigation opens accessibly and closes on Escape, departure, naviga
   header.listeners.keydown({ key: 'Escape' });
   assert.equal(menu.attrs['aria-expanded'], 'false');
   assert.equal(focused, menu);
+  open();
+  // Safari does not focus a pointer-clicked button. It blurs the link first.
+  header.listeners.focusout({ relatedTarget: null });
+  menu.listeners.click();
+  assert.equal(menu.attrs['aria-expanded'], 'false', 'Safari close tap must not reopen after the link blur');
   for (const close of [
     () => navigation.listeners.click({ target: { closest: () => firstLink } }),
     () => document.listeners.click({ target: {} }),
