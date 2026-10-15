@@ -22,6 +22,8 @@ const logoFiles = [
   ['violema-restored-type-20261010.png', 'violema-logo.png'],
   ['violema-dark-bk-logo-20261015.png', 'violema-logo-dark.png'],
   ['violema-fine-neck-icon-20261010.png', 'violema-icon.png'],
+  ['psychdoc-wordmark-light.svg', 'psychdoc-wordmark-light.svg'],
+  ['psychdoc-wordmark-dark.svg', 'psychdoc-wordmark-dark.svg'],
 ];
 
 await exportCorpora(undefined, { check: true });

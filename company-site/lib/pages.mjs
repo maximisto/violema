@@ -78,7 +78,7 @@ const protocolSteps = [
 ];
 
 export function protocol() {
-  return `<ol class="protocol" aria-label="Evidence workflow">${protocolSteps.map(([name, text], i) => `<li class="station"><span class="station-number">${String(i + 1).padStart(2, '0')}</span><span class="station-node" aria-hidden="true"></span><strong class="station-name">${name}</strong><span class="station-text">${text}</span></li>`).join('')}</ol>`;
+  return `<ol class="protocol" data-step-sequence data-stage="static" aria-label="Evidence workflow">${protocolSteps.map(([name, text], i) => `<li class="station" data-step><span class="station-number">${String(i + 1).padStart(2, '0')}</span><span class="station-node" aria-hidden="true"></span><strong class="station-name">${name}</strong><span class="station-text">${text}</span></li>`).join('')}</ol>`;
 }
 
 // The review instrument: one packet claim traced to its sources, then the saved interval and bounded replay.

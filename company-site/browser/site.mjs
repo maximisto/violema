@@ -83,3 +83,15 @@ if (map) {
 if (document.querySelector('.home-experience')) import('./experience.mjs');
 
 if (document.querySelector('[data-diagram]')) import('./diagrams.mjs');
+
+// A short entrance orients both six-step overviews. Selection stays with the reader;
+// there is no Replay control for a purely presentational fade.
+if (document.querySelector('[data-step-sequence]')) {
+  import('./playback.mjs').then(({ enhancePlayback }) => {
+    for (const sequence of document.querySelectorAll('[data-step-sequence]')) {
+      const steps = [...sequence.querySelectorAll('[data-step]')];
+      steps.forEach((step, index) => step.style.setProperty('--seq', index));
+      enhancePlayback(sequence, steps, 1700);
+    }
+  });
+}

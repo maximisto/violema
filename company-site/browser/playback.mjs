@@ -4,7 +4,7 @@ const narrow = matchMedia('(max-width: 767px)');
 
 export function enhancePlayback(root, parts, duration, replayLabel) {
   const control = root.querySelector('[data-playback]');
-  if (!control || !('IntersectionObserver' in window)) return;
+  if (!('IntersectionObserver' in window)) return;
   let observer;
   let timer;
   let seen = new Set();
@@ -17,15 +17,19 @@ export function enhancePlayback(root, parts, duration, replayLabel) {
   function settle() {
     clear();
     root.dataset.stage = 'settled';
-    control.textContent = reducedMotion.matches ? 'Motion off' : replayLabel;
-    control.disabled = reducedMotion.matches;
-    if (root.dataset.playbackName) control.setAttribute('aria-label', `${control.textContent}: ${root.dataset.playbackName}`);
+    if (control) {
+      control.textContent = reducedMotion.matches ? 'Motion off' : replayLabel;
+      control.disabled = reducedMotion.matches;
+      if (root.dataset.playbackName) control.setAttribute('aria-label', `${control.textContent}: ${root.dataset.playbackName}`);
+    }
   }
   function play() {
     clear();
     if (reducedMotion.matches || document.hidden) { settle(); return; }
-    control.textContent = 'Skip animation';
-    if (root.dataset.playbackName) control.setAttribute('aria-label', `Skip animation: ${root.dataset.playbackName}`);
+    if (control) {
+      control.textContent = 'Skip animation';
+      if (root.dataset.playbackName) control.setAttribute('aria-label', `Skip animation: ${root.dataset.playbackName}`);
+    }
     if (narrow.matches) {
       root.dataset.stage = 'following';
       seen = new Set();
@@ -52,8 +56,10 @@ export function enhancePlayback(root, parts, duration, replayLabel) {
     }, { threshold: [0, .15] });
     observer.observe(root);
   }
-  control.hidden = false;
-  control.addEventListener('click', () => active() ? settle() : play());
+  if (control) {
+    control.hidden = false;
+    control.addEventListener('click', () => active() ? settle() : play());
+  }
   root.addEventListener('click', event => {
     if (event.target !== control && active()) settle();
   });

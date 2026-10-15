@@ -1,3 +1,5 @@
+> Historical design record. These concepts are retired. Use [the approved asset list](../../brand/README.md) for current work.
+
 # Open-eye refinement — 2026-10-10
 
 Max approved the flowing circuit-hair direction and requested an open eye. Built-in image_gen edited the approved lockup and matching icon. Previous versions remain preserved.

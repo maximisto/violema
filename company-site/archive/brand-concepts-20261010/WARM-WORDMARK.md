@@ -1,3 +1,5 @@
+> Historical design record. These concepts are retired. Use [the approved asset list](../../brand/README.md) for current work.
+
 # Warm wordmark and larger typography — 2026-10-10
 
 Max requested a little orange/more multicolor in VIOLEMA, larger name and subtitle, and a subtitle spanning the brand name. Built-in image_gen edited the approved open-eye logo. The portrait icon remains the approved open-eye version.

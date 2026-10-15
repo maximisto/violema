@@ -66,11 +66,11 @@ test('the privacy page describes the saved theme preference without changing the
   assert.doesNotMatch(privacy, /do not set cookies or use localStorage/);
 });
 
-function playbackHarness({ reduce = false, mobile = false, observerAvailable = true } = {}) {
+function playbackHarness({ reduce = false, mobile = false, observerAvailable = true, controlAvailable = true } = {}) {
   const eventTarget = extra => ({ listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; }, ...extra });
   const parts = Array.from({ length: 3 }, () => ({ played: false, setAttribute() { this.played = true; }, removeAttribute() { this.played = false; } }));
   const control = eventTarget({ hidden: true, disabled: false });
-  const root = eventTarget({ dataset: { stage: 'static' }, querySelector: () => control, querySelectorAll: () => parts });
+  const root = eventTarget({ dataset: { stage: 'static' }, querySelector: () => controlAvailable ? control : null, querySelectorAll: () => parts });
   const motion = eventTarget({ matches: reduce });
   const size = eventTarget({ matches: mobile });
   const document = eventTarget({ hidden: false, querySelector: selector => selector === '[data-trace-story]' ? root : null, querySelectorAll: () => [] });
@@ -200,4 +200,22 @@ test('closing a pointer-opened trial dialog restores its invoking link even when
     dialog.listeners.close();
     assert.equal(focused, choice.dataset.trialChoice);
   }
+});
+
+
+test('presentational step entrances settle without exposing a replay control', () => {
+  const h = playbackHarness({ controlAvailable: false });
+  h.enter(.35);
+  assert.equal(h.root.dataset.stage, 'playing');
+  assert.equal(h.control.hidden, true);
+  h.tick();
+  assert.equal(h.root.dataset.stage, 'settled');
+  assert.equal(h.timers.size, 0);
+  const reduced = playbackHarness({ controlAvailable: false, reduce: true });
+  assert.equal(reduced.root.dataset.stage, 'settled');
+  const phone = playbackHarness({ controlAvailable: false, mobile: true });
+  phone.enter(.35);
+  assert.equal(phone.root.dataset.stage, 'following');
+  phone.root.listeners.click({ target: phone.parts[0] });
+  assert.equal(phone.root.dataset.stage, 'settled', 'manual step selection immediately ends the entrance');
 });
