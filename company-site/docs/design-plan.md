@@ -1,243 +1,70 @@
 # Company site design plan
 
-Owner direction, 2026-10-10: a little wow, but clean and easy to work with, like a 21st-century lab.
-Violema is the method company; PsychDoc is its first application. The two sites read as one family
-(Instrument Sans and Inter, a dark instrument window on a light page) while Violema keeps its own
-palette: cool lab greys and the approved logo's violet as the one accent.
+Approved direction, 2026-10-15: five chapters, light by default, polished dark mode. Preserve the approved logo, Instrument Sans / Inter, the actual evidence and its limitations. This supersedes the October 10 homepage and light-only notes in this file's history. Implementation is a local candidate; deployment needs a separate request.
 
-Update, 2026-10-10 (owner-approved logo): the header carries the approved scientific logo from
-`brand/` instead of the typographic placeholder, the accent is the logo's violet `#6852A3`, and the
-site ships in the light theme only, because the logo's ink subtitle disappears on dark grounds and no
-reversed logo exists yet. Dark page tokens return once a reversed logo is approved; the instrument
-stays dark as designed.
+## Reading sequence
 
-## Release update: separate home and physician walkthrough
+1. **Overview.** A focused company statement beside the existing 12-trial source assembly. The main action enters the guided evidence; PsychDoc has its own direct link.
+2. **Evidence in action.** One real saved claim, its four source records and its limits. The full 24-paper / 23-claim map remains in a native disclosure below the guide. Filters, text alternative, download and the `#evidence-map` deep link remain available.
+3. **The method.** Six inspectable parts of a record: Source, Study, Claim, Assumption, Review, Version. Each panel provides one explanation and a destination where the reader can inspect it.
+4. **Applications.** PsychDoc is the primary feature, with three specific exploration paths. The existing materials demonstration is a subordinate editorial row and retains its review-pending/no-pooled-estimate wording.
+5. **Conversation.** A scientific briefing invitation and a separate scientific-review route.
 
-On 2026-10-10 Max requested a company homepage with a stronger hero visual and a separate page for the physician review. This supersedes the earlier dense home instrument and desktop-only trial field below. The homepage now shows all 12 pinned trial labels and a source-assembly diagram on desktop, tablet and phone. Its curves encode inclusion in the saved primary analysis, not effect magnitude or citation. Restrained copper `#CD936B` identifies the claim boundary against the existing violet source lines. No new logo pixels, fonts or packet data are introduced.
+Chapter navigation follows native scrolling. Section changes use space, typography, hairlines and distinct surfaces: cool grey, white, pale violet, grey and violet. Avoid repetitive card grids, scroll hijacking, entrance effects on every paragraph and synthetic evidence graphics.
 
-The full primary claim, four source links and bounded replay now live in `/review/`, accompanied by a four-step review path, animal/human scope note and five concrete feedback questions. This page is public but noindex, with no named advisor, appointment, affiliation or submission form. Home, method and demo are indexable; the local preview server still sends a noindex header. The `/login` footer link belongs to the preserved application.
+## Appearance
 
-There is no automatic hero animation in this release. Existing evidence and method content remains available on its original routes. The earlier anatomy and motion notes below document the prior iteration.
+Light remains the first-visit default regardless of OS appearance. The header's sun/moon button switches between Light and Dark in one action. Its accessible label and tooltip name the destination mode; native button behavior supports Enter and Space. It saves only `violema-theme` in localStorage; a small guarded prepaint script restores an explicit dark choice. Denied storage leaves the current page usable. The privacy page documents the preference.
 
-## Principles
+`browser/site.css` owns light and instrument tokens. `browser/appearance.css` adds chapter tokens and the dark override. Components use shared tokens. The original light PNG and the October 15 owner-supplied dark PNG are shown only in their matching theme. Both stay unchanged; do not invert, recolour or regenerate them.
 
-1. **The page is a bench; the instrument is the only dark object on it.** Everything else is light,
-   flat and quiet, so the eye goes to the one thing that does work.
-2. **Every mark comes from the packet.** Connector lines are `claim.sourceIds`, chart marks are the
-   saved estimate, interval and thresholds, the footer is `sourceVersion`. Nothing is decorative data.
-3. **One moment of motion.** The hero trace draws once on load. Everything else moves only to answer
-   an action, in 120 to 200 ms.
-4. **Status is information.** Review states stay verbatim, set as status pills (the only pills).
-   Numbers appear on the protocol because it is a real sequence; nowhere else.
-5. **Plain chrome.** Sentence-case labels, no all-caps eyebrows, monospace only for identifiers,
-   arrows only where a link leaves the site (the existing "↗").
-
-## Tokens
-
-Light on `:root` (`color-scheme: light`); the instrument is dark. The dark column is parked until a
-reversed logo is approved and is not in the stylesheet.
-
-| Role | Light (shipped) | Dark (parked) |
+| Role | Light | Dark |
 | --- | --- | --- |
-| `--bg` page ground | `#F5F6F8` | `#0E1117` |
-| `--surface` cards, statement band | `#FFFFFF` | `#151A22` |
-| `--surface-2` tracks, table heads | `#ECEEF2` | `#1C222C` |
-| `--ink` | `#12161D` | `#E8ECF1` |
-| `--ink-2` secondary text | `#4A5260` | `#A9B2BF` |
-| `--ink-3` tertiary text | `#626B78` | `#8C96A4` |
-| `--line` decorative hairlines | `#DDE1E7` | `#252C37` |
-| `--line-strong` control borders | `#818A97` (brief `#848D9A`) | `#626C7B` (brief `#5E6877`) |
-| `--accent` fills, links, focus | `#6852A3`, the logo's violet (brief `#4B3BD1`) | to be chosen with the reversed logo |
-| `--accent-ink` text on accent | `#FFFFFF` | `#0E1117` |
+| Page | `#F5F6F8` | `#10131A` |
+| Surface | `#FFFFFF` | `#181D26` |
+| Secondary surface | `#ECEEF2` | `#232936` |
+| Chapter surface | `#F0EFF5` | `#191823` |
+| Primary text | `#12161D` | `#ECECF0` |
+| Secondary text | `#4A5260` | `#B5BCC8` |
+| Tertiary text | `#626B78` | `#9CA6B7` |
+| Accent | `#6852A3` | `#BAA9EB` |
+| Text on accent | `#FFFFFF` | `#171023` |
+| Control border | `#818A97` | `#8793A5` |
 
-`#6852A3` gives 6.32:1 under white text, 5.84:1 as link text on `--bg`, 6.32:1 on `--surface` and
-5.44:1 on `--surface-2`. The logo's orange is used only inside the logo.
+The evidence instrument keeps its established dark palette in both themes. Copper marks the claim boundary; violet identifies sources and interactive elements. Decorative hairlines are distinct from control boundaries. Tests require 4.5:1 for text and 3:1 for control borders on each page surface. Focus rings are 3 px with a 4 px offset.
 
-Instrument: `--inst-bg #0B0F17`, `--inst-surface #111725`, `--inst-ink #E6EAF0`,
-`--inst-ink-2 #9AA4B2`, `--inst-line #263040`, `--inst-accent #A79BFF`, plus one added
-`--inst-line-strong #626C7B` for the slider track and control borders inside the instrument
-(`--inst-line` is 1.4:1, decorative only).
+## Layout and type
 
-`--line-strong` was darkened by three steps (light) and lightened by four (parked dark) because the
-brief values give 2.89:1 and 2.83:1 against `--surface-2`, where the segmented controls sit. Both now
-clear 3:1 on every ground.
-Shadows are tokens too (`--shadow-raised`), tinted to the ground, used only on the hero instrument
-and the selected segment, which really are raised.
+- Keep the 1240 px frame, expanding the homepage/header/footer to 1480 px above 1600 px. Preserve 40/24/16 px desktop/tablet/phone gutters. The desktop hero fills at least the initial viewport using svh; short screens compact spacing without clipping content. Wide-screen hero type grows to 88 px. Chapter labels use 40 px numbers, 18 px names and a divider.
+- Homepage hero uses five columns for copy and seven for the instrument. Below 960 px, use a true one-column grid so twelve desktop gaps cannot overflow a 320 px screen.
+- Chapter space is 72–112 px. Headings use Instrument Sans; body text uses Inter. Identifiers retain system monospace.
+- The evidence guide is asymmetrical on desktop and stacked on smaller screens. Panels share an intrinsic grid track to avoid a jump when switching tabs. Inactive panels remain hidden from focus and the accessibility tree.
+- The method is a connected six-part row on desktop and a 3×2 selectable layout on phones. Only the current panel appears after enhancement.
+- Phone header uses a fixed logo/appearance row and a 48 px navigation row. The first row scrolls away; the navigation remains available without covering anchor destinations.
+- Product paths and source disclosures have clear focus, hover and touch targets. New phone actions are at least 44 px tall.
 
-Shape: 8 px controls and chips, 12 px cards and instruments, 8 px nested containers, pills only for
-status tags, 1 px borders everywhere, 2 px accent focus ring at 2 px offset.
+## Motion contract
 
-## Type
+The PsychDoc handoff and latest diagram-motion worktree (78e41e4) informed behavior. Its DiagramStage/DiagramExplorer patterns are adapted to the existing vanilla stack: shared playback helper, SVG controls and detail panels. No React runtime or animation dependency.
 
-- Instrument Sans (variable, 600 max): display, headings, navigation, buttons, segment labels, the footer name.
-- The header uses the approved logo image (`brand/violema-restored-type-20261010.png`), about 248 px wide
-  on desktop and 168 px on phones so its "Scientific Evidence" line stays legible.
-- Inter (variable): running text, captions, table cells.
-- `ui-monospace, SFMono-Regular, Menlo, monospace`: source record ids, commit ids, hashes, versions.
-- Display `clamp(2.75rem, 5.2vw, 4.5rem)`, line-height 1.02, -0.02em, 600.
-- Section titles `clamp(1.9rem, 3.2vw, 2.75rem)`, line-height 1.08, -0.015em, 600.
-- Body 1.0625rem, line-height 1.65, measure 66ch at most. `text-wrap: balance` on headings.
-- Small text 0.875rem; captions 0.8125rem. No text under 12 px, including inside the instrument.
+- Static HTML is the complete, settled record. JavaScript adds playback and tab selection.
+- The hero source assembly and homepage method sequence and the two Method diagrams each play once after at least 15% of the component is visible. No loop, random motion, count-up statistic or animated estimate.
+- Desktop playback is bounded (hero 3.4 seconds; homepage method 1.5 seconds; Method diagrams 3.6 seconds). On phones, parts animate after 25% of each enters view, or 40% of the visible viewport for a taller part; completion settles after the last part. The SVG diagrams retain their own horizontal scroll region on narrow screens.
+- Skip and Replay are the same persistent button. Clicks or deliberate keyboard interaction settle playback; touch scrolling does not.
+- Reduced motion starts settled with motion disabled. Changing the preference, hiding the tab or crossing a breakpoint during playback settles immediately.
+- Only solid source-assembly and pipeline connectors use `pathLength`; dashed/planned relationships retain their original dash units. Focused and selected nodes stay fully visible.
+- Panel transitions are a restrained 220 ms / 4 px entrance, gated by the motion preference. Scientific content and control state remain readable without them.
 
-## Layout
+## Progressive enhancement and boundaries
 
-A 12-column grid in a 1240 px frame with 40 px gutters on desktop, 24 px on tablets and 16 px on
-phones. Text is left aligned throughout; nothing is centred except inside the instrument's scale.
+Plain anchors and native details work without JavaScript. All guide panels, method explanations, evidence sources and downloads exist in the HTML. The full map imports its browser module only when expanded; direct fragments expand the relevant disclosure first. Review/demo calculations and their source packets are unchanged.
 
-### Home
+All 12 hero trial records open a native dialog with every recorded DOI, registration and source version. Escape closes it and restores focus. Without enhancement the names remain DOI links and the full trial packet is downloadable. The Method page adds 16 keyboard-selectable nodes with explanatory panels, plus the existing bounded assumed-shift control on its interval chart. Details use the same pinned version 2.2 facts as the drawings; planned work stays labelled.
 
-```
-┌ [logo] ──────────────────────────────── Method   Evidence lab   PsychDoc ↗ ┐ ~100 px, sticky
-│                                                                              │
-│ Scientific evidence systems        ┌ PsychDoc specimen ── [status pill] ───┐ │
-│ Know which                         │ claim ─┬──────── source 1  id  year   │ │
-│ conclusions hold.                  │ text   ├──────── source 2  id  year   │ │
-│ And why.                           │ limit  ├──────── source 3  id  year   │ │
-│ lede                               │        └──────── source 4  id  year   │ │
-│ [Explore PsychDoc ↗] [See method]  │ Saved estimate and interval  Hedges' g │ │
-│ First application line             │ ┄┄┄┄┄|┄┄┄┄┄┄┄┄┄┄┄┄┄┄|┄┄  scale + refs   │ │
-│   5 columns                        │ shift ────●──────────  +0.00           │ │
-│                                    │ estimate text · limit text             │ │
-│                                    │ version (mono)          Inspect        │ │
-│                                    └──────────── 7 columns ───────────────┘ │
-├────────────────────────── statement band on --surface ──────────────────────┤
-│ A paper is a source.                       We make the links inspectable…    │
-│ A conclusion is a chain of reasoning.                                        │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ Keep the reasoning close to the evidence.                                    │
-│ 01 ●──── 02 ●──── 03 ●──── 04 ●──── 05 ●──── 06 ●     protocol stations       │
-│ Source   Study    Claim    Assumption Review  Version                        │
-│ Trace the claim | Expose the assumption | Test what transfers  (to /method/) │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ First application                                                            │
-│ PsychDoc. From molecule to clinic.   intro + honest status line              │
-│                                      Does the interpretation survive…        │
-│                                      [Explore PsychDoc ↗]  Try the lab       │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ Open the record.            [● Clinical research | ○ Materials research]      │
-│                             question, summary, counts, review status         │
-│                             Try the evidence lab                             │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ Materials research [Curated demonstration]  quiet two-column card            │
-│ Start with a conclusion worth getting right.   [Request a briefing ↗]        │
-│ footer: wordmark · tagline · links · preview status line                     │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
+The physician walkthrough remains at `/review/` with noindex/follow. Both complete source packets and the bounded assumed-shift control remain on their existing review/demo routes. No new submission form, analytics, service, dependency or backend integration is introduced.
 
-Phones: the header puts the links on a second row and only the logo row scrolls away, so the
-navigation stays reachable; the hero stacks copy then instrument; the trace becomes claim above sources with a vertical
-trunk on the left that branches to each source; the protocol becomes a vertical list on a hairline.
+## Verification
 
-### Method
+Build and run `node --test --test-reporter=spec tests/*.test.mjs` from `company-site/`. Check the six routes in both themes at 320, 390, 768, 1024 and 1440 px. Exercise theme persistence, keyboard tabs, native disclosures, lazy map filters, deep links, Skip/Replay and existing replay controls. Inspect console errors, page overflow, hidden-panel accessibility and mobile sticky-header placement.
 
-```
-│ The method                                                                   │
-│ A conclusion should show its working.                lede                    │
-│ 01 ●──── 02 ●──── … 06 ●   stations, then the "organizing workflow" note     │
-│ Trace       copy  ─────────  [dark: claim ─┬─ sources, limit, status]        │
-│ Challenge   copy  ─────────  [dark: interval on the Hedges' g scale]         │
-│ Transfer    copy  ─────────  [dark: PsychDoc | Perovskite, receipt link]     │
-│ What exists. What comes next.   status pill rows                             │
-│ Inspect the record.             [Open the evidence lab]                      │
-```
-
-### Demo, the bench
-
-```
-│ Evidence lab / Open the record.                         prepared-packet note │
-│ [● Clinical research  PsychDoc… | ○ Materials research  Perovskite…]  Reset  │
-│ corpus header: domain, title, question            [Download packet ↓]        │
-│ review banner                                                                │
-│ ┌ rail ──────┐ ┌ dark instrument ───────────────┐ ┌ linked evidence ───────┐ │
-│ │ Claim 1  ◀ │ │ Claim 1 [status pill]           │ │ Claim 1               │ │
-│ │ Claim 2    │ │ claim text                      │ │ id  year              │ │
-│ │ Claim 3    │ │ interpretation limit            │ │ title ↗               │ │
-│ │            │ │ ─────────────────────────────── │ │ kind · locator        │ │
-│ │            │ │ replay: scale, slider, result   │ │ …                     │ │
-│ └────────────┘ └─────────────────────────────────┘ └───────────────────────┘ │
-│ conditions table (scrollable, focusable region)                              │
-│ how this packet was prepared · provenance details                            │
-```
-
-Tablet: rail and instrument side by side, evidence under the instrument. Phone: claim selector,
-then the instrument, then evidence, then the table.
-
-## The instrument
-
-```
-┌ header: "PsychDoc specimen" (h2)                    [claim.status pill] ┐
-├ trace ──────────────────────────────────────────────────────────────────┤
-│                       ┌──────● ol of claim.sourceIds, equal rows        │
-│ claim card  ──────────○──────●  title (link ↗), kind, year, id in mono    │
-│  label, text, limit   ├──────●                                            │
-│                       └──────●                                            │
-├ replay (data-bias-root) ────────────────────────────────────────────────┤
-│ "Saved estimate and interval"  unit, direction                           │
-│ legend: Saved result (dot), Assumed shift (capped bar)                   │
-│ scale: ticks −1.50…0.50, dashed −0.50 and −0.24 reference lines,         │
-│        saved row (grey, dot), shifted row (accent, capped interval)       │
-│ slider 0 to 0.60 (hidden without JS), output +0.00                       │
-│ result text (aria-live), the existing limit sentence                     │
-├ footer: "Prepared source packet", sourceVersion in mono, "Inspect" link ┤
-```
-
-- The leads are horizontal SVG lines placed by percentage on equal-height source rows, so they meet
-  each row's centre at any width without measuring the DOM. A short bus on the claim card's edge
-  joins them; it grows outward from the card's midpoint first. On phones the claim sits above the
-  sources and a vertical trunk branches to each row instead. `pathLength="1"` and a CSS
-  stroke-dashoffset animation draw them in order (700 ms each, 100 ms stagger) only under
-  `@media (scripting: enabled) and (prefers-reduced-motion: no-preference)`. With JavaScript off or
-  reduced motion the lines are simply drawn. After the run, a class pins the drawn state so a layout
-  change cannot replay it.
-- The interval scale is SVG with percentage x positions and fixed pixel rows, so its labels stay at
-  a readable size from 320 px to 1440 px instead of shrinking with a viewBox.
-- Only the hero trace animates. The method page reuses the same trace statically.
-
-## Trial field (desktop hero)
-
-From 1024 px the white below the copy holds the 12 trials pooled in the saved primary analysis
-(`data/sypres-primary-trials.json`, one node per trial record, seeded layout). Hairlines converge
-beside the instrument, a single line rises along its left edge and joins the claim at a port on the
-claim card's left side, mirroring the trace's port on the right. In the load moment the trials light
-violet, their hairlines converge, the line rises, and only then does the claim-to-source trace run:
-trials, pooled analysis, claim, sources (about 2.5 s, once). Reduced motion and no JavaScript show
-the lit state. The copy column keeps an opaque clear zone (`--bg` with a soft lower edge) so the
-field never sits under text. The field is anchored to the trace's midpoint, which is the claim's
-midpoint, so the join stays exact at any desktop width; the caption aligns with the copy column.
-Weights: ink 8% for the base hairlines, violet 24% hairlines and 60% nodes when lit, 50% for the
-rising line. It draws no other corpus.
-
-## Phone logo
-
-The approved logo stays as it is: no redraw, crop or new lockup during integration. On phones it
-fills the widest space the header allows (full width above the navigation row below 480 px), which
-renders its subtitle about 7.8, 8.9 and 9.7 px tall at 320, 360 and 390 px. A properly legible
-phone lockup (subtitle removed or enlarged) needs a new asset exported from the approved master and
-approved by Max; that is a later, separate review. No `<picture>` source is added until it exists.
-
-## Interaction
-
-- Corpus switches (home teaser, demo) are links to anchors without JavaScript and become an ARIA
-  tablist with arrow, Home and End keys, roving tabindex and `aria-selected` once enhanced. Selected
-  segments show a filled indicator as well as colour.
-- Claim selection keeps link semantics and `aria-current`; the centre claim and its evidence switch
-  together.
-- The bias slider keeps its bounds, step and limit text; reset returns to the first corpus, first
-  claim and zero shift. On the bench a scope line beside the control states that the replay always
-  uses Claim 1, the primary analysis, whichever claim is selected (Astra's wording).
-- The header gains its hairline once the page scrolls.
-
-## Review against the brief
-
-- Rejected first idea: a fan of diagonal connector lines from one point. It read as decoration and
-  needed DOM measurement for curves; horizontal leads on equal rows are calmer, exact and work
-  without JavaScript.
-- Rejected: repeating the interval chart in the PsychDoc section. The hero already does it; the
-  section keeps its copy and links instead.
-- Rejected: monospace small labels and middle-dot meta strings as chrome. Mono is limited to
-  identifiers; middle dots appear only where they are part of packet text.
-- Dropped from the old site while building: the arrow icon after every internal link and button.
-  Only links that leave the site keep "↗".
-- Accessory removed after the screenshot critique: source rows that faded in as their leads arrived.
-  It read as a loading state and briefly lowered text contrast; the leads and their end nodes are
-  enough.
+Automated tests exercise the actual playback module with visibility, media-query, timer and storage controls. Static-markup tests cover the no-JavaScript reading order. Do not describe those as real-browser OS-preference or JavaScript-disabled checks unless those environments were actually exercised.

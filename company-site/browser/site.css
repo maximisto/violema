@@ -1,5 +1,5 @@
 /* Violema company site.
-   Tokens first; components below use only tokens. The page is light; the instrument is dark. */
+   Tokens first; components below use only tokens. Light defaults; the instrument stays dark. */
 
 @font-face {
   font-family: 'Instrument Sans';
@@ -76,9 +76,8 @@
   --duration: 180ms;
 }
 
-/* Light only for now: the approved logo's ink subtitle disappears on dark grounds and no
-   reversed logo exists yet. Dark page tokens return with a reversed logo; the instrument
-   below is dark by design and unaffected. */
+/* Reader-selected dark page tokens and theme-specific logo visibility live in appearance.css.
+   The instrument below keeps its own palette in either theme. */
 
 @media (max-width: 1023px) {
   :root { --gutter: 24px; }

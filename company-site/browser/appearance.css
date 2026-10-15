@@ -1,0 +1,92 @@
+/* A reader-selected theme. First visits remain light, irrespective of OS preference. */
+:root {
+  --chapter-bg: #F0EFF5;
+  --chapter-line: #D5D0E2;
+  --header-surface: rgb(245 246 248 / 96%);
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #10131A;
+  --surface: #181D26;
+  --surface-2: #232936;
+  --ink: #ECECF0;
+  --ink-2: #B5BCC8;
+  --ink-3: #9CA6B7;
+  --line: #333B4A;
+  --line-strong: #8793A5;
+  --accent: #BAA9EB;
+  --accent-ink: #171023;
+  --copper: #D9AA88;
+  --chapter-bg: #191823;
+  --chapter-line: #40394F;
+  --header-surface: rgb(16 19 26 / 96%);
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 12%), 0 24px 64px -24px rgb(0 0 0 / 55%);
+  --shadow-control: 0 1px 2px rgb(0 0 0 / 20%);
+}
+.site-header { background: var(--header-surface); backdrop-filter: blur(16px); }
+.header-inner { display: grid; grid-template-columns: auto 1fr auto; gap: 20px; }
+.primary-nav { justify-self: end; margin-right: 0; }
+.theme-control { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); cursor: pointer; }
+.theme-control:hover { color: var(--accent); background: var(--surface-2); }
+.theme-control svg { width: 20px; height: 20px; }
+.theme-control .theme-sun, .brand .brand-dark { display: none; }
+[data-theme='dark'] .theme-control .theme-moon, [data-theme='dark'] .brand .brand-light { display: none; }
+[data-theme='dark'] .theme-control .theme-sun, [data-theme='dark'] .brand .brand-dark { display: block; }
+/* Each owner-supplied logo is served unchanged on its intended theme. */
+.brand { position: relative; isolation: isolate; --brand-logo: url('/company-assets/violema-logo.png'); --brand-width: 248px; }
+[data-theme='dark'] .brand { --brand-logo: url('/company-assets/violema-logo-dark.png'); }
+/* A soft light pass follows the original electric-logo treatment. The image mask
+   keeps transparent gaps clear; the clip leaves the face and wordmark still. */
+.brand::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: min(100%, var(--brand-width));
+  aspect-ratio: 3;
+  transform: translateY(-50%);
+  pointer-events: none;
+  clip-path: polygon(0 0, 35% 0, 32.5% 24%, 29.5% 37%, 28% 43%, 25% 46%, 25% 54%, 26.5% 58%, 25.5% 66%, 23% 73%, 20% 77%, 0 77%);
+  -webkit-mask: var(--brand-logo) center / contain no-repeat;
+  mask: var(--brand-logo) center / contain no-repeat;
+  mix-blend-mode: screen;
+  background: linear-gradient(105deg, transparent 38%, rgb(216 180 254 / 25%) 44%, rgb(255 255 255 / 68%) 50%, rgb(196 181 253 / 25%) 56%, transparent 62%) 100% 50% / 250% 100% no-repeat;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .brand::after { animation: brand-hair-light 12s ease-in-out 1.2s infinite; }
+}
+@keyframes brand-hair-light {
+  0%, 8% { opacity: 0; background-position: 100% 50%; }
+  20% { opacity: .28; }
+  42% { opacity: .24; }
+  54%, 100% { opacity: 0; background-position: 0% 50%; }
+}
+.button { transition: background-color 180ms var(--ease), border-color 180ms var(--ease), box-shadow 180ms var(--ease), transform 180ms var(--ease); }
+.button:active { transform: translateY(1px); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+.instrument :focus-visible { outline-color: var(--inst-accent); }
+@media (max-width: 1023px) {
+  .header-inner { gap: 12px; }
+  .primary-nav a { padding-inline: 8px; font-size: .875rem; }
+}
+@media (max-width: 767px) {
+  :root { --header-height: 52px; }
+  .site-header { top: -108px; }
+  .header-inner { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 96px 48px; padding-block: 8px 0; gap: 4px 12px; }
+  .brand { grid-column: 1; grid-row: 1; min-height: 0; align-self: center; }
+  .brand img { width: 248px; max-width: 100%; }
+  .primary-nav { grid-column: 1 / -1; grid-row: 2; width: 100%; margin: 0; justify-content: space-between; min-height: 48px; }
+  .primary-nav a { padding-inline: 4px; font-size: .8125rem; }
+  .theme-control { grid-column: 2; grid-row: 1; }
+}
+@media (max-width: 359px) {
+  .site-header { top: -92px; }
+  .header-inner { grid-template-rows: 80px 48px; }
+  .brand { --brand-width: 200px; }
+  .brand img { width: 200px; }
+  .primary-nav a { padding-inline: 2px; font-size: .75rem; white-space: nowrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}

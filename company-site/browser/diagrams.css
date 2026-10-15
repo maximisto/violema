@@ -1,0 +1,34 @@
+/* Interactive detail panels keep the existing, source-labelled SVGs intact. */
+.diagram-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 40px; min-height: 44px; color: var(--ink-2); font-size: .875rem; }
+.diagram-toolbar > p { margin: 0; }
+.diagram-toolbar button, .diagram-detail button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--ink); background: var(--surface); font: 500 .8125rem var(--font-display); cursor: pointer; }
+.diagram-toolbar button:hover, .diagram-detail button:hover { border-color: var(--accent); color: var(--accent); }
+.diagram-explorer .diagram { margin-top: 16px; }
+[data-diagram-part][role='button'] { cursor: pointer; outline: none; }
+[data-diagram-part][role='button']:is(:hover, [aria-expanded='true']) > rect { stroke: var(--accent); stroke-width: 2.5; fill: color-mix(in oklab, var(--accent) 7%, var(--surface)); }
+[data-diagram-part][role='button']:focus-visible > rect { stroke: var(--accent); stroke-width: 3.5; vector-effect: non-scaling-stroke; }
+.diagram-detail { border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); background: var(--surface); border-radius: 10px; padding: 24px 28px; margin-top: 20px; scroll-margin-block: calc(var(--header-height) + 24px) 24px; }
+.diagram-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.diagram-detail-head .label { margin: 0; color: var(--accent); }
+.diagram-detail h3 { font-size: 1.5rem; max-width: 38ch; margin: 16px 0; }
+.diagram-detail h3:focus { outline: none; }
+.diagram-detail > p { max-width: 86ch; color: var(--ink-2); }
+.diagram-detail .text-link { display: inline-flex; align-items: center; min-height: 44px; }
+.method-row > .wrap > .how-head .label, .method-copy > .label { font-size: 1.125rem; font-weight: 600; color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-diagram][data-stage='playing'] [data-diagram-part] { animation: diagram-part 650ms both; animation-delay: calc(var(--seq) * 340ms); }
+  [data-diagram][data-stage='playing'] [data-diagram-edge] { stroke-dasharray: 1; animation: diagram-line 650ms both; animation-delay: calc(200ms + var(--seq) * 340ms); }
+  [data-diagram][data-stage='playing'] .dg-edge-planned { animation: diagram-part 1200ms 1200ms both; }
+  [data-diagram][data-stage='following'] [data-diagram-part][data-played] { animation: diagram-part 650ms both; }
+  .diagram-detail:not([hidden]) { animation: diagram-detail 200ms ease-out; }
+}
+/* Keyboard interaction must never be dimmed by a running sequence. */
+[data-diagram-part]:is(:focus-within, [aria-expanded='true']) { animation: none !important; opacity: 1; }
+@keyframes diagram-part { from { opacity: .18; } to { opacity: 1; } }
+@keyframes diagram-line { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes diagram-detail { from { opacity: .65; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (max-width: 767px) {
+  .diagram-detail { padding: 18px; }
+  .diagram-toolbar { align-items: start; }
+  .diagram-toolbar button { flex: none; }
+}

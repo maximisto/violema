@@ -64,9 +64,9 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
   assert.match(html,/href="\/login">Existing workspace sign in<\/a>/);
   assert.doesNotMatch(html,/planned destination, not live here/);
   assert.doesNotMatch(html,/—/,'Public copy uses no em-dashes');
-  assert.match(html,/<a class="brand" href="\/" aria-label="Violema home"><img src="\/company-assets\/violema-logo\.png" width="2172" height="724" alt="Violema"><\/a>/);
+  assert.match(html,/<a class="brand" href="\/" aria-label="Violema home"><img class="brand-light" src="\/company-assets\/violema-logo\.png" width="2172" height="724" alt="Violema"><img class="brand-dark" src="\/company-assets\/violema-logo-dark\.png" width="2172" height="724" alt="Violema" loading="lazy"><\/a>/);
   assert.match(html,/rel="icon" href="\/company-assets\/violema-icon\.png" type="image\/png"/);
-  assert.match(html,/<meta name="color-scheme" content="light">/);
+  assert.match(html,/<meta name="color-scheme" content="light dark">/);
   assert.doesNotMatch(html,/\/Users\/|\/private\/tmp\/|OpenRouter\.env|Slack\.env|auth-users/);
   const ids=[...html.matchAll(/\sid="([^\"]+)"/g)].map(match=>match[1]);
   assert.equal(new Set(ids).size,ids.length,'Document IDs must be unique');
@@ -152,7 +152,7 @@ test('browser module paths and self-hosted stylesheet assets resolve in the gene
   for(const [,relative] of css.matchAll(/url\('([^']+)'\)/g))assert.ok((await stat(join(dist,relative))).isFile());
   assert.match(css,/prefers-reduced-motion:\s*reduce/);
   assert.match(css,/:focus-visible/);
-  assert.doesNotMatch(css,/prefers-color-scheme/,'Light only until a reversed logo is approved');
+  assert.doesNotMatch(css,/prefers-color-scheme/,'Theme is reader-selected, not forced by the operating system');
   assert.match(css,/:root \{\n  color-scheme: light;/);
   assert.ok(!(await readdir(dist)).includes('assets'),'Legacy app asset namespace is preserved');
 });
@@ -244,7 +244,7 @@ test('demo bench keeps one rail, one dark instrument and one evidence column per
 });
 
 test('the header logo and icon are the owner-approved brand files, served unchanged',async()=>{
-  for(const [approved,served] of [['violema-restored-type-20261010.png','violema-logo.png'],['violema-fine-neck-icon-20261010.png','violema-icon.png']]){
+  for(const [approved,served] of [['violema-restored-type-20261010.png','violema-logo.png'],['violema-dark-bk-logo-20261015.png','violema-logo-dark.png'],['violema-fine-neck-icon-20261010.png','violema-icon.png']]){
     const source=await readFile(join(root,'brand',approved));
     assert.ok(source.equals(await readFile(join(dist,'company-assets',served))),`${served} is ${approved}`);
   }

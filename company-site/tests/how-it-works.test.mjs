@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { howItWorks as f } from '../data/how-it-works.mjs';
 import { howItWorksSection, crossFieldSection, loopDiagram, crossFieldDiagram, wrapText } from '../lib/how-it-works.mjs';
+import { diagramDetails } from '../lib/diagram-details.mjs';
 import { escapeHTML } from '../lib/render.mjs';
 
 const method = await readFile(new URL('../dist/method/index.html', import.meta.url), 'utf8');
@@ -139,4 +140,28 @@ test('the method page figures agree with the frozen version 2.2 evidence map', a
     assert.equal(paper.year, Number(item.source.slice(-4)));
     assert.equal(paper.authors.at(-1).split(',')[0].trim(), item.lab, 'last author names the lab');
   }
+});
+
+
+test('every interactive diagram node resolves to a named detail with valid source links', () => {
+  for (const [name, svg] of [['loop', loopDiagram(f)], ['cross', crossFieldDiagram(f)]]) {
+    const details = diagramDetails(name, f);
+    const ids = [...svg.matchAll(/data-diagram-part="([^"]+)"/g)].map(match => match[1]);
+    assert.deepEqual(ids, details.map(item => item.id));
+    assert.equal(new Set(ids).size, 8);
+    for (const item of details) {
+      assert.ok(method.includes(`id="detail-${item.id}"`));
+      assert.ok(item.title && item.note && item.status);
+      if (item.href) assert.ok(!item.href.includes('undefined'));
+    }
+  }
+  for (const claim of f.converging) assert.ok(method.includes(`#${claim.claimId}`));
+  assert.deepEqual(diagramDetails('cross', f).filter(item => item.status === 'Planned').map(item => item.id), ['insight-other', 'insight-checked', 'insight-offered', 'insight-record']);
+});
+
+test('only solid connectors are normalized for drawing; planned connectors retain dashed strokes', () => {
+  assert.equal((loopDiagram(f).match(/data-diagram-edge pathLength="1"/g) || []).length, 8);
+  assert.doesNotMatch(crossFieldDiagram(f), /data-diagram-edge|pathLength/);
+  assert.match(method, /id="method-bias-range"/);
+  assert.match(method, /data-bias-root/);
 });
