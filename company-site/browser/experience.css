@@ -295,7 +295,10 @@
 /* Supporting copy has room to breathe at the same readable size on phones. */
 .experience-hero .trial-records li { white-space: normal; }
 .experience-hero .evidence-hero-caption { flex-wrap: wrap; align-items: center; }
-.experience-hero .evidence-hero-caption > span { flex: 1 1 30ch; }
+.experience-hero .evidence-hero-caption > span { flex: none; }
+@media (min-width: 600px) {
+  .experience-hero .evidence-hero-caption > span { flex: 1 1 30ch; }
+}
 .experience-hero .evidence-hero-caption a { min-height: 44px; display: inline-flex; align-items: center; }
 @media (max-width: 767px) {
   .record-open { display: none; }
