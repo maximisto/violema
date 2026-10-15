@@ -1,5 +1,14 @@
 # Violema experience progress
 
+## Mobile blackout follow-up
+
+1. Inspect the reported homepage evidence panel and eight-step Method diagram in the actual mobile layout.
+2. Make the evidence panel follow the chosen theme, remove mobile height reserved for hidden panels, and keep diagram text at full opacity throughout playback.
+3. Verify all evidence tabs, all eight steps, light/dark modes, replay/skip and Safari responsive rendering; preserve scientific copy and data.
+4. Record the validated result and publish the scoped follow-up through the existing guarded release path if within the continuing release authorization. Three attempts maximum per failing step.
+
+Implemented and locally verified: the evidence panel follows light/dark theme; hidden mobile panels have zero layout height; SVG labels remain at opacity 1 while outlines animate. All eight Method steps open their detail records. Native Safari 390×844 Responsive Design Mode shows readable cards and working evidence tabs in both themes. The original solid-black iPhone failure was not reproduced in desktop Safari; the whole-group fade that made labels nearly invisible was reproduced and removed. Build, 72 site tests, nine release checks and independent diff review pass. Scientific copy/data are unchanged. Continuing the scoped correction to the owner-authorized publication; activation and live verification are recorded in the vault release receipts.
+
 ## Mobile header correction and Safari verification
 
 1. Replace the two-row phone navigation and negative sticky offset with a compact logo/theme/menu bar. Retain 16px+ navigation labels in a dismissible disclosure; preserve desktop layout and no-JavaScript links.
