@@ -15,14 +15,17 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/legal/terms/`
 
 ## Layout
 
-- `lib/pages.mjs`: page shell (wordmark header, footer, metadata), the protocol stations, and the six routes.
+- `lib/pages.mjs`: page shell (logo header, appearance control, footer, metadata), the protocol stations, and the six routes.
+- `lib/experience.mjs`: the five homepage chapters, guided claim/source/limits interaction and six-part method explorer.
 - `lib/legal.mjs`: public website terms and privacy copy; separate from legacy workspace policies.
 - `lib/how-it-works.mjs`: the method page's "How it works" and "Where this is going" sections: two inline SVG diagrams of PsychDoc's evidence system, coloured only through tokens, with their figures read from `data/how-it-works.mjs`.
 - `lib/render.mjs`: shared evidence renderer: escaped text, safe source links, bounded additive-shift arithmetic, the interval scale, the trace specimen (a claim joined to its cited source records), the bias control and the demo bench.
-- `browser/site.mjs`: entry module on every page: header state, pinning the hero trace once drawn, segmented controls; it imports `lab.mjs` only where a replay or the bench exists.
+- `browser/site.mjs`: entry module on every page: appearance preference, header state, tabs and fragment navigation. It imports the lab only on review/demo, the map when expanded, and homepage playback only on home.
 - `browser/tabs.mjs`: ARIA tabs over plain anchor links (arrow, Home and End keys; links still jump without JavaScript).
 - `browser/lab.mjs`: the assumed-bias replay (physician review and demo) and the bench: corpus switch, claim selection, reset and hash links.
-- `browser/site.css`: colour tokens (light, dark and the always-dark instrument), type scale, layout and the one on-load animation.
+- `browser/site.css`: base colour tokens, type scale and existing page layouts.
+- `browser/appearance.css`: manual light/dark themes, theme-specific logos, shared header and focus treatment.
+- `browser/experience.css` and `browser/experience.mjs`: homepage chapter layouts and bounded playback.
 - `assets/`: self-hosted fonts with their licences (see below).
 - `brand/`: the approved logo, its icon, the concepts that led to it and their prompts (see "Scientific logo preview").
 - `docs/design-plan.md`: the design plan: tokens, type, layouts and the instrument's anatomy.
@@ -36,9 +39,11 @@ The generated routes are `dist/index.html`, `dist/method/index.html`, `dist/demo
 
 ## Design system
 
-Colours are CSS custom properties on `:root`; components use only tokens. The site ships in the light theme only (`color-scheme: light`) until a reversed logo is approved, because the approved logo's ink subtitle disappears on dark grounds; the parked dark values are in `docs/design-plan.md`. The accent is the logo's violet `#6852A3`. The instrument (home illustration, review specimen, method examples, demo bench) is dark by design: `.instrument` re-points the shared tokens to the `--inst-*` values, so components inside it need no special cases. The source illustration adds a restrained copper `#CD936B` border and endpoint; shadows only on raised objects. Instrument Sans sets display, headings, navigation and buttons; Inter sets running text; the system monospace stack is reserved for identifiers (record ids, commits, hashes, versions). See `docs/design-plan.md` for values and contrast notes.
+Colours are CSS custom properties on `:root`; components use only tokens. The site defaults to light. A sun/moon button with an accessible destination label and tooltip switches modes and remembers the choice in localStorage (`violema-theme`); the privacy page documents this local preference. OS appearance does not override a first visit. The original light logo and owner-supplied dark logo stay byte-identical and display only in their matching theme. The accent is the logo's violet `#6852A3`. The instrument (home illustration, review specimen, method examples, demo bench) is dark by design: `.instrument` re-points the shared tokens to the `--inst-*` values, so components inside it need no special cases. The source illustration adds a restrained copper `#CD936B` border and endpoint; shadows only on raised objects. Instrument Sans sets display, headings, navigation and buttons; Inter sets running text; the system monospace stack is reserved for identifiers (record ids, commits, hashes, versions). See `docs/design-plan.md` for values and contrast notes.
 
-The home hero assembles the 12 named trial records from the pinned primary-analysis packet into one source-linked claim. It is visible at every screen width. The grouped curves mean inclusion in the saved analysis, never citation edges, causal relationships, statistical independence or effect magnitude. Each record retains its `data-trial` identity and the full packet is available through the review route. There is no automatic hero animation.
+The home hero assembles the 12 named trial records from the pinned primary-analysis packet into one source-linked claim. It is visible at every screen width. The grouped curves mean inclusion in the saved analysis, never citation edges, causal relationships, statistical independence or effect magnitude. Each record retains its `data-trial` identity and the full packet is available through the review route. The hero and homepage method sequence each play once when sufficiently visible. Skip and Replay use the same button. Phone playback follows the parts as they enter view; reduced motion, a hidden tab or deliberate interaction settles the complete record. No numerical result is animated.
+
+The homepage follows five chapters: overview, guided evidence, method, applications and a briefing invitation. The complete evidence map sits in a native disclosure, retaining its filters, text alternative, export and direct `#evidence-map` link. Without JavaScript, guided panels and method explanations are all present in reading order.
 
 `/review/` is a generic physician/researcher walkthrough: one primary claim, the four linked sources, an assumed-shift replay, the animal/human scope boundary and five focused questions. It makes no advisor appointment or affiliation claim, collects no submissions and asks for published sources without patient information. `/demo/` continues to hold both full packets and the fixed Claim 1 replay scope.
 
@@ -55,7 +60,7 @@ The home hero assembles the 12 named trial records from the pinned primary-analy
 
 ## Logo
 
-The header shows the owner-approved scientific logo and the favicon uses its matching icon. Both live in `brand/` and the build copies them unchanged: `brand/violema-restored-type-20261010.png` to `company-assets/violema-logo.png` and `brand/violema-fine-neck-icon-20261010.png` to `company-assets/violema-icon.png`. Do not edit, regenerate or recolour files under `brand/`; a test checks the served files are byte-identical to the approved ones. The unchanged logo is about 248 px wide on desktop and spans the available phone header width, with navigation below it on narrow screens.
+The header shows the owner-approved scientific logos and the favicon uses the matching icon. All live in `brand/` and the build copies them unchanged: `brand/violema-restored-type-20261010.png` to `company-assets/violema-logo.png`, the October 15 supplied `brand/violema-dark-bk-logo-20261015.png` to `company-assets/violema-logo-dark.png`, and `brand/violema-fine-neck-icon-20261010.png` to `company-assets/violema-icon.png`. Do not edit, regenerate or recolour files under `brand/`; a test checks the served files are byte-identical to the approved ones. The unchanged logo is about 248 px wide on desktop and spans the available phone header width, with navigation below it on narrow screens.
 
 ## Updating a packet
 
@@ -65,9 +70,9 @@ The JavaScript renderer reads the same frozen data module as the static build. W
 
 ## Browser acceptance
 
-Run against the built preview. Check all six routes by direct load and refresh at 1440, 1024, 768, 390 and 320 px widths in the light theme, and confirm a dark colour-scheme preference still renders the light page with the dark instrument. Verify corpus and claim links with mouse and keyboard, the segmented controls' arrow keys, range changes including endpoints on the physician review page and the demo, materials isolation, reset, packet downloads, reduced motion (the static source illustration stays visible), a no-JavaScript load (drawn trace, static interval, every claim and table), focus rings on every control, 44 px targets on phones and text contrast of at least 4.5:1. Table overflow is intentionally contained inside the keyboard-focusable comparison region; the page itself must not overflow horizontally. Inspect console and network failures.
+Run against the built preview. Check all six routes by direct load and refresh at 1440, 1024, 768, 390 and 320 px widths in both light and selected dark themes. Confirm a first visit remains light, an explicit selection survives navigation/refresh, and blocked storage leaves the current-page toggle usable. Verify corpus and claim links with mouse and keyboard, the segmented controls' arrow keys, range changes including endpoints on the physician review page and the demo, materials isolation, reset, packet downloads, Skip/Replay, reduced motion (the complete source illustration stays visible), full-map disclosure and direct fragment links, a no-JavaScript load (drawn trace, static interval, every claim and table), focus rings on every control, 44 px targets on phones and text contrast of at least 4.5:1. Table overflow is intentionally contained inside the keyboard-focusable comparison region; the page itself must not overflow horizontally. Inspect console and network failures.
 
-Automated Node checks cover arithmetic boundaries, packet identity, document IDs/anchors, local links, assets, source protocols, corpus isolation, and meaningful no-JavaScript markup. Browser checks are separate because the package deliberately has no browser automation dependency.
+Automated Node checks cover arithmetic boundaries, packet identity, document IDs/anchors, local links, assets, source protocols, corpus isolation, static markup, appearance storage failure, theme contrast, visibility thresholds, playback interruption and reduced-motion behavior. Browser checks are separate because the package deliberately has no browser automation dependency.
 
 This directory contains no deploy action. The adjacent migration preparation packet owns nginx cutover/rollback instructions. Production deployment remains a separate operation. The owner explicitly authorized the scientific site and physician review release on 2026-10-10; changing this bundle does not itself deploy it.
 
@@ -106,3 +111,9 @@ The public company policies identify Violema, Inc., a Delaware corporation, as d
 The existing publicly listed `legal@violema.com` and `privacy@violema.com` addresses are used in the drafts. Confirm monitoring before publication. The policy text has not been reviewed by counsel. Guidance consulted: [Delaware Online Privacy and Protection Act, §1205C](https://delcode.delaware.gov/title6/c012c/index.html) and [FTC data-handling guidance](https://www.ftc.gov/business-guidance/resources/protecting-personal-information-guide-business).
 
 `release/legal-pages-20261011/` prepares a local release packet for these exact new routes and preserves `/terms` and `/privacy` for the workspace. Its README documents baseline guards and owner-authorized deployment steps. Preparing a packet does not deploy it.
+
+### October 15 interaction refinement
+
+The homepage fills the desktop viewport and expands to a 1480 px frame on wide screens. Numbered chapter labels are stronger; all 12 trial labels open their actual source metadata. The Method page now has selectable SVG nodes, detail panels and bounded playback, adapted from PsychDoc's `diagram-motion` worktree at `78e41e4`. Its interval chart uses the existing assumed-shift slider. `browser/playback.mjs` shares motion handling without adding a dependency; `lib/diagram-details.mjs` explains the same frozen version 2.2 facts as the diagrams. Planned edges remain dashed.
+
+Build and 70 tests pass. Updated responsive/keyboard checks are in `docs/experience-progress.md`; native Safari checks pass for the hero, themes, motion, diagram panels, dialog focus return and chart endpoints. A faint masked light pass moves through the logo hair in both themes and is excluded under reduced motion. The owner authorized push and deployment on October 15; `release/experience-20261015/` prepares the guarded successor. The vault runbook records the activated revision and recovery receipts.

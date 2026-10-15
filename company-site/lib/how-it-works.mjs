@@ -1,4 +1,5 @@
 import { escapeHTML as e } from './render.mjs';
+import { diagramDetails } from './diagram-details.mjs';
 
 // The method page's schematic of the evidence system as PsychDoc runs it, and the planned cross-field step.
 // Figures come from data/how-it-works.mjs (a dated snapshot of PsychDoc version 2.2). The diagrams are inline SVG drawn
@@ -34,7 +35,7 @@ export function wrapText(text, max) {
 
 // One step of the loop: who does it, what it does, and the version 2.2 figure that shows it working.
 function step({ x, y, number, who, title, body, figure }) {
-  return `<g transform="translate(${x} ${y})"><rect class="dg-box" width="212" height="200" rx="10"/>${tag(who)}<text class="dg-number" x="198" y="31" text-anchor="end">${number}</text><text class="dg-title" x="14" y="66">${e(title)}</text>${lines(body, 'dg-text', 14, 90, 18)}<line class="dg-rule" x1="14" y1="146" x2="198" y2="146"/>${lines(figure, 'dg-figure', 14, 168, 18)}</g>`;
+  return `<g data-diagram-part="pipeline-${number}" data-seq="${number - 1}" transform="translate(${x} ${y})"><rect class="dg-box" width="212" height="200" rx="10"/>${tag(who)}<text class="dg-number" x="198" y="31" text-anchor="end">${number}</text><text class="dg-title" x="14" y="66">${e(title)}</text>${lines(body, 'dg-text', 14, 90, 18)}<line class="dg-rule" x1="14" y1="146" x2="198" y2="146"/>${lines(figure, 'dg-figure', 14, 168, 18)}</g>`;
 }
 
 const arrowDefs = prefix => `<defs><marker id="${prefix}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0 0 L10 5 L0 10 z"/></marker><marker id="${prefix}-arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head-accent" d="M0 0 L10 5 L0 10 z"/></marker></defs>`;
@@ -53,23 +54,23 @@ export function loopDiagram(f) {
   ];
   const label = 'The PsychDoc pipeline in eight steps: set the question, find papers, screen them against written rules, read them, write claims, connect claims, check independence, publish. Studies added to the synthesis become seeds for the next weekly scan, so the search keeps widening.';
   return `<svg class="dg dg-loop" viewBox="0 0 1000 532" role="img" focusable="false" aria-label="${e(label)}">${arrowDefs('loop')}${steps.map((item, i) => step({ ...item, number: i + 1 })).join('')}`
-    + '<line class="dg-edge" x1="230" y1="120" x2="264" y2="120" marker-end="url(#loop-arrow)"/>'
-    + '<line class="dg-edge" x1="482" y1="120" x2="516" y2="120" marker-end="url(#loop-arrow)"/>'
-    + '<line class="dg-edge" x1="734" y1="120" x2="768" y2="120" marker-end="url(#loop-arrow)"/>'
-    + '<line class="dg-edge" x1="878" y1="222" x2="878" y2="308" marker-end="url(#loop-arrow)"/>'
-    + '<line class="dg-edge" x1="770" y1="412" x2="736" y2="412" marker-end="url(#loop-arrow)"/>'
-    + '<line class="dg-edge" x1="518" y1="412" x2="484" y2="412" marker-end="url(#loop-arrow)"/>'
-    + '<line class="dg-edge" x1="266" y1="412" x2="232" y2="412" marker-end="url(#loop-arrow)"/>'
+    + '<line class="dg-edge" x1="230" y1="120" x2="264" y2="120" marker-end="url(#loop-arrow)" data-diagram-edge pathLength="1" data-seq="0"/>'
+    + '<line class="dg-edge" x1="482" y1="120" x2="516" y2="120" marker-end="url(#loop-arrow)" data-diagram-edge pathLength="1" data-seq="1"/>'
+    + '<line class="dg-edge" x1="734" y1="120" x2="768" y2="120" marker-end="url(#loop-arrow)" data-diagram-edge pathLength="1" data-seq="2"/>'
+    + '<line class="dg-edge" x1="878" y1="222" x2="878" y2="308" marker-end="url(#loop-arrow)" data-diagram-edge pathLength="1" data-seq="3"/>'
+    + '<line class="dg-edge" x1="770" y1="412" x2="736" y2="412" marker-end="url(#loop-arrow)" data-diagram-edge pathLength="1" data-seq="4"/>'
+    + '<line class="dg-edge" x1="518" y1="412" x2="484" y2="412" marker-end="url(#loop-arrow)" data-diagram-edge pathLength="1" data-seq="5"/>'
+    + '<line class="dg-edge" x1="266" y1="412" x2="232" y2="412" marker-end="url(#loop-arrow)" data-diagram-edge pathLength="1" data-seq="6"/>'
     + '<text class="dg-label" x="866" y="270" text-anchor="end">papers that pass the rules</text>'
-    + '<path class="dg-edge-loop" d="M122 310 V 266 H 374 V 224" marker-end="url(#loop-arrow-accent)"/>'
+    + '<path class="dg-edge-loop" data-diagram-edge pathLength="1" data-seq="7" d="M122 310 V 266 H 374 V 224" marker-end="url(#loop-arrow-accent)"/>'
     + '<text class="dg-label dg-label-accent" x="388" y="254">Added studies become seeds</text>'
     + '<text class="dg-label dg-label-accent" x="388" y="272">for the next weekly scan</text>'
     + '</svg>';
 }
 
 // A claim drawn as an input to the planned cross-field question: three real ones from version 2.2, one planned.
-function claimBox({ x, y, who, text, source, planned = false, height = 72 + 18 * text.length }) {
-  return `<g transform="translate(${x} ${y})"><rect class="${planned ? 'dg-box-planned' : 'dg-box'}" width="300" height="${height}" rx="10"/>${tag(who, { x: 14, y: 12, variant: planned ? 'planned' : '' })}${lines(text, 'dg-text-ink', 14, 58, 18)}${source ? `<text class="dg-small" x="14" y="${61 + 18 * text.length}">${e(source)}</text>` : ''}</g>`;
+function claimBox({ id, seq, x, y, who, text, source, planned = false, height = 72 + 18 * text.length }) {
+  return `<g data-diagram-part="${id}" data-seq="${seq}" transform="translate(${x} ${y})"><rect class="${planned ? 'dg-box-planned' : 'dg-box'}" width="300" height="${height}" rx="10"/>${tag(who, { x: 14, y: 12, variant: planned ? 'planned' : '' })}${lines(text, 'dg-text-ink', 14, 58, 18)}${source ? `<text class="dg-small" x="14" y="${61 + 18 * text.length}">${e(source)}</text>` : ''}</g>`;
 }
 
 export function crossFieldDiagram(f) {
@@ -78,27 +79,29 @@ export function crossFieldDiagram(f) {
   const qHeight = 98 + 18 * question.length;
   const label = 'Planned. Three real claims from different labs and journals, in rats, mice and people, plus claims from other fields, would be linked by the system to one posed question. The question would be checked by AI stress tests and signed expert review, offered to labs to test, and carry a contribution record naming the papers, journals, labs, reviewers and the testing lab.';
   return `<svg class="dg dg-cross" viewBox="0 0 1000 528" role="img" focusable="false" aria-label="${e(label)}">${arrowDefs('cross')}`
-    + claimBox({ x: 16, y: 20, who: 'Rats, electrophysiology', text: ['Psilocybin or 25CN-NBOH: firing changed', 'months later. No synaptic density change', 'detected; not reported per drug.'], source: `${rat.source}, ${rat.venue}` })
-    + claimBox({ x: 16, y: 164, who: 'Mice, imaging', text: ['New dendritic spines after one dose,', 'about a third still there a month on.'], source: `${mouse.source}, ${mouse.venue}` })
-    + claimBox({ x: 16, y: 290, who: 'People, PET scan', text: ['15 adults: no significant overall rise in', 'synaptic density a week after one dose.'], source: `${human.source}, ${human.venue}` })
-    + claimBox({ x: 16, y: 416, who: 'Planned', planned: true, height: 88, text: ['Claims from other questions and', 'fields that measure the same thing.'] })
+    + claimBox({ id: "insight-claim-1", seq: 0, x: 16, y: 20, who: 'Rats, electrophysiology', text: ['Psilocybin or 25CN-NBOH: firing changed', 'months later. No synaptic density change', 'detected; not reported per drug.'], source: `${rat.source}, ${rat.venue}` })
+    + claimBox({ id: "insight-claim-2", seq: 1, x: 16, y: 164, who: 'Mice, imaging', text: ['New dendritic spines after one dose,', 'about a third still there a month on.'], source: `${mouse.source}, ${mouse.venue}` })
+    + claimBox({ id: "insight-claim-3", seq: 2, x: 16, y: 290, who: 'People, PET scan', text: ['15 adults: no significant overall rise in', 'synaptic density a week after one dose.'], source: `${human.source}, ${human.venue}` })
+    + claimBox({ id: "insight-other", seq: 3, x: 16, y: 416, who: 'Planned', planned: true, height: 88, text: ['Claims from other questions and', 'fields that measure the same thing.'] })
     + '<path class="dg-edge-planned" d="M316 83 C 348 83, 340 206, 372 206" marker-end="url(#cross-arrow-accent)"/>'
     + '<path class="dg-edge-planned" d="M316 218 C 346 218, 342 234, 372 234" marker-end="url(#cross-arrow-accent)"/>'
     + '<path class="dg-edge-planned" d="M316 344 C 346 344, 342 262, 372 262" marker-end="url(#cross-arrow-accent)"/>'
     + '<path class="dg-edge-planned" d="M316 460 C 350 460, 340 292, 372 292" marker-end="url(#cross-arrow-accent)"/>'
     + '<text class="dg-label dg-label-accent" x="378" y="136">Planned links</text>'
-    + `<g transform="translate(376 150)"><rect class="dg-box-posed" width="256" height="${qHeight}" rx="10"/>${tag('Posed question', { variant: 'posed' })}${lines(question, 'dg-text-ink', 14, 62, 18)}${lines(['Listed today as an open question', `in version ${f.synthesis.version}. Not a finding.`], 'dg-small', 14, 62 + 18 * question.length + 8, 18)}</g>`
+    + `<g data-diagram-part="insight-question" data-seq="4" transform="translate(376 150)"><rect class="dg-box-posed" width="256" height="${qHeight}" rx="10"/>${tag('Posed question', { variant: 'posed' })}${lines(question, 'dg-text-ink', 14, 62, 18)}${lines(['Listed today as an open question', `in version ${f.synthesis.version}. Not a finding.`], 'dg-small', 14, 62 + 18 * question.length + 8, 18)}</g>`
     + '<path class="dg-edge-planned" d="M632 249 H 646 V 68 H 658" marker-end="url(#cross-arrow-accent)"/>'
-    + `<g transform="translate(664 20)"><rect class="dg-box-planned" width="320" height="96" rx="10"/><text class="dg-title" x="14" y="32">Checked</text>${lines(['AI stress tests, then signed', 'expert review.'], 'dg-text', 14, 58, 18)}</g>`
+    + `<g data-diagram-part="insight-checked" data-seq="5" transform="translate(664 20)"><rect class="dg-box-planned" width="320" height="96" rx="10"/><text class="dg-title" x="14" y="32">Checked</text>${lines(['AI stress tests, then signed', 'expert review.'], 'dg-text', 14, 58, 18)}</g>`
     + '<line class="dg-edge-planned" x1="824" y1="118" x2="824" y2="138" marker-end="url(#cross-arrow-accent)"/>'
-    + `<g transform="translate(664 140)"><rect class="dg-box-planned" width="320" height="80" rx="10"/><text class="dg-title" x="14" y="32">Offered to labs to test</text>${lines(['A prediction a lab can confirm or refute.'], 'dg-text', 14, 58, 18)}</g>`
+    + `<g data-diagram-part="insight-offered" data-seq="6" transform="translate(664 140)"><rect class="dg-box-planned" width="320" height="80" rx="10"/><text class="dg-title" x="14" y="32">Offered to labs to test</text>${lines(['A prediction a lab can confirm or refute.'], 'dg-text', 14, 58, 18)}</g>`
     + '<line class="dg-edge-planned" x1="824" y1="222" x2="824" y2="242" marker-end="url(#cross-arrow-accent)"/>'
-    + `<g transform="translate(664 244)"><rect class="dg-box-planned" width="320" height="248" rx="10"/>${tag('Contribution record', { variant: 'planned' })}${lines(['Claims it rests on, each with its paper'], 'dg-text-ink', 14, 64, 18)}${lines([`Journals: ${mouse.venue}, ${rat.venue},`, human.venue], 'dg-text-ink', 14, 88, 18)}${lines([`Labs behind them: ${[mouse.lab, rat.lab, human.lab].join(', ')}`, 'Reviewers who signed the check', 'The lab that tests it, and the result', 'Credit terms agreed before the test'], 'dg-text-ink', 14, 130, 24)}<text class="dg-small" x="14" y="230">Every later use cites the record.</text></g>`
+    + `<g data-diagram-part="insight-record" data-seq="7" transform="translate(664 244)"><rect class="dg-box-planned" width="320" height="248" rx="10"/>${tag('Contribution record', { variant: 'planned' })}${lines(['Claims it rests on, each with its paper'], 'dg-text-ink', 14, 64, 18)}${lines([`Journals: ${mouse.venue}, ${rat.venue},`, human.venue], 'dg-text-ink', 14, 88, 18)}${lines([`Labs behind them: ${[mouse.lab, rat.lab, human.lab].join(', ')}`, 'Reviewers who signed the check', 'The lab that tests it, and the result', 'Credit terms agreed before the test'], 'dg-text-ink', 14, 130, 24)}<text class="dg-small" x="14" y="230">Every later use cites the record.</text></g>`
     + '</svg>';
 }
 
-function figure(name, svg, legend, caption, regionLabel) {
-  return `<figure class="diagram diagram-${name}">${legend}<div class="diagram-scroll" tabindex="0" role="region" aria-label="${e(regionLabel)}">${svg}</div><p class="diagram-hint" aria-hidden="true">Scroll sideways to see the whole diagram.</p><figcaption>${caption}</figcaption></figure>`;
+function figure(name, svg, legend, caption, regionLabel, f) {
+  const details = diagramDetails(name, f);
+  const panels = details.map(item => `<div class="diagram-detail" role="region" id="detail-${item.id}" data-detail-panel="${item.id}" data-detail-name="${e(item.name)}" aria-labelledby="title-${item.id}" hidden><div class="diagram-detail-head"><p class="label">${e(item.status)}</p><button type="button" data-detail-close aria-label="Close ${e(item.name)} details">Close <span aria-hidden="true">×</span></button></div><h3 id="title-${item.id}" tabindex="-1">${e(item.title)}</h3><p>${e(item.note)}</p>${item.href ? `<a class="text-link" href="${e(item.href)}">${e(item.link)} ${external}</a>` : ''}</div>`).join('');
+  return `<div class="diagram-explorer" data-diagram data-stage="static" data-playback-name="${name === 'loop' ? 'pipeline' : 'cross-field'}"><div class="diagram-toolbar"><p hidden data-diagram-hint>Select a step to explore its record.</p><button type="button" data-playback hidden aria-label="Play ${name === 'loop' ? 'pipeline' : 'cross-field'} animation">Play sequence</button></div><figure class="diagram diagram-${name}">${legend}<div class="diagram-scroll" tabindex="0" role="region" aria-label="${e(regionLabel)}">${svg}</div><p class="diagram-hint" aria-hidden="true">Scroll sideways to see the whole diagram.</p><figcaption>${caption}</figcaption></figure>${panels}</div>`;
 }
 
 export function howItWorksSection(f) {
@@ -112,7 +115,7 @@ export function howItWorksSection(f) {
   const rules = `<details class="how-rules"><summary>Read the rules</summary><ul>${s.include.map(rule => `<li><strong>Include</strong> ${e(rule)}</li>`).join('')}${s.exclude.map(rule => `<li><strong>Exclude</strong> ${e(rule)}</li>`).join('')}</ul><p>These rules ask whether a study measured the brain a week or more after dosing. The synthesis has broader rules of its own, and its trust panel counts only verdicts made under those.</p></details>`;
   return `<section class="method-row how-it-works" id="how-it-works" aria-labelledby="how-it-works-title"><div class="wrap">`
     + `<div class="split how-head"><div><p class="label">How it works</p><h2 id="how-it-works-title">From one question<br>to claims you can check.</h2></div><div class="split-body"><p class="lede">PsychDoc, the first application of this method, takes one research question at a time. It finds candidate papers itself by following citations, sorts them by written rules, turns what they report into claims you can check, and keeps scanning for new work.</p><p class="status-line">The numbers are a snapshot of PsychDoc’s psilocybin synthesis, version ${e(f.synthesis.version)} of ${longDate(f.synthesis.updatedAt)}: a provisional synthesis that has not had signed expert review. PsychDoc shows its current state.</p></div></div>`
-    + figure('loop', loopDiagram(f), legend, 'Steps 1 to 4 turn a question into a set of papers that pass written rules; steps 5 to 8 turn those papers into claims, links and a published page. The violet loop keeps the search widening: every study added to the synthesis must also be listed as a seed, or a test fails the build, and the next weekly scan starts from the larger set. Today a person adds the seeds in the same update; adding them automatically is planned.', 'The eight steps; scroll sideways on narrow screens')
+    + figure('loop', loopDiagram(f), legend, 'Steps 1 to 4 turn a question into a set of papers that pass written rules; steps 5 to 8 turn those papers into claims, links and a published page. The violet loop keeps the search widening: every study added to the synthesis must also be listed as a seed, or a test fails the build, and the next weekly scan starts from the larger set. Today a person adds the seeds in the same update; adding them automatically is planned.', 'The eight steps; scroll sideways on narrow screens', f)
     + `<div class="how-facts">`
     + `<div class="how-fact"><h3>It finds papers itself, by following citations</h3><p>${e(f.scan.schedule)} a scheduled job asks OpenAlex, an open index of scholarly works and the citations between them, two questions about each seed paper: which papers does it cite, and which papers cite it? Of the papers that cite a seed, it keeps the ${f.scan.citingKept} most cited. Seeds are the papers the synthesis already rests on; any paper linked to a seed becomes a candidate.</p><p>The last accepted scan, on ${longDate(f.scan.date)}, started from ${count(f.scan.seeds, 'seed')} and produced ${f.scan.candidates} candidates; the ${f.scan.multiSeed} that link to two or more seeds are read first. It ran before the synthesis grew to ${f.independence.papers} papers, so the next scan starts from more seeds. A scan is saved only when every seed resolves and every request is answered, and it arrives as a pull request that a person reviews.</p><p>New papers have few citations yet, so recent work is easy to miss. A review therefore also runs written keyword searches on OpenAlex and Europe PMC and records the exact queries; in the review of ${longDate(s.date)}, an AI agent ran them. Of the ${s.included} records that passed the rules, the searches found ${s.foundBySearch} and the citation scan ${s.foundByScan}; ${s.scanOnly === 1 ? 'one was' : `${s.scanOnly} were`} found by the scan alone. Running the searches on a schedule is planned.</p></div>`
     + `<div class="how-fact"><h3>It decides what counts by written rules</h3><p>Ranking only sets the reading order. Whether a paper counts is decided against written rules, stored with a version stamp (<code>${e(s.criteriaVersion)}</code>) in the screening record. Each verdict records the version it was made under; if the rules change, old verdicts stop counting until someone looks at them again.</p><p>Every screened record gets a verdict and a one-line reason. On ${longDate(s.date)}, ${s.records} records were screened, the scan’s ${s.fromScan} candidates from 2024 to 2026 and ${s.fromSearch} from the keyword searches: ${s.included} were included, ${s.excluded} excluded and ${s.pending} wait for a full-text check. The other ${s.unscreened} scan candidates have no verdict yet. Excluded papers stay on file with their reason.</p><p>An AI model drafted these rules, each verdict and its reason; a person approves the change before it is published. Today that person is the publisher, until a scientific editor is appointed.</p>${rules}</div>`
@@ -134,7 +137,7 @@ export function crossFieldSection(f) {
   const legend = '<ul class="diagram-legend" aria-label="Outline key"><li><span class="outline-key" aria-hidden="true"></span>Exists today</li><li><span class="outline-key outline-key-planned" aria-hidden="true"></span>Planned</li></ul>';
   return `<section class="method-row" id="cross-field" aria-labelledby="cross-field-title"><div class="wrap">`
     + `<div class="split how-head"><div><p class="label">Where this is going</p><h2 id="cross-field-title">From many papers to new questions,<br>with shared credit.</h2><p class="how-status"><span class="pill">Planned</span></p></div><div class="split-body"><p class="lede">Today PsychDoc links claims inside one question. The plan is to link claims across questions, journals and fields wherever they measure the same thing, so the system can point to a pattern no single paper shows.</p><p>Each such pattern would be posed as a question, checked, offered to labs to test, and carry a record of everyone whose work it rests on.</p></div></div>`
-    + figure('cross', crossFieldDiagram(f), legend, `Solid outlines exist today; dashed ones are planned. The three claims are real and come from three labs and three journals; the links into the question would be drawn by the system, which is planned. The question itself is already listed in version ${e(f.synthesis.version)} as an open question.`, 'The planned cross-field question; scroll sideways on narrow screens')
+    + figure('cross', crossFieldDiagram(f), legend, `Solid outlines exist today; dashed ones are planned. The three claims are real and come from three labs and three journals; the links into the question would be drawn by the system, which is planned. The question itself is already listed in version ${e(f.synthesis.version)} as an open question.`, 'The planned cross-field question; scroll sideways on narrow screens', f)
     + `<div class="table-scroll how-table" tabindex="0" role="region" aria-label="PsychDoc today and planned; scroll horizontally if needed"><table><caption>PsychDoc today, and what is planned.</caption><thead><tr><th scope="col">Part</th><th scope="col">Today</th><th scope="col">Planned</th></tr></thead><tbody>${statusRows.map(([part, today, planned]) => `<tr><th scope="row">${part}</th><td>${today}</td><td>${planned}</td></tr>`).join('')}</tbody></table></div>`
     + `</div></section>`;
 }

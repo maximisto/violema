@@ -50,6 +50,7 @@ export const legalPolicies = [
   },
   {
     slug: 'privacy',
+    updatedAt: '2026-10-15',
     title: 'Website Privacy Policy',
     description: 'How Violema, Inc. handles information on its public scientific website and in related correspondence.',
     summary: 'The scientific demonstrations run in your browser. These pages have no accounts, submission forms, advertising trackers, or analytics scripts. Hosting requests and messages you choose to send can still involve personal information.',
@@ -70,7 +71,8 @@ export const legalPolicies = [
       {
         id: 'cookies-tracking',
         title: '3. Cookies, analytics, and tracking signals',
-        html: `<p>The scientific pages do not set cookies or use localStorage, sessionStorage, advertising pixels, or analytics scripts. Fonts, scripts, and visual assets are served from this website. These statements concern the scientific pages; they do not mean a browser returning from the workspace has no violema.com cookies.</p>
+        html: `<p>The scientific pages use localStorage to remember your light or dark appearance choice in this browser, under the key <code>violema-theme</code>. This preference is not sent to Violema or an AI provider. You can change it using the appearance control or remove it by clearing this website's browser storage. The pages still work when browser storage is unavailable.</p>
+<p>The scientific pages do not set cookies or use sessionStorage, advertising pixels, or analytics scripts. Fonts, scripts, and visual assets are served from this website. These statements concern the scientific pages; they do not mean a browser returning from the workspace has no violema.com cookies.</p>
 <p>We do not conduct cross-site behavioral tracking through these pages or embed third-party services to perform it. Because these pages do not perform that tracking, a browser's Do Not Track signal does not change their behavior. External websites you choose to visit have their own practices.</p>`,
       },
       {

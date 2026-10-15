@@ -20,6 +20,7 @@ const fontFiles = [
 // The owner-approved scientific logo and icon, copied unchanged from company-site/brand/.
 const logoFiles = [
   ['violema-restored-type-20261010.png', 'violema-logo.png'],
+  ['violema-dark-bk-logo-20261015.png', 'violema-logo-dark.png'],
   ['violema-fine-neck-icon-20261010.png', 'violema-icon.png'],
 ];
 
@@ -41,6 +42,12 @@ for (const [route, markup] of [
 ]) await writeFile(join(dist, route), markup);
 for (const [source, destination] of [
   ['browser/site.css', 'company-assets/site.css'],
+  ['browser/appearance.css', 'company-assets/appearance.css'],
+  ['browser/experience.css', 'company-assets/experience.css'],
+  ['browser/experience.mjs', 'company-assets/browser/experience.mjs'],
+  ['browser/playback.mjs', 'company-assets/browser/playback.mjs'],
+  ['browser/diagrams.mjs', 'company-assets/browser/diagrams.mjs'],
+  ['browser/diagrams.css', 'company-assets/diagrams.css'],
   ['browser/site.mjs', 'company-assets/browser/site.mjs'],
   ['browser/tabs.mjs', 'company-assets/browser/tabs.mjs'],
   ['browser/lab.mjs', 'company-assets/browser/lab.mjs'],
