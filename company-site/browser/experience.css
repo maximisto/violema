@@ -186,6 +186,13 @@
   .product-feature { column-gap: 40px; padding: 32px; }
 }
 @media (max-width: 767px) {
+  .hero-family { max-width: none; margin-top: 32px; padding-block: 24px; border-bottom: 1px solid var(--line); text-align: center; }
+  .hero-family > p { margin-bottom: 16px; }
+  .hero-product-link { width: 224px; max-width: 100%; margin-inline: auto; grid-template-columns: 1fr auto 1fr; gap: 10px 8px; }
+  .hero-product-identity { display: contents; }
+  .hero-product-link img { grid-column: 1 / -1; grid-row: 1; }
+  .hero-product-caption { grid-column: 2; grid-row: 2; margin-top: 0; }
+  .hero-product-link > span:last-child { grid-column: 3; grid-row: 2; justify-self: start; font-size: 1rem; line-height: 1.5; }
   .guide-foot a, .experience-hero .evidence-hero-caption a, .chapter-bottomline > a { display: inline-flex; align-items: center; min-height: 44px; }
   .hero-endnote { padding-block: 20px; }
   .hero-endnote > span { max-width: 25ch; }
@@ -205,7 +212,6 @@
 @media (max-width: 479px) {
   .experience-hero { padding-top: 32px; }
   .experience-hero h1 { font-size: 2.875rem; }
-  .hero-family { margin-top: 24px; padding-top: 20px; }
   .experience-hero .hero-grid { row-gap: 32px; }
   .experience-hero .evidence-hero-top, .experience-hero .source-assembly { padding: 18px; }
   .instrument-title-row { align-items: start; }
