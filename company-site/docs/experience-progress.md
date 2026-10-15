@@ -1,5 +1,17 @@
 # Violema experience progress
 
+## Mobile header correction and Safari verification
+
+1. Replace the two-row phone navigation and negative sticky offset with a compact logo/theme/menu bar. Retain 16px+ navigation labels in a dismissible disclosure; preserve desktop layout and no-JavaScript links.
+2. Verify menu keyboard/dismissal behavior, logo bounds before/after scrolling, 320–1023px layouts, light/dark appearance and reduced motion.
+3. Compare local and live in native Safari desktop and Responsive Design Mode, then publish the scoped correction within the approved release follow-up and verify live artifact parity.
+4. Record screenshots and any limits of simulated mobile verification.
+
+Keep the approved palette, Instrument Sans/Inter and brand artwork. The single header row is 80px; the menu opens only on request. Three attempts per failing step maximum.
+
+Local verification: build and 72 site tests pass; nine guarded-release tests pass. Browser checks at 320/390/768/844/1023/1024/1440 px show no document overflow or clipped visible logos. The menu has 18px links with 56px targets; Escape, link navigation, outside click and breakpoint dismissal work. Light/dark wordmarks load correctly. Independent review identified a no-JavaScript sticky-header issue; the fallback now scrolls normally. Native Safari and live successor checks are pending activation/unlocked access.
+
+
 ## October 15 refinement release — authorized
 
 Max explicitly requested push and deployment of all latest Violema updates after local approval.

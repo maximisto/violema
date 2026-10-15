@@ -219,3 +219,44 @@ test('presentational step entrances settle without exposing a replay control', (
   phone.root.listeners.click({ target: phone.parts[0] });
   assert.equal(phone.root.dataset.stage, 'settled', 'manual step selection immediately ends the entrance');
 });
+
+
+test('mobile navigation opens accessibly and closes on Escape, departure, navigation and viewport changes', async () => {
+  const source = (await readFile(new URL('../browser/site.mjs', import.meta.url), 'utf8')).replace(/^import .*;$/m, '');
+  const target = extra => ({ listeners: {}, addEventListener(name, fn) { this.listeners[name] = fn; }, ...extra });
+  let focused;
+  const firstLink = { focus() { focused = this; } };
+  const menu = target({ hidden: true, attrs: {}, setAttribute(name, value) { this.attrs[name] = value; }, getAttribute(name) { return this.attrs[name]; }, focus() { focused = this; } });
+  const navigation = target({ querySelector: () => firstLink });
+  const header = target({ dataset: {}, querySelector: selector => selector === '[data-menu-control]' ? menu : navigation, contains: element => [menu, navigation, firstLink].includes(element) });
+  const document = target({ querySelector: selector => selector === '[data-site-header]' ? header : null, querySelectorAll: () => [], getElementById: () => null });
+  const window = target({ scrollY: 0 });
+  const media = target({ matches: true });
+  vm.runInNewContext(source, { document, window, matchMedia: () => media, location: { hash: '' } });
+  assert.equal(menu.hidden, false);
+  assert.equal(menu.attrs['aria-expanded'], 'false');
+  const open = () => {
+    menu.listeners.click();
+    assert.equal(menu.attrs['aria-expanded'], 'true');
+    assert.equal(menu.attrs['aria-label'], 'Close navigation');
+    assert.equal(focused, firstLink);
+  };
+  open();
+  header.listeners.keydown({ key: 'Escape' });
+  assert.equal(menu.attrs['aria-expanded'], 'false');
+  assert.equal(focused, menu);
+  for (const close of [
+    () => navigation.listeners.click({ target: { closest: () => firstLink } }),
+    () => document.listeners.click({ target: {} }),
+    () => header.listeners.focusout({ relatedTarget: {} }),
+    () => media.listeners.change(),
+    () => window.listeners.pageshow(),
+  ]) {
+    open();
+    close();
+    assert.equal(header.dataset.menuOpen, 'false');
+    assert.equal(menu.attrs['aria-label'], 'Open navigation');
+  }
+  assert.match(html, /aria-controls="primary-navigation" hidden data-menu-control/);
+  assert.match(html, /<nav class="primary-nav" id="primary-navigation" aria-label="Main navigation">/);
+});

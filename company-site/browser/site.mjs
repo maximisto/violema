@@ -26,6 +26,35 @@ if (header) {
   const update = () => { header.dataset.scrolled = String(window.scrollY > 4); };
   update();
   window.addEventListener('scroll', update, { passive: true });
+  const menu = header.querySelector('[data-menu-control]');
+  const navigation = header.querySelector('.primary-nav');
+  if (menu && navigation) {
+    const mobile = matchMedia('(max-width: 1023px)');
+    const setOpen = open => {
+      header.dataset.menuOpen = String(open);
+      menu.setAttribute('aria-expanded', String(open));
+      menu.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+    };
+    header.dataset.navReady = '';
+    menu.hidden = false;
+    setOpen(false);
+    menu.addEventListener('click', () => {
+      const open = menu.getAttribute('aria-expanded') !== 'true';
+      setOpen(open);
+      if (open) navigation.querySelector('a')?.focus({ preventScroll: true });
+    });
+    header.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && menu.getAttribute('aria-expanded') === 'true') {
+        setOpen(false);
+        menu.focus({ preventScroll: true });
+      }
+    });
+    navigation.addEventListener('click', event => { if (event.target.closest('a')) setOpen(false); });
+    document.addEventListener('click', event => { if (!header.contains(event.target)) setOpen(false); });
+    header.addEventListener('focusout', event => { if (!header.contains(event.relatedTarget)) setOpen(false); });
+    mobile.addEventListener('change', () => setOpen(false));
+    window.addEventListener('pageshow', () => setOpen(false));
+  }
 }
 
 // The hero trace draws once in CSS; pin the drawn state afterwards so a later layout change
