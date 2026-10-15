@@ -1,5 +1,14 @@
 # Violema experience progress
 
+## Safari mobile menu closure
+
+1. Reproduce the close failure in native Safari and isolate its focus/click ordering.
+2. Add a regression for a null-target focusout before the close-button click; fix that narrow event path.
+3. Verify repeated toggles, outside dismissal, keyboard departure, Escape, links and both themes in Safari; run site/release checks and independent review.
+4. Publish the scoped follow-up to the authorized release, verify live bytes and behavior, and record recovery receipts. Maximum three attempts per failing step.
+
+Native Safari reproduced the failure: open → close tap leaves the menu expanded and focuses Method again. A regression exercising null-target focusout before the toggle click failed against the old code and passes with the fix. Known focus departures still dismiss the menu; null-target blur waits for the click's own action. All 72 site tests, build and nine release checks pass. The Mac locked before post-fix native Safari verification; that check remains pending in the release receipts.
+
 ## Mobile blackout follow-up
 
 1. Inspect the reported homepage evidence panel and eight-step Method diagram in the actual mobile layout.
