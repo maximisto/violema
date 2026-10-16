@@ -2,7 +2,7 @@ import { mkdir, writeFile, copyFile, rm, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { corpora, stressTest } from '../data/corpora.mjs';
-import { homePage, methodPage, demoPage, reviewPage, legalPage } from '../lib/pages.mjs';
+import { homePage, methodPage, demoPage, reviewPage, legalPage, notFoundPage } from '../lib/pages.mjs';
 import { exportCorpora } from './export-corpora.mjs';
 import { checkTrials } from './export-trials.mjs';
 
@@ -41,6 +41,7 @@ for (const [route, markup] of [
   ['review/index.html', reviewPage(corpora, stressTest)],
   ['legal/terms/index.html', legalPage('terms')],
   ['legal/privacy/index.html', legalPage('privacy')],
+  ['404.html', notFoundPage()],
 ]) await writeFile(join(dist, route), markup);
 for (const [source, destination] of [
   ['browser/site.css', 'company-assets/site.css'],
@@ -73,8 +74,8 @@ for (const [source, destination] of logoFiles) await copyFile(join(root, 'brand'
 await copyFile(join(assets, 'violema-social-hero.jpg'), join(dist, 'company-assets/violema-social-hero.jpg'));
 await writeFile(join(dist, 'robots.txt'), 'User-agent: *\nAllow: /\n\nSitemap: https://violema.com/sitemap.xml\n');
 await writeFile(join(dist, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ['/', '/method/', '/demo/', '/legal/terms/', '/legal/privacy/'].map(path => `<url><loc>https://violema.com${path}</loc></url>`).join('') + '</urlset>\n');
-await writeFile(join(dist, 'llms.txt'), '# Violema\n\nScientific evidence systems that connect claims to sources, make consequential assumptions visible, and keep the record open to review. Prepared demonstrations remain subject to independent scientific review.\n\n- [Method](https://violema.com/method/): source, claim, assumption, review and version records.\n- [Evidence lab](https://violema.com/demo/): two manually curated packets; shared presentation, not universal scientific validity.\n- [PsychDoc](https://psychdoc.ai/): first scientific application.\n- [Website Terms of Use](https://violema.com/legal/terms/): public scientific website terms.\n- [Website Privacy Policy](https://violema.com/legal/privacy/): public scientific website information practices.\n\nThe existing workspace sign-in remains at https://violema.com/login.\n');
-console.log(`Built six static pages and ${corpora.length} source packets in company-site/dist.`);
+await writeFile(join(dist, 'llms.txt'), '# Violema\n\nScientific evidence systems that connect claims to sources, make consequential assumptions visible, and keep the record open to review. Prepared demonstrations remain subject to independent scientific review.\n\n- [Method](https://violema.com/method/): source, claim, assumption, review and version records.\n- [Evidence lab](https://violema.com/demo/): two manually curated packets; shared presentation, not universal scientific validity.\n- [PsychDoc](https://psychdoc.ai/): first scientific application.\n- [Website Terms of Use](https://violema.com/legal/terms/): public scientific website terms.\n- [Website Privacy Policy](https://violema.com/legal/privacy/): public scientific website information practices.\n');
+console.log(`Built six static pages, the 404 page and ${corpora.length} source packets in company-site/dist.`);
 
 const heroAssets = join(assets, 'violema-hero');
 await mkdir(join(dist, 'company-assets/violema-hero'), { recursive: true });
