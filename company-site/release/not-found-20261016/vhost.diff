@@ -1,0 +1,50 @@
+--- baseline-violema.conf	2026-10-16 07:09:56
++++ candidate-violema.conf	2026-10-16 07:13:56
+@@ -237,22 +237,34 @@
+         add_header Referrer-Policy "strict-origin" always;
+     }
+     # END VIOLEMA PUBLIC LEGAL PAGES
+-    # END VIOLEMA SCIENCE COMPANY-ONLY OVERLAY
+-
+-    # --- Serve React SPA (frontend dist) ---
+-    root /var/www/nexus/frontend/dist;
+-    index index.html;
+-
+-    # Cache static assets aggressively (hashed filenames)
+-    location ~* \.(js|css|woff2?|ttf|eot|svg|ico|png|jpg|gif|webp)$ {
+-        expires 1y;
+-        add_header Cache-Control "public, immutable";
+-        try_files $uri =404;
++    # BEGIN VIOLEMA NOT FOUND
++    # Any 404 in this server shows the company page with a real 404 status. Proxied /api/ errors pass through
++    # untouched (proxy_intercept_errors stays off).
++    error_page 404 /404.html;
++    location = /404.html {
++        internal;
++        root /var/www/violema-science/current;
++        add_header Cache-Control "no-cache" always;
++        add_header X-Content-Type-Options "nosniff" always;
++        add_header X-Frame-Options "SAMEORIGIN" always;
++        add_header Referrer-Policy "strict-origin" always;
+     }
++    location = /index.html {
++        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
++        root /var/www/violema-science/current;
++        try_files /index.html =404;
++        add_header Cache-Control "no-cache" always;
++        add_header X-Content-Type-Options "nosniff" always;
++        add_header X-Frame-Options "SAMEORIGIN" always;
++        add_header Referrer-Policy "strict-origin" always;
++    }
++    # END VIOLEMA NOT FOUND
++    # END VIOLEMA SCIENCE COMPANY-ONLY OVERLAY
+ 
+-    # SPA fallback — all non-API routes → index.html
++    # The old workspace app moved to agent.purpleorange.ai: violema.com serves none of its pages or assets.
++    # Only /api/ below still reaches the backend (OAuth callbacks, Stripe and Postmark webhooks).
+     location / {
+-        try_files $uri $uri/ /index.html;
++        return 404;
+     }
+ 
+     # --- Proxy /api/* → Express backend on port 3001 ---
