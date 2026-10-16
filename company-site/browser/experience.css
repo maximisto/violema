@@ -20,6 +20,8 @@
 .hero-category { font-size: var(--text-caption); margin-bottom: 24px; }
 .hero-copy .lede { max-width: 44ch; }
 .experience-hero .actions { gap: 16px 24px; }
+/* Over the hero artwork the secondary button keeps a surface behind its label, as its hover state does everywhere. */
+.experience-hero .actions .button-secondary { background: var(--surface); box-shadow: var(--shadow-control); }
 .hero-family { max-width: 440px; margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
 .hero-family > p { margin: 0 0 14px; font: 500 var(--text-small)/1.5 var(--font-display); color: var(--ink-2); }
 .hero-product-link { display: grid; grid-template-columns: minmax(0, 1fr) 24px; align-items: center; gap: 16px; padding-block: 4px; color: var(--ink); text-decoration: none; border-radius: 6px; }
