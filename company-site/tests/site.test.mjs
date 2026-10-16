@@ -62,7 +62,8 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
   assert.ok(html.includes(`<meta name="robots" content="${route === '/review/' ? 'noindex,follow' : 'index,follow'}">`));
   assert.match(html,/id="main"/);
   assert.doesNotMatch(html,/href="https:\/\/agent\.purpleorange\.ai/);
-  assert.match(html,/href="\/login">Existing workspace sign in<\/a>/);
+  // The old workspace moved to agent.purpleorange.ai; violema.com no longer serves or links its pages.
+  assert.doesNotMatch(html,/href="\/(?:login|signup|dashboard|terms|privacy|blog)\b/);
   assert.doesNotMatch(html,/planned destination, not live here/);
   assert.doesNotMatch(html,/—/,'Public copy uses no em-dashes');
   assert.match(html,/<a class="brand" href="\/" aria-label="Violema home"><img class="brand-light" src="\/company-assets\/violema-logo\.png" width="2172" height="724" alt="Violema"><img class="brand-dark" src="\/company-assets\/violema-logo-dark\.png" width="2172" height="724" alt="Violema" loading="lazy"><\/a>/);
@@ -75,7 +76,6 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
     const href=decode(match[1]);
     if(href.startsWith('#')){assert.ok(ids.includes(href.slice(1)),`Missing anchor ${href}`);continue;}
     if(!href.startsWith('/'))continue;
-    if(['/login','/terms','/privacy'].includes(href))continue; // Served by the preserved application, outside this static bundle.
     if(href===TRACKER_SRC)continue; // nginx proxies it to Umami (lib/analytics.mjs); never part of dist.
     const [path,anchor]=href.split('#');
     let local=join(dist,path);
@@ -95,7 +95,7 @@ test('website policies are reachable from every company footer without replacing
     const html=await readFile(join(dist,'legal',slug,'index.html'),'utf8');
     assert.match(html,/Violema, Inc\./);
     assert.match(html,/Delaware corporation/);
-    assert.ok(html.includes(`href="/${slug}"`),'Original workspace policy remains linked');
+    assert.match(html,slug==='terms'?/separate workspace terms and a workspace privacy policy/:/separate workspace privacy policy/,'Workspace policies stay named, unlinked');
     assert.doesNotMatch(html,/<form[ >]|\[Address\]|\[Company|12.month retention/);
   }
   const entries=await readdir(dist);
@@ -110,6 +110,20 @@ test('titles use the house separators',async()=>{
   assert.equal(await title('index.html'),'Violema: scientific conclusions, with their evidence attached');
   assert.equal(await title('method/index.html'),'The method | Violema');
   assert.equal(await title('demo/index.html'),'Evidence lab | Violema');
+});
+
+test('the 404 page works at any address and is never indexed',async()=>{
+  const html=await readFile(join(dist,'404.html'),'utf8');
+  assert.equal(html.match(/<title>([^<]+)<\/title>/)[1],'Page not found | Violema');
+  assert.equal((html.match(/<h1[ >]/g)||[]).length,1);
+  assert.ok(html.includes('<meta name="robots" content="noindex,follow">'));
+  assert.doesNotMatch(html,/rel="canonical"|property="og:url"|name="googlebot"/,'A 404 has no canonical address');
+  assert.doesNotMatch(html,/—/,'Public copy uses no em-dashes');
+  // nginx serves this file at the missed address (/a/b/c), so a relative link or asset would resolve against it.
+  for(const match of html.matchAll(/(?:href|src)="([^\"]+)"/g))assert.match(match[1],/^(?:\/|#|https:\/\/)/,`${match[1]} is root-absolute`);
+  const footer=html.match(/<footer class="site-footer">[\s\S]*?<\/footer>/)[0];
+  for(const route of ['/legal/terms/','/legal/privacy/'])assert.ok(footer.includes(`href="${route}"`));
+  assert.doesNotMatch(await readFile(join(dist,'sitemap.xml'),'utf8'),/404/);
 });
 
 test('all claims, cited sources and condition tables exist before JavaScript',async()=>{

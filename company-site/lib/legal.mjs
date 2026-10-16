@@ -20,7 +20,7 @@ export function buildLegalPolicies(config = analytics) {
         id: 'scope',
         title: '1. Who we are and what these terms cover',
         html: `<p>Violema, Inc., a Delaware corporation ("Violema," "we," or "us"), operates this public scientific website. These terms cover the homepage, Method, Evidence lab, For reviewers, these legal pages, and associated evidence downloads. Please read them before using these materials.</p>
-<p>Existing Violema workspace services have separate <a href="/terms">workspace terms</a> and a <a href="/privacy">workspace privacy policy</a>. PsychDoc at psychdoc.ai is a division of Violema, Inc. and has its own <a href="https://psychdoc.ai/policies/terms">terms</a> and <a href="https://psychdoc.ai/policies/privacy">privacy policy</a>, which govern information you provide there. These website terms do not replace those agreements.</p>`,
+<p>Existing Violema workspace services have separate workspace terms and a workspace privacy policy. PsychDoc at psychdoc.ai is a division of Violema, Inc. and has its own <a href="https://psychdoc.ai/policies/terms">terms</a> and <a href="https://psychdoc.ai/policies/privacy">privacy policy</a>, which govern information you provide there. These website terms do not replace those agreements.</p>`,
       },
       {
         id: 'scientific-materials',
@@ -71,7 +71,7 @@ export function buildLegalPolicies(config = analytics) {
         id: 'scope',
         title: '1. Operator and scope',
         html: `<p>Violema, Inc., a Delaware corporation, is responsible for the information practices described here. This policy covers the public scientific homepage, Method, Evidence lab, For reviewers, these legal pages, evidence downloads, and related correspondence.</p>
-<p>Existing workspace services are covered by their separate <a href="/privacy">workspace privacy policy</a>. A scientific briefing link takes you to psychdoc.ai, run by PsychDoc, a division of Violema, Inc., under its own <a href="https://psychdoc.ai/policies/privacy">privacy policy</a>. This policy does not govern information you provide there.</p>`,
+<p>Existing workspace services are covered by their separate workspace privacy policy. A scientific briefing link takes you to psychdoc.ai, run by PsychDoc, a division of Violema, Inc., under its own <a href="https://psychdoc.ai/policies/privacy">privacy policy</a>. This policy does not govern information you provide there.</p>`,
       },
       {
         id: 'information',

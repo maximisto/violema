@@ -20,22 +20,24 @@ const fontFiles = ['instrument-sans-latin-wght-normal.woff2', 'inter-latin-wght-
 // replay enhance without a second round trip.
 const labModules = ['/company-assets/browser/tabs.mjs', '/company-assets/browser/lab.mjs', '/company-assets/browser/render.mjs', '/company-assets/data/corpora.mjs'];
 
-function head(route, title, description, { lab = false } = {}) {
+// notFound marks the 404 page: nginx serves it at whatever address missed, so it has no canonical URL of its own.
+function head(route, title, description, { lab = false, notFound = false } = {}) {
+  const indexable = route !== '/review/' && !notFound;
   return [
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
     `<title>${e(title)}</title>`,
     `<meta name="description" content="${e(description)}">`,
-    `<meta name="robots" content="${route === '/review/' ? 'noindex,follow' : 'index,follow'}">`,
+    `<meta name="robots" content="${indexable ? 'index,follow' : 'noindex,follow'}">`,
     '<meta name="color-scheme" content="light dark">',
     '<meta name="theme-color" content="#F5F6F8">',
-    `<link rel="canonical" href="https://violema.com${route}">`,
+    ...(notFound ? [] : [`<link rel="canonical" href="https://violema.com${route}">`]),
     '<script type="application/ld+json">{"@context":"https://schema.org","@type":"Corporation","@id":"https://violema.com/#organization","name":"Violema","legalName":"Violema, Inc.","url":"https://violema.com/"}</script>',
     '<meta property="og:type" content="website">',
     '<meta property="og:site_name" content="Violema">',
     `<meta property="og:title" content="${e(title)}">`,
     `<meta property="og:description" content="${e(description)}">`,
-    `<meta property="og:url" content="https://violema.com${route}">`,
+    ...(notFound ? [] : [`<meta property="og:url" content="https://violema.com${route}">`]),
     '<meta property="og:image" content="https://violema.com/company-assets/violema-social-hero.jpg">',
     '<meta property="og:image:type" content="image/jpeg">',
     '<meta property="og:image:width" content="1200">',
@@ -46,7 +48,7 @@ function head(route, title, description, { lab = false } = {}) {
     `<meta name="twitter:description" content="${e(description)}">`,
     '<meta name="twitter:image" content="https://violema.com/company-assets/violema-social-hero.jpg">',
     '<meta name="twitter:image:alt" content="Violema scientific evidence systems: a stone handaxe and glass DNA helix above Earth.">',
-    ...(route !== '/review/' ? ['<meta name="googlebot" content="max-image-preview:large">'] : []),
+    ...(indexable ? ['<meta name="googlebot" content="max-image-preview:large">'] : []),
     ...(route === '/' ? ['<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","@id":"https://violema.com/#webpage","url":"https://violema.com/","name":"Violema: scientific conclusions, with their evidence attached","primaryImageOfPage":{"@type":"ImageObject","url":"https://violema.com/company-assets/violema-social-hero.jpg","width":1200,"height":630}}</script>'] : []),
     '<link rel="icon" href="/company-assets/violema-icon.png" type="image/png">',
     ...fontFiles.map(file => `<link rel="preload" href="/company-assets/fonts/${file}" as="font" type="font/woff2" crossorigin>`),
@@ -64,7 +66,7 @@ function siteHeader(route) {
 }
 
 function siteFooter() {
-  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span><a href="/login">Existing workspace sign in</a></div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
+  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span></div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
 }
 
 export function shell(route, title, description, content, options = {}) {
@@ -78,6 +80,11 @@ export function legalPage(slug) {
   const effectiveDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${updatedAt}T00:00:00Z`));
   const sections = policy.sections.map(section => `<section id="${e(section.id)}" class="legal-section" aria-labelledby="${e(section.id)}-title"><h2 id="${e(section.id)}-title">${e(section.title)}</h2>${section.html}</section>`).join('');
   return shell(`/legal/${slug}/`, `${policy.title} | Violema`, policy.description, `<article class="wrap legal-document"><nav class="legal-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span aria-current="page">${e(policy.title)}</span></nav><header class="legal-heading"><p class="label">Violema, Inc. · Delaware corporation</p><h1>${e(policy.title)}</h1><p class="lede">${e(policy.summary)}</p><p class="caption">Effective date: <time datetime="${e(updatedAt)}">${e(effectiveDate)}</time></p></header><nav class="legal-contents" aria-label="On this page"><p>On this page</p><ol>${policy.sections.map(section => `<li><a href="#${e(section.id)}">${e(section.title)}</a></li>`).join('')}</ol></nav><div class="legal-body">${sections}</div></article>`);
+}
+
+// Served by nginx (error_page 404) at any address that matches no page, so every link and asset is root-absolute.
+export function notFoundPage() {
+  return shell('/404', 'Page not found | Violema', 'This address does not match a page on the Violema scientific website. It may be mistyped, or the page may have moved.', `<article class="wrap legal-document"><header class="legal-heading"><p class="label">Error 404</p><h1>Page not found</h1><p class="lede">This address does not match a page on the Violema website. It may be mistyped, or the page may have moved.</p></header><div class="actions"><a class="button button-primary" href="/">Go to the homepage</a><a class="button button-secondary" href="/method/">Read the method</a></div></article>`, { notFound: true });
 }
 
 // The six records of the method. A real sequence, so the stations are numbered.
