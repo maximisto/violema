@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the mobile caption successor locally; never contact production."""
+"""Prepare the layered hero successor locally; never contact production."""
 import argparse
 import hashlib
 import json
@@ -83,7 +83,7 @@ def prepare(previous_packet, dist, revision, output, bundle_preparer):
     preparer = pinned(bundle_preparer, PREPARER_SHA)
     previous_manifest = json.loads(pinned(previous_packet / 'manifest.json', MANIFEST_SHA))
     if previous_manifest['revision'] != PREVIOUS_REVISION:
-        raise ValueError('Expected the mobile-hero source manifest, not an older release.')
+        raise ValueError('Expected the mobile-caption source manifest, not an older release.')
     for name in LEGAL_FILES:
         if not (dist / name).is_file():
             raise ValueError(f'Missing required public output: {name}')
