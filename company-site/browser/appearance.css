@@ -104,3 +104,8 @@
 }
 [data-step]:focus-within { animation: none !important; opacity: 1; }
 @keyframes step-arrive { from { transform: translateY(5px); } to { transform: none; } }
+
+/* Reserve the compact header during module startup; no-script navigation stays expanded. */
+@media (max-width: 1023px) and (scripting: enabled) {
+  .site-header:not([data-nav-ready]) .primary-nav { display: none; }
+}

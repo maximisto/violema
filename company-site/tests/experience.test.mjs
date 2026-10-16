@@ -11,7 +11,7 @@ const appearance = await readFile(new URL('../browser/appearance.css', import.me
 const baseCSS = await readFile(new URL('../browser/site.css', import.meta.url), 'utf8');
 
 test('the guided journey preserves the claim, its limits and every cited source before JavaScript', () => {
-  const guide = html.slice(html.indexOf('class="evidence-guide'), html.indexOf('<details class="full-map"'));
+  const guide = html.slice(html.indexOf('class="evidence-guide'), html.indexOf('<div class="full-map"'));
   const corpus = corpora.find(item => item.id === 'psychdoc');
   const claim = corpus.claims[0];
   for (const text of [claim.text, claim.caveat, claim.status]) assert.ok(guide.includes(escapeHTML(text)));
@@ -22,7 +22,9 @@ test('the guided journey preserves the claim, its limits and every cited source 
     assert.ok(guide.includes(escapeHTML(source.locator)));
   }
   assert.doesNotMatch(guide, /<section[^>]+hidden/);
-  assert.match(html, /<details class="full-map" id="full-map">/);
+  assert.match(html, /<div class="full-map" id="full-map">/);
+  assert.doesNotMatch(html, /<details[^>]*class="full-map"/);
+  assert.match(html, /href="#evidence-map"/);
   const chapters = [...html.matchAll(/<section[^>]+id="([^"]+)"[^>]+data-chapter/g)].map(match => match[1]);
   assert.deepEqual(chapters, ['overview', 'evidence', 'method', 'applications', 'connect']);
 });

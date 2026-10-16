@@ -73,3 +73,10 @@ await writeFile(join(dist, 'robots.txt'), 'User-agent: *\nAllow: /\n\nSitemap: h
 await writeFile(join(dist, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ['/', '/method/', '/demo/', '/legal/terms/', '/legal/privacy/'].map(path => `<url><loc>https://violema.com${path}</loc></url>`).join('') + '</urlset>\n');
 await writeFile(join(dist, 'llms.txt'), '# Violema\n\nScientific evidence systems that connect claims to sources, make consequential assumptions visible, and keep the record open to review. Prepared demonstrations remain subject to independent scientific review.\n\n- [Method](https://violema.com/method/): source, claim, assumption, review and version records.\n- [Evidence lab](https://violema.com/demo/): two manually curated packets; shared presentation, not universal scientific validity.\n- [PsychDoc](https://psychdoc.ai/): first scientific application.\n- [Website Terms of Use](https://violema.com/legal/terms/): public scientific website terms.\n- [Website Privacy Policy](https://violema.com/legal/privacy/): public scientific website information practices.\n\nThe existing workspace sign-in remains at https://violema.com/login.\n');
 console.log(`Built six static pages and ${corpora.length} source packets in company-site/dist.`);
+
+const heroAssets = join(assets, 'violema-hero');
+await mkdir(join(dist, 'company-assets/violema-hero'), { recursive: true });
+// Only the layers used by the light and dark compositions are shipped.
+for (const name of ['evidence-network-light.svg', 'evidence-network-dark.svg', 'scientific-diagrams-light.svg', 'scientific-diagrams-dark.svg', 'earth-horizon-light.webp', 'earth-horizon-dark.webp', 'dna-glass.webp', 'handaxe-concept.webp', 'observe-microscope.webp', 'record-document.webp', 'revisit-network.webp']) {
+  await copyFile(join(heroAssets, name), join(dist, 'company-assets/violema-hero', name));
+}
