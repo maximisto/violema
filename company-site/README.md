@@ -17,10 +17,12 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/legal/terms/`
 
 - `lib/pages.mjs`: page shell (logo header, appearance control, footer, metadata), the protocol stations, and the six routes.
 - `lib/experience.mjs`: the five homepage chapters, guided claim/source/limits interaction and six-part method explorer.
-- `lib/legal.mjs`: public website terms and privacy copy; separate from legacy workspace policies.
+- `lib/legal.mjs`: public website terms and privacy copy; separate from legacy workspace policies. The privacy wording follows the visit-statistics switch.
+- `lib/analytics.mjs`: the visit-statistics switch (Umami website ID and policy date) and the tracker tag. See "Visit statistics" below.
 - `lib/how-it-works.mjs`: the method page's "How it works" and "Where this is going" sections: two inline SVG diagrams of PsychDoc's evidence system, coloured only through tokens, with their figures read from `data/how-it-works.mjs`.
 - `lib/render.mjs`: shared evidence renderer: escaped text, safe source links, bounded additive-shift arithmetic, the interval scale, the trace specimen (a claim joined to its cited source records), the bias control and the demo bench.
 - `browser/site.mjs`: entry module on every page: appearance preference, header state, tabs and fragment navigation. It imports the lab only on review/demo, the map when expanded, and homepage playback only on home.
+- `browser/analytics.mjs`: `track()` for the four counted reader actions; a no-op without the tracker.
 - `browser/tabs.mjs`: ARIA tabs over plain anchor links (arrow, Home and End keys; links still jump without JavaScript).
 - `browser/lab.mjs`: the assumed-bias replay (physician review and demo) and the bench: corpus switch, claim selection, reset and hash links.
 - `browser/site.css`: base colour tokens, type scale and existing page layouts.
@@ -46,6 +48,20 @@ The home hero assembles the 12 named trial records from the pinned primary-analy
 The homepage follows five chapters: overview, guided evidence, method, applications and a briefing invitation. The complete evidence map sits in a native disclosure, retaining its filters, text alternative, export and direct `#evidence-map` link. Without JavaScript, guided panels and method explanations are all present in reading order.
 
 `/review/` is a generic physician/researcher walkthrough: one primary claim, the four linked sources, an assumed-shift replay, the animal/human scope boundary and five focused questions. It makes no advisor appointment or affiliation claim, collects no submissions and asks for published sources without patient information. `/demo/` continues to hold both full packets and the fixed Claim 1 replay scope.
+
+## Visit statistics
+
+The site can count visits with Umami, self-hosted on the same VPS as psychdoc.ai and shared with it (runbook in `maximisto/psychdoc-ai`, `docs/analytics.md`). It is **on** since 2026-10-16: `analytics.websiteId` in `lib/analytics.mjs` holds the violema.com website ID and `policyDate` the privacy page's effective date. Setting both back to `null` removes the tracker and restores the no-analytics privacy wording, byte for byte. The ID is committed rather than read from the environment so a release bundle stays reproducible from its commit.
+
+When on, every page loads `/stats/script.js` (deferred, `data-domains` violema.com and www.violema.com, Do Not Track honoured, query and fragment dropped), and four reader actions are counted with fixed labels only: `evidence-map-opened`, `corpus-switched` (`corpus`), `trial-record-opened` (`trial`) and `shift-explored` (first slider move per replay, never the value). No element carries Umami's `data-umami-event` attributes: on the lab's hash links Umami would cancel the click and navigate only after its request settles.
+
+To turn it on, in this order:
+
+1. Umami runs and psychdoc.ai's runbook steps 1 to 5 are done.
+2. In the Umami dashboard, add a website for `violema.com` and copy its ID.
+3. In the violema.com TLS server block, inside the company overlay and before `location / { return 404; }`, add `include snippets/umami-locations.conf;`. That changes the vhost, so the release packet's pinned baseline and candidate hashes change with it. Check `curl -fsSI https://violema.com/stats/script.js` returns 200.
+4. In one commit, set `websiteId` and `policyDate` (the day the release goes live). The build fails if only one is set. Tests show the privacy page switching to the statistics wording.
+5. Prepare a release packet as usual. The bundle now includes `company-assets/browser/analytics.mjs`; extend the audited bundler's allowlist if it rejects the new file.
 
 ## Fonts
 

@@ -1,6 +1,7 @@
 // Progressive enhancement entry point. Every page loads this module and it imports only what the
 // page uses. Without JavaScript every page keeps its full content, tables, links and downloads.
 import { enhanceTabs } from './tabs.mjs';
+import { track } from './analytics.mjs';
 
 const themeControl = document.querySelector('[data-theme-control]');
 if (themeControl) {
@@ -109,7 +110,12 @@ if (map) {
   const disclosure = map.closest('details.full-map');
   if (!disclosure || disclosure.open) import('./evidence-map.mjs');
   else disclosure.addEventListener('toggle', () => {
-    if (disclosure.open) import('./evidence-map.mjs');
+    if (!disclosure.open) return;
+    import('./evidence-map.mjs');
+    if (!disclosure.dataset.counted) {
+      disclosure.dataset.counted = '';
+      track('evidence-map-opened');
+    }
   });
 }
 
