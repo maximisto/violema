@@ -51,7 +51,7 @@ The homepage follows five chapters: overview, guided evidence, method, applicati
 
 ## Visit statistics
 
-The site can count visits with Umami, self-hosted on the same VPS as psychdoc.ai and shared with it (runbook in `maximisto/psychdoc-ai`, `docs/analytics.md`). It is **off**: `analytics.websiteId` in `lib/analytics.mjs` is `null`, so no tracker renders and the privacy page keeps its no-analytics wording, byte for byte. The ID is committed rather than read from the environment so a release bundle stays reproducible from its commit.
+The site can count visits with Umami, self-hosted on the same VPS as psychdoc.ai and shared with it (runbook in `maximisto/psychdoc-ai`, `docs/analytics.md`). It is **on** since 2026-10-16: `analytics.websiteId` in `lib/analytics.mjs` holds the violema.com website ID and `policyDate` the privacy page's effective date. Setting both back to `null` removes the tracker and restores the no-analytics privacy wording, byte for byte. The ID is committed rather than read from the environment so a release bundle stays reproducible from its commit.
 
 When on, every page loads `/stats/script.js` (deferred, `data-domains` violema.com and www.violema.com, Do Not Track honoured, query and fragment dropped), and four reader actions are counted with fixed labels only: `evidence-map-opened`, `corpus-switched` (`corpus`), `trial-record-opened` (`trial`) and `shift-explored` (first slider move per replay, never the value). No element carries Umami's `data-umami-event` attributes: on the lab's hash links Umami would cancel the click and navigate only after its request settles.
 

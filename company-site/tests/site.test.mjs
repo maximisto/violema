@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { corpora, stressTest } from '../data/corpora.mjs';
 import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen } from '../lib/render.mjs';
 import { homePage } from '../lib/pages.mjs';
+import { TRACKER_SRC } from '../lib/analytics.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
@@ -75,6 +76,7 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
     if(href.startsWith('#')){assert.ok(ids.includes(href.slice(1)),`Missing anchor ${href}`);continue;}
     if(!href.startsWith('/'))continue;
     if(['/login','/terms','/privacy'].includes(href))continue; // Served by the preserved application, outside this static bundle.
+    if(href===TRACKER_SRC)continue; // nginx proxies it to Umami (lib/analytics.mjs); never part of dist.
     const [path,anchor]=href.split('#');
     let local=join(dist,path);
     if((await stat(local)).isDirectory())local=join(local,'index.html');

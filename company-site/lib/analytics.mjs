@@ -6,9 +6,9 @@
 // no tracker renders and the privacy page keeps its no-analytics wording (lib/legal.mjs reads the same switch).
 export const analytics = Object.freeze({
   /** Umami's website ID for violema.com: public, it ships in every page. */
-  websiteId: null,
+  websiteId: '37945817-4e5c-4e8d-bdfa-f93dfeac5256',
   /** The date the analytics wording takes effect on the privacy page, as YYYY-MM-DD. */
-  policyDate: null,
+  policyDate: '2026-10-16',
 });
 
 /** Shared with psychdoc.ai's Umami: its daily purge and 7-day backups (psychdoc-ai ops/analytics/). Change together. */
