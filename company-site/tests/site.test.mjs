@@ -309,6 +309,18 @@ test('the home page build is deterministic',async()=>{
   assert.equal(await readFile(join(dist,'index.html'),'utf8'),first,'a separate build process produced the same bytes');
 });
 
+test('the home hero offers two actions, and its briefing link is the one the closing chapter uses',async()=>{
+  const html=await readFile(join(dist,'index.html'),'utf8');
+  const hero=html.match(/<section class="hero experience-hero"[\s\S]*?<\/section>/)[0];
+  const actions=hero.match(/<div class="actions">[\s\S]*?<\/div>/)[0];
+  assert.match(actions,/^<div class="actions"><a class="button button-primary" href="#evidence">Follow the evidence /,'the primary action still leads');
+  assert.equal((actions.match(/class="button /g)||[]).length,2,'exactly two buttons in the hero');
+  const secondary=actions.match(/<a class="button button-secondary" href="([^"]+)">Request a scientific briefing /);
+  assert.ok(secondary,'the second button asks for a scientific briefing');
+  const closing=html.match(/<section class="experience-chapter chapter-connect"[\s\S]*?<\/section>/)[0];
+  assert.ok(closing.includes(`<a class="button button-primary" href="${secondary[1]}">Request a scientific briefing `),'top and bottom of the page send the reader to the same briefing form');
+});
+
 test('the demo replay states that it always uses Claim 1, beside the control, clinical corpus only',async()=>{
   const label='<p class="replay-scope" id="replay-scope">Saved replay: Claim 1, primary analysis. Selecting another claim does not change this replay.</p>';
   const clinical=corpusPanel(corpora.find(c=>c.id===stressTest.corpusId),stressTest);
