@@ -4,6 +4,7 @@ import { evidenceMapSection } from './evidence-map.mjs';
 import { homeExperience } from './experience.mjs';
 import { howItWorksSection, crossFieldSection } from './how-it-works.mjs';
 import { howItWorks } from '../data/how-it-works.mjs';
+import { analyticsScript } from './analytics.mjs';
 import { legalPolicies, legalUpdatedAt } from './legal.mjs';
 import { escapeHTML as e, sourceURL, corpusPanel, intervalFigure, calculateBiasScenario, chartLegend, biasControl, biasExplanation, referenceNote, scenarioSummary, traceSpecimen } from './render.mjs';
 
@@ -67,7 +68,7 @@ function siteFooter() {
 }
 
 export function shell(route, title, description, content, options = {}) {
-  return `<!doctype html><html lang="en"><head>${head(route, title, description, options)}</head><body><a class="skip-link" href="#main">Skip to content</a>${siteHeader(route)}<main id="main"${route === '/' ? ' class="home-experience"' : ''}>${content}</main>${siteFooter()}<script type="module" src="/company-assets/browser/site.mjs"></script></body></html>`;
+  return `<!doctype html><html lang="en"><head>${head(route, title, description, options)}</head><body><a class="skip-link" href="#main">Skip to content</a>${siteHeader(route)}<main id="main"${route === '/' ? ' class="home-experience"' : ''}>${content}</main>${siteFooter()}<script type="module" src="/company-assets/browser/site.mjs"></script>${analyticsScript()}</body></html>`;
 }
 
 export function legalPage(slug) {

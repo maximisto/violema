@@ -1,4 +1,5 @@
 import { enhancePlayback } from './playback.mjs';
+import { track } from './analytics.mjs';
 
 const trace = document.querySelector('[data-trace-story]');
 if (trace) enhancePlayback(trace, [...trace.querySelectorAll('.trial-records, .assembly-convergence, .assembly-claim')], 3400, 'Replay trace');
@@ -42,6 +43,7 @@ if (trialDialog && typeof trialDialog.showModal === 'function') {
       panels.forEach(panel => { panel.hidden = panel.dataset.trialPanel !== choice.dataset.trialChoice; });
       trialDialog.setAttribute('aria-labelledby', `trial-title-${choice.dataset.trialChoice}`);
       trialDialog.showModal();
+      track('trial-record-opened', { trial: choice.dataset.trialChoice });
     });
   }
 }

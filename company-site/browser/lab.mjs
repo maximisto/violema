@@ -3,6 +3,7 @@
 import { corpora, stressTest } from '../data/corpora.mjs';
 import { calculateBiasScenario, intervalFigure } from './render.mjs';
 import { enhanceTabs } from './tabs.mjs';
+import { track } from './analytics.mjs';
 
 const format = number => number.toFixed(2).replace('-', '−');
 const plainClick = event => !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
@@ -22,7 +23,15 @@ function enhanceBias(root) {
     result.textContent = `Assumed shift +${format(scenario.bias)}. Estimate ${format(scenario.estimate)}; ${stressTest.intervalLabel || '95% confidence interval'} ${format(scenario.lower)} to ${format(scenario.upper)}.`;
   }
   control.hidden = false;
-  range.addEventListener('input', event => update(Number(event.target.value)));
+  let explored = false;
+  range.addEventListener('input', event => {
+    update(Number(event.target.value));
+    // Once per replay per page view, and never the value: that the reader tried the shift is the signal.
+    if (!explored) {
+      explored = true;
+      track('shift-explored');
+    }
+  });
   return { root, update };
 }
 
@@ -63,6 +72,7 @@ if (panels.length && switcher) {
     onSelect(panelId) {
       const id = panelId.replace(/^corpus-/, '');
       showCorpus(id, true);
+      track('corpus-switched', { corpus: id });
       history.replaceState(null, '', `#corpus-${id}`);
     },
   });

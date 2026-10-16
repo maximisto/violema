@@ -6,7 +6,10 @@ import { corpora } from '../data/corpora.mjs';
 import { escapeHTML } from '../lib/render.mjs';
 
 const html = await readFile(new URL('../dist/index.html', import.meta.url), 'utf8');
-const playback = (await readFile(new URL('../browser/playback.mjs', import.meta.url), 'utf8')).replace('export function', 'function') + (await readFile(new URL('../browser/experience.mjs', import.meta.url), 'utf8')).replace(/^import .*;\n/, '');
+// The sandbox has no modules: imports are stripped and analytics.mjs's track() is a stub that records into `tracked`
+// when the test's context supplies one.
+const trackStub = 'const track = (...args) => { if (typeof tracked !== "undefined") tracked.push(args); };\n';
+const playback = trackStub + (await readFile(new URL('../browser/playback.mjs', import.meta.url), 'utf8')).replace('export function', 'function') + (await readFile(new URL('../browser/experience.mjs', import.meta.url), 'utf8')).replace(/^import .*;\n/gm, '');
 const appearance = await readFile(new URL('../browser/appearance.css', import.meta.url), 'utf8');
 const baseCSS = await readFile(new URL('../browser/site.css', import.meta.url), 'utf8');
 
@@ -224,7 +227,7 @@ test('presentational step entrances settle without exposing a replay control', (
 
 
 test('mobile navigation opens accessibly and closes on Escape, departure, navigation and viewport changes', async () => {
-  const source = (await readFile(new URL('../browser/site.mjs', import.meta.url), 'utf8')).replace(/^import .*;$/m, '');
+  const source = trackStub + (await readFile(new URL('../browser/site.mjs', import.meta.url), 'utf8')).replace(/^import .*;$/gm, '');
   const target = extra => ({ listeners: {}, addEventListener(name, fn) { this.listeners[name] = fn; }, ...extra });
   let focused;
   const firstLink = { focus() { focused = this; } };
