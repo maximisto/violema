@@ -2,14 +2,7 @@
 # Rendered by deploy/scientific-site/render.mjs; see migration handoff.
 # One EXISTING backend/state/scheduler. No second process is created.
 # LOOPBACK ONLY. Requires a separately approved local backend fixture on :3001.
-# Place these map directives in nginx http context, never inside server.
-map "$request_method:$request_uri" $scientific_browser_redirect {
-    default "";
-    "~^(?:GET|HEAD):/(?:login|signup|access-terms|plans|pricing|settings(?:/billing)?|connect/slack|integrations|admin|dashboard(?:/agents)?|runs/[A-Za-z0-9_-]+)/?$" "http://127.0.0.1:8089$request_uri#";
-    "~^(?:GET|HEAD):/(?:plans|pricing)\?(?:section=topups|plan=(?:pro|team)|checkout=(?:success|cancel))$" "http://127.0.0.1:8089$request_uri#";
-    "~^(?:GET|HEAD):/dashboard\?(?:panel=schedules|checkout=(?:success|cancel))$" "http://127.0.0.1:8089$request_uri#";
-    "~^(?:GET|HEAD):/(?:login|signup|access-terms|connect/slack)\?next=(?:%2[Ff]|/)(?:dashboard|plans|pricing)$" "http://127.0.0.1:8089$request_uri#";
-}
+# Place this map directive in nginx http context, never inside server.
 map $uri $scientific_protected_path {
     default 0;
     "~*(?:^/(?:backend|frontend|deploy|company-site|docs|node_modules)(?:/|$)|(?:^|/)\.[^/]*(?:/|$)|(?:\.(?:bak|map|env|rtf)$)|^/(?:AGENTS|CLAUDE)\.md$)" 1;
@@ -51,6 +44,14 @@ server {
         proxy_send_timeout 300s;
     }
     root /var/www/nexus/company-site/dist;
+    error_page 404 /404.html;
+    location = /404.html {
+        internal;
+        add_header Cache-Control no-cache always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin always;
+    }
     location = / {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         try_files /index.html =404;
@@ -67,6 +68,10 @@ server {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         try_files /method/index.html =404;
     }
+    location = /method/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /method/index.html =404;
+    }
     location = /demo {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         try_files /demo/index.html =404;
@@ -74,6 +79,46 @@ server {
     location = /demo/ {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         try_files /demo/index.html =404;
+    }
+    location = /demo/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /demo/index.html =404;
+    }
+    location = /review {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /review/index.html =404;
+    }
+    location = /review/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /review/index.html =404;
+    }
+    location = /review/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /review/index.html =404;
+    }
+    location = /legal/terms {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /legal/terms/index.html =404;
+    }
+    location = /legal/terms/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /legal/terms/index.html =404;
+    }
+    location = /legal/terms/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /legal/terms/index.html =404;
+    }
+    location = /legal/privacy {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /legal/privacy/index.html =404;
+    }
+    location = /legal/privacy/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /legal/privacy/index.html =404;
+    }
+    location = /legal/privacy/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /legal/privacy/index.html =404;
     }
     location = /robots.txt {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
@@ -91,74 +136,8 @@ server {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         try_files $uri =404;
     }
-    location ^~ /assets/ {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    location ^~ /brand/ {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    location ^~ /fonts/ {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    location ^~ /seo/ {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    location ^~ /blog/ {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    location ^~ /ai-agents-for-founders/ {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    location = /blog {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    location = /ai-agents-for-founders {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    location = /po-logo.png {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    location = /violema-icon.svg {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    location = /violema-mark.svg {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    location = /33bbbde5b8700c2c95901a438260d51d.txt {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        root /var/www/nexus/frontend/dist;
-        try_files $uri $uri/index.html =404;
-    }
-    # Unknown/sensitive queries stay on the original host; no token transfer.
-    location ~ "^(?:/(?:login|signup|access-terms|plans|pricing|settings(?:/billing)?|connect/slack|integrations|admin|dashboard(?:/agents)?|runs/[A-Za-z0-9_-]+)|/(?:faq|privacy|terms))/?$" {
-        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
-        if ($scientific_browser_redirect != "") { return 302 $scientific_browser_redirect; }
-        root /var/www/nexus/frontend/dist;
-        try_files /index.html =404;
-    }
-    # Scientific routes never fall through into the legacy SPA.
+    # The old workspace app moved to agent.purpleorange.ai: its pages, assets and
+    # unknown paths are the company 404 page, never a redirect or the legacy SPA.
     location / { return 404; }
 }
 server {

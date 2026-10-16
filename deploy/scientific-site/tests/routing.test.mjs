@@ -26,22 +26,28 @@ test('all API, provider deliveries, callbacks and historical generated links ret
   }
 });
 
-test('only inventoried browser routes and explicit safe queries redirect; no fragment inheritance', () => {
-  for (const host of oldHosts) for (const target of ['/login', '/signup', '/dashboard', '/dashboard/agents', '/settings/billing', '/runs/run_123', '/plans?section=topups', '/pricing?plan=pro', '/dashboard?panel=schedules', '/login?next=%2Fdashboard']) {
-    assert.deepEqual(classify({ host, target }), { kind: 'redirect', status: 302, location: `https://agent.purpleorange.ai${target}#` });
-    assert.equal(classify({ host, method: 'POST', target }).kind, 'method-not-allowed');
+test('old workspace pages, old assets and unknown paths are the company 404 page, never a redirect', () => {
+  const notFound = { kind: 'not-found', status: 404, page: '/404.html' };
+  const oldPages = ['/login', '/signup', '/access-terms', '/dashboard', '/dashboard/agents', '/settings', '/settings/billing', '/plans', '/pricing', '/connect/slack', '/integrations', '/admin', '/runs/run_123', '/faq', '/terms', '/privacy'];
+  const oldQueries = ['/plans?section=topups', '/pricing?plan=pro', '/dashboard?panel=schedules', '/login?next=%2Fdashboard', '/login?token=secret', '/pricing?checkout=success&session_id=cs_123'];
+  const oldAssets = ['/assets/old-bundle.js', '/brand/violema-slack-avatar.png', '/fonts/geist/geist-sans-400.woff2', '/seo/seo.css', '/blog', '/blog/weekly-founder-update-ai-agent/index.html', '/ai-agents-for-founders', '/po-logo.png', '/violema-icon.svg'];
+  const unknown = ['/nonexistent', '/Login', '/dashboard-other', '/runs/a/b', '/api-other', '/wp-login.php', '/login%3Ftoken=secret', '/404.html'];
+  for (const host of oldHosts) for (const method of ['GET', 'HEAD', 'POST']) for (const target of [...oldPages, ...oldQueries, ...oldAssets, ...unknown]) {
+    assert.deepEqual(classify({ host, method, target }), notFound, `${host} ${method} ${target}`);
   }
-  for (const target of ['/login?token=secret', '/login?code=secret', '/login?next=https://evil.test', '/login?next=%2F%2Fevil.test', '/login?%74oken=secret', '/integrations?connected=gmail&status=success', '/pricing?checkout=success&session_id=cs_123', '/dashboard?panel=schedules&token=secret']) {
-    assert.equal(classify({ target }).kind, 'legacy-app', target);
-  }
-  for (const target of ['/dashboard-other', '/runs/a/b', '/api-other', '//evil.test/dashboard', '/login%3Ftoken=secret']) assert.notEqual(classify({ target }).kind, 'redirect', target);
 });
 
-test('scientific pages and metadata use company HTML with no SPA fallback; legacy static stays available', () => {
-  for (const target of ['/', '/method', '/method/', '/demo', '/demo/', '/company-assets/site.css', '/company-assets/data/psychdoc.json', '/robots.txt', '/sitemap.xml', '/llms.txt']) assert.equal(classify({ target }).kind, 'company', target);
-  for (const target of ['/assets/old-bundle.js', '/brand/violema-slack-avatar.png', '/fonts/geist/geist-sans-400.woff2', '/blog', '/ai-agents-for-founders', '/blog/weekly-founder-update-ai-agent/index.html', '/seo/seo.css']) assert.equal(classify({ target }).kind, 'legacy-static', target);
-  for (const target of ['/terms', '/privacy', '/faq']) assert.equal(classify({ target }).kind, 'legacy-app', target);
-  assert.equal(classify({ target: '/nonexistent' }).kind, 'not-found');
+test('company pages and metadata use company HTML; non-read methods are refused', () => {
+  const pages = ['/', '/index.html', '/method', '/method/', '/method/index.html', '/demo', '/demo/', '/demo/index.html', '/review', '/review/', '/review/index.html', '/legal/terms', '/legal/terms/', '/legal/privacy/', '/legal/privacy/index.html', '/robots.txt', '/sitemap.xml', '/llms.txt', '/company-assets/site.css', '/company-assets/data/psychdoc.json'];
+  for (const host of oldHosts) for (const target of pages) {
+    assert.equal(classify({ host, target }).kind, 'company', target);
+    assert.equal(classify({ host, method: 'POST', target }).kind, 'method-not-allowed', target);
+  }
+});
+
+test('agent.purpleorange.ai keeps the old app for reads', () => {
+  for (const target of ['/', '/login', '/dashboard', '/assets/old-bundle.js']) assert.equal(classify({ host: 'agent.purpleorange.ai', target }).kind, 'legacy-app', target);
+  assert.equal(classify({ host: 'agent.purpleorange.ai', method: 'POST', target: '/login' }).kind, 'method-not-allowed');
 });
 
 test('source and sensitive file paths are rejected before asset and API prefix handling', () => {
@@ -59,8 +65,12 @@ test('rendered configs match committed inert templates and proxy all API locatio
     assert.match(output, /location = \/api \{/);
     assert.match(output, /location = \/method \{[\s\S]*?try_files \/method\/index\.html =404;/);
     assert.match(output, /location \/ \{ return 404; \}/);
-    assert.match(output, /\$request_uri#";/);
-    assert.doesNotMatch(output, /proxy_redirect|proxy_cookie_domain|rewrite\s|return 30[1278] https:\/\/agent\.purpleorange\.ai\$request_uri;/);
+    assert.match(output, /error_page 404 \/404\.html;\n    location = \/404\.html \{\n        internal;/);
+    assert.doesNotMatch(output, /proxy_redirect|proxy_cookie_domain|rewrite\s|return 30[12]|scientific_browser_redirect|\$request_uri#/);
+    // The company server never reads the old app's root or names the app host.
+    const company = output.split('server {').find(block => /listen (?:127\.0\.0\.1:8088|443 ssl);\n    server_name (?:localhost|violema\.com)/.test(block));
+    assert.ok(company, `${mode} company server`);
+    assert.doesNotMatch(company.replace(/#.*$/gm, ''), /frontend\/dist|agent\.purpleorange\.ai/);
   }
 });
 
