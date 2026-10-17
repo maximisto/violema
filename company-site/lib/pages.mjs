@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { evidenceMapSection } from './evidence-map.mjs';
-import { homeExperience } from './experience.mjs';
+import { homeExperience, heroArtwork } from './experience.mjs';
 import { howItWorksSection, crossFieldSection } from './how-it-works.mjs';
 import { howItWorks } from '../data/how-it-works.mjs';
 import { analyticsScript } from './analytics.mjs';
@@ -55,7 +55,7 @@ function head(route, title, description, { lab = false, notFound = false } = {})
     '<script>try{if(localStorage.getItem("violema-theme")==="dark")document.documentElement.dataset.theme="dark"}catch{}</script>',
     '<link rel="stylesheet" href="/company-assets/site.css">',
     '<link rel="stylesheet" href="/company-assets/appearance.css">',
-    ...(route === '/' ? ['<link rel="stylesheet" href="/company-assets/experience.css">'] : []),
+    ...(['/', '/about/'].includes(route) ? ['<link rel="stylesheet" href="/company-assets/experience.css">'] : []),
     ...(route === '/method/' ? ['<link rel="stylesheet" href="/company-assets/diagrams.css">'] : []),
     ...(lab ? labModules : []).map(href => `<link rel="modulepreload" href="${href}">`),
   ].join('');
@@ -70,7 +70,7 @@ function siteFooter() {
 }
 
 export function shell(route, title, description, content, options = {}) {
-  return `<!doctype html><html lang="en"><head>${head(route, title, description, options)}</head><body><a class="skip-link" href="#main">Skip to content</a>${siteHeader(route)}<main id="main"${route === '/' ? ' class="home-experience"' : ''}>${content}</main>${siteFooter()}<script type="module" src="/company-assets/browser/site.mjs"></script>${analyticsScript()}</body></html>`;
+  return `<!doctype html><html lang="en"><head>${head(route, title, description, options)}</head><body><a class="skip-link" href="#main">Skip to content</a>${siteHeader(route)}<main id="main"${['/', '/about/'].includes(route) ? ' class="home-experience"' : ''}>${content}</main>${siteFooter()}<script type="module" src="/company-assets/browser/site.mjs"></script>${analyticsScript()}</body></html>`;
 }
 
 export function legalPage(slug) {
@@ -173,10 +173,219 @@ export function demoPage(corpora,stress) {
 }
 
 export function aboutPage() {
+  const governanceStations = [
+    ['Code', 'Weekly citation scans and deterministic counts.', 'Scheduled jobs follow citations out from seed papers on OpenAlex, track shared trial registrations, and count independent research programs so repeated reports from one cohort never inflate evidence counts.', '/method/#how-it-works', 'Inspect the weekly pipeline'],
+    ['Rules', 'Written inclusion and exclusion rules.', 'Every question starts with explicit written screening rules. Each candidate paper is recorded as included, excluded, or pending with a documented reason.', '/method/#how-it-works', 'Read the screening rules'],
+    ['Quotes', 'Exact passages stay attached to every claim.', 'Claims are never detached summaries. Each claim keeps the exact quote, locator, population, comparator, endpoint, and time window from the primary publication.', '/demo/#corpus-psychdoc', 'Inspect a source-linked claim'],
+    ['Replay', 'Saved statistical code re-run to four decimals.', 'When a field supports quantitative pooling, Violema re-runs the published statistical code and exposes an explicit additive bias control so readers can test where a conclusion breaks.', '/review/#review-specimen', 'Replay the saved analysis'],
+    ['Review', 'Independent domain scientists sign with ORCID.', 'External trialists, pharmacologists, and methodologists audit the downloadable packet, sign with their ORCID iD, and control the exact wording of any dissent.', '/review/', 'Open the reviewer walkthrough'],
+    ['Firewall', 'Commissioned speed, never commissioned conclusions.', 'Research teams can commission a review or private briefing on an 8-to-10-week schedule. Money never buys or previews a tier, threshold, or conclusion, and commissioned reviews publish openly within six months.', 'https://psychdoc.ai/#briefing', 'Request a scientific briefing'],
+  ];
+
+  const heroInstrument = `<figure class="evidence-hero instrument about-hero-instrument" aria-labelledby="about-dossier-title">
+    <div class="evidence-hero-top">
+      <div class="instrument-title-row">
+        <p id="about-dossier-title">Three layers of scientific accountability.</p>
+        <span class="pill">Violema, Inc.</span>
+      </div>
+      <span class="caption">Delaware C-Corporation · Headquartered in Chicago, Illinois</span>
+    </div>
+    <div class="source-assembly about-dossier-body">
+      <div class="about-telemetry-grid" aria-label="Live system metrics">
+        <div class="about-telemetry-cell">
+          <span class="about-telemetry-value">02</span>
+          <span class="about-telemetry-label">Prepared corpora</span>
+          <small>Psychedelic medicine &amp; materials stability</small>
+        </div>
+        <div class="about-telemetry-cell">
+          <span class="about-telemetry-value">24</span>
+          <span class="about-telemetry-label">Source papers read</span>
+          <small>300 in scope · 1,588 citation candidates</small>
+        </div>
+        <div class="about-telemetry-cell">
+          <span class="about-telemetry-value">23</span>
+          <span class="about-telemetry-label">Tiered claims</span>
+          <small>Each with exact quotes &amp; reversal criteria</small>
+        </div>
+        <div class="about-telemetry-cell">
+          <span class="about-telemetry-value">15</span>
+          <span class="about-telemetry-label">Research programs</span>
+          <small>Counted for lab &amp; sample independence</small>
+        </div>
+      </div>
+      <svg class="about-architecture-svg" viewBox="0 0 600 136" role="img" aria-label="Three accountability layers: Deterministic Code feeds AI Draft with Human Gate, which feeds ORCID-Signed Domain Review">
+        <defs>
+          <linearGradient id="about-signal" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#A79BFF"/>
+            <stop offset="50%" stop-color="#CD936B"/>
+            <stop offset="100%" stop-color="#A79BFF"/>
+          </linearGradient>
+        </defs>
+        <path d="M188 68 H212 M388 68 H412" stroke="url(#about-signal)" stroke-width="2" stroke-dasharray="4 3"/>
+        <circle cx="200" cy="68" r="3.5" fill="#CD936B"/>
+        <circle cx="400" cy="68" r="3.5" fill="#A79BFF"/>
+        <g transform="translate(8,14)">
+          <rect width="180" height="108" rx="10" fill="#111725" stroke="#263040"/>
+          <text x="16" y="28" fill="#A79BFF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="600">LAYER 01 · CODE</text>
+          <text x="16" y="54" fill="#E6EAF0" font-family="Instrument Sans, sans-serif" font-size="15" font-weight="600">Deterministic trace</text>
+          <text x="16" y="76" fill="#9AA4B2" font-family="Inter, sans-serif" font-size="12">Citation scans, R replay,</text>
+          <text x="16" y="93" fill="#9AA4B2" font-family="Inter, sans-serif" font-size="12">program independence</text>
+        </g>
+        <g transform="translate(210,14)">
+          <rect width="180" height="108" rx="10" fill="#111725" stroke="#626C7B"/>
+          <text x="16" y="28" fill="#CD936B" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="600">LAYER 02 · GATE</text>
+          <text x="16" y="54" fill="#E6EAF0" font-family="Instrument Sans, sans-serif" font-size="15" font-weight="600">AI draft + human</text>
+          <text x="16" y="76" fill="#9AA4B2" font-family="Inter, sans-serif" font-size="12">Exact quotes attached;</text>
+          <text x="16" y="93" fill="#9AA4B2" font-family="Inter, sans-serif" font-size="12">human approval gate</text>
+        </g>
+        <g transform="translate(412,14)">
+          <rect width="180" height="108" rx="10" fill="#111725" stroke="#A79BFF"/>
+          <text x="16" y="28" fill="#A79BFF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="600">LAYER 03 · REVIEW</text>
+          <text x="16" y="54" fill="#E6EAF0" font-family="Instrument Sans, sans-serif" font-size="15" font-weight="600">ORCID sign-off</text>
+          <text x="16" y="76" fill="#9AA4B2" font-family="Inter, sans-serif" font-size="12">Named domain experts</text>
+          <text x="16" y="93" fill="#9AA4B2" font-family="Inter, sans-serif" font-size="12">&amp; protected dissent</text>
+        </g>
+      </svg>
+      <div class="assembly-claim">
+        <p class="assembly-label">Editorial independence</p>
+        <p class="assembly-claim-text">Money buys speed, priority, and private briefings. It never buys or previews conclusions.</p>
+        <p class="assembly-limit">Every commissioned review is published openly within six months with its full source packet and revision history.</p>
+      </div>
+    </div>
+    <figcaption class="evidence-hero-caption">
+      <span>One evidence engine across scientific disciplines.</span>
+      <a href="/method/">Inspect the method</a>
+    </figcaption>
+  </figure>`;
+
+  const companyGuide = `<div class="evidence-guide" data-tabs>
+    <div class="guide-topline"><span>Violema, Inc. · Corporate &amp; operating charter</span><span class="record-status">Active architecture</span></div>
+    <nav class="guide-tabs" data-tablist aria-label="Explore how Violema operates">
+      <a href="#charter-problem"><span>01</span> The bottleneck</a>
+      <a href="#charter-divisions"><span>02</span> Division model</a>
+      <a href="#charter-firewall"><span>03</span> Editorial firewall</a>
+    </nav>
+    <div class="guide-panels">
+      <section id="charter-problem" aria-labelledby="charter-problem-heading">
+        <p class="label">Why traditional evidence reviews fall behind</p>
+        <h3 id="charter-problem-heading">$141,195 and 67 weeks per systematic review.</h3>
+        <p class="guide-claim">A drug developer, clinical trial team, research fund, or journal editor needs an answer this quarter. By the time a traditional review lands, new trials have changed the picture, so teams fall back on abstracts and press releases.</p>
+        <div class="guide-boundary">
+          <strong>What Violema replaces</strong>
+          <p>Instead of a static PDF summary that hides disagreements, Violema builds a living, claim-by-claim record that shows which claims hold, why they hold that tier, and what new evidence would change them. Benchmarks: Michelson &amp; Reuter (Contemp Clin Trials Commun, 2019); Borah et al. (BMJ Open, 2017).</p>
+        </div>
+        <a class="text-link" href="/demo/">Open the live evidence lab ${external}</a>
+      </section>
+      <section id="charter-divisions" aria-labelledby="charter-divisions-heading">
+        <p class="label">One core engine · field-specific products</p>
+        <h3 id="charter-divisions-heading">Violema is the engine. Each division serves one field.</h3>
+        <ul class="guide-sources">
+          <li><details open><summary><strong>PsychDoc.AI · Psychedelic medicine (Live)</strong><span aria-hidden="true">+</span></summary><p>Our first operating division. Tracks psychedelic neuroscience and clinical trials claim by claim, starting with psilocybin neuroplasticity and depression meta-analysis stress testing.</p><a href="${psychdoc}">Explore PsychDoc.AI ${external}</a></details></li>
+          <li><details><summary><strong>Materials science · Perovskite stability (Live specimen)</strong><span aria-hidden="true">+</span></summary><p>Exercises the same source-to-claim record and condition comparison matrix outside medicine, showing where incompatible test conditions block statistical pooling.</p><a href="/demo/#corpus-perovskite-stability">Inspect the materials specimen ${external}</a></details></li>
+          <li><details><summary><strong>Research integrity · Peer-review verification (Exploring)</strong><span aria-hidden="true">+</span></summary><p>Pre-publication claim and citation verification tools for academic peer reviewers, journals, and university research integrity offices.</p><a href="/method/#cross-field">See how cross-field verification works ${external}</a></details></li>
+        </ul>
+        <p class="caption">Each scientific product stays clean and focused on its domain literature while Violema, Inc. maintains the shared verification engine.</p>
+      </section>
+      <section id="charter-firewall" aria-labelledby="charter-firewall-heading">
+        <p class="label">How Violema makes money without compromising conclusions</p>
+        <h3 id="charter-firewall-heading">Free to read. Paid to commission.</h3>
+        <p class="guide-claim">Public living syntheses are free for researchers, clinicians, and the press. Drug developers, R&amp;D teams, and university trial groups pay to commission a synthesis on their question in 8 to 10 weeks or subscribe to living updates.</p>
+        <div class="guide-boundary">
+          <strong>Three non-negotiable firewall rules</strong>
+          <p>1. Sponsors choose the research question, never the tier or conclusion. 2. Sponsors receive no pre-publication preview of conclusions. 3. Every commissioned review is published openly within six months.</p>
+        </div>
+        <a class="text-link" href="${psychdoc}/policies/editorial">Read the full editorial policy ${external}</a>
+      </section>
+    </div>
+    <div class="guide-foot"><span>Violema, Inc. holds no equity, options, or advisory roles in any drug developer.</span><a href="/company-assets/data/psychdoc.json" download>Download sample packet ${external}</a></div>
+  </div>`;
+
+  const governanceExplorer = `<div class="method-explorer" data-tabs data-method-explorer data-step-sequence data-stage="static">
+    <div class="method-controls"><span>Select any governance station to inspect how Violema enforces rigor.</span></div>
+    <nav class="method-stations" data-tablist aria-label="Explore the six governance guarantees">${governanceStations.map(([name], i) => `<a data-step href="#gov-${name.toLowerCase()}"><span class="method-number">0${i + 1}</span><span class="method-dot" aria-hidden="true"></span><strong>${name}</strong></a>`).join('')}</nav>
+    <div class="method-panels">${governanceStations.map(([name, title, body, href, label]) => `<section id="gov-${name.toLowerCase()}" aria-labelledby="gov-${name.toLowerCase()}-heading"><div><p class="label">${name}</p><h3 id="gov-${name.toLowerCase()}-heading">${title}</h3></div><div><p>${e(body)}</p><a class="text-link" href="${href}">${label} ${external}</a></div></section>`).join('')}</div>
+  </div>`;
+
+  const founderSection = `<section class="experience-chapter chapter-evidence" id="founder" aria-labelledby="founder-title" data-chapter>
+    <div class="wrap">
+      <p class="chapter-label"><span aria-hidden="true">03</span>Founder &amp; Leadership</p>
+      <div class="about-founder-showcase">
+        <figure class="instrument founder-instrument" aria-label="Max Markovtsev founder dossier">
+          <div class="founder-instrument-head">
+            <span class="pill">Founder &amp; CEO</span>
+            <span class="caption">Chicago, Illinois</span>
+          </div>
+          <div class="founder-portrait-wrap">
+            <img class="founder-portrait" src="/company-assets/max-markovtsev.jpg" width="1024" height="1024" alt="Max Markovtsev, Founder and CEO of Violema, Inc." loading="lazy">
+          </div>
+          <figcaption class="founder-instrument-body">
+            <h3 class="founder-name">Max Markovtsev</h3>
+            <p class="founder-role">Founder &amp; Chief Executive Officer · Violema, Inc.</p>
+            <div class="founder-badges">
+              <a class="founder-badge" href="https://orcid.org/0009-0009-9354-2207" target="_blank" rel="noopener noreferrer"><code>ORCID 0009-0009-9354-2207</code> ${external}</a>
+              <a class="founder-badge" href="https://www.linkedin.com/in/maximisto/" target="_blank" rel="noopener noreferrer">LinkedIn @maximisto ${external}</a>
+              <a class="founder-badge" href="https://x.com/maximisto" target="_blank" rel="noopener noreferrer">X @maximisto ${external}</a>
+            </div>
+            <dl class="founder-ledger" aria-label="Career timeline">
+              <div>
+                <dt>2026 to present</dt>
+                <dd><strong>Violema, Inc. &amp; PsychDoc.AI</strong><span>Founder &amp; CEO · Scientific evidence systems</span></dd>
+              </div>
+              <div>
+                <dt>2017 to present</dt>
+                <dd><strong>Purple Orange AI · Purple Orange Group</strong><span>Founder &amp; Managing Partner · Governed AI systems</span></dd>
+              </div>
+              <div>
+                <dt>1995 to 2016</dt>
+                <dd><strong>J. Walter Thompson · Leo Burnett · BBDO</strong><span>Sr. Digital Strategist &amp; Director of Business Intelligence</span></dd>
+              </div>
+              <div>
+                <dt>1991 to 1995</dt>
+                <dd><strong>Moscow State University (MESI)</strong><span>Economics, Statistics, and Informatics</span></dd>
+              </div>
+            </dl>
+          </figcaption>
+        </figure>
+
+        <div class="founder-narrative">
+          <p class="label">Systems architecture meets scientific synthesis</p>
+          <h2 id="founder-title">Thirty years turning complex data into decisions.</h2>
+          <p class="lede">Max Markovtsev is a Chicago-based founder and systems architect who has spent three decades building analytical, business intelligence, and governed AI systems for high-stakes decisions.</p>
+          <p>Before founding Violema, Inc. and its first scientific division, <a href="${psychdoc}">PsychDoc.AI ${external}</a>, Max spent more than 15 years in strategy and business intelligence at Leo Burnett, BBDO, and J. Walter Thompson. At 19 he helped open Leo Burnett’s Moscow office on the Procter &amp; Gamble account, and over the next decade and a half he led analytics, research synthesis, and digital transformation for global enterprise and public-sector organizations.</p>
+          <p>In 2017 his work turned to machine learning and governed AI infrastructure in Chicago, designing multi-agent verification pipelines, citation and provenance graphs, and human-in-the-loop software where every automated output must pass deterministic checks before a person approves it.</p>
+
+          <div class="guide-boundary founder-callout">
+            <strong>Why a systems architect builds scientific evidence infrastructure</strong>
+            <p>Most AI tools fail science because they treat papers as text to summarize rather than experiments to audit. Violema was built on a different premise: let deterministic code handle citation graphs, sample-overlap tracking, and statistical reproduction, and let named, ORCID-verified domain scientists sign the scientific conclusions.</p>
+          </div>
+
+          <div class="founder-track-record" aria-label="Prior enterprise analytics and strategy experience">
+            <p class="label">Prior strategy, analytics &amp; BI leadership across global organizations</p>
+            <ul class="founder-client-grid">
+              <li><strong>Procter &amp; Gamble</strong><span>Brand &amp; market intelligence</span></li>
+              <li><strong>Unilever</strong><span>Digital transformation &amp; analytics</span></li>
+              <li><strong>Wrigley</strong><span>Global consumer &amp; commercial BI</span></li>
+              <li><strong>Nestlé</strong><span>Strategic research &amp; data systems</span></li>
+              <li><strong>Northwestern Mutual</strong><span>Enterprise digital strategy</span></li>
+              <li><strong>U.S. Marine Corps</strong><span>Digital systems &amp; recruitment BI</span></li>
+            </ul>
+          </div>
+
+          <div class="founder-disclosure">
+            <p class="small"><strong>Role boundary and conflict-of-interest disclosure:</strong> Max Markovtsev leads product architecture, citation-graph engineering, and statistical reproduction at Violema, Inc. He is identified in that engineering and publishing role, not as a clinician or medical reviewer. Neither Max Markovtsev nor Violema, Inc. holds shares, options, or advisory roles in any psychedelic drug developer.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>`;
+
   return shell('/about/', 'About Violema | Violema', 'Who builds Violema, how Violema, Inc. structures scientific accountability across PsychDoc.AI and future fields, and founder Max Markovtsev’s background.', [
-    `<section class="page-head"><div class="wrap split"><div><p class="label">About Violema, Inc.</p><h1>Scientific conclusions<br>should show their working.</h1></div><div><p class="lede page-lede">Violema, Inc. is a Delaware corporation based in Chicago. We build scientific evidence systems that connect claims to primary sources, expose consequential assumptions, and keep conclusions open to independent review.</p><p class="small">Each application brings the same record structure to a specific scientific field, starting with <a href="${psychdoc}">PsychDoc.AI ${external}</a> in psychedelic research and a second demonstration in <a href="/demo/#corpus-perovskite-stability">materials science</a>.</p></div></div></section>`,
-    `<section class="section" id="governance" aria-labelledby="governance-title"><div class="wrap split"><div><p class="label">Scientific governance</p><h2 id="governance-title">Three layers of accountability.</h2><p class="lede">Software can trace sources and replay saved models, but it cannot replace domain judgment. Violema separates what code checks, what AI drafts, and what qualified scientists sign.</p></div><div class="capabilities"><div class="capability"><span class="pill pill-filled">Layer 01 · Deterministic code</span><h3>Traceable source and analysis records</h3><p>Code follows citation graphs, tracks shared trial registrations and research programs, re-runs published statistical code, and keeps exact passages attached to each claim.</p></div><div class="capability"><span class="pill">Layer 02 · Independent domain review</span><h3>Named reviewers with ORCID sign-off</h3><p>External researchers and trialists inspect the downloadable packet, sign with their ORCID iD, and control the exact wording of any dissent. Unreviewed claims are labeled explicitly.</p></div><div class="capability"><span class="pill">Layer 03 · Editorial firewall</span><h3>Commissioned speed, never commissioned conclusions</h3><p>Clients can commission a new synthesis or private briefing on their timeline. Money never buys or previews a tier, a threshold, or a conclusion, and commissioned syntheses are published openly.</p></div></div></div></section>`,
-    `<section class="section" id="founder" aria-labelledby="founder-title"><div class="wrap about-founder"><figure class="founder-card"><img class="founder-portrait" src="/company-assets/max-markovtsev.jpg" width="1024" height="1024" alt="Max Markovtsev, Founder and CEO of Violema, Inc." loading="lazy"><figcaption class="founder-meta"><strong>Max Markovtsev</strong><span>Founder &amp; Chief Executive Officer, Violema, Inc.</span><div class="founder-links"><a href="https://orcid.org/0009-0009-9354-2207" target="_blank" rel="noopener noreferrer">ORCID 0009-0009-9354-2207 ${external}</a><a href="https://www.linkedin.com/in/maximisto/" target="_blank" rel="noopener noreferrer">LinkedIn @maximisto ${external}</a></div></figcaption></figure><div class="founder-bio"><p class="label">Founder &amp; Leadership</p><h2 id="founder-title">Thirty years turning complex data into decisions.</h2><p class="lede">Max Markovtsev is a Chicago-based founder and systems architect who has spent three decades building analytical, business intelligence, and governed AI systems for high-stakes decisions.</p><p>Before founding Violema, Inc. and its first scientific division, <a href="${psychdoc}">PsychDoc.AI ${external}</a>, Max spent over 15 years in strategy and business intelligence at Leo Burnett, BBDO, and J. Walter Thompson. At 19 he helped open Leo Burnett’s Moscow office on the Procter &amp; Gamble account, and over the next decade and a half he led analytics, research synthesis, and digital transformation for Procter &amp; Gamble, Unilever, Wrigley, Nestlé, Northwestern Mutual, and the U.S. Marine Corps.</p><p>In 2017 his work turned to machine learning and governed AI systems through Purple Orange AI in Chicago, where he designs multi-agent verification pipelines, citation and provenance graphs, and human-in-the-loop software architecture. He studied at Moscow State University of Economics, Statistics, and Informatics.</p><p class="small"><strong>Role and disclosure:</strong> Max leads product architecture, citation-graph engineering, and statistical reproduction at Violema, Inc. He is not a clinician or medical reviewer. Neither he nor Violema, Inc. holds shares, options, or advisory roles in any psychedelic drug developer.</p></div></div></section>`,
-    `<section class="section closing" aria-labelledby="about-closing-title"><div class="wrap split"><div><p class="label">Contact &amp; review</p><h2 id="about-closing-title">Inspect the record or start a conversation.</h2></div><div class="split-body"><p class="lede">Researchers and clinicians can inspect our open review walkthrough. Research and R&amp;D teams can request a scientific briefing through PsychDoc.AI.</p><div class="actions"><a class="button button-primary" href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a><a class="button button-secondary" href="/review/">For scientific reviewers</a></div></div></div></section>`,
+    `<section class="hero experience-hero" id="about-overview" aria-labelledby="about-hero-title" data-chapter><div class="wrap hero-grid"><div class="hero-scene"><div class="hero-copy"><p class="label hero-category"><span class="category-dot" aria-hidden="true"></span>About Violema, Inc. · Chicago</p><h1 id="about-hero-title"><span class="hero-headline-line">Built to show</span> <span class="hero-headline-line">which conclusions</span><span class="hero-headline-line hero-headline-accent">actually hold.</span></h1><p class="lede">Violema, Inc. is a Delaware corporation based in Chicago. We build scientific evidence systems that connect claims to primary sources, expose consequential assumptions, and keep conclusions open to independent review.</p><div class="actions"><a class="button button-primary" href="#founder">Meet the founder <span aria-hidden="true">↓</span></a><a class="button button-secondary" href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></div></div>${heroArtwork()}<div class="hero-family"><p>First operating division</p><a class="hero-product-link" href="${psychdoc}" aria-label="Explore PsychDoc.AI, our first application"><span class="hero-product-identity"><img class="psychdoc-logo-light" src="/company-assets/psychdoc-wordmark-light.svg" width="1774" height="372" alt=""><img class="psychdoc-logo-dark" src="/company-assets/psychdoc-wordmark-dark.svg" width="1774" height="372" alt=""><span class="hero-product-caption">Live at psychdoc.ai · Psychedelic research, claim by claim.</span></span>${external}</a></div></div>${heroInstrument}</div><div class="wrap hero-endnote"><span>Violema, Inc. · Scientific conclusions, with their evidence attached.</span><a href="#company">Explore the company charter <span aria-hidden="true">↓</span></a></div></section>`,
+    `<nav class="chapter-nav" aria-label="On this page"><div class="wrap"><a href="#about-overview" aria-current="location">Overview</a><a href="#company">01 The company</a><a href="#governance">02 Governance</a><a href="#founder">03 Founder &amp; leadership</a><a href="#about-applications">04 Divisions</a><a href="#about-connect">Start a conversation</a></div></nav>`,
+    `<section class="experience-chapter chapter-evidence" id="company" aria-labelledby="company-title" data-chapter><div class="wrap"><div class="chapter-grid"><div class="chapter-intro"><p class="chapter-label"><span aria-hidden="true">01</span>The company</p><h2 id="company-title">One evidence engine.<br>Built for contested science.</h2><p class="lede">When a scientific field moves fast and papers disagree, a paragraph summary hides the exact details a decision depends on.</p><p class="chapter-aside">Three pillars of the Violema charter.<br>Select a tab to inspect.</p><a class="text-link map-jump" href="/method/">Read the full technical method ${external}</a></div>${companyGuide}</div></div></section>`,
+    `<section class="experience-chapter chapter-method" id="governance" aria-labelledby="governance-title" data-chapter><div class="wrap"><div class="chapter-heading"><p class="chapter-label"><span aria-hidden="true">02</span>Scientific governance</p><h2 id="governance-title">How a systems company<br>guarantees scientific rigor.</h2><p class="lede">Software can trace citations and replay statistical models, but it cannot replace domain judgment. Violema separates what code checks, what AI drafts, and what qualified scientists sign.</p></div>${governanceExplorer}<div class="chapter-bottomline"><span>Code finds. AI drafts. A person approves. Domain experts sign.</span><a class="text-link" href="/review/">Inspect the scientific reviewer walkthrough ${external}</a></div></div></section>`,
+    founderSection,
+    `<section class="experience-chapter chapter-applications" id="about-applications" aria-labelledby="about-applications-title" data-chapter><div class="wrap"><div class="chapter-heading"><p class="chapter-label"><span aria-hidden="true">04</span>Divisions &amp; roadmap</p><h2 id="about-applications-title">Focused products.<br>Shared verification.</h2><p class="lede">Each Violema division stays clean and dedicated to its own scientific community, while company and governance records live here on violema.com.</p></div><article class="product-feature" aria-labelledby="about-psychdoc-title"><div class="product-identity"><p class="label">First division · Live in production</p><h3 id="about-psychdoc-title">PsychDoc<span aria-hidden="true">.</span></h3><p class="product-tagline">Psychedelic research, claim by claim.</p><p>Living public syntheses, interactive bias stress tests, molecule-to-clinic evidence chains, and commissioned reviews for drug developers, investors, and academic trial teams.</p><a class="button button-primary" href="${psychdoc}">Open PsychDoc.AI ${external}</a><p class="caption">Version 2.2 live · 24 papers read of 300 in scope · 15 research programs.</p></div><div class="product-paths"><p class="label">Live capabilities on PsychDoc.AI</p><a href="${psychdoc}/evidence/psilocybin-rewiring"><span><strong>Living synthesis dossier</strong><small>Does one dose of psilocybin rewire the brain? 23 tiered claims with reversal criteria.</small></span>${external}</a><a href="${psychdoc}/#stress"><span><strong>Interactive bias stress test</strong><small>SYPRES 2026 meta-analysis reproduced to four decimals; drag in assumed bias until claims break.</small></span>${external}</a><a href="${psychdoc}/#chain"><span><strong>Molecule-to-clinic chain</strong><small>Psilocybin alongside GH001 and SPL026, showing every published link and every unstudied gap.</small></span>${external}</a></div></article><article class="materials-feature" aria-labelledby="about-materials-title"><div><p class="label">Second field specimen</p><h3 id="about-materials-title">Materials science</h3><span class="example-label">Live at violema.com/demo</span></div><div><h4>Perovskite solar-cell stability under ISOS reporting rules</h4><p>Demonstrates how the Violema record travels outside medicine: four perovskite stability reports traced claim by claim, exposing where incompatible illumination, temperature, and humidity conditions forbid a pooled statistical estimate.</p><p class="small">Next horizon: pre-publication claim verification tools for peer reviewers, journals, and universities.</p><a class="text-link" href="/demo/#corpus-perovskite-stability">Inspect the materials specimen ${external}</a></div></article></div></section>`,
+    `<section class="experience-chapter chapter-connect" id="about-connect" aria-labelledby="about-closing-title" data-chapter><div class="wrap"><div class="connect-heading"><p class="chapter-label"><span aria-hidden="true">05</span>Start a conversation</p><h2 id="about-closing-title">Start with a conclusion<br>worth getting right<span>.</span></h2><p class="lede">Whether you are evaluating a clinical program, commissioning an evidence review, or offering independent domain review, we would love to hear from you.</p><div class="actions"><a class="button button-primary" href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a><a class="text-link" href="/review/">Here to review the science? ${external}</a></div></div><figure class="closing-evidence"><div class="closing-evidence-art" aria-hidden="true"><svg viewBox="0 0 360 190" fill="none"><path class="closing-path" d="M60 96C105 96 105 76 155 76S239 108 292 86"/><path class="closing-signal" d="M60 96C105 96 105 76 155 76S239 108 292 86"/></svg><img class="closing-observe" src="/company-assets/violema-hero/observe-microscope.webp" width="1254" height="1254" alt="" loading="lazy"><img class="closing-record" src="/company-assets/violema-hero/record-document.webp" width="1254" height="1254" alt="" loading="lazy"><img class="closing-revisit" src="/company-assets/violema-hero/revisit-network.webp" width="1254" height="1254" alt="" loading="lazy"><div class="closing-stages"><span>Observe</span><span>Record</span><span>Revisit</span></div></div><figcaption>From observation to a traceable record.</figcaption></figure></div></section>`,
   ].join(''));
 }

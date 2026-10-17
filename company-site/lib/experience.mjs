@@ -34,7 +34,7 @@ function methodExplorer(corpus) {
   return `<div class="method-explorer" data-tabs data-method-explorer data-step-sequence data-stage="static"><div class="method-controls"><span>Select a step to inspect its part of the record.</span></div><nav class="method-stations" data-tablist aria-label="Explore the evidence method">${steps.map(([name], i) => `<a data-step href="#method-${name.toLowerCase()}"><span class="method-number">0${i + 1}</span><span class="method-dot" aria-hidden="true"></span><strong>${name}</strong></a>`).join('')}</nav><div class="method-panels">${steps.map(([name, title, body, href, label]) => `<section id="method-${name.toLowerCase()}" aria-labelledby="method-${name.toLowerCase()}-heading"><div><p class="label">${name}</p><h3 id="method-${name.toLowerCase()}-heading">${title}</h3></div><div><p>${e(body)}</p><a class="text-link" href="${href}">${label} ${arrow}</a></div></section>`).join('')}</div></div>`;
 }
 
-function heroArtwork() {
+export function heroArtwork() {
   const base = '/company-assets/violema-hero/';
   return `<div class="violema-hero-art" aria-hidden="true" data-hero-art>
     <div class="vha-atmosphere"></div>
