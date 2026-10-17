@@ -7,9 +7,21 @@
 [data-diagram-part][role='button'] { cursor: pointer; outline: none; }
 [data-diagram-part][role='button']:is(:hover, [aria-expanded='true']) > rect { stroke: var(--accent); stroke-width: 2.5; fill: color-mix(in oklab, var(--accent) 7%, var(--surface)); }
 [data-diagram-part][role='button']:focus-visible > rect { stroke: var(--accent); stroke-width: 3.5; vector-effect: non-scaling-stroke; }
-.diagram-detail { border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); background: var(--surface); border-radius: 10px; padding: 24px 28px; margin-top: 20px; scroll-margin-block: calc(var(--header-height) + 24px) 24px; }
-.diagram-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.diagram-detail { border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); background: var(--surface); border-radius: 10px; padding: 24px 28px; margin-top: 14px; scroll-margin-block: calc(var(--header-height) + 24px) 24px; }
+.diagram-detail-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px 16px; }
 .diagram-detail-head .label { margin: 0; color: var(--accent); }
+.diagram-detail-controls { display: inline-flex; align-items: center; gap: 8px; }
+.diagram-step-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 20px; }
+.diagram-step-pill { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink-2); font: 500 var(--text-caption) / 1.3 var(--font-display); text-align: left; cursor: pointer; transition: border-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease), background-color var(--duration-fast) var(--ease); }
+.diagram-step-pill:hover { border-color: var(--accent); color: var(--ink); }
+.diagram-step-pill.is-active { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 8%, var(--surface)); color: var(--ink); }
+.diagram-step-num { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600; color: var(--accent); flex: none; }
+@media (max-width: 959px) {
+  .diagram-step-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 479px) {
+  .diagram-step-nav { grid-template-columns: minmax(0, 1fr); }
+}
 .diagram-detail h3 { font-size: 1.5rem; max-width: 38ch; margin: 16px 0; }
 .diagram-detail h3:focus { outline: none; }
 .diagram-detail > p { max-width: 66ch; color: var(--ink-2); }
