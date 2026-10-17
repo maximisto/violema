@@ -329,10 +329,10 @@ test('the home hero offers two actions, and its briefing link is the one the clo
   const actions=hero.match(/<div class="actions">[\s\S]*?<\/div>/)[0];
   assert.match(actions,/^<div class="actions"><a class="button button-primary" href="#evidence">Follow the evidence /,'the primary action still leads');
   assert.equal((actions.match(/class="button /g)||[]).length,2,'exactly two buttons in the hero');
-  const secondary=actions.match(/<a class="button button-secondary" href="([^"]+)">Request a scientific briefing /);
+  const secondary=actions.match(/<a class="button button-secondary" href="([^"]+)">Request a briefing /);
   assert.ok(secondary,'the second button asks for a scientific briefing');
   const closing=html.match(/<section class="experience-chapter chapter-connect"[\s\S]*?<\/section>/)[0];
-  assert.ok(closing.includes(`<a class="button button-primary" href="${secondary[1]}">Request a scientific briefing `),'top and bottom of the page send the reader to the same briefing form');
+  assert.ok(closing.includes(`<a class="button button-primary" href="${secondary[1]}">Request a briefing `),'top and bottom of the page send the reader to the same briefing form');
 });
 
 test('the demo replay states that it always uses Claim 1, beside the control, clinical corpus only',async()=>{
