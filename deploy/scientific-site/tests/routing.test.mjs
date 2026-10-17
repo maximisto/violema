@@ -38,7 +38,7 @@ test('old workspace pages, old assets and unknown paths are the company 404 page
 });
 
 test('company pages and metadata use company HTML; non-read methods are refused', () => {
-  const pages = ['/', '/index.html', '/method', '/method/', '/method/index.html', '/demo', '/demo/', '/demo/index.html', '/review', '/review/', '/review/index.html', '/legal/terms', '/legal/terms/', '/legal/privacy/', '/legal/privacy/index.html', '/robots.txt', '/sitemap.xml', '/llms.txt', '/company-assets/site.css', '/company-assets/data/psychdoc.json'];
+  const pages = ['/', '/index.html', '/method', '/method/', '/method/index.html', '/demo', '/demo/', '/demo/index.html', '/review', '/review/', '/review/index.html', '/about', '/about/', '/about/index.html', '/legal/terms', '/legal/terms/', '/legal/privacy/', '/legal/privacy/index.html', '/robots.txt', '/sitemap.xml', '/llms.txt', '/company-assets/site.css', '/company-assets/data/psychdoc.json'];
   for (const host of oldHosts) for (const target of pages) {
     assert.equal(classify({ host, target }).kind, 'company', target);
     assert.equal(classify({ host, method: 'POST', target }).kind, 'method-not-allowed', target);
