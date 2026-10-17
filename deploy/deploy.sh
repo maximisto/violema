@@ -40,11 +40,42 @@ COMPANY_VHOST_MARKERS=(
   '/var/www/violema-science'
 )
 
+# True if a server_name in the file names $DOMAIN or www.$DOMAIN. Exact token
+# comparison: no regex escaping, and `read -a` never glob-expands *.host names.
+serves_domain() {
+  local line name names re='^[[:space:]]*server_name[[:space:]]+([^;]*)'
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    [[ $line =~ $re ]] || continue
+    read -ra names <<< "${BASH_REMATCH[1]}"
+    (( ${#names[@]} )) || continue
+    for name in "${names[@]}"; do
+      [[ "$name" == "$DOMAIN" || "$name" == "www.$DOMAIN" ]] && return 0
+    done
+  done < "$1"
+  return 1
+}
+
+# Fails closed. Inspects the target vhost, its sites-enabled link and every
+# config nginx loads from sites-enabled/ and conf.d/ (links resolved), so a
+# renamed, relinked or conf.d-hosted company vhost is still found. Refuses on:
+#   - a company marker in any of them (whatever DOMAIN is set to),
+#   - another file already serving $DOMAIN (a second server_name for the same
+#     host would leave nginx choosing between the company site and the old app),
+#   - a dangling symlink or an unreadable file, which cannot be inspected.
+# Configs included from anywhere else are not scanned.
 refuse_if_company_vhost() {
   local vhost marker
-  for vhost in "$NGINX_SITE" "$NGINX_ENABLED"; do
+  local candidates=("$NGINX_SITE" "$NGINX_ENABLED")
+  for vhost in "$NGINX_DIR"/sites-enabled/* "$NGINX_DIR"/conf.d/*.conf; do
+    [[ -e "$vhost" || -L "$vhost" ]] && candidates+=("$vhost")
+  done
+  for vhost in "${candidates[@]}"; do
+    if [[ -L "$vhost" && ! -e "$vhost" ]]; then
+      die "$vhost is a dangling symlink, so it cannot be checked for the company-site vhost. Nothing was changed."
+    fi
     [[ -e "$vhost" ]] || continue
-    [[ -r "$vhost" ]] || die "Cannot read $vhost; refusing to rewrite a vhost that cannot be inspected."
+    [[ -r "$vhost" ]] || die "Cannot read $vhost; refusing to rewrite nginx while a config cannot be inspected."
     for marker in "${COMPANY_VHOST_MARKERS[@]}"; do
       if grep -qF -- "$marker" "$vhost"; then
         die "$vhost is the live company-site vhost (found '$marker').
@@ -53,6 +84,10 @@ refuse_if_company_vhost() {
   Company-site changes ship as release packets (company-site/release/)."
       fi
     done
+    if [[ ! "$vhost" -ef "$NGINX_SITE" ]] && serves_domain "$vhost"; then
+      die "$vhost already serves $DOMAIN and is not $NGINX_SITE.
+  Writing the legacy config would add a second server_name $DOMAIN. Nothing was changed."
+    fi
   done
 }
 
