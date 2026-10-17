@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # VIOLEMA by Purple Orange AI — VPS Deploy Script
 # Run as root (or a sudo user) on Hostinger VPS
-# Usage:  sudo bash deploy.sh [--skip-deps]   (see usage() below)
+# Usage:  sudo bash deploy.sh [--backend-only] [--skip-deps]   (see usage())
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -19,6 +19,9 @@ NGINX_SITE="$NGINX_DIR/sites-available/$DOMAIN"
 NGINX_ENABLED="$NGINX_DIR/sites-enabled/$DOMAIN"
 SSL_CERT_PATH="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
 PM2_APP_NAME="${PM2_APP_NAME:-violema-backend}"
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3001/api/health}"
+HEALTH_ATTEMPTS="${HEALTH_ATTEMPTS:-15}"   # x interval = how long a restart may take
+HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-2}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
@@ -123,11 +126,15 @@ EOF
 # npm skips only apply when node_modules already exists.
 usage() {
   cat <<EOF
-Usage: sudo bash deploy.sh [--skip-deps]
+Usage: sudo bash deploy.sh [--backend-only] [--skip-deps]
 
-  --skip-deps   Skip system package installs, and npm installs whose node_modules
-                is already present.
-  -h, --help    Show this help.
+  --backend-only  Redeploy the Express backend only: git sync, backend install
+                  and build, pm2 restart, health check. Never touches system
+                  packages, the frontend, nginx or certificates. This is the
+                  only mode that runs while violema.com is the company site.
+  --skip-deps     Skip system package installs, and npm installs whose node_modules
+                  is already present.
+  -h, --help      Show this help.
 
 Unknown options are rejected: an older copy of this script ignored them and ran
 a full deploy.
@@ -135,19 +142,46 @@ EOF
 }
 
 SKIP_DEPS=false
+BACKEND_ONLY=false
 for arg in "$@"; do
   case "$arg" in
     --skip-deps) SKIP_DEPS=true ;;
+    --backend-only) BACKEND_ONLY=true ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "Unknown option: $arg" ;;
   esac
 done
 
 # Preflight: refuse before touching packages, the checkout or any build.
-refuse_if_company_vhost
+# --backend-only never writes nginx, so it is the one mode allowed past this.
+if [[ "$BACKEND_ONLY" != true ]]; then
+  refuse_if_company_vhost
+fi
+
+restart_backend_only() {
+  info "Restarting $PM2_APP_NAME in place…"
+  # Restart by name, never delete + start: a missing process fails here instead
+  # of starting a second backend in another user's PM2 daemon. The backend
+  # re-reads backend/.env on every start.
+  pm2 restart "$PM2_APP_NAME" --update-env \
+    || die "pm2 could not restart $PM2_APP_NAME. Is it running under this user's PM2 (pm2 status)?"
+  pm2 save
+}
+
+wait_for_backend_health() {
+  local attempt
+  for (( attempt = 1; attempt <= HEALTH_ATTEMPTS; attempt++ )); do
+    if curl -fsS --max-time 5 -o /dev/null "$HEALTH_URL"; then
+      info "Backend healthy at $HEALTH_URL."
+      return 0
+    fi
+    sleep "$HEALTH_INTERVAL_SECONDS"
+  done
+  die "Backend did not answer $HEALTH_URL after restart. Check: pm2 logs $PM2_APP_NAME"
+}
 
 # ── 1. Dependencies ──────────────────────────────────────────────────────────
-if [[ "$SKIP_DEPS" != true ]]; then
+if [[ "$SKIP_DEPS" != true && "$BACKEND_ONLY" != true ]]; then
   info "Updating system packages…"
   apt-get update -qq && apt-get upgrade -y -qq
 
@@ -188,10 +222,25 @@ if [[ "$SKIP_DEPS" == true && -d node_modules ]]; then
   info "Skipping backend dependency install (--skip-deps, node_modules present)."
 else
   npm ci --prefer-offline
-  npx playwright install --with-deps chromium
+  # --with-deps runs apt-get; the other modes promise not to touch system packages.
+  if [[ "$SKIP_DEPS" == true || "$BACKEND_ONLY" == true ]]; then
+    npx playwright install chromium
+  else
+    npx playwright install --with-deps chromium
+  fi
 fi
 npm run build
 info "Backend build complete."
+
+if [[ "$BACKEND_ONLY" == true ]]; then
+  mkdir -p "$LOG_DIR"
+  restart_backend_only
+  wait_for_backend_health
+  echo ""
+  echo -e "${GREEN}✓ VIOLEMA backend redeployed at $(git -C "$APP_DIR" rev-parse --short HEAD)${NC}"
+  echo "  nginx, the frontend and the company site were not touched."
+  exit 0
+fi
 
 # ── 4. Frontend ──────────────────────────────────────────────────────────────
 info "Building frontend…"
