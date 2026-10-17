@@ -347,7 +347,7 @@ export function aboutPage() {
             <span class="caption">Chicago, Illinois</span>
           </div>
           <div class="founder-portrait-wrap">
-            <img class="founder-portrait" src="/company-assets/max-markovtsev.jpg" width="1024" height="1024" alt="Max Markovtsev, Founder and CEO of Violema, Inc.">
+            <img class="founder-portrait" src="/company-assets/max-markovtsev.jpg" width="2048" height="2048" alt="Max Markovtsev, Founder and CEO of Violema, Inc.">
           </div>
           <figcaption class="founder-instrument-body">
             <h2 class="founder-name">Max Markovtsev</h2>
@@ -422,6 +422,7 @@ export function aboutPage() {
             <div><dt>Entity</dt><dd>Delaware C-Corporation</dd></div>
             <div><dt>Headquarters</dt><dd>Chicago, Illinois</dd></div>
             <div><dt>Divisions</dt><dd><a href="${psychdoc}">PsychDoc.AI ${external}</a> · <a href="/demo/#corpus-perovskite-stability">Materials Lab</a></dd></div>
+            <div><dt>Accounts</dt><dd><a href="mailto:accounts@violema.com">accounts@violema.com</a></dd></div>
             <div><dt>Governance</dt><dd><a href="${psychdoc}/policies/editorial">Editorial Policy ${external}</a> · <a href="/legal/terms/">Terms</a> · <a href="/legal/privacy/">Privacy</a></dd></div>
           </dl>
         </article>
