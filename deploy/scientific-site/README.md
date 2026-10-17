@@ -8,7 +8,7 @@ The company bundle uses `company-site/dist` and `/company-assets/`. Both HTTPS h
 
 Since release `20261016-d673fe0-not-found` (activated 2026-10-16, see [its packet](../../company-site/release/not-found-20261016/README.md)), violema.com serves only the company site:
 
-- Company pages (`/`, `/index.html`, `/method`, `/demo`, `/review`, `/legal/terms`, `/legal/privacy`, each with and without a trailing slash or `index.html`), `robots.txt`, `sitemap.xml`, `llms.txt` and `/company-assets/` are GET/HEAD only.
+- Company pages (`/`, `/index.html`, `/method`, `/demo`, `/review`, `/about`, `/legal/terms`, `/legal/privacy`, each with and without a trailing slash or `index.html`), `robots.txt`, `sitemap.xml`, `llms.txt` and `/company-assets/` are GET/HEAD only.
 - `/api/` is the only path that reaches the backend: OAuth callbacks, the Stripe and Postmark webhooks and every other API call, with route, body, query, Host and method unchanged.
 - Everything else returns 404 with the company `404.html`: old workspace pages (`/login`, `/dashboard`, `/plans`, `/settings`, `/terms`, `/privacy`, `/faq` and the rest), old assets (`/assets/`, `/brand/`, `/fonts/`, `/seo/`, the blog and root icons), and unknown or scanner paths. Nothing redirects to agent.purpleorange.ai.
 
