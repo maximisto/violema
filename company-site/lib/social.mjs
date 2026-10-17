@@ -15,11 +15,11 @@ const glyphs = {
 // once its URL is confirmed: TikTok has a glyph above but no confirmed profile yet.
 export const profiles = [
   { id: 'github', name: 'GitHub', owner: 'Max Markovtsev', href: 'https://github.com/maximisto' },
-  { id: 'linkedin', name: 'LinkedIn', owner: 'Max Markovtsev', href: 'https://www.linkedin.com/in/maximisto/' },
+  { id: 'linkedin', name: 'LinkedIn', owner: 'Max Markovtsev', href: 'https://www.linkedin.com/in/maximisto/', handle: 'in/maximisto' },
   { id: 'instagram', name: 'Instagram', owner: 'Violema', href: 'https://www.instagram.com/violemaai/' },
   { id: 'x', name: 'X', owner: 'Max Markovtsev', href: 'https://x.com/maximisto' },
   { id: 'facebook', name: 'Facebook', owner: 'Max Markovtsev', href: 'https://www.facebook.com/maximisto' },
-  { id: 'orcid', name: 'ORCID', owner: 'Max Markovtsev', href: 'https://orcid.org/0009-0009-9354-2207' },
+  { id: 'orcid', name: 'ORCID', owner: 'Max Markovtsev', href: 'https://orcid.org/0009-0009-9354-2207', handle: '0009-0009-9354-2207' },
 ];
 
 export function profileIcon(id) {
@@ -33,5 +33,15 @@ export function profileLinks(ids = profiles.map(profile => profile.id)) {
     const profile = profiles.find(entry => entry.id === id);
     if (!profile) throw new Error(`No confirmed profile "${id}"`);
     return `<li><a class="social-link social-link--${id}" href="${profile.href}" target="_blank" rel="noopener noreferrer" aria-label="${profile.owner} on ${profile.name}" title="${profile.name}">${profileIcon(id)}</a></li>`;
+  }).join('');
+}
+
+// Labelled profile cards: icon, network and the public handle, so an identifier such as an
+// ORCID iD stays readable and copyable rather than hidden behind an icon.
+export function profileCards(ids) {
+  return ids.map(id => {
+    const profile = profiles.find(entry => entry.id === id);
+    if (!profile?.handle) throw new Error(`No public handle for profile "${id}"`);
+    return `<li><a class="profile-card profile-card--${id}" href="${profile.href}" target="_blank" rel="noopener noreferrer" aria-label="${profile.owner} on ${profile.name}: ${profile.handle}">${profileIcon(id)}<span class="profile-card-text"><span class="profile-card-name">${profile.name}</span><span class="profile-card-handle">${profile.handle}</span></span></a></li>`;
   }).join('');
 }
