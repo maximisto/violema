@@ -1,5 +1,48 @@
 # VIOLEMA VPS deploy
 
+## Since the company-site cutover (2026-10-16)
+
+`violema.com` is the static company site. Its vhost, `/etc/nginx/sites-available/violema.com`, carries the `BEGIN VIOLEMA SCIENCE COMPANY-ONLY OVERLAY` block, serves `/var/www/violema-science/current`, and proxies only `/api/` to the backend on `127.0.0.1:3001`. Release packets in `company-site/release/` change it by exact hash. The legacy app (`frontend/dist`) is served on agent.purpleorange.ai, through a vhost this script does not manage.
+
+`deploy.sh` without `--backend-only` refuses to run while that vhost is in place. It stops before apt, git or any build, and changes nothing. Its legacy nginx templates would otherwise replace the company site with the old app. There is no override. The cutover is undone with its own rollback packet, never with this script.
+
+### Backend-only redeploy
+
+Use this to ship backend code or dependency fixes (for example a Dependabot lockfile bump). It runs: git sync of `/var/www/nexus` to `origin/$BRANCH` (default `main`), backend `npm ci` and Playwright Chromium (no apt), `npm run build`, `pm2 restart violema-backend --update-env`, `pm2 save`, then polls `http://127.0.0.1:3001/api/health` (15 tries, 2 seconds apart) and fails if it never answers. It never touches system packages, the frontend, nginx, certificates or the company site.
+
+**Do not run the copy at `/var/www/nexus/deploy/deploy.sh` for the first backend-only deploy.** That checkout predates `--backend-only`. The old script ignores unknown flags, so it would run a full deploy and overwrite the company vhost. Run a fresh copy, and only once it is confirmed to know the flag:
+
+```bash
+DEPLOY_SRC="$(mktemp -d)"
+git clone --depth 1 --branch main https://github.com/maximisto/violema.git "$DEPLOY_SRC"
+grep -q -- '--backend-only' "$DEPLOY_SRC/deploy/deploy.sh" && sudo bash "$DEPLOY_SRC/deploy/deploy.sh" --backend-only --skip-deps
+```
+
+Clone the same branch the script deploys (`BRANCH`, default `main`). After that first run, `/var/www/nexus` itself has the new script.
+
+Before and after, confirm nothing outside the backend moved:
+
+```bash
+sudo sha256sum /etc/nginx/sites-available/violema.com   # must be identical before and after
+pm2 status
+curl -fsS http://127.0.0.1:3001/api/health
+curl -sI https://violema.com | head -1
+```
+
+Notes:
+- The backend restarts in place by name. If `violema-backend` is not in the current user's PM2 list, the script fails instead of starting a second backend. Run it with the same `sudo` as before.
+- A backend restart resumes the scheduler and any live sends it owns. Check `pm2 logs violema-backend` after the health check passes.
+- The frontend on agent.purpleorange.ai is not rebuilt. That is fine for dependency-only or backward-compatible API changes. A change the old frontend cannot handle needs its own frontend release.
+- Rollback: revert the commit on `main`, then run the backend-only deploy again.
+
+### `--skip-deps` and lockfile changes
+
+`--skip-deps` skips apt and skips `npm ci` only when `node_modules` holds a stamp (`node_modules/.violema-deploy-lock.sha256`) matching the current `package-lock.json`. A changed lockfile always installs, so lockfile-only security fixes are never skipped. The stamp is written only after every install step succeeds. Installs made before this change have no stamp, so the first `--skip-deps` run after it reinstalls once.
+
+## Fresh box provisioning (full deploy)
+
+The full deploy below (apt, Node, nginx bootstrap, Certbot, frontend build, PM2) applies only to a box where `violema.com` does not yet carry the company vhost. On the current VPS it refuses, by design.
+
 1. Point `violema.com` and `www.violema.com` at the VPS public IP.
 2. SSH into the VPS as `root` or a sudo user.
 3. Run:
@@ -95,8 +138,8 @@ curl https://violema.com/api/health
 ```
 
 Notes:
-- The deploy script now bootstraps nginx over HTTP first, then switches to the full HTTPS config after Certbot succeeds.
-- The frontend is served from `frontend/dist` and `/api/*` is proxied to the Express backend on port `3001`.
+- On a fresh box, the full deploy bootstraps nginx over HTTP first, then switches to the full HTTPS config after Certbot succeeds. Both steps refuse if the target vhost is the company site.
+- On the current VPS, `violema.com` serves the company site and proxies only `/api/*` to the Express backend on port `3001`. `frontend/dist` is served on agent.purpleorange.ai.
 - `/api/health` is a public liveness probe and returns only `{ status, service, timestamp }`. Model ids, provider routing, and integration status are operator diagnostics and now live behind `GET /api/admin/health`, which requires an admin session.
 - With `NODE_ENV=production`, checkout endpoints return an honest 503 (`billing_not_configured`) instead of mock sessions when Stripe env vars are missing, and `/api/billing/stripe/mock-checkout/*` returns 404. Mock checkout exists for local development only.
 - Auth cookies can now be pinned to `violema.com` with `AUTH_COOKIE_DOMAIN=violema.com`, which is the right setting once DNS fully cuts over.
