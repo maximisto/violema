@@ -1655,3 +1655,76 @@ tr > *:last-child { border-right: 0; }
 }
 
 .evidence-map:not(.map-enhanced) .map-detail button { display: none; }
+
+/* ---------- About page founder layout ---------- */
+.about-founder {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: 32px;
+  row-gap: 32px;
+  align-items: start;
+}
+.founder-card {
+  grid-column: 1 / span 4;
+  margin: 0;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-raised);
+}
+.founder-portrait {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  object-position: center 18%;
+  border-radius: var(--radius-nested);
+}
+.founder-meta {
+  display: grid;
+  gap: 6px;
+  padding-top: 18px;
+}
+.founder-meta strong {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--ink);
+}
+.founder-meta > span {
+  font-size: var(--text-caption);
+  color: var(--ink-2);
+}
+.founder-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 8px;
+}
+.founder-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  font-size: var(--text-caption);
+  font-weight: 500;
+}
+.founder-bio {
+  grid-column: 6 / span 7;
+}
+.founder-bio > .lede {
+  margin-bottom: 18px;
+}
+.capability h3 {
+  margin-top: 12px;
+  margin-bottom: 8px;
+}
+@media (max-width: 899px) {
+  .founder-card {
+    grid-column: 1 / -1;
+    max-width: 420px;
+  }
+  .founder-bio {
+    grid-column: 1 / -1;
+  }
+}
