@@ -1,4 +1,4 @@
-// Brand glyphs for Max Markovtsev's profile links, drawn in currentColor on a 24-unit grid.
+// Brand glyphs for the site's profile links, drawn in currentColor on a 24-unit grid.
 // Paths are Simple Icons 13.21.0 (CC0), except LinkedIn, which Simple Icons no longer ships;
 // that path is the one purpleorange.ai already uses. The marks belong to their owners.
 const glyphs = {
@@ -11,14 +11,15 @@ const glyphs = {
   orcid: 'M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zM7.369 4.378c.525 0 .947.431.947.947s-.422.947-.947.947a.95.95 0 0 1-.947-.947c0-.525.422-.947.947-.947zm-.722 3.038h1.444v10.041H6.647V7.416zm3.562 0h3.9c3.712 0 5.344 2.653 5.344 5.025 0 2.578-2.016 5.025-5.325 5.025h-3.919V7.416zm1.444 1.303v7.444h2.297c3.272 0 4.022-2.484 4.022-3.722 0-2.016-1.284-3.722-4.097-3.722h-2.222z',
 };
 
-// Public profiles, in footer order. A network is listed only once its URL is confirmed:
-// Instagram and TikTok have glyphs above but no confirmed profile yet.
+// Public profiles, in footer order, each with the account's owner. A network is listed only
+// once its URL is confirmed: TikTok has a glyph above but no confirmed profile yet.
 export const profiles = [
-  { id: 'github', name: 'GitHub', href: 'https://github.com/maximisto' },
-  { id: 'linkedin', name: 'LinkedIn', href: 'https://www.linkedin.com/in/maximisto/' },
-  { id: 'x', name: 'X', href: 'https://x.com/maximisto' },
-  { id: 'facebook', name: 'Facebook', href: 'https://www.facebook.com/maximisto' },
-  { id: 'orcid', name: 'ORCID', href: 'https://orcid.org/0009-0009-9354-2207' },
+  { id: 'github', name: 'GitHub', owner: 'Max Markovtsev', href: 'https://github.com/maximisto' },
+  { id: 'linkedin', name: 'LinkedIn', owner: 'Max Markovtsev', href: 'https://www.linkedin.com/in/maximisto/' },
+  { id: 'instagram', name: 'Instagram', owner: 'Violema', href: 'https://www.instagram.com/violemaai/' },
+  { id: 'x', name: 'X', owner: 'Max Markovtsev', href: 'https://x.com/maximisto' },
+  { id: 'facebook', name: 'Facebook', owner: 'Max Markovtsev', href: 'https://www.facebook.com/maximisto' },
+  { id: 'orcid', name: 'ORCID', owner: 'Max Markovtsev', href: 'https://orcid.org/0009-0009-9354-2207' },
 ];
 
 export function profileIcon(id) {
@@ -31,6 +32,6 @@ export function profileLinks(ids = profiles.map(profile => profile.id)) {
   return ids.map(id => {
     const profile = profiles.find(entry => entry.id === id);
     if (!profile) throw new Error(`No confirmed profile "${id}"`);
-    return `<li><a class="social-link" href="${profile.href}" target="_blank" rel="noopener noreferrer" aria-label="Max Markovtsev on ${profile.name}" title="${profile.name}">${profileIcon(id)}</a></li>`;
+    return `<li><a class="social-link social-link--${id}" href="${profile.href}" target="_blank" rel="noopener noreferrer" aria-label="${profile.owner} on ${profile.name}" title="${profile.name}">${profileIcon(id)}</a></li>`;
   }).join('');
 }

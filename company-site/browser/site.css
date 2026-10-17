@@ -1891,6 +1891,9 @@ tr > *:last-child { border-right: 0; }
 }
 .founder-profiles .social-link { width: 48px; height: 48px; }
 .founder-profiles .social-link svg { width: 24px; height: 24px; }
+/* Here only, ORCID keeps its brand green; a white disc keeps the iD letters white on either theme. */
+.founder-profiles .social-link--orcid { color: #A6CE39; }
+.founder-profiles .social-link--orcid svg { background: radial-gradient(circle closest-side, #fff 92%, transparent 93%); }
 .founder-instrument {
   margin: 0;
   overflow: hidden;
@@ -1930,38 +1933,10 @@ tr > *:last-child { border-right: 0; }
   font-size: var(--text-caption);
   color: var(--inst-ink-2);
 }
-.founder-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--inst-line);
-}
-.founder-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 12px;
-  background: var(--inst-surface);
-  border: 1px solid var(--inst-line-strong);
-  border-radius: var(--radius-control);
-  color: var(--inst-ink);
-  font-size: 0.9375rem;
-  font-weight: 500;
-  text-decoration: none;
-  transition: border-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
-}
-.founder-badge:hover {
-  border-color: var(--inst-accent);
-  color: var(--inst-accent);
-}
-.founder-badge code {
-  font-size: 0.875rem;
-}
 .founder-ledger {
-  margin: 18px 0 0;
+  margin: 20px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--inst-line);
   display: grid;
   gap: 14px;
 }

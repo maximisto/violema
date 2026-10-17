@@ -18,7 +18,7 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/le
 - `lib/pages.mjs`: page shell (logo header, appearance control, footer, metadata), the protocol stations, and the six routes.
 - `lib/experience.mjs`: the five homepage chapters, guided claim/source/limits interaction and six-part method explorer.
 - `lib/legal.mjs`: public website terms and privacy copy; separate from legacy workspace policies. The privacy wording follows the visit-statistics switch.
-- `lib/social.mjs`: Max Markovtsev's confirmed public profiles and their brand glyphs (Simple Icons 13.21.0, CC0; LinkedIn from purpleorange.ai), rendered as icon links in every footer and under the founder card on /about/. A network joins the footer only once its URL is confirmed.
+- `lib/social.mjs`: the confirmed public profiles (Max Markovtsev's, plus Violema's Instagram), each named by its owner, and their brand glyphs (Simple Icons 13.21.0, CC0; LinkedIn from purpleorange.ai), rendered as icon links in every footer and under the founder card on /about/, where ORCID alone keeps its brand green. A network joins the footer only once its URL is confirmed.
 - `lib/analytics.mjs`: the visit-statistics switch (Umami website ID and policy date) and the tracker tag. See "Visit statistics" below.
 - `lib/how-it-works.mjs`: the method page's "How it works" and "Where this is going" sections: two inline SVG diagrams of PsychDoc's evidence system, coloured only through tokens, with their figures read from `data/how-it-works.mjs`.
 - `lib/render.mjs`: shared evidence renderer: escaped text, safe source links, bounded additive-shift arithmetic, the interval scale, the trace specimen (a claim joined to its cited source records), the bias control and the demo bench.

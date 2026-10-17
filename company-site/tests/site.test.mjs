@@ -189,26 +189,31 @@ test('/about/ shows the six former clients as one-ink marks, each with an access
   assert.match(css,/\[data-theme='dark'\] \.founder-client-logo \{ filter: brightness\(0\) invert\(1\); \}/);
 });
 
-test('every footer links Max Markovtsev\'s confirmed profiles as named icon links',async()=>{
-  assert.deepEqual(profiles.map(profile=>profile.id),['github','linkedin','x','facebook','orcid']);
+test('every footer links the confirmed profiles as icon links named by their owner',async()=>{
+  assert.deepEqual(profiles.map(profile=>profile.id),['github','linkedin','instagram','x','facebook','orcid']);
+  assert.equal(profiles.find(profile=>profile.id==='instagram').owner,'Violema','@violemaai is the company account');
   for(const profile of profiles){
     assert.match(profile.href,/^https:\/\//);
     assert.match(profileIcon(profile.id),/^<svg viewBox="0 0 24 24"[^>]* aria-hidden="true"[^>]*><path d="[^"]+"\/><\/svg>$/);
   }
   for(const [,file] of pages){
     const html=await readFile(join(dist,file),'utf8');
-    const list=html.match(/<ul class="social-list footer-social" aria-label="Max Markovtsev's profiles">([\s\S]*?)<\/ul>/)?.[1]??'';
-    const links=[...list.matchAll(/<a class="social-link" href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="Max Markovtsev on ([^"]+)" title="[^"]+"><svg/g)].map(match=>[match[1],match[2]]);
-    assert.deepEqual(links,profiles.map(profile=>[profile.href,profile.name]),`${file} footer profiles`);
+    const list=html.match(/<ul class="social-list footer-social" aria-label="Social profiles">([\s\S]*?)<\/ul>/)?.[1]??'';
+    const links=[...list.matchAll(/<a class="social-link social-link--([a-z]+)" href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="([^"]+)" title="[^"]+"><svg/g)].map(match=>[match[1],match[2],match[3]]);
+    assert.deepEqual(links,profiles.map(profile=>[profile.id,profile.href,`${profile.owner} on ${profile.name}`]),`${file} footer profiles`);
   }
 });
 
-test('/about/ puts the LinkedIn and ORCID icons under the founder card',async()=>{
+test('/about/ puts the LinkedIn and ORCID icons under the founder card, ORCID in its green there only',async()=>{
   const html=await readFile(join(dist,'about/index.html'),'utf8');
   const aside=html.match(/<div class="founder-aside">([\s\S]*?)<div class="founder-narrative">/)?.[1]??'';
   assert.match(aside,/<\/figure>\s*<ul class="social-list founder-profiles" aria-label="Max Markovtsev's profiles">/);
-  const hrefs=[...aside.matchAll(/<a class="social-link" href="([^"]+)"/g)].map(match=>match[1]);
+  const hrefs=[...aside.matchAll(/<a class="social-link social-link--[a-z]+" href="([^"]+)"/g)].map(match=>match[1]);
   assert.deepEqual(hrefs,['https://www.linkedin.com/in/maximisto/','https://orcid.org/0009-0009-9354-2207']);
+  // The icons replace the card's former text badges.
+  assert.doesNotMatch(html,/founder-badge/);
+  const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
+  assert.deepEqual(css.match(/[^\n]*#A6CE39[^\n]*/gi),['.founder-profiles .social-link--orcid { color: #A6CE39; }']);
 });
 
 test('self-hosted fonts match their recorded checksums and ship with their licences',async()=>{
