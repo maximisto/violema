@@ -7,11 +7,12 @@ Adds `/about/` (`about/index.html` + `/company-assets/max-markovtsev.jpg`), adds
 | What | Value |
 | --- | --- |
 | Release candidate | `20261016-about-interactive` |
-| Previous release | `20261016-f666490-hero-briefing` |
-| `index.html` SHA-256 | `545ac53350bf6678a81f2c9351d3d2e5ef09cc73e8421f1f26815f8c4422be53` |
-| `about/index.html` SHA-256 | `aba0bc5f2b93e270cada93888372eb302c7580eee14dbc934512841f5974f94a` |
-| `method/index.html` SHA-256 | `d808d69135fb8e15f0b5f2cb83f17199319105919ff22d14aa3db74d443fcdad` |
-| `404.html` SHA-256 | `0d92084c0989cbea03f6d05a0ad0531393531696bcf7f0c9219ce9a13c78a3ea` |
+| Previous release | `20261016-b71f387-hero-cta` |
+| `index.html` SHA-256 | `502e63af9b9da0c093e382e3561124d9b77994d6ec2d7e2644e0c6804932abe1` |
+| `about/index.html` SHA-256 | `e64bca668a84bfccb16a50f62e8ec2a2bd996feee461a4f7f6bd102cab3b5cad` |
+| `method/index.html` SHA-256 | `549aa45dc9252a7d815857ca72f7ded34fe24ac6df897a7f0ef864c1c139b6a2` |
+| `404.html` SHA-256 | `5c43539d9352b30f7bec77c168d0661b06ddc23c3597b3180177129bd5c870f1` |
+| `public-dist.tar.gz` SHA-256 | `6a3993b3fb8ebc92c640a8e12d7b3b74cc97c4d5fac4825dc8bb9e8172fde466` |
 | Files | 55, each hash in `SHA256SUMS` beside this file |
 | Staged archive | `/tmp/about-20261016/public-dist.tar.gz` (built with `COPYFILE_DISABLE=1 tar --no-xattrs`) |
 
@@ -51,4 +52,4 @@ Because `/etc/nginx/sites-available/violema.com` uses explicit location allowlis
 
 ## Rollback
 
-Point `/var/www/violema-science/current` back at `releases/20261016-f666490-hero-briefing` (sibling symlink, then rename over `current`), restore the previous vhost if edited, run `nginx -t`, then reload nginx.
+Point `/var/www/violema-science/current` back at `releases/20261016-b71f387-hero-cta` (sibling symlink, then rename over `current`), restore the previous vhost if edited, run `nginx -t`, then reload nginx.

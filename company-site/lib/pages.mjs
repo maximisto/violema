@@ -66,7 +66,7 @@ function siteHeader(route) {
 }
 
 function siteFooter() {
-  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/">Home</a><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="/about/">About Violema</a><a href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span></div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
+  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/">Home</a><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="/about/">About Violema</a><a href="${psychdoc}/#briefing">Request a briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span></div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
 }
 
 export function shell(route, title, description, content, options = {}) {
@@ -406,8 +406,8 @@ export function aboutPage() {
         <article class="about-directory-card">
           <p class="label">For R&amp;D, Clinical &amp; Investment Teams</p>
           <h3>Commission a synthesis or briefing</h3>
-          <p>Commission a synthesis on a target, indication, or compound, or request a scientific briefing on our existing corpora.</p>
-          <a class="button button-primary" href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a>
+          <p>Commission a synthesis on a target, indication, or compound, or request a briefing on our existing corpora.</p>
+          <a class="button button-primary" href="${psychdoc}/#briefing">Request a briefing ${external}</a>
         </article>
         <article class="about-directory-card">
           <p class="label">For Trialists, Physicians &amp; Methodologists</p>
