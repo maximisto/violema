@@ -83,12 +83,12 @@ export function enhanceDiagram(root) {
     prevBtn.type = 'button';
     prevBtn.textContent = '← Prev';
     prevBtn.setAttribute('aria-label', 'Previous diagram step');
-    prevBtn.addEventListener('click', () => open(parts[(index - 1 + parts.length) % parts.length], { focusHeading: false }));
+    prevBtn.addEventListener('click', () => open(parts[(index - 1 + parts.length) % parts.length]));
     const nextBtn = document.createElement('button');
     nextBtn.type = 'button';
     nextBtn.textContent = 'Next →';
     nextBtn.setAttribute('aria-label', 'Next diagram step');
-    nextBtn.addEventListener('click', () => open(parts[(index + 1) % parts.length], { focusHeading: false }));
+    nextBtn.addEventListener('click', () => open(parts[(index + 1) % parts.length]));
     controls.append(prevBtn, nextBtn, closeBtn);
     head.append(controls);
   });

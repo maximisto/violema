@@ -66,7 +66,7 @@ function siteHeader(route) {
 }
 
 function siteFooter() {
-  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/">Home</a><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="/about/">About Violema</a><a href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span></div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><nav class="footer-legal" aria-label="Legal"><a href="/about/">About</a><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
+  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/">Home</a><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="/about/">About Violema</a><a href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span></div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
 }
 
 export function shell(route, title, description, content, options = {}) {
@@ -90,7 +90,7 @@ export function notFoundPage() {
 // The six records of the method. Interactive on /method/ so each station inspects its concrete schema and jumps to the section below.
 const protocolSteps = [
   ['Source', 'A stable record', 'Every publication, dataset, or analysis script gets a stable identifier, normalized DOI, and locator.', '4 sources in Claim 1 · DOIs normalized · dataset SHA-256 pinned', '#trace', 'Jump to source trace ↓'],
-  ['Study', 'The underlying experiment', 'Multiple papers can report on one cohort or trial. Code tracks registrations and authorship overlap so one sample is never counted twice.', '12 RCTs in SYPRES · 24 papers from 15 research programs in v2.2', '#how-it-works', 'Jump to independence check ↓'],
+  ['Study', 'The underlying experiment', 'Multiple papers can report on one cohort or trial. Code groups papers into research programs by shared authors, so one lab is not counted as an independent replication of itself.', '12 RCTs in SYPRES · 24 papers from 15 research programs in v2.2', '#how-it-works', 'Jump to independence check ↓'],
   ['Claim', 'What the source supports', 'A plain-language statement of one finding, with its evidence tier and the limit of what it supports.', '23 tiered claims · each linked to its sources', '#trace', 'Inspect a traced claim ↓'],
   ['Assumption', 'What analysis requires', 'When studies are pooled, the analytical choices and potential bias shifts are exposed as interactive controls beside the estimate.', 'Hedges’ g = −0.90 [−1.26, −0.55] · additive shift 0.00 to +0.60', '#assumptions', 'Jump to assumption replay ↓'],
   ['Review', 'What has been checked', 'Separates deterministic code checks and AI-assisted drafts from independent review by domain scientists.', 'Code checks and publisher approval in use · independent review pending', '/review/', 'Open reviewer walkthrough →'],
@@ -98,7 +98,7 @@ const protocolSteps = [
 ];
 
 export function protocol() {
-  return `<div class="protocol-inspector" data-tabs><div class="protocol-inspector-head"><span>Select any station to inspect what it records in the packet</span><span class="caption">6-part evidence schema</span></div><ol class="protocol" data-tablist data-step-sequence data-stage="static" aria-label="Evidence workflow">${protocolSteps.map(([name, text], i) => `<li class="station" data-step><a class="station-tab" href="#protocol-station-${name.toLowerCase()}"><span class="station-number">${String(i + 1).padStart(2, '0')}</span><span class="station-node" aria-hidden="true"></span><strong class="station-name">${name}</strong><span class="station-text">${text}</span></a></li>`).join('')}</ol><div class="protocol-panels">${protocolSteps.map(([name, text, detail, artifact, href, linkLabel], i) => `<section class="protocol-panel" id="protocol-station-${name.toLowerCase()}" aria-labelledby="protocol-station-${name.toLowerCase()}-title"><div class="protocol-panel-main"><p class="label">Station 0${i + 1} · ${name}</p><h2 id="protocol-station-${name.toLowerCase()}-title">${text}.</h2><p>${e(detail)}</p></div><div class="protocol-panel-meta"><div class="method-artifact"><span class="method-artifact-tag">Recorded in the packet</span><code>${e(artifact)}</code></div><a class="text-link" href="${href}">${linkLabel}</a></div></section>`).join('')}</div></div>`;
+  return `<div class="protocol-inspector" data-tabs><div class="protocol-inspector-head"><span>Select any station to inspect what it records in the packet</span><span class="caption">6-part evidence schema</span></div><ol class="protocol" data-tablist data-step-sequence data-stage="static" aria-label="Evidence workflow">${protocolSteps.map(([name, text], i) => `<li class="station" role="presentation" data-step><a class="station-tab" href="#protocol-station-${name.toLowerCase()}"><span class="station-number">${String(i + 1).padStart(2, '0')}</span><span class="station-node" aria-hidden="true"></span><strong class="station-name">${name}</strong><span class="station-text">${text}</span></a></li>`).join('')}</ol><div class="protocol-panels">${protocolSteps.map(([name, text, detail, artifact, href, linkLabel], i) => `<section class="protocol-panel" id="protocol-station-${name.toLowerCase()}" aria-labelledby="protocol-station-${name.toLowerCase()}-title"><div class="protocol-panel-main"><p class="label">Station 0${i + 1} · ${name}</p><h2 id="protocol-station-${name.toLowerCase()}-title">${text}.</h2><p>${e(detail)}</p></div><div class="protocol-panel-meta"><div class="method-artifact"><span class="method-artifact-tag">Recorded in the packet</span><code>${e(artifact)}</code></div><a class="text-link" href="${href}">${linkLabel}</a></div></section>`).join('')}</div></div>`;
 }
 
 // The review instrument: one packet claim traced to its sources, then the saved interval and bounded replay.
@@ -222,7 +222,7 @@ export function aboutPage() {
           </div>
           <p class="about-layer-body">${e(body)}</p>
           <p class="about-layer-invariant"><strong>Verification rule:</strong> ${e(invariant)}</p>
-          <a class="about-layer-link" href="${href}">${linkLabel} ${external}</a>
+          <a class="about-layer-link" href="${href}">${linkLabel}${href.startsWith('http') ? ` ${external}` : ''}</a>
         </section>`).join('')}
       </div>
     </div>
@@ -248,15 +248,15 @@ export function aboutPage() {
           <strong>What Violema replaces</strong>
           <p>Instead of a static PDF summary that hides disagreements, Violema builds a living, claim-by-claim record that shows which claims hold, why they hold that tier, and what new evidence would change them. Benchmarks: Michelson &amp; Reuter (Contemp Clin Trials Commun, 2019); Borah et al. (BMJ Open, 2017).</p>
         </div>
-        <a class="text-link" href="/demo/">Open the live evidence lab ${external}</a>
+        <a class="text-link" href="/demo/">Open the evidence lab</a>
       </section>
       <section id="charter-divisions" aria-labelledby="charter-divisions-heading">
         <p class="label">One core engine · field-specific products</p>
         <h3 id="charter-divisions-heading">Violema is the engine. Each division serves one field.</h3>
         <ul class="guide-sources">
           <li><details open><summary><strong>PsychDoc.AI · Psychedelic medicine (Live)</strong><span aria-hidden="true">+</span></summary><p>Our first operating division. Tracks psychedelic neuroscience and clinical trials claim by claim, starting with psilocybin neuroplasticity and depression meta-analysis stress testing.</p><a href="${psychdoc}">Explore PsychDoc.AI ${external}</a></details></li>
-          <li><details><summary><strong>Materials science · Perovskite stability (Live specimen)</strong><span aria-hidden="true">+</span></summary><p>Exercises the same source-to-claim record and condition comparison matrix outside medicine, showing where incompatible test conditions block statistical pooling.</p><a href="/demo/#corpus-perovskite-stability">Inspect the materials specimen ${external}</a></details></li>
-          <li><details><summary><strong>Research integrity · Peer-review verification (Exploring)</strong><span aria-hidden="true">+</span></summary><p>Pre-publication claim and citation verification tools for academic peer reviewers, journals, and university research integrity offices.</p><a href="/method/#cross-field">See how cross-field verification works ${external}</a></details></li>
+          <li><details><summary><strong>Materials science · Perovskite stability (Live specimen)</strong><span aria-hidden="true">+</span></summary><p>Exercises the same source-to-claim record and condition comparison matrix outside medicine, showing where incompatible test conditions block statistical pooling.</p><a href="/demo/#corpus-perovskite-stability">Inspect the materials specimen</a></details></li>
+          <li><details><summary><strong>Research integrity · Peer-review verification (Exploring)</strong><span aria-hidden="true">+</span></summary><p>Pre-publication claim and citation verification tools for academic peer reviewers, journals, and university research integrity offices.</p><a href="/method/#cross-field">See the cross-field plan</a></details></li>
         </ul>
         <p class="caption">Each scientific product stays clean and focused on its domain literature while Violema, Inc. maintains the shared verification engine.</p>
       </section>
@@ -271,7 +271,7 @@ export function aboutPage() {
         <a class="text-link" href="${psychdoc}/policies/editorial">Read the full editorial policy ${external}</a>
       </section>
     </div>
-    <div class="guide-foot"><span>Violema, Inc. holds no equity, options, or advisory roles in any drug developer.</span><a href="/company-assets/data/psychdoc.json" download>Download sample packet ${external}</a></div>
+    <div class="guide-foot"><span>Violema, Inc. holds no equity, options, or advisory roles in any drug developer.</span><a href="/company-assets/data/psychdoc.json" download>Download sample packet</a></div>
   </div>`;
 
   const founderExplorer = `<div class="evidence-guide founder-explorer" data-tabs data-founder-explorer>
@@ -327,7 +327,7 @@ export function aboutPage() {
         <a class="text-link" href="https://orcid.org/0009-0009-9354-2207" target="_blank" rel="noopener noreferrer">Verify ORCID record 0009-0009-9354-2207 ${external}</a>
       </section>
     </div>
-    <div class="guide-foot"><span>Tip: click any era in the dossier timeline on the left or the tabs above to switch views.</span><a href="https://www.linkedin.com/in/maximisto/" target="_blank" rel="noopener noreferrer">LinkedIn @maximisto ${external}</a></div>
+    <div class="guide-foot"><a href="https://www.linkedin.com/in/maximisto/" target="_blank" rel="noopener noreferrer">LinkedIn @maximisto ${external}</a></div>
   </div>`;
 
   const founderLeadSection = `<section class="about-lead-section" id="founder" aria-labelledby="about-page-title">
@@ -372,7 +372,7 @@ export function aboutPage() {
               </div>
               <div>
                 <dt>1991 to 1995</dt>
-                <dd><a class="founder-epoch-link" href="#founder-era-disclosure" data-epoch-target="founder-era-disclosure"><strong>Moscow State University (MESI)</strong><span>Economics, Statistics, and Informatics →</span></a></dd>
+                <dd><a class="founder-epoch-link" href="#founder-era-disclosure" data-epoch-target="founder-era-disclosure"><strong>Moscow State University of Economics, Statistics and Informatics (MESI)</strong><span>Economics, Statistics, and Informatics →</span></a></dd>
               </div>
             </dl>
           </figcaption>
@@ -421,7 +421,7 @@ export function aboutPage() {
           <dl class="about-corp-facts">
             <div><dt>Entity</dt><dd>Delaware C-Corporation</dd></div>
             <div><dt>Headquarters</dt><dd>Chicago, Illinois</dd></div>
-            <div><dt>Divisions</dt><dd><a href="${psychdoc}">PsychDoc.AI ${external}</a> · <a href="/demo/#corpus-perovskite-stability">Materials Lab</a></dd></div>
+            <div><dt>Division</dt><dd><a href="${psychdoc}">PsychDoc.AI ${external}</a></dd></div><div><dt>Second field</dt><dd><a href="/demo/#corpus-perovskite-stability">Materials specimen</a></dd></div>
             <div><dt>Accounts</dt><dd><a href="mailto:accounts@violema.com">accounts@violema.com</a></dd></div>
             <div><dt>Governance</dt><dd><a href="${psychdoc}/policies/editorial">Editorial Policy ${external}</a> · <a href="/legal/terms/">Terms</a> · <a href="/legal/privacy/">Privacy</a></dd></div>
           </dl>
@@ -433,7 +433,7 @@ export function aboutPage() {
   return shell('/about/', 'About Violema | Violema', 'Who builds Violema, how Violema, Inc. structures scientific accountability across PsychDoc.AI and future fields, and founder Max Markovtsev’s background.', [
     founderLeadSection,
     `<section class="experience-chapter chapter-method" id="company" aria-labelledby="company-title"><div class="wrap"><p class="chapter-label"><span aria-hidden="true">01</span>The company &amp; charter</p><div class="about-company-layout"><div class="about-company-left"><h2 id="company-title">One evidence engine.<br>Built for contested science.</h2><p class="lede">When a scientific field moves fast and papers disagree, a paragraph summary hides the exact details a decision depends on.</p>${companyGuide}</div><div class="about-company-right">${accountabilityInstrument}</div></div></div></section>`,
-    `<section class="experience-chapter chapter-applications" id="about-applications" aria-labelledby="about-applications-title"><div class="wrap"><div class="chapter-heading"><p class="chapter-label"><span aria-hidden="true">02</span>Divisions &amp; roadmap</p><h2 id="about-applications-title">Focused products.<br>Shared verification.</h2><p class="lede">Each Violema division stays clean and dedicated to its own scientific community, while company and governance records live here on violema.com.</p></div><article class="product-feature" aria-labelledby="about-psychdoc-title"><div class="product-identity"><p class="label">First division · Live in production</p><h3 id="about-psychdoc-title">PsychDoc<span aria-hidden="true">.</span></h3><p class="product-tagline">Psychedelic research, claim by claim.</p><p>Living public syntheses, interactive bias stress tests, molecule-to-clinic evidence chains, and commissioned reviews for drug developers, investors, and academic trial teams.</p><a class="button button-primary" href="${psychdoc}">Open PsychDoc.AI ${external}</a><p class="caption">Version 2.2 · 24 papers read from 15 research programs.</p></div><div class="product-paths"><p class="label">Live capabilities on PsychDoc.AI</p><a href="${psychdoc}/evidence/psilocybin-rewiring"><span><strong>Living synthesis dossier</strong><small>Does one dose of psilocybin rewire the brain? 23 tiered claims, each linked to its sources.</small></span>${external}</a><a href="${psychdoc}/#stress"><span><strong>Interactive bias stress test</strong><small>SYPRES 2026 meta-analysis reproduced to four decimals; drag in assumed bias until claims break.</small></span>${external}</a><a href="${psychdoc}/#chain"><span><strong>Molecule-to-clinic chain</strong><small>Psilocybin alongside GH001 and SPL026, showing every published link and every unstudied gap.</small></span>${external}</a></div></article><article class="materials-feature" aria-labelledby="about-materials-title"><div><p class="label">Second field specimen</p><h3 id="about-materials-title">Materials science</h3><span class="example-label">Live at violema.com/demo</span></div><div><h4>Perovskite solar-cell stability under ISOS reporting rules</h4><p>Demonstrates how the Violema record travels outside medicine: four perovskite stability reports traced claim by claim, exposing where incompatible illumination, temperature, and humidity conditions forbid a pooled statistical estimate.</p><p class="small">Next horizon: pre-publication claim verification tools for peer reviewers, journals, and universities.</p><a class="text-link" href="/demo/#corpus-perovskite-stability">Inspect the materials specimen ${external}</a></div></article></div></section>`,
+    `<section class="experience-chapter chapter-applications" id="about-applications" aria-labelledby="about-applications-title"><div class="wrap"><div class="chapter-heading"><p class="chapter-label"><span aria-hidden="true">02</span>Divisions &amp; roadmap</p><h2 id="about-applications-title">Focused products.<br>Shared verification.</h2><p class="lede">Each Violema division stays clean and dedicated to its own scientific community, while company and governance records live here on violema.com.</p></div><article class="product-feature" aria-labelledby="about-psychdoc-title"><div class="product-identity"><p class="label">First division · Live in production</p><h3 id="about-psychdoc-title">PsychDoc<span aria-hidden="true">.</span></h3><p class="product-tagline">Psychedelic research, claim by claim.</p><p>Living public syntheses, interactive bias stress tests, molecule-to-clinic evidence chains, and commissioned reviews for drug developers, investors, and academic trial teams.</p><a class="button button-primary" href="${psychdoc}">Open PsychDoc.AI ${external}</a><p class="caption">Version 2.2 · 24 papers read from 15 research programs.</p></div><div class="product-paths"><p class="label">Live capabilities on PsychDoc.AI</p><a href="${psychdoc}/evidence/psilocybin-rewiring"><span><strong>Living synthesis dossier</strong><small>Does one dose of psilocybin rewire the brain? 23 tiered claims, each linked to its sources.</small></span>${external}</a><a href="${psychdoc}/#stress"><span><strong>Interactive bias stress test</strong><small>SYPRES 2026 meta-analysis reproduced to four decimals; drag in assumed bias until claims break.</small></span>${external}</a><a href="${psychdoc}/#chain"><span><strong>Molecule-to-clinic chain</strong><small>Psilocybin alongside GH001 and SPL026, showing every published link and every unstudied gap.</small></span>${external}</a></div></article><article class="materials-feature" aria-labelledby="about-materials-title"><div><p class="label">Second field specimen</p><h3 id="about-materials-title">Materials science</h3><span class="example-label">Live at violema.com/demo</span></div><div><h4>Perovskite solar-cell stability under ISOS reporting rules</h4><p>Demonstrates how the Violema record travels outside medicine: four perovskite stability reports traced claim by claim, exposing where incompatible illumination, temperature, and humidity conditions forbid a pooled statistical estimate.</p><p class="small">Next horizon: pre-publication claim verification tools for peer reviewers, journals, and universities.</p><a class="text-link" href="/demo/#corpus-perovskite-stability">Inspect the materials specimen</a></div></article></div></section>`,
     corporateDirectory,
   ].join(''), { lab: true });
 }

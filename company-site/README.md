@@ -11,7 +11,7 @@ npm test
 npm run preview
 ```
 
-Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/legal/terms/` and `/legal/privacy/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method, demo and website policy HTML is indexable for the owner-authorized release; robots.txt allows crawling and the sitemap lists those five routes. The physician review page uses `noindex,follow` and is excluded from the sitemap. This is discoverability control, not authentication. Missing static paths return 404 locally. The links `/login`, `/terms` and `/privacy` belong to the preserved production application and are not part of this bundle.
+Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/legal/terms/` and `/legal/privacy/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method, demo, about and website policy HTML is indexable for the owner-authorized release; robots.txt allows crawling and the sitemap lists those six routes. The physician review page uses `noindex,follow` and is excluded from the sitemap. This is discoverability control, not authentication. Missing static paths return 404 locally. The links `/login`, `/terms` and `/privacy` belong to the preserved production application and are not part of this bundle.
 
 ## Layout
 
