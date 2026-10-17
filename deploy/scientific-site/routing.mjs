@@ -7,7 +7,7 @@ export const backend = 'http://127.0.0.1:3001';
 export const protectedPath = '(?:^/(?:backend|frontend|deploy|company-site|docs|node_modules)(?:/|$)|(?:^|/)\\.[^/]*(?:/|$)|(?:\\.(?:bak|map|env|rtf)$)|^/(?:AGENTS|CLAUDE)\\.md$)';
 export const notFoundPage = '/404.html';
 
-const companyDirectories = ['/method', '/demo', '/review', '/legal/terms', '/legal/privacy'];
+const companyDirectories = ['/method', '/demo', '/review', '/about', '/legal/terms', '/legal/privacy'];
 // Exact company routes and the built file each serves, mirroring the live overlay.
 export const companyPages = [
   ['/', '/index.html'], ['/index.html', '/index.html'],

@@ -82,6 +82,52 @@ for (const list of document.querySelectorAll('[data-tabs] [data-tablist]')) {
   if (api) tabGroups.push({ anchors, api });
 }
 
+const epochLinks = [...document.querySelectorAll('[data-epoch-target]')];
+if (epochLinks.length) {
+  const syncEpochs = activeId => {
+    for (const link of epochLinks) link.classList.toggle('is-active', link.dataset.epochTarget === activeId);
+  };
+  syncEpochs('founder-era-enterprise');
+  for (const link of epochLinks) {
+    link.addEventListener('click', event => {
+      const targetId = link.dataset.epochTarget;
+      const group = tabGroups.find(g => g.anchors.some(a => a.hash === `#${targetId}`));
+      if (!group) return;
+      event.preventDefault();
+      group.api.select(targetId);
+      syncEpochs(targetId);
+    });
+  }
+  const founderTabs = document.querySelector('[data-founder-explorer] [data-tablist]');
+  if (founderTabs) {
+    founderTabs.addEventListener('click', event => {
+      const anchor = event.target.closest('a[href^="#"]');
+      if (anchor) syncEpochs(anchor.hash.slice(1));
+    });
+  }
+}
+
+for (const trace of document.querySelectorAll('[data-trace]')) {
+  const rows = [...trace.querySelectorAll('[data-trace-row]')];
+  const leads = [...trace.querySelectorAll('.trace-lead')];
+  const trunks = [...trace.querySelectorAll('.trace-trunk')];
+  const leadNodes = [...trace.querySelectorAll('.trace-leads .trace-node')];
+  const trunkNodes = [...trace.querySelectorAll('.trace-trunks .trace-node')];
+  rows.forEach((row, index) => {
+    const toggle = active => {
+      row.classList.toggle('is-highlighted', active);
+      leads[index]?.classList.toggle('is-highlighted', active);
+      trunks[index]?.classList.toggle('is-highlighted', active);
+      leadNodes[index]?.classList.toggle('is-highlighted', active);
+      trunkNodes[index]?.classList.toggle('is-highlighted', active);
+    };
+    row.addEventListener('pointerenter', () => toggle(true));
+    row.addEventListener('pointerleave', () => toggle(false));
+    row.addEventListener('focusin', () => toggle(true));
+    row.addEventListener('focusout', () => toggle(false));
+  });
+}
+
 // Existing map fragments still work when the full explorer is folded away.
 function revealFragment() {
   let id;

@@ -96,6 +96,18 @@ server {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         try_files /review/index.html =404;
     }
+    location = /about {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /about/index.html =404;
+    }
+    location = /about/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /about/index.html =404;
+    }
+    location = /about/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /about/index.html =404;
+    }
     location = /legal/terms {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         try_files /legal/terms/index.html =404;

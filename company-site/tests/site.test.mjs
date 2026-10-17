@@ -11,7 +11,7 @@ import { TRACKER_SRC } from '../lib/analytics.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
-const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html'],['/review/','review/index.html'],['/legal/terms/','legal/terms/index.html'],['/legal/privacy/','legal/privacy/index.html']];
+const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html'],['/review/','review/index.html'],['/about/','about/index.html'],['/legal/terms/','legal/terms/index.html'],['/legal/privacy/','legal/privacy/index.html']];
 const decode = value => value.replaceAll('&amp;','&');
 
 test('additive replay preserves original result and interval width throughout declared domain',()=>{
