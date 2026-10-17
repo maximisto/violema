@@ -106,14 +106,15 @@ test('--backend-only redeploys the backend and never touches nginx, the frontend
     'npm ci --prefer-offline',
     'npx playwright install chromium',
     'npm run build',
-    'pm2 restart violema-backend --update-env',
+    'pm2 describe violema-backend',
+    `pm2 startOrReload ${join(box.app, 'deploy/ecosystem.config.cjs')} --only violema-backend --update-env`,
     'pm2 save',
     'curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:3001/api/health',
   ]);
   assert.ok(result.commands.some(c => c.startsWith('git ') && c.endsWith(' reset --hard origin/main')), 'checkout synced to origin/main');
   assert.ok(result.log.filter(l => /\|(npm|npx) /.test(l)).every(l => l.startsWith('backend|')), 'npm only ran in backend/');
   for (const name of outsideBackend) assert.ok(!result.commands.some(c => c.startsWith(`${name} `)), `${name} not called`);
-  assert.ok(!result.commands.some(c => c.includes('pm2 delete') || c.includes('pm2 start')), 'restart in place only');
+  assert.ok(!result.commands.some(c => c.includes('pm2 delete') || c.startsWith('pm2 start ')), 'no delete + start');
   assert.equal(readFileSync(vhostPath(box), 'utf8'), overlayVhost, 'vhost bytes unchanged');
   assert.ok(!existsSync(join(box.nginx, 'sites-enabled/violema.com')), 'nothing linked into sites-enabled');
 });
@@ -130,7 +131,8 @@ test('--backend-only fails closed when PM2 has no such process', t => {
   const box = sandbox(t, { exitCodes: { pm2: 1 } });
   const result = box.run('--backend-only', '--skip-deps');
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /could not restart violema-backend/);
+  assert.match(result.stderr, /PM2 has no process named violema-backend/);
+  assert.deepEqual(result.commands.filter(c => c.startsWith('pm2 ')), ['pm2 describe violema-backend']);
   assert.ok(!result.commands.some(c => c.startsWith('curl ')), 'no health probe after a failed restart');
 });
 

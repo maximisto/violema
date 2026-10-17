@@ -204,12 +204,18 @@ write_deps_stamp() {
 }
 
 restart_backend_only() {
-  info "Restarting $PM2_APP_NAME in place…"
-  # Restart by name, never delete + start: a missing process fails here instead
-  # of starting a second backend in another user's PM2 daemon. The backend
-  # re-reads backend/.env on every start.
-  pm2 restart "$PM2_APP_NAME" --update-env \
-    || die "pm2 could not restart $PM2_APP_NAME. Is it running under this user's PM2 (pm2 status)?"
+  # A missing process fails here instead of starting a second backend in
+  # another user's PM2 daemon (startOrReload alone would start one).
+  pm2 describe "$PM2_APP_NAME" >/dev/null 2>&1 \
+    || die "PM2 has no process named $PM2_APP_NAME for this user (pm2 status). Run with the same sudo as the original deploy."
+  info "Reloading $PM2_APP_NAME from deploy/ecosystem.config.cjs…"
+  # Reloading from the ecosystem file applies its env block (NODE_ENV, PORT);
+  # the backend re-reads backend/.env on every start. A reload is not relied on
+  # to apply changes to script, cwd, instances or the memory limit: after
+  # changing those, do a one-off delete + start (see DEPLOY.md).
+  PM2_APP_NAME="$PM2_APP_NAME" APP_BACKEND_CWD="$APP_DIR/backend" \
+    pm2 startOrReload "$APP_DIR/deploy/ecosystem.config.cjs" --only "$PM2_APP_NAME" --update-env \
+    || die "pm2 could not reload $PM2_APP_NAME. Check: pm2 logs $PM2_APP_NAME"
   pm2 save
 }
 
