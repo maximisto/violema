@@ -122,8 +122,10 @@ EOF
 # --skip-deps skips dependency INSTALLS everywhere — system packages here, and
 # the npm ci / Playwright installs below (which used to run on every deploy
 # regardless, observed 2026-08-04: a "skip-deps" deploy still reinstalled 440
-# packages and re-ran apt via Playwright). Fresh checkouts still install: the
-# npm skips only apply when node_modules already exists.
+# packages and re-ran apt via Playwright). Fresh checkouts still install, and
+# so does a changed lockfile: an npm skip needs node_modules AND a stamp proving
+# it was installed from the current package-lock.json. Without that, a
+# lockfile-only security fix deployed with --skip-deps would never install.
 usage() {
   cat <<EOF
 Usage: sudo bash deploy.sh [--backend-only] [--skip-deps]
@@ -133,7 +135,7 @@ Usage: sudo bash deploy.sh [--backend-only] [--skip-deps]
                   packages, the frontend, nginx or certificates. This is the
                   only mode that runs while violema.com is the company site.
   --skip-deps     Skip system package installs, and npm installs whose node_modules
-                  is already present.
+                  was installed from the current package-lock.json.
   -h, --help      Show this help.
 
 Unknown options are rejected: an older copy of this script ignored them and ran
@@ -157,6 +159,36 @@ done
 if [[ "$BACKEND_ONLY" != true ]]; then
   refuse_if_company_vhost
 fi
+
+# Written into node_modules only after every install step succeeded. `npm ci`
+# deletes node_modules first, so a failed or partial install leaves no stamp.
+DEPS_STAMP="node_modules/.violema-deploy-lock.sha256"
+
+lockfile_sha() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum package-lock.json | cut -d' ' -f1
+  else
+    shasum -a 256 package-lock.json | cut -d' ' -f1
+  fi
+}
+
+# A pure check, run from the package directory: 0 = install, 1 = skip. The
+# install itself stays at top level, because bash ignores `set -e` inside a
+# function called as an `if` condition and a failed npm ci would carry on.
+deps_install_needed() {
+  local label="$1"
+  [[ "$SKIP_DEPS" == true && -d node_modules ]] || return 0
+  if [[ -f "$DEPS_STAMP" && "$(cat "$DEPS_STAMP")" == "$(lockfile_sha)" ]]; then
+    info "Skipping $label dependency install (--skip-deps, lockfile unchanged)."
+    return 1
+  fi
+  info "Installing $label dependencies despite --skip-deps: package-lock.json changed since the last install."
+  return 0
+}
+
+write_deps_stamp() {
+  lockfile_sha > "$DEPS_STAMP"
+}
 
 restart_backend_only() {
   info "Restarting $PM2_APP_NAME in place…"
@@ -218,9 +250,7 @@ if [[ ! -f ".env" ]]; then
   die "Missing $APP_DIR/backend/.env — please create it with:\n  ANTHROPIC_API_KEY=sk-ant-..."
 fi
 
-if [[ "$SKIP_DEPS" == true && -d node_modules ]]; then
-  info "Skipping backend dependency install (--skip-deps, node_modules present)."
-else
+if deps_install_needed backend; then
   npm ci --prefer-offline
   # --with-deps runs apt-get; the other modes promise not to touch system packages.
   if [[ "$SKIP_DEPS" == true || "$BACKEND_ONLY" == true ]]; then
@@ -228,6 +258,7 @@ else
   else
     npx playwright install --with-deps chromium
   fi
+  write_deps_stamp
 fi
 npm run build
 info "Backend build complete."
@@ -245,10 +276,9 @@ fi
 # ── 4. Frontend ──────────────────────────────────────────────────────────────
 info "Building frontend…"
 cd "$APP_DIR/frontend"
-if [[ "$SKIP_DEPS" == true && -d node_modules ]]; then
-  info "Skipping frontend dependency install (--skip-deps, node_modules present)."
-else
+if deps_install_needed frontend; then
   npm ci --prefer-offline
+  write_deps_stamp
 fi
 npm run build
 info "Frontend build complete ($(du -sh dist | cut -f1) in dist/)."

@@ -133,3 +133,46 @@ test('--backend-only fails closed when PM2 has no such process', t => {
   assert.match(result.stderr, /could not restart violema-backend/);
   assert.ok(!result.commands.some(c => c.startsWith('curl ')), 'no health probe after a failed restart');
 });
+
+const installs = result => result.log.filter(l => l === 'backend|npm ci --prefer-offline').length;
+const stampPath = box => join(box.app, 'backend/node_modules/.violema-deploy-lock.sha256');
+
+test('--skip-deps still installs when package-lock.json changed, and skips only when it did not', t => {
+  const box = sandbox(t);
+  mkdirSync(join(box.app, 'backend/node_modules'));  // today's VPS: node_modules, no stamp
+  const first = box.run('--backend-only', '--skip-deps');
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(installs(first), 1, 'an unstamped node_modules is not trusted');
+  assert.match(first.stdout, /package-lock\.json changed/);
+  assert.ok(existsSync(stampPath(box)), 'stamp written after a good install');
+
+  const unchanged = box.run('--backend-only', '--skip-deps');
+  assert.equal(unchanged.status, 0, unchanged.stderr);
+  assert.equal(installs(unchanged), 0);
+  assert.ok(!unchanged.commands.some(c => c.startsWith('npx playwright')), 'no browser install on a skip');
+  assert.ok(unchanged.commands.includes('npm run build'));
+
+  writeFileSync(join(box.app, 'backend/package-lock.json'), '{"lockfileVersion":3,"packages":{"node_modules/qs":{"version":"6.14.1"}}}\n');
+  const changed = box.run('--backend-only', '--skip-deps');
+  assert.equal(changed.status, 0, changed.stderr);
+  assert.equal(installs(changed), 1, 'a lockfile-only fix installs under --skip-deps');
+});
+
+test('without --skip-deps the backend always installs', t => {
+  const box = sandbox(t);
+  box.run('--backend-only');
+  const again = box.run('--backend-only');
+  assert.equal(again.status, 0, again.stderr);
+  assert.equal(installs(again), 1);
+});
+
+test('a failed install leaves no stamp, so the next --skip-deps run retries it', t => {
+  for (const failing of ['npm', 'npx']) {
+    const box = sandbox(t, { exitCodes: { [failing]: 1 } });
+    mkdirSync(join(box.app, 'backend/node_modules'));
+    const result = box.run('--backend-only', '--skip-deps');
+    assert.notEqual(result.status, 0, `${failing} failure aborts the deploy`);
+    assert.ok(!existsSync(stampPath(box)), `no stamp after a failed ${failing}`);
+    assert.ok(!result.commands.some(c => c.startsWith('pm2 ')), 'backend not restarted');
+  }
+});
