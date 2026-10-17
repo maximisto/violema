@@ -8,6 +8,7 @@ import { corpora, stressTest } from '../data/corpora.mjs';
 import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen } from '../lib/render.mjs';
 import { homePage } from '../lib/pages.mjs';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
+import { profiles, profileIcon } from '../lib/social.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
@@ -171,6 +172,48 @@ test('browser module paths and self-hosted stylesheet assets resolve in the gene
   assert.doesNotMatch(css,/prefers-color-scheme/,'Theme is reader-selected, not forced by the operating system');
   assert.match(css,/:root \{\n  color-scheme: light;/);
   assert.ok(!(await readdir(dist)).includes('assets'),'Legacy app asset namespace is preserved');
+});
+
+test('/about/ shows the six former clients as one-ink marks, each with an accessible name',async()=>{
+  const html=await readFile(join(dist,'about/index.html'),'utf8');
+  const grid=html.match(/<ul class="founder-client-grid"[\s\S]*?<\/ul>/)?.[0]??'';
+  assert.equal((grid.match(/<li>/g)||[]).length,6);
+  assert.match(grid,/<img class="founder-client-logo founder-client-logo--wrigley" src="\/company-assets\/clients\/wrigley\.svg"[^>]* alt="Wrigley"/);
+  assert.match(grid,/<img class="founder-client-logo founder-client-logo--nestle" src="\/company-assets\/clients\/nestle\.svg"[^>]* alt="Nestlé"/);
+  // The Unilever icon is decorative; the visible word carries the name.
+  assert.match(grid,/unilever\.svg"[^>]* alt=""[^>]*>Unilever<\/span>/);
+  for(const name of ['P&amp;G','Northwestern Mutual','U.S. Marine Corps'])assert.ok(grid.includes(`>${name}</span>`),`${name} wordmark`);
+  for(const name of ['unilever.svg','wrigley.svg','nestle.svg'])assert.deepEqual(await readFile(join(dist,'company-assets/clients',name)),await readFile(join(root,'assets/clients',name)));
+  const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
+  assert.match(css,/\.founder-client-logo \{[^}]*filter: brightness\(0\);/);
+  assert.match(css,/\[data-theme='dark'\] \.founder-client-logo \{ filter: brightness\(0\) invert\(1\); \}/);
+});
+
+test('every footer links the confirmed profiles as icon links named by their owner',async()=>{
+  assert.deepEqual(profiles.map(profile=>profile.id),['github','linkedin','instagram','x','facebook','orcid']);
+  assert.equal(profiles.find(profile=>profile.id==='instagram').owner,'Violema','@violemaai is the company account');
+  for(const profile of profiles){
+    assert.match(profile.href,/^https:\/\//);
+    assert.match(profileIcon(profile.id),/^<svg viewBox="0 0 24 24"[^>]* aria-hidden="true"[^>]*><path d="[^"]+"\/><\/svg>$/);
+  }
+  for(const [,file] of pages){
+    const html=await readFile(join(dist,file),'utf8');
+    const list=html.match(/<ul class="social-list footer-social" aria-label="Social profiles">([\s\S]*?)<\/ul>/)?.[1]??'';
+    const links=[...list.matchAll(/<a class="social-link social-link--([a-z]+)" href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="([^"]+)" title="[^"]+"><svg/g)].map(match=>[match[1],match[2],match[3]]);
+    assert.deepEqual(links,profiles.map(profile=>[profile.id,profile.href,`${profile.owner} on ${profile.name}`]),`${file} footer profiles`);
+  }
+});
+
+test('/about/ puts the LinkedIn and ORCID icons under the founder card, ORCID in its green there only',async()=>{
+  const html=await readFile(join(dist,'about/index.html'),'utf8');
+  const aside=html.match(/<div class="founder-aside">([\s\S]*?)<div class="founder-narrative">/)?.[1]??'';
+  assert.match(aside,/<\/figure>\s*<ul class="social-list founder-profiles" aria-label="Max Markovtsev's profiles">/);
+  const hrefs=[...aside.matchAll(/<a class="social-link social-link--[a-z]+" href="([^"]+)"/g)].map(match=>match[1]);
+  assert.deepEqual(hrefs,['https://www.linkedin.com/in/maximisto/','https://orcid.org/0009-0009-9354-2207']);
+  // The icons replace the card's former text badges.
+  assert.doesNotMatch(html,/founder-badge/);
+  const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
+  assert.deepEqual(css.match(/[^\n]*#A6CE39[^\n]*/gi),['.founder-profiles .social-link--orcid { color: #A6CE39; }']);
 });
 
 test('self-hosted fonts match their recorded checksums and ship with their licences',async()=>{

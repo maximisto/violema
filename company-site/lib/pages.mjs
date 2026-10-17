@@ -6,6 +6,7 @@ import { howItWorksSection, crossFieldSection } from './how-it-works.mjs';
 import { howItWorks } from '../data/how-it-works.mjs';
 import { analyticsScript } from './analytics.mjs';
 import { legalPolicies, legalUpdatedAt } from './legal.mjs';
+import { profileLinks } from './social.mjs';
 import { escapeHTML as e, sourceURL, corpusPanel, intervalFigure, calculateBiasScenario, chartLegend, biasControl, biasExplanation, referenceNote, scenarioSummary, traceSpecimen } from './render.mjs';
 
 const psychdoc = 'https://psychdoc.ai';
@@ -66,7 +67,7 @@ function siteHeader(route) {
 }
 
 function siteFooter() {
-  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/">Home</a><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="/about/">About Violema</a><a href="${psychdoc}/#briefing">Request a briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span></div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
+  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/">Home</a><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="/about/">About Violema</a><a href="${psychdoc}/#briefing">Request a briefing ${external}</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span></div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><ul class="social-list footer-social" aria-label="Social profiles">${profileLinks()}</ul><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
 }
 
 export function shell(route, title, description, content, options = {}) {
@@ -288,12 +289,12 @@ export function aboutPage() {
         <h3 id="founder-era-enterprise-heading">Global strategy, business intelligence &amp; research synthesis.</h3>
         <p class="guide-claim">At 19, Max helped open Leo Burnett’s Moscow office on the Procter &amp; Gamble account. Over the next decade and a half at Leo Burnett, BBDO, and J. Walter Thompson, he served as Senior Digital Strategist and Director of Business Intelligence across global consumer, financial, and public-sector programs.</p>
         <ul class="founder-client-grid" aria-label="Selected enterprise and public-sector organizations">
-          <li><strong>Procter &amp; Gamble</strong><span>Brand &amp; market intelligence</span></li>
-          <li><strong>Unilever</strong><span>Digital transformation &amp; analytics</span></li>
-          <li><strong>Wrigley</strong><span>Global consumer &amp; commercial BI</span></li>
-          <li><strong>Nestlé</strong><span>Strategic research &amp; data systems</span></li>
-          <li><strong>Northwestern Mutual</strong><span>Enterprise digital strategy</span></li>
-          <li><strong>U.S. Marine Corps</strong><span>Digital systems &amp; recruitment BI</span></li>
+          <li><span class="founder-client-mark founder-client-wordmark founder-client-wordmark--serif founder-client-wordmark--pg">P&amp;G</span><span class="founder-client-role">Brand &amp; market intelligence</span></li>
+          <li><span class="founder-client-mark founder-client-wordmark"><img class="founder-client-logo founder-client-logo--unilever" src="/company-assets/clients/unilever.svg" width="24" height="24" alt="" loading="lazy" decoding="async">Unilever</span><span class="founder-client-role">Digital transformation &amp; analytics</span></li>
+          <li><span class="founder-client-mark"><img class="founder-client-logo founder-client-logo--wrigley" src="/company-assets/clients/wrigley.svg" width="1024" height="124" alt="Wrigley" loading="lazy" decoding="async"></span><span class="founder-client-role">Global consumer &amp; commercial BI</span></li>
+          <li><span class="founder-client-mark"><img class="founder-client-logo founder-client-logo--nestle" src="/company-assets/clients/nestle.svg" width="300" height="82" alt="Nestlé" loading="lazy" decoding="async"></span><span class="founder-client-role">Strategic research &amp; data systems</span></li>
+          <li><span class="founder-client-mark founder-client-wordmark founder-client-wordmark--serif">Northwestern Mutual</span><span class="founder-client-role">Enterprise digital strategy</span></li>
+          <li><span class="founder-client-mark founder-client-wordmark">U.S. Marine Corps</span><span class="founder-client-role">Digital systems &amp; recruitment BI</span></li>
         </ul>
       </section>
       <section id="founder-era-ai" aria-labelledby="founder-era-ai-heading">
@@ -341,42 +342,40 @@ export function aboutPage() {
       </header>
 
       <div class="about-founder-showcase">
-        <figure class="instrument founder-instrument" aria-label="Max Markovtsev founder dossier">
-          <div class="founder-instrument-head">
-            <span class="pill">Founder &amp; CEO</span>
-            <span class="caption">Chicago, Illinois</span>
-          </div>
-          <div class="founder-portrait-wrap">
-            <img class="founder-portrait" src="/company-assets/max-markovtsev.jpg" width="1024" height="1024" alt="Max Markovtsev, Founder and CEO of Violema, Inc.">
-          </div>
-          <figcaption class="founder-instrument-body">
-            <h2 class="founder-name">Max Markovtsev</h2>
-            <p class="founder-role">Founder &amp; Chief Executive Officer · Violema, Inc.</p>
-            <div class="founder-badges">
-              <a class="founder-badge" href="https://orcid.org/0009-0009-9354-2207" target="_blank" rel="noopener noreferrer"><code>ORCID 0009-0009-9354-2207</code> ${external}</a>
-              <a class="founder-badge" href="https://www.linkedin.com/in/maximisto/" target="_blank" rel="noopener noreferrer">LinkedIn @maximisto ${external}</a>
-              <a class="founder-badge" href="https://x.com/maximisto" target="_blank" rel="noopener noreferrer">X @maximisto ${external}</a>
+        <div class="founder-aside">
+          <figure class="instrument founder-instrument" aria-label="Max Markovtsev founder dossier">
+            <div class="founder-instrument-head">
+              <span class="pill">Founder &amp; CEO</span>
+              <span class="caption">Chicago, Illinois</span>
             </div>
-            <dl class="founder-ledger" aria-label="Career timeline">
-              <div>
-                <dt>2026 to present</dt>
-                <dd><a class="founder-epoch-link" href="#founder-era-violema" data-epoch-target="founder-era-violema"><strong>Violema, Inc. &amp; PsychDoc.AI</strong><span>Founder &amp; CEO · Scientific evidence systems →</span></a></dd>
-              </div>
-              <div>
-                <dt>2017 to present</dt>
-                <dd><a class="founder-epoch-link" href="#founder-era-ai" data-epoch-target="founder-era-ai"><strong>Purple Orange AI · Purple Orange Group</strong><span>Founder &amp; Managing Partner · Governed AI systems →</span></a></dd>
-              </div>
-              <div>
-                <dt>1995 to 2016</dt>
-                <dd><a class="founder-epoch-link" href="#founder-era-enterprise" data-epoch-target="founder-era-enterprise"><strong>J. Walter Thompson · Leo Burnett · BBDO</strong><span>Sr. Digital Strategist &amp; Director of BI →</span></a></dd>
-              </div>
-              <div>
-                <dt>1991 to 1995</dt>
-                <dd><a class="founder-epoch-link" href="#founder-era-disclosure" data-epoch-target="founder-era-disclosure"><strong>Moscow State University of Economics, Statistics and Informatics (MESI)</strong><span>Economics, Statistics, and Informatics →</span></a></dd>
-              </div>
-            </dl>
-          </figcaption>
-        </figure>
+            <div class="founder-portrait-wrap">
+              <img class="founder-portrait" src="/company-assets/max-markovtsev.jpg" width="1024" height="1024" alt="Max Markovtsev, Founder and CEO of Violema, Inc.">
+            </div>
+            <figcaption class="founder-instrument-body">
+              <h2 class="founder-name">Max Markovtsev</h2>
+              <p class="founder-role">Founder &amp; Chief Executive Officer · Violema, Inc.</p>
+              <dl class="founder-ledger" aria-label="Career timeline">
+                <div>
+                  <dt>2026 to present</dt>
+                  <dd><a class="founder-epoch-link" href="#founder-era-violema" data-epoch-target="founder-era-violema"><strong>Violema, Inc. &amp; PsychDoc.AI</strong><span>Founder &amp; CEO · Scientific evidence systems →</span></a></dd>
+                </div>
+                <div>
+                  <dt>2017 to present</dt>
+                  <dd><a class="founder-epoch-link" href="#founder-era-ai" data-epoch-target="founder-era-ai"><strong>Purple Orange AI · Purple Orange Group</strong><span>Founder &amp; Managing Partner · Governed AI systems →</span></a></dd>
+                </div>
+                <div>
+                  <dt>1995 to 2016</dt>
+                  <dd><a class="founder-epoch-link" href="#founder-era-enterprise" data-epoch-target="founder-era-enterprise"><strong>J. Walter Thompson · Leo Burnett · BBDO</strong><span>Sr. Digital Strategist &amp; Director of BI →</span></a></dd>
+                </div>
+                <div>
+                  <dt>1991 to 1995</dt>
+                  <dd><a class="founder-epoch-link" href="#founder-era-disclosure" data-epoch-target="founder-era-disclosure"><strong>Moscow State University of Economics, Statistics and Informatics (MESI)</strong><span>Economics, Statistics, and Informatics →</span></a></dd>
+                </div>
+              </dl>
+            </figcaption>
+          </figure>
+          <ul class="social-list founder-profiles" aria-label="Max Markovtsev's profiles">${profileLinks(['linkedin', 'orcid'])}</ul>
+        </div>
 
         <div class="founder-narrative">
           <p class="label">Founder profile · Systems architecture meets scientific synthesis</p>

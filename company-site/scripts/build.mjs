@@ -25,13 +25,15 @@ const logoFiles = [
   ['psychdoc-wordmark-light.svg', 'psychdoc-wordmark-light.svg'],
   ['psychdoc-wordmark-dark.svg', 'psychdoc-wordmark-dark.svg'],
 ];
+// Former-client marks for the About page, copied unchanged from purpleorange.ai's founder strip (assets/brand/founder/).
+const clientLogoFiles = ['unilever.svg', 'wrigley.svg', 'nestle.svg'];
 
 await exportCorpora(undefined, { check: true });
 // Trial records must match primary.studies; with SYPRES_CSV set they are also re-derived from the pinned CSV.
 const trials = await checkTrials({ csv: process.env.SYPRES_CSV });
 // Only the generated company-site directory is removed; application output is separate.
 await rm(dist, { recursive: true, force: true });
-for (const directory of ['method', 'demo', 'review', 'about', 'legal/terms', 'legal/privacy', 'company-assets/browser', 'company-assets/data', 'company-assets/fonts']) {
+for (const directory of ['method', 'demo', 'review', 'about', 'legal/terms', 'legal/privacy', 'company-assets/browser', 'company-assets/data', 'company-assets/fonts', 'company-assets/clients']) {
   await mkdir(join(dist, directory), { recursive: true });
 }
 for (const [route, markup] of [
@@ -72,6 +74,7 @@ for (const name of ['provenance.md', 'stage-b-snapshot.json', 'portability-recei
 }
 for (const [source, destination] of fontFiles) await copyFile(join(assets, source), join(dist, 'company-assets', destination));
 for (const [source, destination] of logoFiles) await copyFile(join(root, 'brand', source), join(dist, 'company-assets', destination));
+for (const name of clientLogoFiles) await copyFile(join(assets, 'clients', name), join(dist, 'company-assets/clients', name));
 await copyFile(join(assets, 'violema-social-hero.jpg'), join(dist, 'company-assets/violema-social-hero.jpg'));
 await copyFile(join(assets, 'max-markovtsev.jpg'), join(dist, 'company-assets/max-markovtsev.jpg'));
 await writeFile(join(dist, 'robots.txt'), 'User-agent: *\nAllow: /\n\nSitemap: https://violema.com/sitemap.xml\n');

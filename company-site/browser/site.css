@@ -409,6 +409,12 @@ code {
 .footer-legal { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .footer-legal a { display: inline-flex; align-items: center; min-height: 44px; font-size: var(--text-caption); color: var(--ink); text-underline-offset: 4px; }
 .footer-meta > a { color: var(--ink-2); }
+/* Profile links: brand glyphs in the page's ink, 44px targets, as the theme control. */
+.social-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.social-link { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: var(--ink-2); }
+.social-link:hover { color: var(--accent); background: var(--surface-2); }
+.social-link svg { width: 20px; height: 20px; }
+.footer-social { margin-inline: -12px; }
 
 @media (max-width: 767px) {
   .footer-main { grid-template-columns: 1fr; gap: 20px; }
@@ -1874,8 +1880,21 @@ tr > *:last-child { border-right: 0; }
   gap: 40px 48px;
   align-items: start;
 }
-.founder-instrument {
+.founder-aside {
   grid-column: 1 / span 5;
+  display: grid;
+  gap: 16px;
+}
+/* Glyphs line up with the card's text edge (23px inset, less the 12px around each glyph). */
+.founder-profiles {
+  padding-left: 11px;
+}
+.founder-profiles .social-link { width: 48px; height: 48px; }
+.founder-profiles .social-link svg { width: 24px; height: 24px; }
+/* Here only, ORCID keeps its brand green; a white disc keeps the iD letters white on either theme. */
+.founder-profiles .social-link--orcid { color: #A6CE39; }
+.founder-profiles .social-link--orcid svg { background: radial-gradient(circle closest-side, #fff 92%, transparent 93%); }
+.founder-instrument {
   margin: 0;
   overflow: hidden;
   border-radius: 16px;
@@ -1914,38 +1933,10 @@ tr > *:last-child { border-right: 0; }
   font-size: var(--text-caption);
   color: var(--inst-ink-2);
 }
-.founder-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--inst-line);
-}
-.founder-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 12px;
-  background: var(--inst-surface);
-  border: 1px solid var(--inst-line-strong);
-  border-radius: var(--radius-control);
-  color: var(--inst-ink);
-  font-size: 0.9375rem;
-  font-weight: 500;
-  text-decoration: none;
-  transition: border-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
-}
-.founder-badge:hover {
-  border-color: var(--inst-accent);
-  color: var(--inst-accent);
-}
-.founder-badge code {
-  font-size: 0.875rem;
-}
 .founder-ledger {
-  margin: 18px 0 0;
+  margin: 20px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--inst-line);
   display: grid;
   gap: 14px;
 }
@@ -2016,14 +2007,52 @@ tr > *:last-child { border-right: 0; }
   border: 1px solid var(--line);
   border-radius: var(--radius-nested);
   display: grid;
-  gap: 4px;
+  gap: 10px;
 }
-.founder-client-grid strong {
-  font-family: var(--font-display);
-  font-size: 1rem;
+/* Former-client marks follow purpleorange.ai's founder strip: every mark in one ink,
+   set type where no clean vector mark is held. A fixed row height keeps roles aligned. */
+.founder-client-mark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
   color: var(--ink);
+  opacity: 0.72;
 }
-.founder-client-grid span {
+.founder-client-logo {
+  display: block;
+  height: 24px;
+  width: auto;
+  max-width: 100%;
+  filter: brightness(0);
+}
+[data-theme='dark'] .founder-client-logo { filter: brightness(0) invert(1); }
+.founder-client-logo--unilever { height: 30px; }
+.founder-client-logo--wrigley { height: 20px; }
+.founder-client-logo--nestle { height: 26px; }
+.founder-client-wordmark {
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  /* Narrow three-column cards (about 1024 to 1440px) fold long names onto two lines inside the mark row. */
+  text-wrap: balance;
+}
+.founder-client-wordmark--serif {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.founder-client-wordmark--pg {
+  font-size: 1.875rem;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+.founder-client-role {
   font-size: 0.875rem;
   color: var(--ink-2);
   line-height: 1.45;
@@ -2253,11 +2282,11 @@ tr > *:last-child { border-right: 0; }
   .about-page-header > .lede,
   .about-company-left,
   .about-company-right,
-  .founder-instrument,
+  .founder-aside,
   .founder-narrative {
     grid-column: 1 / -1;
   }
-  .founder-instrument {
+  .founder-aside {
     max-width: 560px;
   }
   .founder-client-grid {
