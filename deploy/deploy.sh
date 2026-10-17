@@ -164,7 +164,10 @@ fi
 # deletes node_modules first, so a failed or partial install leaves no stamp.
 DEPS_STAMP="node_modules/.violema-deploy-lock.sha256"
 
+# Prints nothing (never a partial value) when package-lock.json is missing or
+# unreadable; callers treat an empty hash as "install".
 lockfile_sha() {
+  [[ -r package-lock.json ]] || return 0
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum package-lock.json | cut -d' ' -f1
   else
@@ -177,8 +180,14 @@ lockfile_sha() {
 # function called as an `if` condition and a failed npm ci would carry on.
 deps_install_needed() {
   local label="$1"
+  local current
   [[ "$SKIP_DEPS" == true && -d node_modules ]] || return 0
-  if [[ -f "$DEPS_STAMP" && "$(cat "$DEPS_STAMP")" == "$(lockfile_sha)" ]]; then
+  if [[ ! -f "$DEPS_STAMP" ]]; then
+    info "Installing $label dependencies despite --skip-deps: no install stamp yet, so node_modules is not trusted."
+    return 0
+  fi
+  current="$(lockfile_sha)"
+  if [[ -n "$current" && "$(cat "$DEPS_STAMP")" == "$current" ]]; then
     info "Skipping $label dependency install (--skip-deps, lockfile unchanged)."
     return 1
   fi
@@ -186,8 +195,12 @@ deps_install_needed() {
   return 0
 }
 
+# Hash first, then write: a redirect would truncate the stamp before hashing.
 write_deps_stamp() {
-  lockfile_sha > "$DEPS_STAMP"
+  local sha
+  sha="$(lockfile_sha)"
+  [[ -n "$sha" ]] || die "Could not hash $PWD/package-lock.json; refusing to stamp node_modules."
+  printf '%s\n' "$sha" > "$DEPS_STAMP"
 }
 
 restart_backend_only() {

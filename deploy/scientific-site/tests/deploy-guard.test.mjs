@@ -143,7 +143,7 @@ test('--skip-deps still installs when package-lock.json changed, and skips only 
   const first = box.run('--backend-only', '--skip-deps');
   assert.equal(first.status, 0, first.stderr);
   assert.equal(installs(first), 1, 'an unstamped node_modules is not trusted');
-  assert.match(first.stdout, /package-lock\.json changed/);
+  assert.match(first.stdout, /no install stamp yet/);
   assert.ok(existsSync(stampPath(box)), 'stamp written after a good install');
 
   const unchanged = box.run('--backend-only', '--skip-deps');
