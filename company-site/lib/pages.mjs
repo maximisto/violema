@@ -347,7 +347,7 @@ export function aboutPage() {
             <span class="caption">Chicago, Illinois</span>
           </div>
           <div class="founder-portrait-wrap">
-            <img class="founder-portrait" src="/company-assets/max-markovtsev.jpg" width="2048" height="2048" alt="Max Markovtsev, Founder and CEO of Violema, Inc.">
+            <img class="founder-portrait" src="/company-assets/max-markovtsev.jpg" width="1024" height="1024" alt="Max Markovtsev, Founder and CEO of Violema, Inc.">
           </div>
           <figcaption class="founder-instrument-body">
             <h2 class="founder-name">Max Markovtsev</h2>
