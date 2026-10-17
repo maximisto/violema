@@ -2016,14 +2016,52 @@ tr > *:last-child { border-right: 0; }
   border: 1px solid var(--line);
   border-radius: var(--radius-nested);
   display: grid;
-  gap: 4px;
+  gap: 10px;
 }
-.founder-client-grid strong {
-  font-family: var(--font-display);
-  font-size: 1rem;
+/* Former-client marks follow purpleorange.ai's founder strip: every mark in one ink,
+   set type where no clean vector mark is held. A fixed row height keeps roles aligned. */
+.founder-client-mark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
   color: var(--ink);
+  opacity: 0.72;
 }
-.founder-client-grid span {
+.founder-client-logo {
+  display: block;
+  height: 24px;
+  width: auto;
+  max-width: 100%;
+  filter: brightness(0);
+}
+[data-theme='dark'] .founder-client-logo { filter: brightness(0) invert(1); }
+.founder-client-logo--unilever { height: 30px; }
+.founder-client-logo--wrigley { height: 20px; }
+.founder-client-logo--nestle { height: 26px; }
+.founder-client-wordmark {
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  /* Narrow three-column cards (about 1024 to 1440px) fold long names onto two lines inside the mark row. */
+  text-wrap: balance;
+}
+.founder-client-wordmark--serif {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.founder-client-wordmark--pg {
+  font-size: 1.875rem;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+.founder-client-role {
   font-size: 0.875rem;
   color: var(--ink-2);
   line-height: 1.45;

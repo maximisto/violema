@@ -288,12 +288,12 @@ export function aboutPage() {
         <h3 id="founder-era-enterprise-heading">Global strategy, business intelligence &amp; research synthesis.</h3>
         <p class="guide-claim">At 19, Max helped open Leo Burnett’s Moscow office on the Procter &amp; Gamble account. Over the next decade and a half at Leo Burnett, BBDO, and J. Walter Thompson, he served as Senior Digital Strategist and Director of Business Intelligence across global consumer, financial, and public-sector programs.</p>
         <ul class="founder-client-grid" aria-label="Selected enterprise and public-sector organizations">
-          <li><strong>Procter &amp; Gamble</strong><span>Brand &amp; market intelligence</span></li>
-          <li><strong>Unilever</strong><span>Digital transformation &amp; analytics</span></li>
-          <li><strong>Wrigley</strong><span>Global consumer &amp; commercial BI</span></li>
-          <li><strong>Nestlé</strong><span>Strategic research &amp; data systems</span></li>
-          <li><strong>Northwestern Mutual</strong><span>Enterprise digital strategy</span></li>
-          <li><strong>U.S. Marine Corps</strong><span>Digital systems &amp; recruitment BI</span></li>
+          <li><span class="founder-client-mark founder-client-wordmark founder-client-wordmark--serif founder-client-wordmark--pg">P&amp;G</span><span class="founder-client-role">Brand &amp; market intelligence</span></li>
+          <li><span class="founder-client-mark founder-client-wordmark"><img class="founder-client-logo founder-client-logo--unilever" src="/company-assets/clients/unilever.svg" width="24" height="24" alt="" loading="lazy" decoding="async">Unilever</span><span class="founder-client-role">Digital transformation &amp; analytics</span></li>
+          <li><span class="founder-client-mark"><img class="founder-client-logo founder-client-logo--wrigley" src="/company-assets/clients/wrigley.svg" width="1024" height="124" alt="Wrigley" loading="lazy" decoding="async"></span><span class="founder-client-role">Global consumer &amp; commercial BI</span></li>
+          <li><span class="founder-client-mark"><img class="founder-client-logo founder-client-logo--nestle" src="/company-assets/clients/nestle.svg" width="300" height="82" alt="Nestlé" loading="lazy" decoding="async"></span><span class="founder-client-role">Strategic research &amp; data systems</span></li>
+          <li><span class="founder-client-mark founder-client-wordmark founder-client-wordmark--serif">Northwestern Mutual</span><span class="founder-client-role">Enterprise digital strategy</span></li>
+          <li><span class="founder-client-mark founder-client-wordmark">U.S. Marine Corps</span><span class="founder-client-role">Digital systems &amp; recruitment BI</span></li>
         </ul>
       </section>
       <section id="founder-era-ai" aria-labelledby="founder-era-ai-heading">

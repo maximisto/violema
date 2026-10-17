@@ -173,6 +173,21 @@ test('browser module paths and self-hosted stylesheet assets resolve in the gene
   assert.ok(!(await readdir(dist)).includes('assets'),'Legacy app asset namespace is preserved');
 });
 
+test('/about/ shows the six former clients as one-ink marks, each with an accessible name',async()=>{
+  const html=await readFile(join(dist,'about/index.html'),'utf8');
+  const grid=html.match(/<ul class="founder-client-grid"[\s\S]*?<\/ul>/)?.[0]??'';
+  assert.equal((grid.match(/<li>/g)||[]).length,6);
+  assert.match(grid,/<img class="founder-client-logo founder-client-logo--wrigley" src="\/company-assets\/clients\/wrigley\.svg"[^>]* alt="Wrigley"/);
+  assert.match(grid,/<img class="founder-client-logo founder-client-logo--nestle" src="\/company-assets\/clients\/nestle\.svg"[^>]* alt="Nestlé"/);
+  // The Unilever icon is decorative; the visible word carries the name.
+  assert.match(grid,/unilever\.svg"[^>]* alt=""[^>]*>Unilever<\/span>/);
+  for(const name of ['P&amp;G','Northwestern Mutual','U.S. Marine Corps'])assert.ok(grid.includes(`>${name}</span>`),`${name} wordmark`);
+  for(const name of ['unilever.svg','wrigley.svg','nestle.svg'])assert.deepEqual(await readFile(join(dist,'company-assets/clients',name)),await readFile(join(root,'assets/clients',name)));
+  const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
+  assert.match(css,/\.founder-client-logo \{[^}]*filter: brightness\(0\);/);
+  assert.match(css,/\[data-theme='dark'\] \.founder-client-logo \{ filter: brightness\(0\) invert\(1\); \}/);
+});
+
 test('self-hosted fonts match their recorded checksums and ship with their licences',async()=>{
   const sums=(await readFile(join(root,'assets/fonts/SHA256SUMS'),'utf8')).trim().split('\n').map(line=>line.split(/\s+/));
   assert.deepEqual(sums.map(([,name])=>name).sort(),['LICENSE-instrument-sans.txt','LICENSE-inter.txt','instrument-sans-latin-wght-normal.woff2','inter-latin-wght-normal.woff2']);

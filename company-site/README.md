@@ -28,7 +28,7 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/le
 - `browser/site.css`: base colour tokens, type scale and existing page layouts.
 - `browser/appearance.css`: manual light/dark themes, theme-specific logos, shared header and focus treatment.
 - `browser/experience.css` and `browser/experience.mjs`: homepage chapter layouts and bounded playback.
-- `assets/`: self-hosted fonts with their licences (see below).
+- `assets/`: self-hosted fonts with their licences (see below). `assets/clients/` holds the Unilever, Wrigley and Nestlé marks for the About page's former-client row, copied unchanged from purpleorange.ai's founder strip (`assets/brand/founder/`, 2026-07-14); `site.css` flattens them to one ink per theme, and P&G, Northwestern Mutual and the U.S. Marine Corps are set in type, as on purpleorange.ai.
 - `brand/`: only the five current approved assets, listed in [the brand README](brand/README.md). Earlier concepts and prompts are in `archive/brand-concepts-20261010/`. The homepage product signature also serves the unchanged PsychDoc.AI two-leaf wordmark in light/dark SVG variants, verified against the current PsychDoc header on 2026-10-15.
 - `docs/design-plan.md`: the design plan: tokens, type, layouts and the instrument's anatomy.
 - `data/`: source packet contract, evidence records, provenance and execution receipts. See `data/provenance.md` for scope and scientific limitations.
