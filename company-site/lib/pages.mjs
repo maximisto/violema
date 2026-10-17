@@ -263,10 +263,10 @@ export function aboutPage() {
       <section id="charter-firewall" aria-labelledby="charter-firewall-heading">
         <p class="label">How Violema makes money without compromising conclusions</p>
         <h3 id="charter-firewall-heading">Free to read. Paid to commission.</h3>
-        <p class="guide-claim">Public living syntheses are free for researchers, clinicians, and the press. Drug developers, R&amp;D teams, and university trial groups pay to commission a synthesis on their question in 8 to 10 weeks or subscribe to living updates.</p>
+        <p class="guide-claim">Public living syntheses are free for researchers, clinicians, and the press. Drug developers, R&amp;D teams, and university trial groups pay to commission a synthesis on their own question.</p>
         <div class="guide-boundary">
-          <strong>Three non-negotiable firewall rules</strong>
-          <p>1. Sponsors choose the research question, never the tier or conclusion. 2. Sponsors receive no pre-publication preview of conclusions. 3. Every commissioned review is published openly within six months.</p>
+          <strong>Three firewall rules</strong>
+          <p>1. Sponsors choose the research question, never the tier or the conclusion. 2. A sponsor never edits, approves or previews conclusions before the scientific editor signs them off. 3. Every commissioned review is published within six months of delivery, with its funder named.</p>
         </div>
         <a class="text-link" href="${psychdoc}/policies/editorial">Read the full editorial policy ${external}</a>
       </section>
@@ -406,7 +406,7 @@ export function aboutPage() {
         <article class="about-directory-card">
           <p class="label">For R&amp;D, Clinical &amp; Investment Teams</p>
           <h3>Commission a synthesis or briefing</h3>
-          <p>Sponsor a rigorous 8-to-10-week living synthesis on a target, indication, or compound, or schedule a private scientific briefing on our existing corpora.</p>
+          <p>Commission a synthesis on a target, indication, or compound, or request a scientific briefing on our existing corpora.</p>
           <a class="button button-primary" href="${psychdoc}/#briefing">Request a scientific briefing ${external}</a>
         </article>
         <article class="about-directory-card">
