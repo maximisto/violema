@@ -6,7 +6,7 @@ import { howItWorksSection, crossFieldSection } from './how-it-works.mjs';
 import { howItWorks } from '../data/how-it-works.mjs';
 import { analyticsScript } from './analytics.mjs';
 import { legalPolicies, legalUpdatedAt } from './legal.mjs';
-import { profileLinks } from './social.mjs';
+import { profileCards, profileLinks } from './social.mjs';
 import { escapeHTML as e, sourceURL, corpusPanel, intervalFigure, calculateBiasScenario, chartLegend, biasControl, biasExplanation, referenceNote, scenarioSummary, traceSpecimen } from './render.mjs';
 
 const psychdoc = 'https://psychdoc.ai';
@@ -278,17 +278,19 @@ export function aboutPage() {
   const founderExplorer = `<div class="evidence-guide founder-explorer" data-tabs data-founder-explorer>
     <div class="guide-topline"><span>Career &amp; systems track record · Select an era to inspect</span><span class="record-status">30+ years</span></div>
     <nav class="guide-tabs" data-tablist aria-label="Explore Max Markovtsev career eras">
-      <a href="#founder-era-enterprise"><span>01</span> Enterprise BI (1995–2016)</a>
-      <a href="#founder-era-ai"><span>02</span> Governed AI (2017–)</a>
-      <a href="#founder-era-violema"><span>03</span> Violema &amp; PsychDoc (2026–)</a>
-      <a href="#founder-era-disclosure"><span>04</span> Role &amp; disclosures</a>
+      <a href="#founder-era-agencies"><span class="era-num">01</span><span class="era-text"><span class="era-title">Agencies</span><span class="era-years">1994–2009</span></span></a>
+      <a href="#founder-era-independent"><span class="era-num">02</span><span class="era-text"><span class="era-title">Own agency</span><span class="era-years">2010–2017</span></span></a>
+      <a href="#founder-era-ai"><span class="era-num">03</span><span class="era-text"><span class="era-title">AI systems</span><span class="era-years">2017–now</span></span></a>
+      <a href="#founder-era-violema"><span class="era-num">04</span><span class="era-text"><span class="era-title">Violema</span><span class="era-years">2026–now</span></span></a>
+      <a href="#founder-era-disclosure"><span class="era-num">05</span><span class="era-text"><span class="era-title">Disclosures</span><span class="era-years">Role &amp; COI</span></span></a>
     </nav>
     <div class="guide-panels">
-      <section id="founder-era-enterprise" aria-labelledby="founder-era-enterprise-heading">
-        <p class="label">J. Walter Thompson · Leo Burnett · BBDO (1995 to 2016)</p>
-        <h3 id="founder-era-enterprise-heading">Global strategy, business intelligence &amp; research synthesis.</h3>
+      <section id="founder-era-agencies" aria-labelledby="founder-era-agencies-heading">
+        <p class="label">J. Walter Thompson · Leo Burnett · BBDO (1994 to 2009)</p>
+        <h3 id="founder-era-agencies-heading">Marketing strategy and business intelligence.</h3>
         <p class="guide-claim">At 19, Max helped open Leo Burnett’s Moscow office on the Procter &amp; Gamble account. Over the next decade and a half at Leo Burnett, BBDO, and J. Walter Thompson, he served as Senior Digital Strategist and Director of Business Intelligence across global consumer, financial, and public-sector programs.</p>
-        <ul class="founder-client-grid" aria-label="Selected enterprise and public-sector organizations">
+        <p class="founder-clients-label" id="founder-clients-label">Selected clients · 1994 to 2017</p>
+        <ul class="founder-client-grid" aria-labelledby="founder-clients-label">
           <li><span class="founder-client-mark founder-client-wordmark founder-client-wordmark--serif founder-client-wordmark--pg">P&amp;G</span><span class="founder-client-role">Brand &amp; market intelligence</span></li>
           <li><span class="founder-client-mark founder-client-wordmark"><img class="founder-client-logo founder-client-logo--unilever" src="/company-assets/clients/unilever.svg" width="24" height="24" alt="" loading="lazy" decoding="async">Unilever</span><span class="founder-client-role">Digital transformation &amp; analytics</span></li>
           <li><span class="founder-client-mark"><img class="founder-client-logo founder-client-logo--wrigley" src="/company-assets/clients/wrigley.svg" width="1024" height="124" alt="Wrigley" loading="lazy" decoding="async"></span><span class="founder-client-role">Global consumer &amp; commercial BI</span></li>
@@ -296,6 +298,11 @@ export function aboutPage() {
           <li><span class="founder-client-mark founder-client-wordmark founder-client-wordmark--serif">Northwestern Mutual</span><span class="founder-client-role">Enterprise digital strategy</span></li>
           <li><span class="founder-client-mark founder-client-wordmark">U.S. Marine Corps</span><span class="founder-client-role">Digital systems &amp; recruitment BI</span></li>
         </ul>
+      </section>
+      <section id="founder-era-independent" aria-labelledby="founder-era-independent-heading">
+        <p class="label">Own agency &amp; consulting (2010 to 2017)</p>
+        <h3 id="founder-era-independent-heading">Strategy and analytics, run independently.</h3>
+        <p class="guide-claim">From 2010 to 2017 Max ran his own agency and consulted directly for brands, carrying his agency years of marketing strategy and business intelligence into independent client work.</p>
       </section>
       <section id="founder-era-ai" aria-labelledby="founder-era-ai-heading">
         <p class="label">Purple Orange AI · Purple Orange Group (2017 to present · Chicago)</p>
@@ -328,7 +335,6 @@ export function aboutPage() {
         <a class="text-link" href="https://orcid.org/0009-0009-9354-2207" target="_blank" rel="noopener noreferrer">Verify ORCID record 0009-0009-9354-2207 ${external}</a>
       </section>
     </div>
-    <div class="guide-foot"><a href="https://www.linkedin.com/in/maximisto/" target="_blank" rel="noopener noreferrer">LinkedIn @maximisto ${external}</a></div>
   </div>`;
 
   const founderLeadSection = `<section class="about-lead-section" id="founder" aria-labelledby="about-page-title">
@@ -364,8 +370,12 @@ export function aboutPage() {
                   <dd><a class="founder-epoch-link" href="#founder-era-ai" data-epoch-target="founder-era-ai"><strong>Purple Orange AI · Purple Orange Group</strong><span>Founder &amp; Managing Partner · Governed AI systems →</span></a></dd>
                 </div>
                 <div>
-                  <dt>1995 to 2016</dt>
-                  <dd><a class="founder-epoch-link" href="#founder-era-enterprise" data-epoch-target="founder-era-enterprise"><strong>J. Walter Thompson · Leo Burnett · BBDO</strong><span>Sr. Digital Strategist &amp; Director of BI →</span></a></dd>
+                  <dt>2010 to 2017</dt>
+                  <dd><a class="founder-epoch-link" href="#founder-era-independent" data-epoch-target="founder-era-independent"><strong>Own agency &amp; consulting</strong><span>Founder · Marketing strategy &amp; analytics →</span></a></dd>
+                </div>
+                <div>
+                  <dt>1994 to 2009</dt>
+                  <dd><a class="founder-epoch-link" href="#founder-era-agencies" data-epoch-target="founder-era-agencies"><strong>J. Walter Thompson · Leo Burnett · BBDO</strong><span>Sr. Digital Strategist &amp; Director of BI →</span></a></dd>
                 </div>
                 <div>
                   <dt>1991 to 1995</dt>
@@ -374,14 +384,14 @@ export function aboutPage() {
               </dl>
             </figcaption>
           </figure>
-          <ul class="social-list founder-profiles" aria-label="Max Markovtsev's profiles">${profileLinks(['linkedin', 'orcid'])}</ul>
+          <ul class="founder-profiles" aria-label="Max Markovtsev's profiles">${profileCards(['linkedin', 'orcid'])}</ul>
         </div>
 
         <div class="founder-narrative">
           <p class="label">Founder profile · Systems architecture meets scientific synthesis</p>
           <h2>Thirty years turning complex data into decisions.</h2>
-          <p class="lede">Max Markovtsev is a Chicago-based founder and systems architect who has spent three decades building analytical, business intelligence, and governed AI systems for high-stakes decisions.</p>
-          <p>Before founding Violema, Inc. and its first scientific division, <a href="${psychdoc}">PsychDoc.AI ${external}</a>, Max spent more than 15 years in strategy and business intelligence at Leo Burnett, BBDO, and J. Walter Thompson, followed by nearly a decade building governed machine-learning and multi-agent verification pipelines in Chicago.</p>
+          <p class="lede">Max Markovtsev is a Chicago-based founder and systems architect who has spent three decades in marketing strategy, business intelligence, and governed AI systems for high-stakes decisions.</p>
+          <p>Before founding Violema, Inc. and its first scientific division, <a href="${psychdoc}">PsychDoc.AI ${external}</a>, Max spent fifteen years in marketing strategy and business intelligence at Leo Burnett, BBDO, and J. Walter Thompson, then ran his own agency and consultancy from 2010 to 2017. Since 2017 he has built governed machine-learning and multi-agent verification pipelines in Chicago.</p>
 
           <div class="guide-boundary founder-callout">
             <strong>Why a systems architect builds scientific evidence infrastructure</strong>

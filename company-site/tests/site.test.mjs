@@ -204,16 +204,32 @@ test('every footer links the confirmed profiles as icon links named by their own
   }
 });
 
-test('/about/ puts the LinkedIn and ORCID icons under the founder card, ORCID in its green there only',async()=>{
+test('/about/ puts LinkedIn and ORCID cards with their handles under the founder card, brand colours there only',async()=>{
   const html=await readFile(join(dist,'about/index.html'),'utf8');
   const aside=html.match(/<div class="founder-aside">([\s\S]*?)<div class="founder-narrative">/)?.[1]??'';
-  assert.match(aside,/<\/figure>\s*<ul class="social-list founder-profiles" aria-label="Max Markovtsev's profiles">/);
-  const hrefs=[...aside.matchAll(/<a class="social-link social-link--[a-z]+" href="([^"]+)"/g)].map(match=>match[1]);
-  assert.deepEqual(hrefs,['https://www.linkedin.com/in/maximisto/','https://orcid.org/0009-0009-9354-2207']);
-  // The icons replace the card's former text badges.
+  assert.match(aside,/<\/figure>\s*<ul class="founder-profiles" aria-label="Max Markovtsev's profiles">/);
+  const cards=[...aside.matchAll(/<a class="profile-card profile-card--([a-z]+)" href="([^"]+)"[^>]* aria-label="([^"]+)">[\s\S]*?<span class="profile-card-handle">([^<]+)<\/span>/g)].map(match=>match.slice(1));
+  assert.deepEqual(cards,[
+    ['linkedin','https://www.linkedin.com/in/maximisto/','Max Markovtsev on LinkedIn: in/maximisto','in/maximisto'],
+    ['orcid','https://orcid.org/0009-0009-9354-2207','Max Markovtsev on ORCID: 0009-0009-9354-2207','0009-0009-9354-2207'],
+  ]);
+  // The cards replace the card's former text badges.
   assert.doesNotMatch(html,/founder-badge/);
   const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
-  assert.deepEqual(css.match(/[^\n]*#A6CE39[^\n]*/gi),['.founder-profiles .social-link--orcid { color: #A6CE39; }']);
+  assert.deepEqual(css.match(/[^\n]*#A6CE39[^\n]*/gi).length,1,'ORCID green appears once, on the card mark');
+  assert.match(css,/\.profile-card--orcid svg \{ color: #A6CE39;/);
+});
+
+test('/about/ career explorer has five eras in order, each tab with a short title and its years',async()=>{
+  const html=await readFile(join(dist,'about/index.html'),'utf8');
+  const nav=html.match(/<nav class="guide-tabs" data-tablist aria-label="Explore Max Markovtsev career eras">([\s\S]*?)<\/nav>/)?.[1]??'';
+  const tabs=[...nav.matchAll(/<a href="#(founder-era-[a-z]+)"><span class="era-num">(\d+)<\/span><span class="era-text"><span class="era-title">([^<]+)<\/span><span class="era-years">([^<]*)<\/span><\/span><\/a>/g)].map(match=>match.slice(1));
+  assert.deepEqual(tabs.map(([id])=>id),['founder-era-agencies','founder-era-independent','founder-era-ai','founder-era-violema','founder-era-disclosure']);
+  assert.deepEqual(tabs.slice(0,3).map(([,,,years])=>years),['1994–2009','2010–2017','2017–now']);
+  for(const [id] of tabs)assert.match(html,new RegExp(`<section id="${id}" aria-labelledby="${id}-heading">`));
+  // Every ledger row in the founder card opens an existing era.
+  for(const [,target] of html.matchAll(/data-epoch-target="([^"]+)"/g))assert.ok(tabs.some(([id])=>id===target),target);
+  assert.doesNotMatch(html,/Enterprise BI/);
 });
 
 test('self-hosted fonts match their recorded checksums and ship with their licences',async()=>{

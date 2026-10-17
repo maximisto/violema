@@ -1885,15 +1885,40 @@ tr > *:last-child { border-right: 0; }
   display: grid;
   gap: 16px;
 }
-/* Glyphs line up with the card's text edge (23px inset, less the 12px around each glyph). */
+/* Profile cards under the founder card: each network's mark in its brand colour, its name,
+   and the public handle in mono, so the ORCID iD reads as a credential rather than an icon. */
 .founder-profiles {
-  padding-left: 11px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* Side by side while each card fits the full ORCID iD on one line; stacked below that. */
+  grid-template-columns: repeat(auto-fit, minmax(236px, 1fr));
+  gap: 12px;
 }
-.founder-profiles .social-link { width: 48px; height: 48px; }
-.founder-profiles .social-link svg { width: 24px; height: 24px; }
-/* Here only, ORCID keeps its brand green; a white disc keeps the iD letters white on either theme. */
-.founder-profiles .social-link--orcid { color: #A6CE39; }
-.founder-profiles .social-link--orcid svg { background: radial-gradient(circle closest-side, #fff 92%, transparent 93%); }
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: var(--shadow-control);
+  transition: border-color 160ms ease-out, background-color 160ms ease-out;
+}
+.profile-card:hover { border-color: var(--accent); }
+.profile-card svg { flex: none; width: 28px; height: 28px; }
+.profile-card--linkedin svg { color: #0A66C2; }
+[data-theme='dark'] .profile-card--linkedin svg { color: #FFFFFF; }
+/* ORCID's iD mark keeps its brand green; a white disc keeps the iD letters white on either theme. */
+.profile-card--orcid svg { color: #A6CE39; background: radial-gradient(circle closest-side, #fff 92%, transparent 93%); }
+.profile-card-text { display: grid; gap: 2px; min-width: 0; }
+.profile-card-name { font: 600 0.9375rem/1.25 var(--font-display); }
+.profile-card-handle { font: 400 0.8125rem/1.35 var(--font-mono); color: var(--ink-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .founder-instrument {
   margin: 0;
   overflow: hidden;
@@ -2207,8 +2232,31 @@ tr > *:last-child { border-right: 0; }
 .founder-explorer {
   margin-top: 28px;
 }
+/* Five eras: a mono meta line (number and years) above a short title, so labels never wrap
+   mid-phrase and the tabs echo the ledger's dates in the founder card. */
 .founder-explorer .guide-tabs {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.founder-explorer .guide-tabs > a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "num years" "title title";
+  align-content: center;
+  justify-content: stretch;
+  gap: 4px 8px;
+  min-height: 68px;
+  padding: 12px 10px;
+  text-align: left;
+}
+.founder-explorer .era-text { display: contents; }
+.founder-explorer .guide-tabs > a > .era-num { grid-area: num; font: 500 0.75rem/1.4 var(--font-mono); color: var(--ink-3); }
+.founder-explorer .era-years { grid-area: years; font: 400 0.75rem/1.4 var(--font-mono); color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.founder-explorer .era-title { grid-area: title; font: 500 0.9375rem/1.25 var(--font-display); color: inherit; }
+.founder-explorer .guide-tabs > a[aria-selected='true'] > .era-num { color: var(--accent); }
+.founder-clients-label {
+  margin: 28px 0 0;
+  font-size: var(--text-caption);
+  color: var(--ink-2);
 }
 .about-directory-section > .wrap {
   display: block;
@@ -2300,9 +2348,6 @@ tr > *:last-child { border-right: 0; }
   .about-layer-tabs {
     grid-template-columns: minmax(0, 1fr);
   }
-  .founder-explorer .guide-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .about-directory-card {
     padding: 22px 18px;
   }
@@ -2311,6 +2356,24 @@ tr > *:last-child { border-right: 0; }
   .about-telemetry-grid,
   .founder-client-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* On phones the eras become a compact list: number, title, years on one row. */
+  .founder-explorer .guide-tabs {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: 0;
+  }
+  .founder-explorer .guide-tabs > a {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-areas: "num title years";
+    align-items: center;
+    min-height: 48px;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .founder-explorer .guide-tabs > a:last-child { border-bottom: 0; }
+  .founder-explorer .guide-tabs > a[aria-selected='true'] {
+    border-bottom-color: var(--line);
+    box-shadow: inset 2px 0 0 var(--accent);
   }
   .founder-ledger > div {
     grid-template-columns: minmax(0, 1fr);

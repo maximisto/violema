@@ -87,7 +87,7 @@ if (epochLinks.length) {
   const syncEpochs = activeId => {
     for (const link of epochLinks) link.classList.toggle('is-active', link.dataset.epochTarget === activeId);
   };
-  syncEpochs('founder-era-enterprise');
+  syncEpochs('founder-era-agencies');
   for (const link of epochLinks) {
     link.addEventListener('click', event => {
       const targetId = link.dataset.epochTarget;
