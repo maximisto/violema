@@ -1,24 +1,32 @@
 # VIOLEMA VPS deploy
 
+> **Stop: update the VPS checkout before using `--backend-only`.** The copy of `deploy.sh` in `/var/www/nexus` predates this mode and only knows `--skip-deps`. It ignores any other flag, so `deploy.sh --backend-only` run from that copy does a **full** deploy and rewrites the company vhost on violema.com. Sync the checkout as a separate first command, confirm the flag exists, and only then run it. The steps are under [Backend-only redeploy](#backend-only-redeploy).
+
 ## Since the company-site cutover (2026-10-16)
 
 `violema.com` is the static company site. Its vhost, `/etc/nginx/sites-available/violema.com`, carries the `BEGIN VIOLEMA SCIENCE COMPANY-ONLY OVERLAY` block, serves `/var/www/violema-science/current`, and proxies only `/api/` to the backend on `127.0.0.1:3001`. Release packets in `company-site/release/` change it by exact hash. The legacy app (`frontend/dist`) is served on agent.purpleorange.ai, through a vhost this script does not manage.
 
 `deploy.sh` without `--backend-only` refuses to run while that vhost is in place. It stops before apt, git or any build, and changes nothing. Its legacy nginx templates would otherwise replace the company site with the old app. There is no override. The cutover is undone with its own rollback packet, never with this script.
 
+The check fails closed. It inspects `sites-available/$DOMAIN`, its `sites-enabled` link, and every config in `sites-enabled/` and `conf.d/*.conf` (links resolved). It refuses on a company marker in any of them (whatever `DOMAIN` is set to), on another file already serving `$DOMAIN` or `www.$DOMAIN`, and on a dangling symlink or an unreadable file. Configs included from elsewhere are not scanned.
+
 ### Backend-only redeploy
 
-Use this to ship backend code or dependency fixes (for example a Dependabot lockfile bump). It runs: git sync of `/var/www/nexus` to `origin/$BRANCH` (default `main`), backend `npm ci` and Playwright Chromium (no apt), `npm run build`, `pm2 restart violema-backend --update-env`, `pm2 save`, then polls `http://127.0.0.1:3001/api/health` (15 tries, 2 seconds apart) and fails if it never answers. It never touches system packages, the frontend, nginx, certificates or the company site.
+Use this to ship backend code or dependency fixes (for example a Dependabot lockfile bump). It runs: git sync of `/var/www/nexus` to `origin/$BRANCH` (default `main`), backend `npm ci` and Playwright Chromium (no apt), `npm run build`, `pm2 describe violema-backend` (fails if PM2 has no such process), `pm2 startOrReload deploy/ecosystem.config.cjs --only violema-backend --update-env`, `pm2 save`, then polls `http://127.0.0.1:3001/api/health` (15 tries, 2 seconds apart) and fails if it never answers. It never touches system packages, the frontend, nginx, certificates or the company site.
 
-**Do not run the copy at `/var/www/nexus/deploy/deploy.sh` for the first backend-only deploy.** That checkout predates `--backend-only`. The old script ignores unknown flags, so it would run a full deploy and overwrite the company vhost. Run a fresh copy, and only once it is confirmed to know the flag:
+**1. Sync the checkout first, as its own command.** The script on disk is whatever the last deploy left, and the copy there now predates `--backend-only` (see the warning at the top). This changes only tracked source files. The running backend keeps serving from its built `dist/` until step 2 rebuilds and reloads it. Untracked runtime data (`backend/*.json`, `backend/.env`) is not touched.
 
 ```bash
-DEPLOY_SRC="$(mktemp -d)"
-git clone --depth 1 --branch main https://github.com/maximisto/violema.git "$DEPLOY_SRC"
-grep -q -- '--backend-only' "$DEPLOY_SRC/deploy/deploy.sh" && sudo bash "$DEPLOY_SRC/deploy/deploy.sh" --backend-only --skip-deps
+sudo git -C /var/www/nexus fetch origin main && sudo git -C /var/www/nexus reset --hard origin/main
 ```
 
-Clone the same branch the script deploys (`BRANCH`, default `main`). After that first run, `/var/www/nexus` itself has the new script.
+**2. Run it, gated on the flag existing.** If the `grep` finds nothing, the checkout is still the old script and nothing runs.
+
+```bash
+grep -q -- '--backend-only' /var/www/nexus/deploy/deploy.sh && sudo bash /var/www/nexus/deploy/deploy.sh --backend-only --skip-deps
+```
+
+Use the same branch in step 1 as the script deploys (`BRANCH`, default `main`).
 
 Before and after, confirm nothing outside the backend moved:
 
@@ -30,14 +38,15 @@ curl -sI https://violema.com | head -1
 ```
 
 Notes:
-- The backend restarts in place by name. If `violema-backend` is not in the current user's PM2 list, the script fails instead of starting a second backend. Run it with the same `sudo` as before.
+- If `violema-backend` is not in the current user's PM2 list, the script fails instead of starting a second backend. Run it with the same `sudo` as before.
+- The reload applies the `env` block of `deploy/ecosystem.config.cjs`, and the backend re-reads `backend/.env` on every start. Don't rely on a reload for changes to `script`, `cwd`, `instances` or `max_memory_restart`. After changing those, do a one-off delete and start, which takes the backend down briefly: `sudo pm2 delete violema-backend && sudo PM2_APP_NAME=violema-backend APP_BACKEND_CWD=/var/www/nexus/backend pm2 start /var/www/nexus/deploy/ecosystem.config.cjs && sudo pm2 save`.
 - A backend restart resumes the scheduler and any live sends it owns. Check `pm2 logs violema-backend` after the health check passes.
 - The frontend on agent.purpleorange.ai is not rebuilt. That is fine for dependency-only or backward-compatible API changes. A change the old frontend cannot handle needs its own frontend release.
 - Rollback: revert the commit on `main`, then run the backend-only deploy again.
 
 ### `--skip-deps` and lockfile changes
 
-`--skip-deps` skips apt and skips `npm ci` only when `node_modules` holds a stamp (`node_modules/.violema-deploy-lock.sha256`) matching the current `package-lock.json`. A changed lockfile always installs, so lockfile-only security fixes are never skipped. The stamp is written only after every install step succeeds. Installs made before this change have no stamp, so the first `--skip-deps` run after it reinstalls once.
+`--skip-deps` skips apt and skips `npm ci` only when `node_modules` holds a stamp (`node_modules/.violema-deploy-lock.sha256`) matching the current `package-lock.json`. A changed lockfile always installs, so lockfile-only security fixes are never skipped. The stamp is written only after every install step succeeds, and an empty or unreadable lockfile hash never counts as a match. Installs made before this change have no stamp, so the first `--skip-deps` run after it reinstalls once.
 
 ## Fresh box provisioning (full deploy)
 
