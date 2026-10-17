@@ -409,6 +409,12 @@ code {
 .footer-legal { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .footer-legal a { display: inline-flex; align-items: center; min-height: 44px; font-size: var(--text-caption); color: var(--ink); text-underline-offset: 4px; }
 .footer-meta > a { color: var(--ink-2); }
+/* Profile links: brand glyphs in the page's ink, 44px targets, as the theme control. */
+.social-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.social-link { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: var(--ink-2); }
+.social-link:hover { color: var(--accent); background: var(--surface-2); }
+.social-link svg { width: 20px; height: 20px; }
+.footer-social { margin-inline: -12px; }
 
 @media (max-width: 767px) {
   .footer-main { grid-template-columns: 1fr; gap: 20px; }
@@ -1874,8 +1880,18 @@ tr > *:last-child { border-right: 0; }
   gap: 40px 48px;
   align-items: start;
 }
-.founder-instrument {
+.founder-aside {
   grid-column: 1 / span 5;
+  display: grid;
+  gap: 16px;
+}
+/* Glyphs line up with the card's text edge (23px inset, less the 12px around each glyph). */
+.founder-profiles {
+  padding-left: 11px;
+}
+.founder-profiles .social-link { width: 48px; height: 48px; }
+.founder-profiles .social-link svg { width: 24px; height: 24px; }
+.founder-instrument {
   margin: 0;
   overflow: hidden;
   border-radius: 16px;
@@ -2291,11 +2307,11 @@ tr > *:last-child { border-right: 0; }
   .about-page-header > .lede,
   .about-company-left,
   .about-company-right,
-  .founder-instrument,
+  .founder-aside,
   .founder-narrative {
     grid-column: 1 / -1;
   }
-  .founder-instrument {
+  .founder-aside {
     max-width: 560px;
   }
   .founder-client-grid {

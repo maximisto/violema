@@ -8,6 +8,7 @@ import { corpora, stressTest } from '../data/corpora.mjs';
 import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen } from '../lib/render.mjs';
 import { homePage } from '../lib/pages.mjs';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
+import { profiles, profileIcon } from '../lib/social.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
@@ -186,6 +187,28 @@ test('/about/ shows the six former clients as one-ink marks, each with an access
   const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
   assert.match(css,/\.founder-client-logo \{[^}]*filter: brightness\(0\);/);
   assert.match(css,/\[data-theme='dark'\] \.founder-client-logo \{ filter: brightness\(0\) invert\(1\); \}/);
+});
+
+test('every footer links Max Markovtsev\'s confirmed profiles as named icon links',async()=>{
+  assert.deepEqual(profiles.map(profile=>profile.id),['github','linkedin','x','facebook','orcid']);
+  for(const profile of profiles){
+    assert.match(profile.href,/^https:\/\//);
+    assert.match(profileIcon(profile.id),/^<svg viewBox="0 0 24 24"[^>]* aria-hidden="true"[^>]*><path d="[^"]+"\/><\/svg>$/);
+  }
+  for(const [,file] of pages){
+    const html=await readFile(join(dist,file),'utf8');
+    const list=html.match(/<ul class="social-list footer-social" aria-label="Max Markovtsev's profiles">([\s\S]*?)<\/ul>/)?.[1]??'';
+    const links=[...list.matchAll(/<a class="social-link" href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="Max Markovtsev on ([^"]+)" title="[^"]+"><svg/g)].map(match=>[match[1],match[2]]);
+    assert.deepEqual(links,profiles.map(profile=>[profile.href,profile.name]),`${file} footer profiles`);
+  }
+});
+
+test('/about/ puts the LinkedIn and ORCID icons under the founder card',async()=>{
+  const html=await readFile(join(dist,'about/index.html'),'utf8');
+  const aside=html.match(/<div class="founder-aside">([\s\S]*?)<div class="founder-narrative">/)?.[1]??'';
+  assert.match(aside,/<\/figure>\s*<ul class="social-list founder-profiles" aria-label="Max Markovtsev's profiles">/);
+  const hrefs=[...aside.matchAll(/<a class="social-link" href="([^"]+)"/g)].map(match=>match[1]);
+  assert.deepEqual(hrefs,['https://www.linkedin.com/in/maximisto/','https://orcid.org/0009-0009-9354-2207']);
 });
 
 test('self-hosted fonts match their recorded checksums and ship with their licences',async()=>{
