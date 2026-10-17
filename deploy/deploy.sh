@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # VIOLEMA by Purple Orange AI — VPS Deploy Script
 # Run as root (or a sudo user) on Hostinger VPS
-# Usage:  sudo bash deploy.sh [--skip-deps]
+# Usage:  sudo bash deploy.sh [--skip-deps]   (see usage() below)
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -12,7 +12,11 @@ APP_DIR="${APP_DIR:-/var/www/nexus}"
 REPO_URL="${REPO_URL:-https://github.com/maximisto/violema.git}"
 BRANCH="${BRANCH:-main}"
 LOG_DIR="${LOG_DIR:-/var/log/nexus}"
-NGINX_SITE="/etc/nginx/sites-available/$DOMAIN"
+# NGINX_DIR moves sites-available and sites-enabled together, so an override
+# can never point the guard at one file while the script relinks the live one.
+NGINX_DIR="${NGINX_DIR:-/etc/nginx}"
+NGINX_SITE="$NGINX_DIR/sites-available/$DOMAIN"
+NGINX_ENABLED="$NGINX_DIR/sites-enabled/$DOMAIN"
 SSL_CERT_PATH="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
 PM2_APP_NAME="${PM2_APP_NAME:-violema-backend}"
 
@@ -21,7 +25,36 @@ info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
+# Since the company-site cutover (2026-10-16) the violema.com vhost is the live
+# company site: a marked overlay serving /var/www/violema-science/current, with
+# only /api/ proxied to the backend. Release packets under company-site/release/
+# activate it by exact hash. The legacy templates below would replace it with
+# the old app (root frontend/dist), so any vhost carrying one of these markers is
+# never rewritten here. There is deliberately no override: undo the cutover with
+# its own rollback packet, not with this script.
+COMPANY_VHOST_MARKERS=(
+  'BEGIN VIOLEMA SCIENCE COMPANY-ONLY OVERLAY'
+  '/var/www/violema-science'
+)
+
+refuse_if_company_vhost() {
+  local vhost marker
+  for vhost in "$NGINX_SITE" "$NGINX_ENABLED"; do
+    [[ -e "$vhost" ]] || continue
+    [[ -r "$vhost" ]] || die "Cannot read $vhost; refusing to rewrite a vhost that cannot be inspected."
+    for marker in "${COMPANY_VHOST_MARKERS[@]}"; do
+      if grep -qF -- "$marker" "$vhost"; then
+        die "$vhost is the live company-site vhost (found '$marker').
+  This script would replace it with the legacy app config. Nothing was changed.
+  To ship backend changes:  sudo bash deploy.sh --backend-only [--skip-deps]
+  Company-site changes ship as release packets (company-site/release/)."
+      fi
+    done
+  done
+}
+
 write_bootstrap_nginx_config() {
+  refuse_if_company_vhost
   cat >"$NGINX_SITE" <<EOF
 server {
     listen 80;
@@ -53,6 +86,7 @@ EOF
 }
 
 render_production_nginx_config() {
+  refuse_if_company_vhost
   sed \
     -e "s|__APP_DOMAIN__|$DOMAIN|g" \
     -e "s|__LEGACY_DOMAIN__|$LEGACY_DOMAIN|g" \
@@ -87,8 +121,30 @@ EOF
 # regardless, observed 2026-08-04: a "skip-deps" deploy still reinstalled 440
 # packages and re-ran apt via Playwright). Fresh checkouts still install: the
 # npm skips only apply when node_modules already exists.
+usage() {
+  cat <<EOF
+Usage: sudo bash deploy.sh [--skip-deps]
+
+  --skip-deps   Skip system package installs, and npm installs whose node_modules
+                is already present.
+  -h, --help    Show this help.
+
+Unknown options are rejected: an older copy of this script ignored them and ran
+a full deploy.
+EOF
+}
+
 SKIP_DEPS=false
-if [[ "${1:-}" == "--skip-deps" ]]; then SKIP_DEPS=true; fi
+for arg in "$@"; do
+  case "$arg" in
+    --skip-deps) SKIP_DEPS=true ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; die "Unknown option: $arg" ;;
+  esac
+done
+
+# Preflight: refuse before touching packages, the checkout or any build.
+refuse_if_company_vhost
 
 # ── 1. Dependencies ──────────────────────────────────────────────────────────
 if [[ "$SKIP_DEPS" != true ]]; then
@@ -160,11 +216,11 @@ else
   info "No SSL certificate found yet, writing bootstrap HTTP-only nginx config…"
   write_bootstrap_nginx_config
 fi
-ln -sf "$NGINX_SITE" "/etc/nginx/sites-enabled/$DOMAIN"
+ln -sf "$NGINX_SITE" "$NGINX_ENABLED"
 
 # Remove default site if still linked
-rm -f /etc/nginx/sites-enabled/default
-rm -f "/etc/nginx/sites-enabled/$LEGACY_DOMAIN"
+rm -f "$NGINX_DIR/sites-enabled/default"
+rm -f "$NGINX_DIR/sites-enabled/$LEGACY_DOMAIN"
 
 nginx -t || die "nginx config test failed — check $NGINX_SITE"
 systemctl reload nginx
