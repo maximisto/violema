@@ -93,7 +93,7 @@ const protocolSteps = [
   ['Study', 'The underlying experiment', 'Multiple papers can report on one cohort or trial. Code tracks registrations and authorship overlap so one sample is never counted twice.', '12 RCTs in SYPRES · 24 papers from 15 research programs in v2.2', '#how-it-works', 'Jump to independence check ↓'],
   ['Claim', 'What the source supports', 'A plain-language statement of one finding, with its evidence tier and the limit of what it supports.', '23 tiered claims · each linked to its sources', '#trace', 'Inspect a traced claim ↓'],
   ['Assumption', 'What analysis requires', 'When studies are pooled, the analytical choices and potential bias shifts are exposed as interactive controls beside the estimate.', 'Hedges’ g = −0.90 [−1.26, −0.55] · additive shift 0.00 to +0.60', '#assumptions', 'Jump to assumption replay ↓'],
-  ['Review', 'What has been checked', 'Separates deterministic code checks and AI-assisted drafts from independent, ORCID-signed domain scientist review.', 'Code + human gate live · independent ORCID review open', '/review/', 'Open reviewer walkthrough →'],
+  ['Review', 'What has been checked', 'Separates deterministic code checks and AI-assisted drafts from independent review by domain scientists.', 'Code checks and publisher approval in use · independent review pending', '/review/', 'Open reviewer walkthrough →'],
   ['Version', 'A replayable record', 'Every synthesis and source packet is downloadable as versioned JSON with a cryptographic receipt so changes are auditable.', 'psychdoc.json & perovskite-stability.json · portability receipt', '#transfer', 'Jump to cross-domain receipt ↓'],
 ];
 
@@ -174,9 +174,9 @@ export function demoPage(corpora,stress) {
 
 export function aboutPage() {
   const accountabilityLayers = [
-    ['layer-code', 'Layer 01 · Code', 'Deterministic trace', 'Scheduled jobs follow citations out from seed papers on OpenAlex, re-run published R statistical scripts to four decimals, and group papers into independent research programs by author overlap.', 'Cannot be bypassed: every synthesis update fails the build if a study is missing from the seed list or if SHA-256 checksums drift.', '/method/#how-it-works', 'Inspect the weekly pipeline'],
-    ['layer-gate', 'Layer 02 · Gate', 'AI draft + human gate', 'AI models assist with candidate search, screening proposals against written rules, and drafting claims with exact quotes attached. Nothing is published until a human editor approves the pull request.', 'Cannot be bypassed: AI never assigns final editorial sign-off and is never credited as an author or scientific reviewer.', 'https://psychdoc.ai/policies/ai-use', 'Read the AI use policy'],
-    ['layer-review', 'Layer 03 · Review', 'ORCID domain sign-off', 'External clinical trialists, pharmacologists, and methodologists inspect the downloadable packet, sign with their ORCID iD, and control the exact wording of any dissenting note.', 'Cannot be bypassed: until a signed expert review is on file, the trust panel states explicitly that independent review is pending.', '/review/', 'Open the reviewer walkthrough'],
+    ['layer-code', 'Layer 01 · Code', 'Deterministic trace', 'A weekly scan follows citations out from seed papers, and code groups papers into independent research programs by shared authors. The published SYPRES analysis was re-run in R and matched to four decimals.', 'Counts on the trust panel are computed by code, not written by hand.', '/method/#how-it-works', 'Inspect the weekly pipeline'],
+    ['layer-gate', 'Layer 02 · Gate', 'AI draft + human gate', 'AI models assist with candidate search, screening proposals against written rules, and drafting claims. Nothing is published until the publisher approves the change.', 'AI is never credited as an author or a reviewer. An automated stress test is not peer review.', 'https://psychdoc.ai/policies/ai-use', 'Read the AI use policy'],
+    ['layer-review', 'Layer 03 · Review', 'Independent domain review', 'External clinical trialists, pharmacologists, and methodologists can inspect the downloadable packet and send specific corrections.', 'The scientific editor position is open. Until it is filled, no synthesis claims scientific sign-off.', '/review/', 'Open the reviewer walkthrough'],
   ];
 
   const accountabilityInstrument = `<figure class="instrument about-accountability-instrument" data-tabs aria-labelledby="about-dossier-title">
@@ -322,7 +322,7 @@ export function aboutPage() {
         <p class="guide-claim">Trained in Economics, Statistics, and Informatics at Moscow State University of Economics, Statistics, and Informatics (MESI, 1991 to 1995), Max leads product architecture, citation-graph engineering, and statistical reproduction at Violema, Inc.</p>
         <div class="guide-boundary">
           <strong>Non-clinician &amp; independence disclosure</strong>
-          <p>Max Markovtsev is identified in his engineering and publishing role, not as a clinician or medical reviewer. Scientific conclusions await signed review by domain specialists with ORCID verification. Neither Max Markovtsev nor Violema, Inc. holds shares, options, or advisory roles in any psychedelic drug developer.</p>
+          <p>Max Markovtsev is identified in his engineering and publishing role, not as a clinician or medical reviewer. Scientific conclusions await independent review by domain specialists. Neither Max Markovtsev nor Violema, Inc. holds shares, options, or advisory roles in any psychedelic drug developer.</p>
         </div>
         <a class="text-link" href="https://orcid.org/0009-0009-9354-2207" target="_blank" rel="noopener noreferrer">Verify ORCID record 0009-0009-9354-2207 ${external}</a>
       </section>
@@ -386,7 +386,7 @@ export function aboutPage() {
 
           <div class="guide-boundary founder-callout">
             <strong>Why a systems architect builds scientific evidence infrastructure</strong>
-            <p>Most AI tools fail science because they treat papers as text to summarize rather than experiments to audit. Violema was built on a different premise: let deterministic code handle citation graphs, sample-overlap tracking, and statistical reproduction, and let named, ORCID-verified domain scientists sign the scientific conclusions.</p>
+            <p>Most AI tools fail science because they treat papers as text to summarize rather than experiments to audit. Violema was built on a different premise: let deterministic code handle citation graphs, sample-overlap tracking, and statistical reproduction, and ask named domain scientists to review the scientific conclusions.</p>
           </div>
 
           ${founderExplorer}
@@ -411,8 +411,8 @@ export function aboutPage() {
         </article>
         <article class="about-directory-card">
           <p class="label">For Trialists, Physicians &amp; Methodologists</p>
-          <h3>Audit the science &amp; sign with ORCID</h3>
-          <p>Walk through our 15-minute verification path, inspect the primary sources and R statistical replay, and submit corrections or signed domain commentary.</p>
+          <h3>Check the science</h3>
+          <p>Take the 15-minute walkthrough, inspect the primary sources and the saved replay, and send specific corrections.</p>
           <a class="button button-secondary" href="/review/">Open reviewer walkthrough</a>
         </article>
         <article class="about-directory-card">
