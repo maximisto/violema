@@ -62,6 +62,9 @@ if (header) {
   }
 }
 
+const briefing = document.querySelector('[data-briefing-form]');
+if (briefing) import('./briefing.mjs').then(({ enhanceBriefingForm }) => enhanceBriefingForm(briefing));
+
 // The hero trace draws once in CSS; pin the drawn state afterwards so a later layout change
 // (rotation, resize across the phone breakpoint) cannot replay it.
 for (const trace of document.querySelectorAll('.trace-animate')) {

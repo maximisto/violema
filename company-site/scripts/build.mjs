@@ -57,6 +57,7 @@ for (const [source, destination] of [
   ['browser/site.mjs', 'company-assets/browser/site.mjs'],
   ['browser/analytics.mjs', 'company-assets/browser/analytics.mjs'],
   ['browser/tabs.mjs', 'company-assets/browser/tabs.mjs'],
+  ['browser/briefing.mjs', 'company-assets/browser/briefing.mjs'],
   ['browser/lab.mjs', 'company-assets/browser/lab.mjs'],
   ['browser/evidence-map.mjs', 'company-assets/browser/evidence-map.mjs'],
   ['lib/evidence-map.mjs', 'company-assets/browser/evidence-map-render.mjs'],
