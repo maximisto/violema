@@ -16,7 +16,7 @@ Last updated: July 11, 2026.`,
   {
     id: 'service',
     title: '2. Description of Service',
-    content: `VIOLEMA is an AI-powered work execution platform that allows users to interact with AI assistants, connect third-party integrations, and automate business tasks. The Service is powered by Anthropic's Claude AI and processes user requests through various connected tools and APIs.
+    content: `VIOLEMA is an AI-powered work execution platform that allows users to interact with AI assistants, connect third-party integrations, and automate business tasks. The Service uses configurable AI models and providers and processes user requests through various connected tools and APIs.
 
 We reserve the right to modify, suspend, or discontinue any aspect of the Service at any time, with or without notice. We will make reasonable efforts to provide advance notice of material changes.`,
   },
@@ -54,7 +54,7 @@ We reserve the right to investigate violations and cooperate with law enforcemen
   {
     id: 'ai',
     title: '5. AI-Generated Content',
-    content: `**Nature of AI output.** VIOLEMA uses Claude, a large language model, to generate responses. AI-generated content may sometimes be inaccurate, incomplete, or inappropriate. You should not rely on VIOLEMA output for critical decisions - medical, legal, financial, or otherwise - without independent verification.
+    content: `**Nature of AI output.** VIOLEMA uses large language models to generate responses. AI-generated content may sometimes be inaccurate, incomplete, or inappropriate. You should not rely on VIOLEMA output for critical decisions - medical, legal, financial, or otherwise - without independent verification.
 
 **Your responsibility.** You are responsible for reviewing AI-generated content before acting on it, especially for actions taken through connected integrations (sending messages, creating tasks, executing code, etc.).
 
@@ -65,7 +65,7 @@ We reserve the right to investigate violations and cooperate with law enforcemen
   {
     id: 'ip',
     title: '6. Intellectual Property',
-    content: `**Our IP.** The Service, including all software, design, branding, documentation, and AI models (excluding Anthropic's models), is owned by Violema and protected by copyright, trademark, and other intellectual property laws. You may not copy, modify, or distribute our proprietary materials without written permission.
+    content: `**Our IP.** The Service, including all software, design, branding, documentation, and AI models (excluding third-party models), is owned by Violema and protected by copyright, trademark, and other intellectual property laws. You may not copy, modify, or distribute our proprietary materials without written permission.
 
 **Your content.** You retain ownership of content you create and input into the Service. By using VIOLEMA, you grant Violema a limited, non-exclusive licence to process your content solely to provide the Service.
 
@@ -90,9 +90,7 @@ We reserve the right to investigate violations and cooperate with law enforcemen
 
 **Duration.** These obligations continue for two years after your last beta access. Information qualifying as a trade secret remains protected for as long as it qualifies as a trade secret under applicable law.
 
-**Participant data.** Violema, Inc.'s obligation to protect participant workspace data continues under the Privacy Policy and applicable onboarding terms.
-
-**Counsel-review notice.** This beta confidentiality language should be reviewed by qualified counsel before broad external onboarding.`,
+**Participant data.** Violema, Inc.'s obligation to protect participant workspace data continues under the Privacy Policy and applicable onboarding terms.`,
   },
   {
     id: 'privacy',
@@ -102,7 +100,7 @@ We reserve the right to investigate violations and cooperate with law enforcemen
   {
     id: 'third-party',
     title: '9. Third-Party Integrations',
-    content: `VIOLEMA allows you to connect third-party services (Slack, GitHub, Stripe, HubSpot, etc.). Your use of these services is governed by their own terms and privacy policies. Violema is not responsible for the practices, content, or reliability of third-party services.
+    content: `VIOLEMA allows you to connect third-party services (supported services such as Slack, GitHub and Stripe). Your use of these services is governed by their own terms and privacy policies. Violema is not responsible for the practices, content, or reliability of third-party services.
 
 By connecting an integration, you authorise VIOLEMA to interact with that service on your behalf within the scope of permissions you grant. You can revoke these permissions at any time from your account settings.`,
   },
@@ -111,7 +109,7 @@ By connecting an integration, you authorise VIOLEMA to interact with that servic
     title: '10. Payment & Subscriptions',
     content: `**Billing.** Paid workspace access is billed according to the beta, pilot, subscription, or service terms agreed during onboarding. Commercial terms may change as the product learns real workflow volume and cost.
 
-**Usage adjustments.** If an approved workspace needs more run capacity, we will handle that through the agreed beta or workspace terms rather than a public self-serve add-on flow.
+**Usage adjustments.** Additional capacity is subject to the agreed beta or workspace terms. Where enabled for an approved workspace, one-time credit top-ups are available through billing and do not change the monthly plan.
 
 **Cancellation.** You may cancel your subscription at any time from account settings. Cancellation takes effect at the end of the current billing period. We do not provide refunds for partial periods except where required by law.
 
@@ -127,7 +125,7 @@ We do not warrant that the Service will be uninterrupted, error-free, or free of
   {
     id: 'liability',
     title: '12. Limitation of Liability',
-    content: `TO THE MAXIMUM EXTENT PERMITTED BY LAW, PURPLE ORANGE AI SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING LOSS OF PROFITS, DATA, OR BUSINESS OPPORTUNITIES, ARISING FROM YOUR USE OF THE SERVICE.
+    content: `TO THE MAXIMUM EXTENT PERMITTED BY LAW, VIOLEMA, INC. SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING LOSS OF PROFITS, DATA, OR BUSINESS OPPORTUNITIES, ARISING FROM YOUR USE OF THE SERVICE.
 
 OUR TOTAL LIABILITY TO YOU FOR ANY CLAIM ARISING FROM THESE TERMS OR YOUR USE OF THE SERVICE SHALL NOT EXCEED THE AMOUNT YOU PAID US IN THE 12 MONTHS PRECEDING THE CLAIM.
 
@@ -160,7 +158,7 @@ For minor changes (e.g., typo corrections, clarifications that don't change your
     content: `For questions about these Terms:
 
 **Email:** legal@violema.com
-**Post:** Violema, Inc., Attn: Legal, [Address]
+For postal contact details, email legal@violema.com.
 
 For security issues: security@violema.com
 For billing issues: billing@violema.com`,
@@ -203,7 +201,7 @@ function renderContent(text: string) {
     // ALL-CAPS paragraphs = legal boilerplate → subdued treatment
     const isAllCaps = para === para.toUpperCase() && para.length > 20;
     return (
-      <p key={i} className={`leading-relaxed mb-4 ${isAllCaps ? 'text-slate-500 text-sm' : 'text-slate-400'}`}>
+      <p key={i} className={`leading-relaxed mb-4 ${isAllCaps ? 'text-slate-400 text-sm' : 'text-slate-400'}`}>
         {withBold}
       </p>
     );
@@ -227,7 +225,7 @@ export default function TermsOfService() {
             </div>
             <div>
               <div className="text-xs text-blue-400 font-semibold tracking-wider uppercase">Legal</div>
-              <div className="text-slate-500 text-xs">Last updated July 11, 2026</div>
+              <div className="text-slate-400 text-xs">Last updated July 11, 2026</div>
             </div>
           </div>
           <h1 className="text-5xl font-bold text-white mb-4">Terms of Service</h1>
@@ -243,13 +241,13 @@ export default function TermsOfService() {
           {/* Sticky TOC */}
           <aside className="hidden lg:block lg:col-span-1">
             <div className="sticky top-28 bg-navy-800/40 border border-navy-700/60 rounded-xl p-4">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Contents</p>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Contents</p>
               <nav className="space-y-1">
                 {SECTIONS.map((s) => (
                   <a
                     key={s.id}
                     href={`#${s.id}`}
-                    className="block text-xs text-slate-500 hover:text-blue-400 py-1 transition-colors leading-relaxed"
+                    className="block text-xs text-slate-400 hover:text-blue-400 py-1 transition-colors leading-relaxed"
                   >
                     {s.title}
                   </a>
@@ -293,9 +291,9 @@ export default function TermsOfService() {
             <div className="p-6 rounded-xl bg-gradient-to-br from-blue-900/20 to-navy-800/60 border border-blue-700/20 text-center">
               <FileText className="w-8 h-8 text-blue-400 mx-auto mb-3" />
               <h3 className="text-white font-semibold mb-2">Legal questions?</h3>
-              <p className="text-slate-400 text-sm mb-4">Our legal team is happy to clarify anything in these Terms.</p>
+              <p className="text-slate-400 text-sm mb-4">Contact us with questions about these Terms.</p>
               <a href="mailto:legal@violema.com" className="btn-primary">
-                Contact Legal Team
+                Contact Legal
               </a>
             </div>
           </main>

@@ -1,0 +1,2 @@
+// Existing founding-cohort offer; this is display copy, not a billing entitlement.
+export const foundingOffer = 'Approved founding testers receive 500 trial credits and can qualify for 50% off Pro for year one by running at least one mission a week and sharing feedback. That is $124.50/month instead of $249/month during the discount period. We confirm eligibility and billing terms before payment; applying does not start a subscription.';

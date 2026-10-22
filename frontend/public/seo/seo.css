@@ -209,7 +209,7 @@ h3 {
 
 h1 {
   max-width: 13ch;
-  font-size: clamp(3rem, 8vw, 6.8rem);
+  font-size: clamp(2.6rem, 5.2vw, 4.4rem);
 }
 
 h2 {
@@ -367,7 +367,7 @@ li {
 
 .article h1 {
   max-width: 16ch;
-  font-size: clamp(2.7rem, 6vw, 5.2rem);
+  font-size: clamp(2.4rem, 4.5vw, 3.8rem);
 }
 
 .article h2 {
@@ -490,3 +490,10 @@ li {
     color: #111827;
   }
 }
+
+/* Match the public product identity and keep CTA text readable. */
+.brand-logo { width: 14rem; height: 3.5rem; object-fit: contain; }
+.nav-links .nav-cta, .button:not(.secondary) { background: #7c3aed; color: #fff; border-radius: .8rem; }
+.nav-links .nav-cta:hover, .button:not(.secondary):hover { background: #6d28d9; color: #fff; }
+.table-card { overflow-x: auto; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
