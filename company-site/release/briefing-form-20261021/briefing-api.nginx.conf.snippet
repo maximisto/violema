@@ -1,0 +1,17 @@
+# violema.com: the homepage briefing form posts JSON to /api/briefing on this host.
+# Hand that one path to the lead handler PsychDoc.AI runs on the same server (pm2 "psychdoc-ai",
+# port 3102, docs/deployment.md in maximisto/psychdoc-ai). Place this block inside the company
+# TLS server block BEFORE `location ^~ /api/` (the legacy backend) and before `location / { return 404; }`:
+# an exact-match location wins over the prefix one, so every other /api/ path is unchanged.
+# The Host header stays violema.com, which is how the handler records which site sent the lead.
+location = /api/briefing {
+    proxy_pass         http://127.0.0.1:3102/api/briefing;
+    proxy_http_version 1.1;
+    proxy_set_header   Host              $host;
+    proxy_set_header   X-Real-IP         $remote_addr;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+    proxy_read_timeout 15s;
+    proxy_send_timeout 15s;
+    client_max_body_size 16k;
+}

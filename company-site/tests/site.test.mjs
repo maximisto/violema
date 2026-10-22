@@ -189,18 +189,23 @@ test('/about/ shows the six former clients as one-ink marks, each with an access
   assert.match(css,/\[data-theme='dark'\] \.founder-client-logo \{ filter: brightness\(0\) invert\(1\); \}/);
 });
 
-test('every footer links the confirmed profiles as icon links named by their owner',async()=>{
-  assert.deepEqual(profiles.map(profile=>profile.id),['github','linkedin','instagram','x','facebook','orcid']);
-  assert.equal(profiles.find(profile=>profile.id==='instagram').owner,'Violema','@violemaai is the company account');
+test('every footer links the company profiles as icon links; a row without a confirmed URL stays in place and says so',async()=>{
+  assert.deepEqual(profiles.map(profile=>profile.id),['linkedin','instagram','x','youtube','reddit','facebook','github']);
   for(const profile of profiles){
-    assert.match(profile.href,/^https:\/\//);
+    assert.equal(profile.owner,'Violema',`${profile.id} is the company account, not a personal one`);
+    if(profile.href!==null)assert.match(profile.href,/^https:\/\//);
     assert.match(profileIcon(profile.id),/^<svg viewBox="0 0 24 24"[^>]* aria-hidden="true"[^>]*><path d="[^"]+"\/><\/svg>$/);
   }
+  assert.equal(profiles.find(profile=>profile.id==='linkedin').href,'https://www.linkedin.com/company/violema/','the company page, not the founder\'s');
+  assert.equal(profiles.find(profile=>profile.id==='instagram').href,'https://www.instagram.com/violemaai/');
   for(const [,file] of pages){
     const html=await readFile(join(dist,file),'utf8');
     const list=html.match(/<ul class="social-list footer-social" aria-label="Social profiles">([\s\S]*?)<\/ul>/)?.[1]??'';
-    const links=[...list.matchAll(/<a class="social-link social-link--([a-z]+)" href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="([^"]+)" title="[^"]+"><svg/g)].map(match=>[match[1],match[2],match[3]]);
-    assert.deepEqual(links,profiles.map(profile=>[profile.id,profile.href,`${profile.owner} on ${profile.name}`]),`${file} footer profiles`);
+    const links=[...list.matchAll(/<a class="social-link social-link--([a-z]+)( social-link--pending)?" href="([^"]+)"( target="_blank" rel="noopener noreferrer")? aria-label="([^"]+)" title="([^"]+)"><svg/g)].map(match=>match.slice(1));
+    assert.deepEqual(links,profiles.map(profile=>profile.href
+      ?[profile.id,undefined,profile.href,' target="_blank" rel="noopener noreferrer"',`Violema on ${profile.name}`,profile.name]
+      :[profile.id,' social-link--pending','/',undefined,`Violema on ${profile.name}, page to come`,`${profile.name}: page to come`]),`${file} footer profiles`);
+    assert.ok(!list.includes('maximisto')&&!list.includes('orcid.org'),`${file} footer carries no personal profile`);
   }
 });
 
@@ -382,16 +387,45 @@ test('the home page build is deterministic',async()=>{
   assert.equal(await readFile(join(dist,'index.html'),'utf8'),first,'a separate build process produced the same bytes');
 });
 
-test('the home hero offers two actions, and its briefing link is the one the closing chapter uses',async()=>{
+test('the home hero offers two actions, and its briefing button lands on the form in the closing chapter',async()=>{
   const html=await readFile(join(dist,'index.html'),'utf8');
   const hero=html.match(/<section class="hero experience-hero"[\s\S]*?<\/section>/)[0];
   const actions=hero.match(/<div class="actions">[\s\S]*?<\/div>/)[0];
   assert.match(actions,/^<div class="actions"><a class="button button-primary" href="#evidence">Follow the evidence /,'the primary action still leads');
   assert.equal((actions.match(/class="button /g)||[]).length,2,'exactly two buttons in the hero');
-  const secondary=actions.match(/<a class="button button-secondary" href="([^"]+)">Request a briefing /);
-  assert.ok(secondary,'the second button asks for a scientific briefing');
+  assert.match(actions,/<a class="button button-secondary" href="#briefing">Request a briefing <span aria-hidden="true">↓<\/span><\/a>/,'the second button stays on this site');
   const closing=html.match(/<section class="experience-chapter chapter-connect"[\s\S]*?<\/section>/)[0];
-  assert.ok(closing.includes(`<a class="button button-primary" href="${secondary[1]}">Request a briefing `),'top and bottom of the page send the reader to the same briefing form');
+  assert.match(closing,/<form class="briefing-form" id="briefing" action="\/api\/briefing" method="post" novalidate aria-labelledby="briefing-title" data-briefing-form data-briefing-intents="[^"]+">/,'the form is the closing chapter\'s action and the address every briefing link uses');
+  assert.ok(closing.includes('<a class="text-link" href="/review/">Here to review the science? '),'the reviewer path stays beside the form');
+});
+
+test('the briefing form is complete without JavaScript and uses the lead handler\'s field contract',async()=>{
+  const html=await readFile(join(dist,'index.html'),'utf8');
+  const form=html.match(/<form class="briefing-form"[\s\S]*?<\/form>/)[0];
+  assert.equal((html.match(/<form class="briefing-form"/g)||[]).length,1,'one briefing form on the homepage');
+  for(const name of ['intent','role','name','email','organization','topic','message'])assert.match(form,new RegExp(`<(?:input|select|textarea) class="briefing-control" id="briefing-${name}" name="${name}"`),`${name} control`);
+  assert.deepEqual([...form.matchAll(/<option value="([a-z-]+)"/g)].map(m=>m[1]),['briefing','pilot','expert-review','correction','privacy','biotech','fund','clinic','research','other'],'option values are the handler\'s, labels may differ');
+  assert.match(form,/<div class="briefing-trap" aria-hidden="true"><label for="briefing-website">Website<\/label><input id="briefing-website" name="website" type="text" tabindex="-1" autocomplete="off"><\/div>/,'the honeypot the handler discards is hidden from people');
+  assert.match(form,/<button class="button button-primary" type="submit" data-briefing-submit disabled>Request a briefing<\/button>/,'the button waits for the module: a plain post cannot reach the JSON-only handler');
+  assert.match(form,/<noscript><p class="briefing-note">Sending needs JavaScript\. The same form is on <a href="https:\/\/psychdoc\.ai\/#briefing">PsychDoc\.AI<\/a>\.<\/p><\/noscript>/);
+  assert.match(form,/<a href="\/legal\/privacy\/">Privacy Policy<\/a>/);
+  assert.ok(html.includes("import('./briefing.mjs')")===false&&(await readFile(join(dist,'company-assets/browser/site.mjs'),'utf8')).includes("import('./briefing.mjs')"),'the page loads the module only through site.mjs');
+  await stat(join(dist,'company-assets/browser/briefing.mjs'));
+  assert.ok(!/[—]/.test(form),'no em-dashes in public copy');
+});
+
+test('every "Request a briefing" link on the site points at the form; nothing links the PsychDoc form except the noscript fallback',async()=>{
+  for(const [route,file] of pages){
+    const html=await readFile(join(dist,file),'utf8');
+    const external=html.split('<noscript>')[0]+(html.split('</noscript>')[1]??'');
+    assert.ok(!external.includes('psychdoc.ai/#briefing'),`${route} sends briefing requests to this site`);
+    for(const [,href] of html.matchAll(/<a[^>]*href="([^"]+)"[^>]*>Request a briefing/g))assert.ok(href==='#briefing'||href==='/#briefing',`${route}: ${href}`);
+  }
+  const privacy=await readFile(join(dist,'legal/privacy/index.html'),'utf8');
+  assert.ok(privacy.includes('<strong>Briefing form.</strong>'),'the privacy policy describes the form');
+  assert.ok(!privacy.includes('submission forms'),'the policy no longer claims the site has no forms');
+  const terms=await readFile(join(dist,'legal/terms/index.html'),'utf8');
+  assert.ok(terms.includes('accept one submission: the briefing form'));
 });
 
 test('the demo replay states that it always uses Claim 1, beside the control, clinical corpus only',async()=>{

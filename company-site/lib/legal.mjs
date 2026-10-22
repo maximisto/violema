@@ -39,7 +39,7 @@ export function buildLegalPolicies(config = analytics) {
       {
         id: 'communications',
         title: '4. Inquiries, feedback, and external services',
-        html: `<p>The scientific pages do not accept accounts, payments, uploads, or review submissions. Please keep patient records, confidential datasets, credentials, and other sensitive information out of ordinary correspondence. The <a href="/legal/privacy/">Website Privacy Policy</a> explains information handling.</p>
+        html: `<p>The scientific pages accept one submission: the briefing form on the homepage, for a briefing, a commissioned synthesis, a review offer, a correction, or a privacy request. They do not accept accounts, payments, uploads, or review submissions. Please keep patient records, confidential datasets, credentials, and other sensitive information out of the form and of ordinary correspondence. The <a href="/legal/privacy/">Website Privacy Policy</a> explains information handling.</p>
 <p>You retain ownership of your feedback. We may consider suggestions and corrections to improve the materials; sending feedback does not transfer ownership of your work. Any publication, attribution, or use requiring your permission must be agreed separately.</p>
 <p>An inquiry or briefing request does not create a paid engagement, research collaboration, investment commitment, confidentiality agreement, or other commercial arrangement. Those require separate agreement. Following an external link takes you to another service; its operator's terms and practices apply.</p>`,
       },
@@ -63,21 +63,22 @@ export function buildLegalPolicies(config = analytics) {
     title: 'Website Privacy Policy',
     description: 'How Violema, Inc. handles information on its public scientific website and in related correspondence.',
     summary: when(
-      'The scientific demonstrations run in your browser. These pages have no accounts, submission forms, advertising trackers, or cookies. We count visits with analytics we run ourselves. Hosting requests and messages you choose to send can still involve personal information.',
-      'The scientific demonstrations run in your browser. These pages have no accounts, submission forms, advertising trackers, or analytics scripts. Hosting requests and messages you choose to send can still involve personal information.',
+      'The scientific demonstrations run in your browser. These pages have no accounts, advertising trackers, or cookies. We count visits with analytics we run ourselves. Hosting requests, the briefing form, and messages you choose to send involve personal information.',
+      'The scientific demonstrations run in your browser. These pages have no accounts, advertising trackers, or analytics scripts. Hosting requests, the briefing form, and messages you choose to send involve personal information.',
     ),
     sections: [
       {
         id: 'scope',
         title: '1. Operator and scope',
         html: `<p>Violema, Inc., a Delaware corporation, is responsible for the information practices described here. This policy covers the public scientific homepage, Method, Evidence lab, For reviewers, these legal pages, evidence downloads, and related correspondence.</p>
-<p>Existing workspace services are covered by their separate workspace privacy policy. A scientific briefing link takes you to psychdoc.ai, run by PsychDoc, a division of Violema, Inc., under its own <a href="https://psychdoc.ai/policies/privacy">privacy policy</a>. This policy does not govern information you provide there.</p>`,
+<p>Existing workspace services are covered by their separate workspace privacy policy. PsychDoc.AI at psychdoc.ai is a division of Violema, Inc. with its own <a href="https://psychdoc.ai/policies/privacy">privacy policy</a>, which governs information you provide there. This policy covers the briefing form on this website.</p>`,
       },
       {
         id: 'information',
         title: '2. Information involved',
         html: `<p><strong>Website requests.</strong> Hosting and security systems may receive ordinary request information, such as your IP address, request time, requested page or file, browser information, referring page when supplied, and response or error information. Your browser may also attach cookies already associated with this domain from an earlier workspace visit.</p>
 <p><strong>Correspondence.</strong> If you contact us, we receive your email address, any name or affiliation you provide, message content, attachments, and related correspondence. Provide only what is needed for your inquiry. Do not send patient information, credentials, or confidential research through ordinary email.</p>
+<p><strong>Briefing form.</strong> The form on the homepage sends Violema, Inc. your name, work email, organization, the role and request type you choose, and any research question or message you add, with the time, the page it was sent from, and your browser's description. It does not record your IP address. The request is stored on our server and emailed to the people who answer it; we reply by email. Provide only what the request needs, and keep patient information, credentials, and confidential research out of it.</p>
 <p><strong>Demonstration controls.</strong> Map filters, selected views, and illustrative adjustments run in browser memory or the URL fragment after the # character. The scientific pages do not submit these selections to Violema or an AI provider.${when(' Visit statistics count that a few of these controls were used, never the values chosen (section 3).', '')} A copied link or your browser history may retain a selected view.</p>`,
       },
       {

@@ -18,7 +18,8 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/le
 - `lib/pages.mjs`: page shell (logo header, appearance control, footer, metadata), the protocol stations, and the six routes.
 - `lib/experience.mjs`: the five homepage chapters, guided claim/source/limits interaction and six-part method explorer.
 - `lib/legal.mjs`: public website terms and privacy copy; separate from legacy workspace policies. The privacy wording follows the visit-statistics switch.
-- `lib/social.mjs`: the confirmed public profiles (Max Markovtsev's, plus Violema's Instagram), each named by its owner, and their brand glyphs (Simple Icons 13.21.0, CC0; LinkedIn from purpleorange.ai), rendered as icon links in every footer and under the founder card on /about/, where ORCID alone keeps its brand green. A network joins the footer only once its URL is confirmed.
+- `lib/social.mjs`: the company's profiles (`profiles`: LinkedIn, Instagram, X, YouTube, Reddit, Facebook, GitHub, all Violema's own accounts) rendered as icon links in every footer, and the founder's (`founderProfiles`: LinkedIn and ORCID) rendered as labelled cards under the founder card on /about/ only, where ORCID alone keeps its brand green. Brand glyphs are Simple Icons 13.21.0 (CC0; LinkedIn from purpleorange.ai). A company row whose URL is not yet confirmed has `href: null`: it keeps its place, links to `/` and its label says the page is to come. Never guess a handle.
+- `lib/briefing.mjs` and `browser/briefing.mjs`: the briefing form (see "Briefing form" below).
 - `lib/analytics.mjs`: the visit-statistics switch (Umami website ID and policy date) and the tracker tag. See "Visit statistics" below.
 - `lib/how-it-works.mjs`: the method page's "How it works" and "Where this is going" sections: two inline SVG diagrams of PsychDoc's evidence system, coloured only through tokens, with their figures read from `data/how-it-works.mjs`.
 - `lib/render.mjs`: shared evidence renderer: escaped text, safe source links, bounded additive-shift arithmetic, the interval scale, the trace specimen (a claim joined to its cited source records), the bias control and the demo bench.
@@ -49,6 +50,14 @@ The home hero assembles the 12 named trial records from the pinned primary-analy
 The homepage follows five chapters: overview, guided evidence, method, applications and a briefing invitation. The complete evidence map sits in a native disclosure, retaining its filters, text alternative, export and direct `#evidence-map` link. Without JavaScript, guided panels and method explanations are all present in reading order.
 
 `/review/` is a generic physician/researcher walkthrough: one primary claim, the four linked sources, an assumed-shift replay, the animal/human scope boundary and five focused questions. It makes no advisor appointment or affiliation claim, collects no submissions and asks for published sources without patient information. `/demo/` continues to hold both full packets and the fixed Claim 1 replay scope.
+
+## Briefing form
+
+The homepage's closing chapter holds the site's one form, `id="briefing"`, and every "Request a briefing" link on the site (hero, footer, About) points at it. The markup is rendered at build time; `browser/briefing.mjs`, loaded by `site.mjs` only where the form exists, enables the button and posts the fields as JSON to `/api/briefing` on this host. Without JavaScript the button stays disabled and a `noscript` line names the same form on PsychDoc.AI, because a plain form post cannot reach the handler.
+
+The handler is the one PsychDoc.AI already runs (`app/api/briefing/route.ts` in `maximisto/psychdoc-ai`): JSON only, rate limited, honeypot field `website`, the lead appended to its store and emailed to the owner. Its field contract is fixed in `lib/briefing.mjs` (`briefingIntents`, `briefingRoles`): labels are Violema's, values are the handler's. nginx hands the path over with `deploy/scientific-site/briefing-api.nginx.conf.snippet`, an exact-match location inside the company server block, placed before the legacy `/api/` prefix. That is a vhost change, so the release packet that ships the form must pin the new vhost hash and the form does not work until the location is live: check `curl -fsS -X POST https://violema.com/api/briefing -H 'content-type: application/json' -d '{}'` answers 400 with `"Check the highlighted fields."`, not 404.
+
+The Website Privacy Policy describes the form (section 2, "Briefing form") and the Terms name it as the one submission the site accepts.
 
 ## Visit statistics
 
