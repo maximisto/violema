@@ -1,11 +1,12 @@
-# October 21 briefing-form release: staged
+# October 21 briefing-form release: activated
 
 The homepage gets the site's own briefing form in chapter 04, `id="briefing"`; every "Request a briefing" link (hero,
 footer, About) points at it instead of the form on psychdoc.ai. The form posts JSON to `/api/briefing` on violema.com,
 which nginx hands to the lead handler PsychDoc.AI already runs on the same VPS. The footer lists the company's own
 profiles (LinkedIn, Instagram, X, YouTube, Reddit, Facebook, GitHub; unconfirmed rows link to `/` and say "page to
 come"); the founder's LinkedIn and ORCID stay on /about/ only. Terms and Privacy describe the form. PR maximisto/violema#39.
-Max asked for the packet on 2026-10-21 ("build the Violema packet"). Not activated.
+Max asked for the packet on 2026-10-21 ("build the Violema packet") and for its activation the same evening ("Activate the
+Violema packet on root@187.77.220.60"). Activated 2026-10-22 00:48 UTC from that session with `activate.sh` beside this file.
 
 ## Source
 
@@ -49,14 +50,33 @@ PsychDoc release; until then the lead is stored and emailed without the label).
 Before activation `POST /api/briefing` on violema.com answers 401 from the legacy backend ("Approved Violema beta session
 required"); after it, `{}` answers 400 with `"Check the highlighted fields."` and a `text/plain` post answers 415.
 
-The live vhost's bytes were not read before preparing this packet (no server access from the preparing session), so there
-is no baseline vhost hash here. `activate.sh` guards the edit instead: it refuses unless the vhost has exactly one
+The live vhost's bytes were not read before preparing this packet (no server access from the preparing session), so the
+packet carried no baseline vhost hash. `activate.sh` guarded the edit instead: it refuses unless the vhost has exactly one
 `location ^~ /api/ {` line and no `/api/briefing` location yet, backs the file up to
 `/var/backups/violema-science/20261021-eeb14bb-briefing-form/violema.conf` with its hash, inserts the block before that
-line, and restores the backup if `nginx -t` or the reload fails. It prints the new vhost hash at the end: record it in
-this file on activation.
+line, and restores the backup if `nginx -t` or the reload fails. Hashes recorded at activation:
 
-## How to activate
+| Vhost `/etc/nginx/sites-available/violema.com` | SHA-256 |
+| --- | --- |
+| Before (backed up) | `676f96527f825d15e0f1fdf13802ec1bb2f367872a101d6ee265d4bf180f97bf` |
+| After | `df1611c4437eaea600e0ca531bd9cb390a3b47c02a35ba544fd3600bdf5bcc69` |
+
+`nginx -t` passed, with the pre-existing duplicate `text/html` MIME warning from the purpleorange.ai Umami snippet.
+
+## How it was activated
+
+Every guard passed on the first run: `current` pointed at the previous release, the live home page matched `9195aec8…`,
+and the vhost had one legacy `/api/` block and no briefing location. Public checks after the reload: `/` equals the pin
+`d74c6df0…`; all 59 live files match `SHA256SUMS` (the 404 body fetched through an unknown path); the form module answers
+200; `POST /api/briefing` with `{}` answers 400 with `"Check the highlighted fields."` and the five field errors; a
+`text/plain` post answers 415; `/api/health` answers 200; an unknown path answers 404. The live page loads with the submit
+button enabled, the hero button at `#briefing`, the seven footer rows, and no console errors.
+
+One labelled test request was sent through the endpoint end to end ("Activation check (Claude, 2026-10-21)",
+`activation-check@violema.com`, intent briefing) and answered `{"ok":true}`: it is in the PsychDoc lead store and the
+owner inbox, to be deleted. Its "Sent from" reads `/` because maximisto/psychdoc-ai#64 is merged but not yet deployed.
+
+## How to activate (as prepared)
 
 From a directory holding `public-dist.tar.gz`, `SHA256SUMS` and `briefing-api.nginx.conf.snippet` (the scratch copy the
 preparing session left, or a fresh reproduction): `./activate.sh root@<vps>`. It checks the tarball hash, copies the three
@@ -66,8 +86,7 @@ live `index.html` equals the previous release (`9195aec8…`) and the new releas
 renamed over `current` with `mv -T`; `nginx -t`; reload nginx. Then the public checks: `/` equals the pin, the form module
 answers 200, the two `/api/briefing` posts answer 400 and 415, `/api/health` answers 200, an unknown path 404.
 
-After activation, send one real request through the form and confirm it arrives in the PsychDoc lead store and the owner
-email (its "Sent from" reads `/` until #64 is deployed, then `violema.com/`).
+After activation, one request through the form confirmed the path to the PsychDoc lead store and the owner email (above).
 
 ## Rollback
 
