@@ -88,7 +88,7 @@ test('the outcome rule gives each of the six outcomes, and a contradiction outra
   assert.equal(decide({ dossier: 'positive', confirmations: 3, contradiction: true }), 'o-contested');
   assert.equal(decide({ dossier: 'positive', confirmations: 2, contradiction: false }), 'o-established-benchmark');
   assert.equal(decide({ dossier: 'positive', confirmations: 1, contradiction: false }), 'o-positive-awaiting-confirmation');
-  assert.match(verdict({ dossier: 'positive', confirmations: 1, contradiction: false }).why, /Confirmations shown: 1\./);
+  assert.match(verdict({ dossier: 'positive', confirmations: 1, contradiction: false }).why, /Confirmations shown:\u00a01\./, 'the count stays on the line of its label');
   assert.throws(() => decide({ dossier: 'maybe', confirmations: 0, contradiction: false }), RangeError);
 });
 
