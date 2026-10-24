@@ -23,9 +23,10 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   overflow: hidden;
-  background: var(--line);
+  background: var(--surface);
 }
-.record-facts > div { display: grid; gap: 6px; align-content: start; padding: 18px 20px; background: var(--surface); min-width: 0; }
+/* Each cell draws its own hairline, so a row the facts do not fill stays the card's colour at any column count. */
+.record-facts > div { display: grid; gap: 6px; align-content: start; padding: 18px 20px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); min-width: 0; }
 .record-facts dt { font-family: var(--font-display); font-size: var(--text-caption); font-weight: 500; color: var(--ink-3); }
 .record-facts dd { display: grid; gap: 4px; margin: 0; }
 .fact-value { font-family: var(--font-display); font-size: 1.125rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); overflow-wrap: anywhere; }
