@@ -1,10 +1,10 @@
-# October 24 Fe4S4 record release: staged
+# October 24 Fe4S4 record release: activated
 
 Two unlisted pages join the site, in its shell and both themes:
 - `/records/fe4s4-benchmark/`: the hypothesis record for one narrow quantum-advantage test on an iron-sulfur benchmark, with four instruments and the PsychDoc ledger;
 - `/records/fe4s4-benchmark/record/`: the full record text.
 
-Both pages carry `noindex,follow` and a canonical link. Neither is in `sitemap.xml` or `llms.txt`, and no navigation links to them; the link is shared directly. PR maximisto/violema#40. Max asked for the merge and deploy on 2026-10-24 ("looks good... do one brush up with design and merge and deploy").
+Both pages carry `noindex,follow` and a canonical link. Neither is in `sitemap.xml` or `llms.txt`, and no navigation links to them; the link is shared directly. PR maximisto/violema#40. Max asked for the merge and deploy on 2026-10-24 ("looks good... do one brush up with design and merge and deploy"). Activated 2026-10-24 21:24 UTC with `activate.sh`; the record routes were added to the vhost at 21:27 UTC with `add-routes.sh`.
 
 ## Source
 
@@ -14,7 +14,7 @@ Against the previous release, six files change:
 - five are new: the two pages, `company-assets/records.css`, `company-assets/browser/fe4s4.mjs` and `company-assets/browser/fe4s4-figures.mjs`;
 - `company-assets/browser/site.mjs` gains one line, which loads the instruments only where `[data-fe4s4]` is present.
 
-The other 58 files are byte-identical. The file count grows from 59 to 64, and the vhost does not change.
+The other 58 files are byte-identical. The file count grows from 59 to 64. **The vhost changes** (below): the packet was first staged as files only, which missed that the vhost serves an allowlist of exact routes.
 
 ## Pins
 
@@ -62,9 +62,55 @@ From a directory holding `public-dist.tar.gz` and `SHA256SUMS`, run `./activate.
    - `/api/health` answers 200;
    - an unknown path answers 404.
 
+Then, from a directory holding `records.nginx.conf.snippet` and `SHA256SUMS`, run `./add-routes.sh root@<vps>` for the vhost step below.
+
+## The vhost change
+
+`/etc/nginx/sites-available/violema.com` serves an allowlist: one exact location per route, then `location / { return 404; }`. On the first run, `activate.sh` put the files live and every guard passed. The two record pages still answered 404, with the company 404 page, because no location matched them. Every other file matched `SHA256SUMS`, so the site was never affected.
+
+`records.nginx.conf.snippet` adds six exact locations:
+- `/records/fe4s4-benchmark`, with and without the trailing slash, and its `index.html`;
+- the same three for `/records/fe4s4-benchmark/record`.
+
+Each location has the same method guard, root and headers as the About block. The block sits between `# BEGIN` and `# END VIOLEMA HYPOTHESIS RECORDS` markers, placed before `# END VIOLEMA SCIENCE COMPANY-ONLY OVERLAY`. The repo's model of the same allowlist, `deploy/scientific-site/routing.mjs`, and its two rendered templates gain the same six routes.
+
+`add-routes.sh` refuses unless all of these hold:
+- `current` points at this release;
+- the vhost equals the hash recorded after the briefing-form release;
+- the vhost has exactly one overlay end marker and no `/records/` location yet;
+- the backup directory does not exist.
+
+It backs the vhost up to `/var/backups/violema-science/20261024-14aaa95-fe4s4-record/violema.conf`, inserts the block, requires six record locations in the result, then runs `nginx -t` and a reload. It restores the backup if either fails. The insertion was rehearsed on a copy of the live vhost first, and it added exactly the 57-line block.
+
+| Vhost `/etc/nginx/sites-available/violema.com` | SHA-256 |
+| --- | --- |
+| Before (backed up) | `df1611c4437eaea600e0ca531bd9cb390a3b47c02a35ba544fd3600bdf5bcc69` |
+| After | `dfadb9960b8a7c23865d00aca148635b0058d460a860688127b0b04737bca5c5` |
+| `records.nginx.conf.snippet` | `6cd48466babd624535e2f68f438a20c70fc58e34c603e0dfd75bb0549790b771` |
+
+`nginx -t` passed, with the pre-existing duplicate `text/html` MIME warning from the purpleorange.ai Umami snippet.
+
+## How it was activated
+
+**`activate.sh`.** Every guard passed on the first run:
+- `current` pointed at `releases/20261021-eeb14bb-briefing-form`;
+- the live home page and `site.mjs` matched their pins;
+- the release directory was new.
+
+**`add-routes.sh`.** Every guard passed. Public checks after its reload:
+- all 64 live files match `SHA256SUMS`;
+- `/records/fe4s4-benchmark` and `/records/fe4s4-benchmark/record` answer 200, with and without the trailing slash;
+- a POST to a record page answers 405;
+- `/records/` alone answers 404, as does an unknown path;
+- `/api/health` answers 200;
+- `POST /api/briefing` with `{}` answers 400.
+
+**In a browser.** The live page loads with no console messages and `noindex,follow`, with the visit-statistics tag present. The cluster canvas replaces the still image, the scale buttons show, all three outcome fieldsets are enabled, and the page has no horizontal overflow.
+
 ## Rollback
 
-1. Point `/var/www/violema-science/current` back at `releases/20261021-eeb14bb-briefing-form`: create a sibling symlink, then rename it over `current`.
-2. Run `nginx -t`, then reload nginx.
+1. Restore `/etc/nginx/sites-available/violema.com` from `/var/backups/violema-science/20261024-14aaa95-fe4s4-record/violema.conf`.
+2. Point `/var/www/violema-science/current` back at `releases/20261021-eeb14bb-briefing-form`: create a sibling symlink, then rename it over `current`.
+3. Run `nginx -t`, then reload nginx.
 
 The record routes then answer 404 again. Nothing else changes, because every other page is byte-identical.

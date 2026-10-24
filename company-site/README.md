@@ -64,7 +64,7 @@ A strip at the end shows the event ledger on PsychDoc's map. `/records/fe4s4-ben
 
 The figures are pure functions in `lib/fe4s4-figures.mjs`. The build renders every figure as SVG, so each page is complete without JavaScript. `browser/fe4s4.mjs`, which `site.mjs` loads only where `[data-fe4s4]` exists, re-renders through the same module (copied to `company-assets/browser/fe4s4-figures.mjs`). It adds the turning cluster, the random configurations, the scale control, the timeline selection and the outcome builder. Motion stops under reduced motion, in a hidden tab, off screen, and on Pause.
 
-Every number on the page is a value from the record or is derived from one in the figures module, and `tests/records.test.mjs` pins the derivations. Record pages are `noindex,follow`, outside the sitemap and `llms.txt`, and reached by a link the owner shares.
+Every number on the page is a value from the record or is derived from one in the figures module, and `tests/records.test.mjs` pins the derivations. Record pages are `noindex,follow`, outside the sitemap and `llms.txt`, and reached by a link the owner shares. The violema.com vhost serves an allowlist of exact routes, so each new record route also needs its locations in `deploy/scientific-site/routing.mjs` and on the server; release `fe4s4-record-20261024` shows the block and the guarded script that adds it.
 
 ## Briefing form
 
