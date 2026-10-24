@@ -97,6 +97,9 @@ export const ENERGIES = Object.freeze({
   // The DMRG value distributed with the model files (Li and Chan, JCTC 2017; bond dimension 4000, marked not
   // converged), which the tracker's SQD entry quotes as its reference.
   dmrg2017: { eh: -327.2396369 },
+  // Zhai et al., arXiv 2601.04621 v1: spin-adapted DMRG on a model of the same size, as quoted by Legeza et al.;
+  // not plotted, because its integrals were not checked against the pinned file.
+  zhai: { eh: -327.244001 },
 });
 /** The SQD entry's largest diagonalized subspace (Shirakawa et al., arXiv 2511.00224). */
 export const SQD_SUBSPACE = 1e10;
@@ -106,7 +109,14 @@ export const GAP = Object.freeze({
   trimci: millihartreeAbove(ENERGIES.trimciBest.eh),
   bar: millihartreeAbove(ENERGIES.bar.eh),
   dmrg2017: millihartreeAbove(ENERGIES.dmrg2017.eh),
+  zhai: millihartreeAbove(ENERGIES.zhai.eh),
 });
+// What the posted SQD run's quantum time alone would cost at IBM's public pay-as-you-go rate
+// (US$96 a minute, ibm.com/quantum/pricing, checked 2026-10-24): the tracker posts 36,000 s of QPU time.
+export const IBM_USD_PER_QPU_MINUTE = 96;
+export const SQD_QPU_MINUTES = 36000 / 60;
+export const SQD_QPU_USD = IBM_USD_PER_QPU_MINUTE * SQD_QPU_MINUTES;
+export const BUDGET_USD = 100000;
 export const TRIMCI_GAIN = Math.round((GAP.quantum - GAP.trimci) * 100) / 100;
 export const KCAL_PER_MILLIHARTREE = 0.6275095;
 export const MATCH_DAYS = daysBetween(ENERGIES.quantum.date, ENERGIES.trimciBest.date);
@@ -199,7 +209,7 @@ export const EVIDENCE = Object.freeze([
   { d: '2025-01-10', lane: 'ft', url: 'https://arxiv.org/abs/2501.06165', who: 'Caesura et al.', venue: 'PRX Quantum 6:030337 (2025) · arXiv 2501.06165', text: 'A fault-tolerant estimate on cytochrome P450, an enzyme family central to drug metabolism: about two orders of magnitude faster (233 times for P450) than an earlier algorithm on baseline photonic hardware without Active Volume support. Active Volume compilation, which suits only some hardware, contributes a factor of about 25 of that. An erratum published 2026-10-08 says its correction does not change the resource estimates.' },
   { d: '2025-01-13', lane: 'an', url: 'https://arxiv.org/abs/2501.07231', who: 'Reinholdt et al.', venue: 'arXiv 2501.07231', text: 'A critical analysis of quantum-selected configuration interaction, the idea behind SQD, finding that sampling efficiency and determinant selection limit it in the systems studied.' },
   { d: '2025-10-31', lane: 'hw', id: 'sqd', url: 'https://arxiv.org/abs/2511.00224', who: 'Shirakawa et al., IBM and RIKEN, 21 authors', venue: 'arXiv 2511.00224', text: 'Closed-loop sample-based quantum diagonalization on IBM Heron processors with up to 152,064 nodes of the Fugaku supercomputer. For this [4Fe-4S] (54e, 36o) model it used 77 qubits and a 10¹⁰-determinant subspace, reaching −326.912 hartree, 278 mEh lower than the team’s 2024 result. The authors describe its accuracy as comparable to some all-classical approximation methods.' },
-  { d: '2025-11-11', lane: 'pg', url: 'https://quantum-advantage-tracker.github.io/', who: 'Quantum Advantage Tracker, IBM and RIKEN SQD entry', venue: 'Quantum Advantage Tracker, variational track', text: 'The tracker lists this record’s Fe₄S₄ model, the same Hamiltonian in a different orbital basis, under its baseline benchmarks, with no active advantage candidate. The IBM and RIKEN SQD entry reports −326.913 hartree on 77 qubits, with 10 hours of quantum processor time and 10 hours on 76,032 Fugaku nodes, run in parallel.' },
+  { d: '2025-11-11', lane: 'pg', url: 'https://quantum-advantage-tracker.github.io/', who: 'Quantum Advantage Tracker, IBM and RIKEN SQD entry', venue: 'Quantum Advantage Tracker, variational track', text: 'The tracker lists this record’s Fe₄S₄ model, the same Hamiltonian in a different orbital basis, under its baseline benchmarks, with no active advantage candidate. The IBM and RIKEN SQD entry reports −326.913 hartree on 77 qubits, with 10 hours of quantum processor time and 10 hours on 76,032 Fugaku nodes; the preprint overlaps the quantum and classical phases.' },
   { d: '2025-11-18', lane: 'cl', url: 'https://arxiv.org/abs/2511.14734', who: 'Zhang and Otten', venue: 'arXiv 2511.14734', text: 'A classical method seeded with random determinants (TrimCI) matched a recent quantum SQD energy for a [4Fe-4S] cluster with roughly a million times fewer determinants and CPU-hours.' },
   { d: '2025-11-20', lane: 'cl', id: 'trimci', url: 'https://quantum-advantage-tracker.github.io/', who: 'TrimCI entries on the tracker', venue: 'Quantum Advantage Tracker, variational track', text: 'Classical entries on the same tracker model, matching the SQD energy (−326.913 hartree) and reaching −327.175 hartree.' },
   { d: '2025-11-30', lane: 'an', url: 'https://arxiv.org/abs/2512.01012', who: 'Raisuddin et al.', venue: 'arXiv 2512.01012', text: 'A benchmark of SQD across the W4-11 thermochemistry set, which found uneven accuracy across reaction types.' },
@@ -307,7 +317,7 @@ export function futureSVG() {
 export const OUTCOMES = Object.freeze([
   { id: 'o-established-benchmark', short: 'Established', tier: 'Moves to Established, for this benchmark only', when: 'Positive, at least two independent positive confirmations, no decisive contradictory reproduction.' },
   { id: 'o-contested', short: 'Active debate', tier: 'Moves to Active debate, for this benchmark only', when: 'Positive, and at least one decisive contradictory reproduction exists.' },
-  { id: 'o-positive-awaiting-confirmation', short: 'Speculation', tier: 'Stays Speculation, shown prominently with its confirmation count', when: 'Positive, fewer than two independent positive confirmations, no decisive contradictory reproduction.' },
+  { id: 'o-positive-awaiting-confirmation', short: 'Speculation', tier: 'Stays Speculation; the positive result is shown on the record with its confirmation count', when: 'Positive, fewer than two independent positive confirmations, no decisive contradictory reproduction.' },
   { id: 'o-threshold-not-met', short: 'Speculation', tier: 'Stays Speculation; threshold not shown', when: 'The bound dossier fails: its speed score’s upper bound is below 2.0, or it misses the ten-run rule.' },
   { id: 'o-otherwise', short: 'Speculation', tier: 'Stays Speculation; inconclusive', when: 'The bound dossier is eligible but inconclusive.' },
   { id: 'o-lapsed', short: 'Speculation', tier: 'Stays Speculation; lapsed', when: 'No dossier was complete, eligible and public by 2027-07-04: no result, never a negative one.' },
@@ -331,7 +341,7 @@ export function verdict(scenario = DEFAULT_SCENARIO) {
 }
 
 export function outcomeList(selectedId = decide(DEFAULT_SCENARIO)) {
-  return OUTCOMES.map(item => `<li data-outcome="${item.id}"${item.id === selectedId ? ' class="is-selected" aria-current="true"' : ''}><span class="outcome-when">${escapeHTML(item.when)}</span><span class="outcome-tier">${escapeHTML(item.short)}</span><code>${item.id}</code></li>`).join('');
+  return OUTCOMES.map(item => `<li data-outcome="${item.id}"${item.id === selectedId ? ' class="is-selected" aria-current="true"' : ''}><span class="outcome-when">${escapeHTML(item.when)}</span><span class="outcome-tier">${escapeHTML(item.short)}</span></li>`).join('');
 }
 
 /* ---------- The ledger behind it ---------- */

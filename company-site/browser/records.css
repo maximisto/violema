@@ -221,7 +221,6 @@
 .outcome-list { display: grid; gap: 6px; list-style: none; }
 .outcome-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 10px 12px; border: 1px solid transparent; border-radius: var(--radius-nested); font-size: var(--text-caption); line-height: 1.45; color: var(--ink-2); transition: background-color var(--duration) var(--ease), border-color var(--duration) var(--ease); }
 .outcome-tier { font-family: var(--font-display); font-weight: 600; white-space: nowrap; }
-.outcome-list code { grid-column: 1 / -1; font-family: var(--font-mono); font-size: var(--text-caption); opacity: 0.75; }
 .outcome-list li.is-selected { border-color: var(--fe4s4-pass); background: var(--inst-surface); color: var(--ink); }
 .outcome-list li.is-selected .outcome-tier { color: var(--fe4s4-pass); }
 

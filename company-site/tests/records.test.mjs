@@ -7,7 +7,7 @@ import { TRACKER_SRC } from '../lib/analytics.mjs';
 import { FE4S4_ROUTE, FE4S4_RECORD_ROUTE } from '../lib/records.mjs';
 import {
   ENERGIES, GAP, TRIMCI_GAIN, MATCH_DAYS, DETERMINANTS, SINGLETS, FLASH_MS, CLOCK, LEDGER, LEDGER_EVENTS, EVIDENCE, RESPONSE_ARCS,
-  OUTCOMES, decide, verdict, raceSVG, RACE_SCALES, daysBetween,
+  OUTCOMES, decide, verdict, raceSVG, RACE_SCALES, daysBetween, SQD_QPU_USD, BUDGET_USD,
 } from '../lib/fe4s4-figures.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -101,4 +101,19 @@ test('the race chart shows marks only, a one-sided pass line, and no verdict mul
   const page = await readFile(join(dist, 'records/fe4s4-benchmark/index.html'), 'utf8');
   assert.doesNotMatch(page, /207×|207 times|decided now|whole contest/);
   assert.match(page, /at or below it passes/);
+});
+
+test('a simulated reading’s fixes hold: no identifying line, no sales button, no visible rule ids, and the comparisons point the right way', async () => {
+  const page = await readFile(join(dist, 'records/fe4s4-benchmark/index.html'), 'utf8');
+  const record = await readFile(join(dist, 'records/fe4s4-benchmark/record/index.html'), 'utf8');
+  for (const html of [page, record]) assert.doesNotMatch(html, /Cleveland Clinic researcher/, 'the record never says whom it was prepared for');
+  const close = page.slice(page.indexOf('class="section record-close"'));
+  assert.doesNotMatch(close.slice(0, close.indexOf('</section>')), /#briefing/, 'the closing section has no briefing button');
+  assert.doesNotMatch(page, /<code>o-/, 'rule ids stay out of the reader-facing outcome list');
+  assert.ok(GAP.zhai > 0, 'Zhai et al. sit above the reference, not below it');
+  assert.ok(page.includes(`${GAP.zhai} mEh above the reference`));
+  assert.doesNotMatch(page, /lower DMRG bound/);
+  assert.equal(SQD_QPU_USD, 57600);
+  assert.ok(SQD_QPU_USD > BUDGET_USD / 2, 'the posted run’s quantum time alone is over half the per-run ceiling');
+  assert.doesNotMatch(page + record, /in parallel/, 'the overlap of phases is the preprint’s description, not the tracker’s');
 });
