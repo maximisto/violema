@@ -11,7 +11,7 @@ npm test
 npm run preview
 ```
 
-Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/legal/terms/` and `/legal/privacy/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method, demo, about and website policy HTML is indexable for the owner-authorized release; robots.txt allows crawling and the sitemap lists those six routes. The physician review page uses `noindex,follow` and is excluded from the sitemap. This is discoverability control, not authentication. Missing static paths return 404 locally. The links `/login`, `/terms` and `/privacy` belong to the preserved production application and are not part of this bundle.
+Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/legal/terms/` and `/legal/privacy/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method, demo, about and website policy HTML is indexable for the owner-authorized release; robots.txt allows crawling and the sitemap lists those six routes. The physician review page uses `noindex,follow` and is excluded from the sitemap. So are the hypothesis records under `/records/` (see "Hypothesis records" below), which are also left out of `llms.txt`. This is discoverability control, not authentication. Missing static paths return 404 locally. The links `/login`, `/terms` and `/privacy` belong to the preserved production application and are not part of this bundle.
 
 ## Layout
 
@@ -20,6 +20,7 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/le
 - `lib/legal.mjs`: public website terms and privacy copy; separate from legacy workspace policies. The privacy wording follows the visit-statistics switch.
 - `lib/social.mjs`: the company's profiles (`profiles`: LinkedIn, Instagram, X, YouTube, Reddit, Facebook, GitHub, all Violema's own accounts) rendered as icon links in every footer, and the founder's (`founderProfiles`: LinkedIn and ORCID) rendered as labelled cards under the founder card on /about/ only, where ORCID alone keeps its brand green. Brand glyphs are Simple Icons 13.21.0 (CC0; LinkedIn from purpleorange.ai). A company row whose URL is not yet confirmed has `href: null`: it keeps its place, links to `/` and its label says the page is to come. Never guess a handle.
 - `lib/briefing.mjs` and `browser/briefing.mjs`: the briefing form (see "Briefing form" below).
+- `lib/records.mjs`, `lib/fe4s4-figures.mjs`, `browser/fe4s4.mjs` and `browser/records.css`: the unlisted hypothesis records (see "Hypothesis records" below). `data/fe4s4-record.html` holds the Fe₄S₄ record's checked text.
 - `lib/analytics.mjs`: the visit-statistics switch (Umami website ID and policy date) and the tracker tag. See "Visit statistics" below.
 - `lib/how-it-works.mjs`: the method page's "How it works" and "Where this is going" sections: two inline SVG diagrams of PsychDoc's evidence system, coloured only through tokens, with their figures read from `data/how-it-works.mjs`.
 - `lib/render.mjs`: shared evidence renderer: escaped text, safe source links, bounded additive-shift arithmetic, the interval scale, the trace specimen (a claim joined to its cited source records), the bias control and the demo bench.
@@ -50,6 +51,20 @@ The home hero assembles the 12 named trial records from the pinned primary-analy
 The homepage follows five chapters: overview, guided evidence, method, applications and a briefing invitation. The complete evidence map sits in a native disclosure, retaining its filters, text alternative, export and direct `#evidence-map` link. Without JavaScript, guided panels and method explanations are all present in reading order.
 
 `/review/` is a generic physician/researcher walkthrough: one primary claim, the four linked sources, an assumed-shift replay, the animal/human scope boundary and five focused questions. It makes no advisor appointment or affiliation claim, collects no submissions and asks for published sources without patient information. `/demo/` continues to hold both full packets and the fixed Claim 1 replay scope.
+
+## Hypothesis records
+
+`/records/fe4s4-benchmark/` shows one hypothesis record as four instruments, each a dark `.instrument` under a light section heading:
+- the Fe₄S₄ cluster and the size of its determinant space;
+- every energy posted on the benchmark's Hamiltonian, on three vertical scales down to the one-sided pass line;
+- the evidence in the order it became public;
+- the draft outcome rule, which the reader can apply to any outcome.
+
+A strip at the end shows the event ledger on PsychDoc's map. `/records/fe4s4-benchmark/record/` is the full record: the v3 text in `data/fe4s4-record.html`, checked against primary sources on 2026-10-24, set at the site's type scale. Edit it only as a dated revision.
+
+The figures are pure functions in `lib/fe4s4-figures.mjs`. The build renders every figure as SVG, so each page is complete without JavaScript. `browser/fe4s4.mjs`, which `site.mjs` loads only where `[data-fe4s4]` exists, re-renders through the same module (copied to `company-assets/browser/fe4s4-figures.mjs`). It adds the turning cluster, the random configurations, the scale control, the timeline selection and the outcome builder. Motion stops under reduced motion, in a hidden tab, off screen, and on Pause.
+
+Every number on the page is a value from the record or is derived from one in the figures module, and `tests/records.test.mjs` pins the derivations. Record pages are `noindex,follow`, outside the sitemap and `llms.txt`, and reached by a link the owner shares.
 
 ## Briefing form
 
