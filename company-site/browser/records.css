@@ -280,14 +280,14 @@
 .record-doc .label { display: block; margin: 0; font-family: var(--font-display); font-size: var(--text-caption); font-weight: 500; line-height: 1.4; color: var(--ink-3); }
 .record-doc .mono, .record-doc .hash { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
 .record-doc .num { font-variant-numeric: tabular-nums; }
-.record-doc .date, .record-status .date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.record-doc .date, .record-status .date { white-space: nowrap; }
 .record-doc .note { color: var(--ink-3); max-width: 52ch; }
 .record-doc .context { padding-left: 14px; border-left: 2px solid var(--line-strong); color: var(--ink-2); }
 .record-doc .context strong { color: var(--ink); }
 .record-doc .claim { display: grid; gap: 18px; padding: 28px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
 .record-doc .claim-top, .record-doc .chips, .record-doc .legend { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.record-doc .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: var(--text-caption); line-height: 1.4; color: var(--ink-2); background: transparent; }
-.record-doc .chip.tier { border-color: transparent; background: var(--accent-soft); color: var(--ink); white-space: nowrap; }
+.record-doc .chip { display: inline-block; padding: 3px 10px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: var(--text-caption); line-height: 1.4; color: var(--ink-2); background: transparent; }
+.record-doc .chip.tier { display: inline-flex; align-items: center; gap: 6px; border-color: transparent; background: var(--accent-soft); color: var(--ink); white-space: nowrap; }
 .record-doc .chip.tier b { font-weight: 600; color: var(--accent); }
 .record-doc .chip.warn { border-color: var(--copper-text); color: var(--copper-text); }
 .record-doc .claim-text { font-family: var(--font-display); font-size: clamp(1.2rem, 2.6vw, 1.45rem); font-weight: 500; line-height: 1.45; max-width: 60ch; }
@@ -330,6 +330,7 @@
 .record-doc .entry-top h3 a { padding-block: 11px; color: inherit; text-decoration: none; }
 .record-doc .entry-top h3 a:hover { text-decoration: underline; }
 .record-doc .venue { color: var(--ink-3); }
+.record-doc .venue a { padding-block: 9px; }
 .record-doc .entry p { color: var(--ink-2); }
 .record-doc .entry > .chip { justify-self: start; }
 .record-doc .kind.estimate { border-color: var(--accent); color: var(--accent); }
