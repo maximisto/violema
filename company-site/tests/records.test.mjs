@@ -110,9 +110,9 @@ test('a simulated reading’s fixes hold: no identifying line, no sales button, 
   const close = page.slice(page.indexOf('class="section record-close"'));
   assert.doesNotMatch(close.slice(0, close.indexOf('</section>')), /#briefing/, 'the closing section has no briefing button');
   assert.doesNotMatch(page, /<code>o-/, 'rule ids stay out of the reader-facing outcome list');
-  assert.ok(GAP.zhai > 0, 'Zhai et al. sit above the reference, not below it');
-  assert.ok(page.includes(`${GAP.zhai} mEh above the reference`));
-  assert.doesNotMatch(page, /lower DMRG bound/);
+  assert.ok(GAP.zhai < 0, 'Zhai et al.’s lowest bound on the pinned file sits below the reference');
+  assert.ok(page.includes(`${Math.abs(GAP.zhai)} mEh below this chart’s zero`));
+  assert.doesNotMatch(page + record, /integrals (were|are) not checked|has not been checked/, 'Zhai et al. name the pinned file as their input');
   assert.equal(SQD_QPU_USD, 57600);
   assert.ok(SQD_QPU_USD > BUDGET_USD / 2, 'the posted run’s quantum time alone is over half the per-run ceiling');
   assert.doesNotMatch(page + record, /in parallel/, 'the overlap of phases is the preprint’s description, not the tracker’s');
