@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { corpora, stressTest } from '../data/corpora.mjs';
 import { homePage, methodPage, demoPage, reviewPage, aboutPage, legalPage, notFoundPage } from '../lib/pages.mjs';
+import { fe4s4Page, fe4s4RecordPage } from '../lib/records.mjs';
 import { exportCorpora } from './export-corpora.mjs';
 import { checkTrials } from './export-trials.mjs';
 
@@ -33,7 +34,7 @@ await exportCorpora(undefined, { check: true });
 const trials = await checkTrials({ csv: process.env.SYPRES_CSV });
 // Only the generated company-site directory is removed; application output is separate.
 await rm(dist, { recursive: true, force: true });
-for (const directory of ['method', 'demo', 'review', 'about', 'legal/terms', 'legal/privacy', 'company-assets/browser', 'company-assets/data', 'company-assets/fonts', 'company-assets/clients']) {
+for (const directory of ['method', 'demo', 'review', 'about', 'legal/terms', 'legal/privacy', 'records/fe4s4-benchmark/record', 'company-assets/browser', 'company-assets/data', 'company-assets/fonts', 'company-assets/clients']) {
   await mkdir(join(dist, directory), { recursive: true });
 }
 for (const [route, markup] of [
@@ -45,6 +46,9 @@ for (const [route, markup] of [
   ['legal/terms/index.html', legalPage('terms')],
   ['legal/privacy/index.html', legalPage('privacy')],
   ['404.html', notFoundPage()],
+  // Unlisted hypothesis records: noindex, and absent from the sitemap and llms.txt below.
+  ['records/fe4s4-benchmark/index.html', fe4s4Page()],
+  ['records/fe4s4-benchmark/record/index.html', fe4s4RecordPage()],
 ]) await writeFile(join(dist, route), markup);
 for (const [source, destination] of [
   ['browser/site.css', 'company-assets/site.css'],
@@ -54,6 +58,9 @@ for (const [source, destination] of [
   ['browser/playback.mjs', 'company-assets/browser/playback.mjs'],
   ['browser/diagrams.mjs', 'company-assets/browser/diagrams.mjs'],
   ['browser/diagrams.css', 'company-assets/diagrams.css'],
+  ['browser/records.css', 'company-assets/records.css'],
+  ['browser/fe4s4.mjs', 'company-assets/browser/fe4s4.mjs'],
+  ['lib/fe4s4-figures.mjs', 'company-assets/browser/fe4s4-figures.mjs'],
   ['browser/site.mjs', 'company-assets/browser/site.mjs'],
   ['browser/analytics.mjs', 'company-assets/browser/analytics.mjs'],
   ['browser/tabs.mjs', 'company-assets/browser/tabs.mjs'],
@@ -81,7 +88,7 @@ await copyFile(join(assets, 'max-markovtsev.jpg'), join(dist, 'company-assets/ma
 await writeFile(join(dist, 'robots.txt'), 'User-agent: *\nAllow: /\n\nSitemap: https://violema.com/sitemap.xml\n');
 await writeFile(join(dist, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ['/', '/method/', '/demo/', '/about/', '/legal/terms/', '/legal/privacy/'].map(path => `<url><loc>https://violema.com${path}</loc></url>`).join('') + '</urlset>\n');
 await writeFile(join(dist, 'llms.txt'), '# Violema\n\nScientific evidence systems that connect claims to sources, make consequential assumptions visible, and keep the record open to review. Prepared demonstrations remain subject to independent scientific review.\n\n- [Method](https://violema.com/method/): source, claim, assumption, review and version records.\n- [Evidence lab](https://violema.com/demo/): two manually curated packets; shared presentation, not universal scientific validity.\n- [About Violema](https://violema.com/about/): company overview, scientific governance, and founder Max Markovtsev.\n- [PsychDoc](https://psychdoc.ai/): first scientific application.\n- [Website Terms of Use](https://violema.com/legal/terms/): public scientific website terms.\n- [Website Privacy Policy](https://violema.com/legal/privacy/): public scientific website information practices.\n');
-console.log(`Built seven static pages, the 404 page and ${corpora.length} source packets in company-site/dist.`);
+console.log(`Built seven static pages, two unlisted record pages, the 404 page and ${corpora.length} source packets in company-site/dist.`);
 
 const heroAssets = join(assets, 'violema-hero');
 await mkdir(join(dist, 'company-assets/violema-hero'), { recursive: true });

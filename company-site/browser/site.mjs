@@ -171,6 +171,7 @@ if (map) {
 if (document.querySelector('.home-experience')) import('./experience.mjs');
 
 if (document.querySelector('[data-diagram]')) import('./diagrams.mjs');
+if (document.querySelector('[data-fe4s4]')) import('./fe4s4.mjs');
 
 // A short entrance orients both six-step overviews. Selection stays with the reader;
 // there is no Replay control for a purely presentational fade.
