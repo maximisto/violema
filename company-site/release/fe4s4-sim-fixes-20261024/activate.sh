@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Activates release 20261024-7ba21bb-fe4s4-sim-fixes on the violema.com VPS.
+# Activates release 20261024-46d6e25-fe4s4-sim-fixes on the violema.com VPS.
 # Usage, from a directory holding public-dist.tar.gz and SHA256SUMS: ./activate.sh root@<vps-host>
 #
 # Files only: the two record pages, records.css and fe4s4-figures.mjs change (fixes from a simulated reading).
@@ -8,7 +8,7 @@
 set -euo pipefail
 
 HOST="${1:?usage: ./activate.sh root@<vps-host>}"
-RELEASE=20261024-7ba21bb-fe4s4-sim-fixes
+RELEASE=20261024-46d6e25-fe4s4-sim-fixes
 PREVIOUS=20261024-de4a746-fe4s4-headers
 STAGE=/root/fe4s4-sim-fixes-20261024
 LIVE_INDEX_SHA=d74c6df025f781dac2a722d0f7bbf45987d0148f6d99e897ce0f0d8bf6cef558       # unchanged by this release
@@ -16,7 +16,7 @@ LIVE_RECORDS_CSS_SHA=26c5e5277a685404d120879a5120a3d3f6f90f75b24ed9d464e34f8e4be
 VHOST_SHA=dfadb9960b8a7c23865d00aca148635b0058d460a860688127b0b04737bca5c5            # with the record routes, not edited here
 FILE_COUNT=64
 
-shasum -a 256 -c <<<"8ea2b33372643cd7354a0e625421b829b23bbc4a3842786be96dd78d3583dc17  public-dist.tar.gz"
+shasum -a 256 -c <<<"a5db716afbebda07b4cfd6cbf4f6acdea84be897023cc087d8e49d8f62e8f77a  public-dist.tar.gz"
 ssh "$HOST" "mkdir -p $STAGE"
 scp public-dist.tar.gz SHA256SUMS "$HOST:$STAGE/"
 
