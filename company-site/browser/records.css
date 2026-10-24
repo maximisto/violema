@@ -1,0 +1,326 @@
+/* Hypothesis records: the Fe4S4 benchmark page and its full record.
+   Page sections use the site's tokens in either theme; each instrument is a dark .instrument with a fixed palette,
+   as on the homepage. Series: quantum in the instrument violet, classical in its ink, the pass line in the copper. */
+
+:root {
+  --fe4s4-iron: #CD936B;
+  --fe4s4-sulfur: #E2CF7A;
+  --fe4s4-carbon: #9AA4B2;
+  --fe4s4-quantum: var(--inst-accent);
+  --fe4s4-classical: var(--inst-ink);
+  --fe4s4-pass: #CD936B;
+}
+
+/* ---------- Page ---------- */
+
+.record-head h1 { max-width: 20ch; }
+.record-head .lede { max-width: 64ch; }
+.record-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1px;
+  margin: 40px 0 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--surface);
+}
+/* Each cell draws its own hairline, so a row the facts do not fill stays the card's colour at any column count. */
+.record-facts > div { display: grid; gap: 2px; align-content: start; padding: 18px 20px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); min-width: 0; }
+.record-facts.instrument { box-shadow: var(--shadow-raised); }
+.record-facts dt { font-family: var(--font-display); font-size: var(--text-caption); font-weight: 500; color: var(--ink-3); }
+.record-facts dd { display: grid; gap: 8px; margin: 0; }
+.fact-value { font-family: var(--font-display); font-size: 1.125rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); overflow-wrap: anywhere; }
+.fact-value.is-bar { color: var(--fe4s4-pass); }
+.fact-value .nobr { white-space: nowrap; }
+.fact-note { font-size: var(--text-caption); line-height: 1.5; color: var(--ink-2); }
+
+.record-section .section-head { margin-bottom: 32px; }
+.record-section-head .lede { max-width: 64ch; }
+.record-close { padding-bottom: var(--section-space); }
+.record-close h2 { max-width: 24ch; }
+.record-coi { max-width: 72ch; margin-top: 20px; }
+
+/* ---------- Instruments ---------- */
+
+.record-instrument { overflow: hidden; box-shadow: var(--shadow-raised); }
+.record-instrument p { margin: 0; max-width: none; }
+.record-instrument .instrument-head { border-bottom: 1px solid var(--line); min-height: 56px; }
+.record-instrument .instrument-title { font-family: var(--font-display); font-weight: 600; color: var(--ink); }
+/* The dark page is close to the instrument black, so the card edge carries more of the separation there. */
+:root[data-theme='dark'] .record-instrument, :root[data-theme='dark'] .record-facts.instrument { border-color: color-mix(in srgb, var(--inst-line-strong) 45%, var(--inst-line)); }
+/* The foot carries the caveats: one column at a readable measure, the hairline still full width. */
+.record-foot {
+  display: block;
+  padding: 16px max(20px, calc(100% - 78ch)) 18px 20px;
+  border-top: 1px solid var(--line);
+  font-size: var(--text-caption);
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.record-figure { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* A fading edge says there is more of the chart that way; set by browser/fe4s4.mjs only when the chart overflows. */
+.record-figure.has-more-right { mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent); }
+.record-figure.has-more-left { mask-image: linear-gradient(90deg, transparent, #000 48px); }
+.record-figure.has-more-left.has-more-right { mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent); }
+.record-chart { display: block; width: 100%; height: auto; }
+/* Wide enough that chart text never renders below its nominal size on a phone; the figure scrolls instead. */
+.race-chart { min-width: 950px; }
+.evidence-chart, .future-chart { min-width: 1000px; }
+.ledger-chart { min-width: 640px; }
+.readout-label { font-family: var(--font-display); font-size: var(--text-caption); font-weight: 500; color: var(--ink-2); }
+.readout-value { font-family: var(--font-display); font-size: clamp(1.5rem, 2.6vw, 2rem); font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; color: var(--ink); overflow-wrap: anywhere; }
+
+/* Chart marks and labels. SVG labels are the site's compact spatial exception to the 16 px text floor.
+   The halo, painted under the fill, stops gridlines, hatch and arcs short of every label. */
+.record-chart text { font-family: var(--font-body); font-size: 12.5px; fill: var(--ink-2); paint-order: stroke; stroke: var(--inst-bg); stroke-width: 3px; stroke-linejoin: round; }
+.record-chart .tick { font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.record-chart .axis-label { font-size: 12px; }
+/* The race chart's viewBox is narrower, so its units render larger; these sizes match the other charts on screen.
+   Its wider halo bridges word spaces, so the 2017 and pass lines break cleanly around the labels on them. */
+.race-chart text { font-size: 10px; stroke-width: 6px; }
+.race-chart .tick, .race-chart .axis-label { font-size: 9.5px; }
+.record-chart .grid { stroke: var(--line); opacity: 0.6; }
+.record-chart .grid-tick, .record-chart .axis, .record-chart .axis-zero, .record-chart .axis-break { stroke: var(--line-strong); fill: none; }
+.record-chart .note-strong { fill: var(--ink); }
+.record-chart .note-classical { fill: var(--fe4s4-classical); }
+.record-chart .note-quantum { fill: var(--fe4s4-quantum); }
+.record-chart .note-bar { fill: var(--fe4s4-pass); }
+.record-chart .note-quantum-arrow { stroke: var(--fe4s4-quantum); stroke-width: 2; fill: none; }
+.record-chart .note-classical-arrow { stroke: var(--fe4s4-classical); stroke-width: 2; fill: none; }
+.record-chart .brace { stroke: var(--ink-2); fill: none; }
+.record-chart .hatch-fill { fill: color-mix(in srgb, var(--fe4s4-pass) 9%, transparent); }
+.record-chart .hatch-line { stroke: color-mix(in srgb, var(--fe4s4-pass) 30%, transparent); stroke-width: 1; }
+.record-chart .pass-line { stroke: var(--fe4s4-pass); stroke-width: 1.5; }
+.record-chart .dmrg-2017 { stroke: var(--fe4s4-classical); stroke-width: 1; stroke-dasharray: 5 4; opacity: 0.6; }
+.record-chart .same-day { stroke: var(--fe4s4-classical); stroke-dasharray: 2 3; opacity: 0.7; }
+.record-chart .quantum-mark { fill: var(--fe4s4-quantum); }
+.record-chart .classical-ring { fill: none; stroke: var(--fe4s4-classical); stroke-width: 2; }
+.record-chart .classical-mark { fill: var(--fe4s4-classical); }
+
+/* Instrument 1 */
+.cluster-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+.cluster-stage { position: relative; aspect-ratio: 4 / 3; max-width: 100%; background: radial-gradient(70% 70% at 50% 46%, var(--inst-surface), var(--inst-bg) 72%); }
+.cluster-still, .cluster-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cluster-still .bond-Fe { stroke: color-mix(in srgb, var(--fe4s4-iron) 70%, var(--inst-bg)); }
+.cluster-still .bond-S { stroke: color-mix(in srgb, var(--fe4s4-sulfur) 70%, var(--inst-bg)); }
+.cluster-still .bond-C { stroke: color-mix(in srgb, var(--fe4s4-carbon) 70%, var(--inst-bg)); }
+.ball-hi-Fe { stop-color: color-mix(in srgb, var(--fe4s4-iron) 35%, white); }
+.ball-mid-Fe { stop-color: var(--fe4s4-iron); }
+.ball-lo-Fe { stop-color: color-mix(in srgb, var(--fe4s4-iron) 22%, var(--inst-bg)); }
+.ball-hi-S { stop-color: color-mix(in srgb, var(--fe4s4-sulfur) 35%, white); }
+.ball-mid-S { stop-color: var(--fe4s4-sulfur); }
+.ball-lo-S { stop-color: color-mix(in srgb, var(--fe4s4-sulfur) 22%, var(--inst-bg)); }
+.ball-hi-C { stop-color: color-mix(in srgb, var(--fe4s4-carbon) 35%, white); }
+.ball-mid-C { stop-color: var(--fe4s4-carbon); }
+.ball-lo-C { stop-color: color-mix(in srgb, var(--fe4s4-carbon) 22%, var(--inst-bg)); }
+/* A translucent pill, so the legend reads as an overlay at every angle of the turning cluster. */
+.cluster-legend { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 14px; padding: 5px 10px; border-radius: 999px; background: color-mix(in srgb, var(--inst-bg) 72%, transparent); list-style: none; font-size: var(--text-caption); color: var(--ink-2); pointer-events: none; }
+.swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; vertical-align: 0; }
+.swatch-fe { background: var(--fe4s4-iron); }
+.swatch-s { background: var(--fe4s4-sulfur); }
+.swatch-c { background: var(--fe4s4-carbon); }
+.cluster-readout { display: grid; gap: 24px; align-content: start; padding: 24px; border-left: 1px solid var(--line); min-width: 0; }
+/* Label, value and caption: the label hugs its value, the caption sits off as a note. */
+.cluster-readout > div, .race-calls > div, .outcome-verdict { gap: 2px; }
+.cluster-readout .caption, .race-calls .caption, .outcome-verdict .caption { margin-top: 8px; }
+.determinants { display: grid; gap: 10px; padding: 18px 20px; border-top: 1px solid var(--line); }
+.determinant-rows { display: grid; gap: 10px; }
+.determinant-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: center; }
+.determinant-row > span { font-family: var(--font-display); color: var(--ink-2); }
+.cells { display: grid; grid-template-columns: repeat(36, minmax(0, 1fr)); gap: 3px; }
+.cells i { height: 16px; border: 1px solid var(--line); border-radius: 3px; background: var(--inst-surface); transition: background-color 120ms linear, box-shadow 120ms linear; }
+.cells i.is-occupied { border-color: transparent; background: var(--fe4s4-quantum); box-shadow: 0 0 8px color-mix(in srgb, var(--fe4s4-quantum) 45%, transparent); }
+.record-motion { margin-left: auto; }
+
+/* Instrument 2 */
+.record-scale { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border: 1px solid var(--line-strong); border-radius: 999px; }
+.record-scale button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); font-family: var(--font-display); font-size: var(--text-caption); font-weight: 600; cursor: pointer; }
+.record-scale button:hover { color: var(--ink); }
+/* Violet is where the reader acts; copper is what the rule fixes. */
+.record-scale button[aria-pressed='true'] { background: var(--accent); color: var(--accent-ink); }
+.race-calls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; border-top: 1px solid var(--line); background: var(--line); }
+.race-calls > div { display: grid; align-content: start; padding: 16px 18px; background: var(--inst-bg); min-width: 0; }
+.call-when { font-family: var(--font-display); font-size: var(--text-caption); font-weight: 500; color: var(--ink-2); }
+.call-value { font-family: var(--font-display); font-size: 1.125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.call-value.is-quantum { color: var(--fe4s4-quantum); }
+.call-value.is-classical { color: var(--fe4s4-classical); }
+.call-value.is-bar { color: var(--fe4s4-pass); }
+
+/* Instrument 3 */
+.record-chart .lane { stroke: var(--line); opacity: 0.7; }
+.record-chart .lane-name { font-size: 12.5px; }
+.lane-text-ft { fill: var(--fe4s4-iron); color: var(--fe4s4-iron); }
+.lane-text-hw { fill: var(--fe4s4-quantum); color: var(--fe4s4-quantum); }
+.lane-text-cl { fill: var(--fe4s4-classical); color: var(--fe4s4-classical); }
+.lane-text-an { fill: var(--ink-2); color: var(--ink-2); }
+.lane-text-pg { fill: var(--fe4s4-sulfur); color: var(--fe4s4-sulfur); }
+.record-chart .lane-ft { fill: var(--inst-bg); stroke: var(--fe4s4-iron); stroke-width: 2; }
+.record-chart .lane-hw { fill: var(--fe4s4-quantum); }
+.record-chart .lane-cl { fill: var(--fe4s4-classical); }
+.record-chart .lane-an { fill: var(--ink-2); }
+.record-chart .lane-pg { fill: var(--fe4s4-sulfur); }
+.record-chart .checked-line { stroke: var(--ink-2); stroke-dasharray: 2 4; }
+.record-chart .response-arc { fill: none; stroke: var(--ink); stroke-dasharray: 3 3; opacity: 0.75; }
+.evidence-mark { cursor: pointer; outline: none; }
+.evidence-mark .target { fill: transparent; }
+.evidence-mark:hover .target { fill: color-mix(in srgb, var(--ink) 8%, transparent); }
+.evidence-mark.is-selected .target, .evidence-mark:focus-visible .target { fill: color-mix(in srgb, var(--ink) 10%, transparent); stroke: var(--ink); stroke-width: 1.5; }
+.evidence-mark:focus-visible .target { stroke-dasharray: 3 2; }
+.evidence-detail { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 24px; min-height: 168px; padding: 18px 20px; border-top: 1px solid var(--line); }
+.evidence-when { display: grid; gap: 4px; align-content: start; }
+.evidence-date { font-family: var(--font-display); font-size: 1.0625rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.evidence-lane { font-family: var(--font-display); font-size: var(--text-caption); font-weight: 500; }
+.evidence-body { display: grid; gap: 6px; min-width: 0; }
+.evidence-body h4 { font-size: 1.0625rem; }
+.evidence-venue { color: var(--ink-2); }
+.evidence-body p:last-child { color: var(--ink-2); max-width: 72ch; }
+
+/* Instrument 4 */
+.record-chart .window { fill: color-mix(in srgb, var(--fe4s4-classical) 9%, transparent); stroke: color-mix(in srgb, var(--fe4s4-classical) 35%, transparent); }
+.record-chart .deadline { stroke: var(--fe4s4-quantum); stroke-width: 1.6; }
+.record-chart .deadline-mark { fill: var(--fe4s4-quantum); }
+.record-chart .judgment-mark { fill: var(--fe4s4-pass); }
+.record-chart .checked-mark { fill: var(--ink); }
+.outcome-builder { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); border-top: 1px solid var(--line); }
+.outcome-controls { display: grid; gap: 22px; align-content: start; padding: 20px; border-right: 1px solid var(--line); min-width: 0; }
+.outcome-controls fieldset { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.outcome-controls fieldset[disabled] { opacity: 0.45; }
+.outcome-controls legend { margin-bottom: 8px; padding: 0; font-family: var(--font-display); font-size: var(--text-caption); font-weight: 600; color: var(--ink); }
+.record-option { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start; font-size: var(--text-caption); line-height: 1.5; color: var(--ink-2); cursor: pointer; }
+.record-option input { width: 16px; height: 16px; margin: 4px 0 0; accent-color: var(--accent); }
+.record-option input:checked + span { color: var(--ink); }
+.record-option input:focus-visible { outline: 2px solid var(--fe4s4-quantum); outline-offset: 2px; }
+.record-options-inline { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.record-options-inline .record-option { grid-template-columns: 20px auto; }
+.outcome-results { display: grid; gap: 12px; align-content: start; padding: 20px; min-width: 0; }
+.outcome-verdict { display: grid; padding: 16px 18px; border: 1px solid var(--line-strong); border-radius: var(--radius-nested); background: var(--inst-surface); }
+.outcome-tier-now { font-family: var(--font-display); font-size: 1.375rem; font-weight: 600; line-height: 1.25; text-wrap: balance; }
+.outcome-list { display: grid; gap: 6px; list-style: none; }
+.outcome-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 10px 12px; border: 1px solid transparent; border-radius: var(--radius-nested); font-size: var(--text-caption); line-height: 1.45; color: var(--ink-2); transition: background-color var(--duration) var(--ease), border-color var(--duration) var(--ease); }
+.outcome-tier { font-family: var(--font-display); font-weight: 600; white-space: nowrap; }
+.outcome-list code { grid-column: 1 / -1; font-family: var(--font-mono); font-size: var(--text-caption); opacity: 0.75; }
+.outcome-list li.is-selected { border-color: var(--fe4s4-pass); background: var(--inst-surface); color: var(--ink); }
+.outcome-list li.is-selected .outcome-tier { color: var(--fe4s4-pass); }
+
+/* Ledger */
+.ledger-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+.ledger-facts { display: grid; gap: 14px; align-content: start; padding: 20px; border-left: 1px solid var(--line); min-width: 0; }
+.ledger-tally { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; }
+.ledger-tally li { padding: 5px 12px; border: 1px solid var(--line-strong); border-radius: 999px; font-family: var(--font-display); font-size: var(--text-caption); font-weight: 500; color: var(--ink); }
+.record-chart .event-reconstructed { fill: var(--fe4s4-classical); opacity: 0.85; }
+.record-chart .event-recorded, .record-chart .conclusion-mark { fill: var(--fe4s4-pass); }
+.record-chart .leader { fill: none; stroke: var(--fe4s4-pass); opacity: 0.7; }
+
+@media (max-width: 1023px) {
+  .cluster-grid, .outcome-builder, .ledger-grid { grid-template-columns: minmax(0, 1fr); }
+  .cluster-readout, .ledger-facts { border-left: 0; border-top: 1px solid var(--line); }
+  .outcome-controls { border-right: 0; border-bottom: 1px solid var(--line); }
+  .race-calls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 599px) {
+  .race-calls, .evidence-detail { grid-template-columns: minmax(0, 1fr); }
+  .cells { gap: 2px; }
+  .cells i { height: 12px; border-radius: 2px; }
+  .record-motion { margin-left: 0; }
+  .record-scale { display: grid; grid-template-columns: 1fr 1.4fr 1fr; width: 100%; border-radius: var(--radius-control); }
+  .record-scale button { padding: 0 6px; border-radius: var(--radius-nested); }
+  .outcome-list li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .outcome-list .outcome-tier { order: -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cells i, .outcome-list li { transition: none; }
+}
+
+/* ---------- The full record: the v3 text at the site's type scale ---------- */
+
+.record-doc { --accent-soft: #EEEAF7; --copper-text: #9A5F36; --copper-soft: #F6ECE4; display: grid; gap: 48px; margin-top: 28px; }
+:root[data-theme='dark'] .record-doc { --accent-soft: #252036; --copper-text: #D9AA88; --copper-soft: #2C231E; }
+.record-doc-wrap { width: min(880px, 100% - 2 * var(--gutter)); padding-block: clamp(32px, 5vw, 64px) var(--section-space); }
+.record-breadcrumb { margin-bottom: 12px; }
+.record-status { max-width: 72ch; }
+.record-doc p { max-width: 68ch; margin: 0; }
+.record-doc h1 { font-size: clamp(2rem, 4.2vw, 2.75rem); line-height: 1.12; }
+.record-doc h2 { font-size: 1.5rem; line-height: 1.2; }
+.record-doc h3 { font-size: 1.125rem; line-height: 1.3; }
+.record-doc a { color: var(--accent); text-underline-offset: 2px; }
+.record-doc section { display: grid; gap: 18px; }
+.record-doc .section-head { display: grid; gap: 8px; margin: 0; }
+.record-doc .section-head p { color: var(--ink-2); }
+.record-doc .label { display: block; margin: 0; font-family: var(--font-display); font-size: var(--text-caption); font-weight: 500; line-height: 1.4; color: var(--ink-3); }
+.record-doc .mono, .record-doc .hash { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
+.record-doc .num { font-variant-numeric: tabular-nums; }
+.record-doc .note { color: var(--ink-3); max-width: 52ch; }
+.record-doc .context { padding-left: 14px; border-left: 2px solid var(--line-strong); color: var(--ink-2); }
+.record-doc .context strong { color: var(--ink); }
+.record-doc .claim { display: grid; gap: 18px; padding: 28px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+.record-doc .claim-top, .record-doc .chips, .record-doc .legend { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.record-doc .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: var(--text-caption); line-height: 1.4; color: var(--ink-2); background: transparent; }
+.record-doc .chip.tier { border-color: transparent; background: var(--accent-soft); color: var(--ink); white-space: nowrap; }
+.record-doc .chip.tier b { font-weight: 600; color: var(--accent); }
+.record-doc .chip.warn { border-color: var(--copper-text); color: var(--copper-text); }
+.record-doc .claim-text { font-family: var(--font-display); font-size: clamp(1.2rem, 2.6vw, 1.45rem); font-weight: 500; line-height: 1.45; max-width: 60ch; }
+.record-doc .scope, .record-doc .indicators { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.record-doc .scope div, .record-doc .indicator { display: grid; gap: 6px; align-content: start; padding: 14px 16px; border-radius: var(--radius-nested); background: var(--surface-2); min-width: 0; }
+.record-doc .indicator p { color: var(--ink-2); }
+.record-doc .indicator .changes { color: var(--ink); }
+.record-doc .basis, .record-doc .caveat, .record-doc .axis-note { color: var(--ink-2); }
+.record-doc .tests-what { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--radius-nested); overflow: hidden; }
+.record-doc .tests-what div { display: grid; gap: 2px; padding: 12px 14px; border-right: 1px solid var(--line); min-width: 0; }
+.record-doc .tests-what div:last-child { border-right: 0; }
+.record-doc .tests-what p { color: var(--ink-2); }
+.record-doc .tests-what .yes { font-weight: 600; color: var(--accent); }
+.record-doc .tests-what .no { font-weight: 600; color: var(--ink-3); }
+.record-doc .test, .record-doc .decision, .record-doc .panel { border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+.record-doc .test { overflow: hidden; }
+.record-doc .test-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--line); }
+.record-doc dl.fields { display: grid; grid-template-columns: 11rem minmax(0, 1fr); margin: 0; }
+.record-doc dl.fields dt, .record-doc dl.fields dd { margin: 0; padding: 12px 24px; border-bottom: 1px solid var(--line); }
+.record-doc dl.fields dt { font-family: var(--font-display); font-size: var(--text-caption); font-weight: 600; color: var(--ink-3); }
+.record-doc dl.fields dd { display: grid; gap: 8px; min-width: 0; color: var(--ink); }
+.record-doc dl.fields dd p { max-width: none; }
+.record-doc .policy { padding: 16px 24px; border-bottom: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); }
+.record-doc .outcomes { display: grid; gap: 10px; padding: 20px 24px; }
+.record-doc .outcomes > p { color: var(--ink-2); }
+.record-doc .outcome { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-items: start; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius-nested); }
+.record-doc .outcome .to { justify-self: end; text-align: right; }
+.record-doc .outcome .oid { grid-column: 1 / -1; color: var(--ink-3); }
+.record-doc .to-tier { font-weight: 600; color: var(--accent); }
+.record-doc .to-tier.same { font-weight: 500; color: var(--ink-3); }
+.record-doc .decision { display: grid; gap: 14px; padding: 22px 24px; }
+.record-doc .coi { display: grid; gap: 10px; padding-left: 16px; border-left: 2px solid var(--copper-text); }
+.record-doc .coi p { color: var(--ink-2); }
+.record-doc .timeline { display: grid; list-style: none; margin: 0; padding: 0; }
+.record-doc .timeline li { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 4px 20px; padding: 18px 0; border-top: 1px solid var(--line); }
+.record-doc .timeline li:last-child { border-bottom: 1px solid var(--line); }
+.record-doc .when { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.record-doc .entry { display: grid; gap: 8px; min-width: 0; }
+.record-doc .entry-top { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.record-doc .entry-top h3 a { color: inherit; text-decoration: none; }
+.record-doc .entry-top h3 a:hover { text-decoration: underline; }
+.record-doc .venue { color: var(--ink-3); }
+.record-doc .entry p { color: var(--ink-2); }
+.record-doc .kind { justify-self: start; }
+.record-doc .kind.estimate { border-color: var(--accent); color: var(--accent); }
+.record-doc .kind.classical { border-color: var(--copper-text); color: var(--copper-text); background: var(--copper-soft); }
+.record-doc .kind.hardware { border-color: transparent; background: var(--accent-soft); color: var(--ink); }
+.record-doc .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.record-doc .panel { display: grid; gap: 12px; align-content: start; padding: 20px 22px; min-width: 0; }
+.record-doc .panel ul { display: grid; gap: 10px; margin: 0; padding-left: 1.1rem; color: var(--ink-2); }
+.record-doc .panel li strong { color: var(--ink); }
+.record-doc .maprow { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 4px 16px; color: var(--ink-2); }
+.record-doc .sources ol { display: grid; gap: 8px; margin: 0; padding-left: 1.3rem; color: var(--ink-2); }
+.record-doc .sources li { overflow-wrap: anywhere; }
+.record-doc .foot { display: grid; gap: 6px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-3); }
+
+@media (max-width: 640px) {
+  .record-doc .claim { padding: 20px; }
+  .record-doc .scope, .record-doc .two, .record-doc .indicators, .record-doc .tests-what { grid-template-columns: minmax(0, 1fr); }
+  .record-doc .tests-what div { border-right: 0; border-bottom: 1px solid var(--line); }
+  .record-doc .tests-what div:last-child { border-bottom: 0; }
+  .record-doc dl.fields { grid-template-columns: minmax(0, 1fr); }
+  .record-doc dl.fields dt { border-bottom: 0; padding-bottom: 0; }
+  .record-doc .timeline li, .record-doc .maprow { grid-template-columns: minmax(0, 1fr); }
+  .record-doc .outcome { grid-template-columns: minmax(0, 1fr); }
+  .record-doc .outcome .to { justify-self: start; text-align: left; }
+}

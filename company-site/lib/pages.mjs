@@ -23,7 +23,8 @@ const labModules = ['/company-assets/browser/tabs.mjs', '/company-assets/browser
 
 // notFound marks the 404 page: nginx serves it at whatever address missed, so it has no canonical URL of its own.
 function head(route, title, description, { lab = false, notFound = false } = {}) {
-  const indexable = route !== '/review/' && !notFound;
+  // The physician walkthrough and hypothesis records are reached by a shared link, not by search.
+  const indexable = route !== '/review/' && !route.startsWith('/records/') && !notFound;
   return [
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -58,6 +59,7 @@ function head(route, title, description, { lab = false, notFound = false } = {})
     '<link rel="stylesheet" href="/company-assets/appearance.css">',
     ...(['/', '/about/'].includes(route) ? ['<link rel="stylesheet" href="/company-assets/experience.css">'] : []),
     ...(route === '/method/' ? ['<link rel="stylesheet" href="/company-assets/diagrams.css">'] : []),
+    ...(route.startsWith('/records/') ? ['<link rel="stylesheet" href="/company-assets/records.css">'] : []),
     ...(lab ? labModules : []).map(href => `<link rel="modulepreload" href="${href}">`),
   ].join('');
 }

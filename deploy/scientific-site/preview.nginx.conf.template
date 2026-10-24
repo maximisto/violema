@@ -132,6 +132,30 @@ server {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         try_files /legal/privacy/index.html =404;
     }
+    location = /records/fe4s4-benchmark {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /records/fe4s4-benchmark/index.html =404;
+    }
+    location = /records/fe4s4-benchmark/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /records/fe4s4-benchmark/index.html =404;
+    }
+    location = /records/fe4s4-benchmark/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /records/fe4s4-benchmark/index.html =404;
+    }
+    location = /records/fe4s4-benchmark/record {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /records/fe4s4-benchmark/record/index.html =404;
+    }
+    location = /records/fe4s4-benchmark/record/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /records/fe4s4-benchmark/record/index.html =404;
+    }
+    location = /records/fe4s4-benchmark/record/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /records/fe4s4-benchmark/record/index.html =404;
+    }
     location = /robots.txt {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         try_files /robots.txt =404;
