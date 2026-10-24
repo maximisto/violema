@@ -230,10 +230,18 @@
         </div>
       </li>
       <li>
+        <div class="when">2025-10-31</div>
+        <div class="entry">
+          <div class="entry-top"><h3><a href="https://arxiv.org/abs/2511.00224">Shirakawa et al.</a></h3><span class="venue">arXiv 2511.00224 · IBM and RIKEN, 21 authors</span></div>
+          <p>Closed-loop sample-based quantum diagonalization on IBM Heron processors with up to 152,064 nodes of the Fugaku supercomputer. For this [4Fe-4S] (54 electrons, 36 orbitals) model it used 77 qubits and a 10<sup>10</sup>-determinant subspace, reaching <span class="num">−326.912</span> hartree, 278 mEh lower than the team's 2024 result. The authors describe its accuracy as comparable to some all-classical approximation methods. This is the result behind the tracker's SQD entry below.</p>
+          <span class="chip kind hardware">Hardware run</span>
+        </div>
+      </li>
+      <li>
         <div class="when">2025-11-11</div>
         <div class="entry">
           <div class="entry-top"><h3><a href="https://quantum-advantage-tracker.github.io/trackers/variational-problems">Quantum Advantage Tracker, variational track</a></h3><span class="venue">Public tracker of advantage candidates</span></div>
-          <p>The tracker lists this record's Fe₄S₄ model (the same Hamiltonian in a different orbital basis). An IBM and RIKEN SQD entry, posted 2025-11-11, reports <span class="num">−326.913</span> hartree on 77 qubits.</p>
+          <p>The tracker lists this record's Fe₄S₄ model (the same Hamiltonian in a different orbital basis). An IBM and RIKEN SQD entry, posted 2025-11-11, reports <span class="num">−326.913</span> hartree on 77 qubits, with 10 hours of quantum processor time and 10 hours on 76,032 Fugaku nodes, run in parallel. The tracker files this instance under its baseline benchmarks, with no active advantage candidate.</p>
           <span class="chip">Program or other</span>
         </div>
       </li>
@@ -259,6 +267,14 @@
           <div class="entry-top"><h3><a href="https://arxiv.org/abs/2512.01012">Raisuddin et al.</a></h3><span class="venue">arXiv 2512.01012</span></div>
           <p>A benchmark of SQD across the W4-11 thermochemistry set, which found uneven accuracy across reaction types.</p>
           <span class="chip kind classical">Analysis</span>
+        </div>
+      </li>
+      <li>
+        <div class="when">2026-01-08</div>
+        <div class="entry">
+          <div class="entry-top"><h3><a href="https://arxiv.org/abs/2601.04621">Zhai et al.</a></h3><span class="venue">arXiv 2601.04621 · v2 2026-06-22</span></div>
+          <p>A classical simulation of the FeMo-cofactor model to chemical accuracy, from the Chan group. Its benchmark on a [Fe₄S₄(SCH₃)₄]²⁻ (54 electrons, 36 orbitals) model reports a spin-adapted DMRG upper bound of <span class="num">−327.244001</span> hartree in its first version, which Legeza et al. compare with their own result. Whether its integrals are this record's pinned file has not been checked.</p>
+          <span class="chip kind classical">Classical result</span>
         </div>
       </li>
       <li>
@@ -310,6 +326,7 @@
       <h2 id="map-h">This record's own history</h2>
       <div class="maprow"><span class="when">2026-10-23</span><span>Claim and test drafted for a demo.</span></div>
       <div class="maprow"><span class="when">2026-10-24</span><span>Revised after reviews by two AI models from different providers, a check of load-bearing facts against primary sources, and a further check of the page itself. The test is now a finished design; the timeline was corrected and extended. No domain expert has reviewed it yet.</span></div>
+      <div class="maprow"><span class="when">2026-10-24</span><span>Two results added after a further review against the papers and the tracker: Shirakawa et al., the preprint behind the tracker's SQD entry, and Zhai et al. Reported runtimes added to the tracker entry. The test and its outcome rule are unchanged.</span></div>
       <p class="axis-note">No outside timestamp yet, so nothing here counts toward a track record. Map time is when the record changed its mind; evidence time is when results appeared.</p>
     </section>
     <section class="panel" aria-labelledby="watch-h">
@@ -338,8 +355,10 @@
       <li>Robledo-Moreno J et al. arXiv 2405.05068 (2024). <a href="https://arxiv.org/abs/2405.05068">arxiv.org/abs/2405.05068</a></li>
       <li>Caesura A et al. Faster quantum chemistry simulations on a quantum computer with improved tensor factorization and active volume compilation. PRX Quantum 6:030337 (2025), with erratum PRX Quantum 7:049901 (2026). <a href="https://doi.org/10.1103/yngp-5fpm">doi:10.1103/yngp-5fpm</a>; <a href="https://doi.org/10.1103/f6l1-cdz7">doi:10.1103/f6l1-cdz7</a></li>
       <li>Reinholdt P et al. arXiv 2501.07231 (2025). <a href="https://arxiv.org/abs/2501.07231">arxiv.org/abs/2501.07231</a></li>
+      <li>Shirakawa T et al. Closed-loop calculations of electronic structure on a quantum processor and a classical supercomputer at full scale. arXiv 2511.00224 (2025). <a href="https://arxiv.org/abs/2511.00224">arxiv.org/abs/2511.00224</a></li>
       <li>Zhang H, Otten M. From random determinants to the ground state. arXiv 2511.14734 (2025). <a href="https://arxiv.org/abs/2511.14734">arxiv.org/abs/2511.14734</a></li>
       <li>Raisuddin et al. arXiv 2512.01012 (2025). <a href="https://arxiv.org/abs/2512.01012">arxiv.org/abs/2512.01012</a></li>
+      <li>Zhai H et al. Classical computational simulation of the FeMo-cofactor model to chemical accuracy and its implications. arXiv 2601.04621 (2026; first version 2026-01-08). <a href="https://arxiv.org/abs/2601.04621">arxiv.org/abs/2601.04621</a></li>
       <li>Legeza Ö et al. arXiv 2603.28648 (2026). <a href="https://arxiv.org/abs/2603.28648">arxiv.org/abs/2603.28648</a></li>
       <li>Wellcome Leap. Quantum for Bio prize outcome, April 16, 2026. <a href="https://wellcomeleap.org/q4bio_prize_announcement/">wellcomeleap.org</a></li>
       <li>Merz KM Jr. et al. arXiv 2605.01138 (2026), revised 2026-09-05. <a href="https://arxiv.org/abs/2605.01138">arxiv.org/abs/2605.01138</a></li>

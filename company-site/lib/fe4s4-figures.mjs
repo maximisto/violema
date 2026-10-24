@@ -94,12 +94,18 @@ export const ENERGIES = Object.freeze({
   trimciBest: { eh: -327.175, date: '2025-11-20' },
   reference: { eh: -327.24466, date: '2026-03-30' },
   bar: { eh: -327.24306 },
+  // The DMRG value distributed with the model files (Li and Chan, JCTC 2017; bond dimension 4000, marked not
+  // converged), which the tracker's SQD entry quotes as its reference.
+  dmrg2017: { eh: -327.2396369 },
 });
+/** The SQD entry's largest diagonalized subspace (Shirakawa et al., arXiv 2511.00224). */
+export const SQD_SUBSPACE = 1e10;
 export const millihartreeAbove = eh => Math.round((eh - ENERGIES.reference.eh) * 1e5) / 100;
 export const GAP = Object.freeze({
   quantum: millihartreeAbove(ENERGIES.quantum.eh),
   trimci: millihartreeAbove(ENERGIES.trimciBest.eh),
   bar: millihartreeAbove(ENERGIES.bar.eh),
+  dmrg2017: millihartreeAbove(ENERGIES.dmrg2017.eh),
 });
 export const TRIMCI_GAIN = Math.round((GAP.quantum - GAP.trimci) * 100) / 100;
 export const KCAL_PER_MILLIHARTREE = 0.6275095;
@@ -146,7 +152,8 @@ export function raceSVG(ymax) {
   p.push(`<g clip-path="url(#race-plot)">`);
   p.push(`<rect x="${R.left}" y="${passY.toFixed(1)}" width="${right - R.left}" height="${(R.top + plotHeight - passY).toFixed(1)}" fill="url(#race-hatch)"/>`);
   p.push(`<line class="pass-line" x1="${R.left}" x2="${right}" y1="${passY.toFixed(1)}" y2="${passY.toFixed(1)}"/>`);
-  p.push(`<line class="same-day" x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${ry(q).toFixed(1)}" y2="${ry(best).toFixed(1)}"/>`);
+  if (ymax >= GAP.dmrg2017 && ymax <= 100) p.push(`<line class="dmrg-2017" x1="${R.left}" x2="${right}" y1="${ry(GAP.dmrg2017).toFixed(1)}" y2="${ry(GAP.dmrg2017).toFixed(1)}"/>`);
+  if (q <= ymax) p.push(`<line class="same-day" x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${ry(q).toFixed(1)}" y2="${ry(best).toFixed(1)}"/>`);
   p.push(`<path class="quantum-mark" d="M${qx.toFixed(1)},${(ry(q) - 8).toFixed(1)} l8,8 l-8,8 l-8,-8 Z"/>`);
   p.push(`<circle class="classical-ring" cx="${mx.toFixed(1)}" cy="${ry(q).toFixed(1)}" r="7"/>`);
   p.push(`<circle class="classical-mark" cx="${mx.toFixed(1)}" cy="${ry(best).toFixed(1)}" r="6.5"/>`);
@@ -154,16 +161,18 @@ export function raceSVG(ymax) {
   p.push(`</g>`);
   if (q <= ymax) {
     p.push(`<path class="brace" d="M${qx.toFixed(1)},${(ry(q) - 16).toFixed(1)} v-6 H${mx.toFixed(1)} v6"/>`);
-    p.push(text((qx + mx) / 2, ry(q) - 28, `${MATCH_DAYS} days between posts`, 'note-strong', 'middle'));
+    p.push(text((qx + mx) / 2, ry(q) - 28, `${MATCH_DAYS} days between tracker posts`, 'note-strong', 'middle'));
     p.push(text(mx + 16, ry(q) + 4, 'IBM and RIKEN SQD, 77 qubits; TrimCI reached the same energy', 'note'));
   }
   if (best <= ymax) p.push(text(mx + 14, ry(best) + 22, `TrimCI, classical: ${Math.round(TRIMCI_GAIN)} mEh lower, same post`, 'note-classical'));
+  if (ymax >= GAP.dmrg2017 && ymax <= 100) p.push(text(R.left + 10, ry(GAP.dmrg2017) - 8, `DMRG with the 2017 model files, marked not converged: ${GAP.dmrg2017} mEh`, 'note-classical'));
   p.push(text(refx - 12, ry(0) - 14, 'GPU DMRG, the reference', 'note-classical', 'end'));
   if (ymax <= 2) p.push(text(right - 10, passY + 22, `Pass line, ${bar} mEh above the reference: at or below it passes`, 'note-bar', 'end'));
   else p.push(text(R.left + 10, passY - 8, `Pass line, ${bar} mEh above the reference`, 'note-bar'));
   const offScale = (x, y, label, cls) => p.push(`<path class="${cls}-arrow" d="M${x.toFixed(1)},${y + 16} V${y} M${(x - 6).toFixed(1)},${y + 7} L${x.toFixed(1)},${y} L${(x + 6).toFixed(1)},${y + 7}"/>`, text(x + 12, y + 12, label, cls));
   if (q > ymax) offScale(qx, R.top + 2, `IBM and RIKEN SQD entry above this scale: ${q.toFixed(2)} mEh`, 'note-quantum');
   if (best > ymax) offScale(mx, R.top + 24, `Best TrimCI entry above this scale: ${best.toFixed(2)} mEh`, 'note-classical');
+  if (GAP.dmrg2017 > ymax) offScale(R.left + 22, R.top + 46, `2017 DMRG value above this scale: ${GAP.dmrg2017} mEh`, 'note-classical');
   if (ymax <= 2) p.push(text((R.left + right) / 2, R.top + plotHeight * 0.36, 'A timed attempt counts only if its verified energy reaches this line.', 'note-strong', 'middle'), text((R.left + right) / 2, R.top + plotHeight * 0.36 + 20, 'Nothing drawn here was entered in that test.', 'note', 'middle'));
   return p.join('');
 }
@@ -189,10 +198,12 @@ export const EVIDENCE = Object.freeze([
   { d: '2024-05-08', lane: 'hw', url: 'https://arxiv.org/abs/2405.05068', who: 'Robledo-Moreno et al.', venue: 'arXiv 2405.05068', text: 'Sample-based quantum diagonalization (SQD) on quantum hardware, applied to nitrogen and iron-sulfur clusters. Going beyond exact diagonalization is not the same as beating the strongest approximate classical solver.' },
   { d: '2025-01-10', lane: 'ft', url: 'https://arxiv.org/abs/2501.06165', who: 'Caesura et al.', venue: 'PRX Quantum 6:030337 (2025) · arXiv 2501.06165', text: 'A fault-tolerant estimate on cytochrome P450, an enzyme family central to drug metabolism: about two orders of magnitude faster (233 times for P450) than an earlier algorithm on baseline photonic hardware without Active Volume support. Active Volume compilation, which suits only some hardware, contributes a factor of about 25 of that. An erratum published 2026-10-08 says its correction does not change the resource estimates.' },
   { d: '2025-01-13', lane: 'an', url: 'https://arxiv.org/abs/2501.07231', who: 'Reinholdt et al.', venue: 'arXiv 2501.07231', text: 'A critical analysis of quantum-selected configuration interaction, the idea behind SQD, finding that sampling efficiency and determinant selection limit it in the systems studied.' },
-  { d: '2025-11-11', lane: 'hw', id: 'sqd', url: 'https://quantum-advantage-tracker.github.io/', who: 'IBM and RIKEN, SQD entry', venue: 'Quantum Advantage Tracker, variational track', text: 'The tracker lists this record’s Fe₄S₄ model, the same Hamiltonian in a different orbital basis. The IBM and RIKEN SQD entry reports −326.913 hartree on 77 qubits.' },
+  { d: '2025-10-31', lane: 'hw', id: 'sqd', url: 'https://arxiv.org/abs/2511.00224', who: 'Shirakawa et al., IBM and RIKEN, 21 authors', venue: 'arXiv 2511.00224', text: 'Closed-loop sample-based quantum diagonalization on IBM Heron processors with up to 152,064 nodes of the Fugaku supercomputer. For this [4Fe-4S] (54e, 36o) model it used 77 qubits and a 10¹⁰-determinant subspace, reaching −326.912 hartree, 278 mEh lower than the team’s 2024 result. The authors describe its accuracy as comparable to some all-classical approximation methods.' },
+  { d: '2025-11-11', lane: 'pg', url: 'https://quantum-advantage-tracker.github.io/', who: 'Quantum Advantage Tracker, IBM and RIKEN SQD entry', venue: 'Quantum Advantage Tracker, variational track', text: 'The tracker lists this record’s Fe₄S₄ model, the same Hamiltonian in a different orbital basis, under its baseline benchmarks, with no active advantage candidate. The IBM and RIKEN SQD entry reports −326.913 hartree on 77 qubits, with 10 hours of quantum processor time and 10 hours on 76,032 Fugaku nodes, run in parallel.' },
   { d: '2025-11-18', lane: 'cl', url: 'https://arxiv.org/abs/2511.14734', who: 'Zhang and Otten', venue: 'arXiv 2511.14734', text: 'A classical method seeded with random determinants (TrimCI) matched a recent quantum SQD energy for a [4Fe-4S] cluster with roughly a million times fewer determinants and CPU-hours.' },
   { d: '2025-11-20', lane: 'cl', id: 'trimci', url: 'https://quantum-advantage-tracker.github.io/', who: 'TrimCI entries on the tracker', venue: 'Quantum Advantage Tracker, variational track', text: 'Classical entries on the same tracker model, matching the SQD energy (−326.913 hartree) and reaching −327.175 hartree.' },
   { d: '2025-11-30', lane: 'an', url: 'https://arxiv.org/abs/2512.01012', who: 'Raisuddin et al.', venue: 'arXiv 2512.01012', text: 'A benchmark of SQD across the W4-11 thermochemistry set, which found uneven accuracy across reaction types.' },
+  { d: '2026-01-08', lane: 'cl', url: 'https://arxiv.org/abs/2601.04621', who: 'Zhai et al., Chan group', venue: 'arXiv 2601.04621 · v2 2026-06-22', text: 'A classical simulation of the FeMo-cofactor model to chemical accuracy. Its benchmark on a [Fe₄S₄(SCH₃)₄]²⁻ (54e, 36o) model reports a spin-adapted DMRG upper bound of −327.244001 hartree in v1, which Legeza et al. compare with their own result. Whether its integrals are this record’s pinned file was not checked, so it is not plotted on the energy chart.' },
   { d: '2026-03-30', lane: 'cl', url: 'https://arxiv.org/abs/2603.28648', who: 'Legeza et al.', venue: 'arXiv 2603.28648', text: 'GPU-accelerated DMRG on the Fe₄S₄ CAS(54,36) model reached −327.24466 hartree. This record’s energy target is that value plus 0.0016 hartree.' },
   { d: '2026-04-16', lane: 'pg', url: 'https://wellcomeleap.org/', who: 'Wellcome Leap, Quantum for Bio', venue: 'Program outcome · program launched March 2023', text: 'The announcement names no winner of the $5 million grand prize for quantum advantage. A team led by Algorithmiq, with IBM and Cleveland Clinic, won the $2 million prize for running its photosensitizer workflow on more than 50 qubits at program depth of order 10³ to 10⁴, with a path toward advantage. Wellcome Leap expects a follow-on program.' },
   { d: '2026-05-01', lane: 'hw', url: 'https://arxiv.org/abs/2605.01138', who: 'Merz et al.', venue: 'arXiv 2605.01138 · revised 2026-09-05 · Gordon Bell Prize finalist, 2026-09-09', text: 'A Cleveland Clinic, RIKEN and IBM team ran a fragmented hybrid quantum-classical calculation on protein systems of up to 12,635 atoms, using IBM Heron processors with the Fugaku and Miyabi-G supercomputers. The largest circuit used 94 qubits and 5,758 two-qubit gates. The authors state that they do not regard the results as the basis of a quantum advantage claim.' },
@@ -201,7 +212,7 @@ export const EVIDENCE = Object.freeze([
 ]);
 export const RESPONSE_ARCS = Object.freeze([
   { from: 'kim', to: 'tindall', lines: [`${daysBetween('2023-06-14', '2023-06-26')} and ${daysBetween('2023-06-14', '2023-06-28')} days between posts`, 'a spin model, not a molecule'], side: 'left' },
-  { from: 'sqd', to: 'trimci', lines: [`${daysBetween('2025-11-11', '2025-11-20')} days between posts`, 'this Hamiltonian'], side: 'left' },
+  { from: 'sqd', to: 'trimci', lines: [`${daysBetween('2025-10-31', '2025-11-20')} days from the preprint`, 'to a matching classical entry'], side: 'left' },
 ]);
 export const DEFAULT_EVIDENCE = EVIDENCE.findIndex(item => item.id === 'sqd');
 

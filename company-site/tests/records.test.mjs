@@ -53,6 +53,7 @@ test('posted energies and the pass line are derived, never typed', () => {
   assert.equal(GAP.quantum, 331.66);
   assert.equal(GAP.trimci, 69.66);
   assert.equal(GAP.bar, 1.6);
+  assert.equal(GAP.dmrg2017, 5.02);
   assert.equal(TRIMCI_GAIN, 262);
   assert.equal(MATCH_DAYS, 9);
   assert.equal(ENERGIES.bar.eh, Math.round((ENERGIES.reference.eh + 0.0016) * 1e5) / 1e5);
@@ -73,11 +74,11 @@ test('every evidence mark links to its source over https', () => {
 test('the clock, the response arcs and the ledger counts add up', () => {
   assert.equal(CLOCK.windowDays, 180);
   assert.equal(daysBetween(CLOCK.dossierBy, CLOCK.judged), 180);
-  assert.deepEqual(RESPONSE_ARCS.map(arc => arc.lines[0]), ['12 and 14 days between posts', '9 days between posts']);
+  assert.deepEqual(RESPONSE_ARCS.map(arc => arc.lines[0]), ['12 and 14 days between posts', '20 days from the preprint']);
   assert.equal(LEDGER_EVENTS, 88);
   assert.equal(Object.values(LEDGER.kinds).reduce((a, b) => a + b, 0), LEDGER_EVENTS);
   assert.deepEqual([...EVIDENCE].map(item => item.d), [...EVIDENCE].map(item => item.d).sort(), 'evidence is in the order it became public');
-  assert.equal(EVIDENCE.length, 19);
+  assert.equal(EVIDENCE.length, 21);
 });
 
 test('the outcome rule gives each of the six outcomes, and a contradiction outranks confirmations', () => {
