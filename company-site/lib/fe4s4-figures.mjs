@@ -21,9 +21,11 @@ function binomial(n, k) {
 /** Determinants with 27 spin-up and 27 spin-down electrons in 36 spatial orbitals: C(36, 27) squared. */
 export const DETERMINANTS = binomial(ACTIVE_SPACE.orbitals, ACTIVE_SPACE.alpha) * binomial(ACTIVE_SPACE.orbitals, ACTIVE_SPACE.beta);
 export const DETERMINANT_TEXT = DETERMINANTS.toLocaleString('en-US');
-/** One configuration every 0.15 s; Julian years. */
-export const SHOW_SECONDS = 0.15;
-export const ENUMERATION_YEARS = Number(DETERMINANTS) * SHOW_SECONDS / (365.25 * 86400);
+/** The singlet (S = 0) subspace: the Ms = 0 space less the Ms = 1 space, C(36, 27)² − C(36, 28)·C(36, 26). */
+export const SINGLETS = DETERMINANTS - binomial(ACTIVE_SPACE.orbitals, ACTIVE_SPACE.alpha + 1) * binomial(ACTIVE_SPACE.orbitals, ACTIVE_SPACE.beta - 1);
+export const SINGLET_TEXT = SINGLETS.toLocaleString('en-US');
+/** The strip draws a new configuration every half second: under three flashes a second for any cell. */
+export const FLASH_MS = 500;
 
 // Idealized cubane: Fe on one tetrahedron (Fe-Fe 2.75 A), sulfide on the other (S-S 3.6 A), Fe-S about 2.28 A;
 // each Fe carries a terminal thiolate S at 2.25 A and its methyl C at 1.82 A, Fe-S-C 105 degrees. Not the benchmark's coordinates.
@@ -177,25 +179,25 @@ export const LANES = Object.freeze([
 ]);
 
 export const EVIDENCE = Object.freeze([
-  { d: '2016-05-11', lane: 'ft', who: 'Reiher et al.', venue: 'PNAS 2017 · arXiv 1605.03590', text: 'A fault-tolerant resource estimate for simulating FeMoco, the iron-molybdenum cofactor of nitrogenase, with error-correction overhead included. An estimate, not a run or a classical comparison.' },
-  { d: '2018-09-27', lane: 'cl', who: 'Li et al.', venue: 'J. Chem. Phys. 2019 · arXiv 1809.10307', text: 'Found that the FeMoco active space used in the 2016 estimate gives a qualitatively incorrect ground state, and built a larger model with 113 electrons in 76 orbitals.' },
-  { d: '2019-02-06', lane: 'ft', who: 'Berry et al.', venue: 'Quantum 2019 · arXiv 1902.02134', text: 'New algorithms for chemistry on a fault-tolerant machine. The version of 2019-10-01 estimates about 700 times less surface-code spacetime volume for FeMoco than earlier quantum algorithms, using the larger 2018 model; the first version gave no such factor.' },
-  { d: '2020-11-06', lane: 'ft', who: 'Lee et al.', venue: 'PRX Quantum 2021 · arXiv 2011.03494', text: 'A projected cost for FeMoco: about 4 million physical qubits and under 4 days, assuming 1 μs cycle times and physical gate error rates no worse than 0.1%. An estimate, not a run.' },
-  { d: '2022-08-03', lane: 'an', who: 'Lee et al., 18 authors', venue: 'Nature Communications 2023 · arXiv 2208.02199', text: 'Asks whether there is evidence for exponential quantum advantage in ground-state energy estimation, and concludes it has yet to be found across chemical space. It does not consider other tasks and does not rule out polynomial speedups.' },
-  { d: '2023-06-14', lane: 'hw', id: 'kim', who: 'Kim et al.', venue: 'Nature 618:500 (2023)', text: 'A 127-qubit experiment that IBM presented as evidence of the utility of quantum computing before fault tolerance. It concerns a spin model, not a molecule.' },
-  { d: '2023-06-26', lane: 'cl', id: 'tindall', who: 'Tindall et al.; Begušić and Chan', venue: 'arXiv 2306.14887 (PRX Quantum 2024) · arXiv 2306.16372, posted 2023-06-28', text: 'Classical simulations of that experiment, posted within two weeks of it. This is why the test makes a quantum result wait at least 180 days before it is judged, and counts every classical answer public by the cutoff.' },
-  { d: '2024-05-08', lane: 'hw', who: 'Robledo-Moreno et al.', venue: 'arXiv 2405.05068', text: 'Sample-based quantum diagonalization (SQD) on quantum hardware, applied to nitrogen and iron-sulfur clusters. Going beyond exact diagonalization is not the same as beating the strongest approximate classical solver.' },
-  { d: '2025-01-10', lane: 'ft', who: 'Caesura et al.', venue: 'PRX Quantum 6:030337 (2025) · arXiv 2501.06165', text: 'A fault-tolerant estimate on cytochrome P450, an enzyme family central to drug metabolism: about two orders of magnitude faster (233 times for P450) than an earlier algorithm on baseline photonic hardware without Active Volume support. Active Volume compilation, which suits only some hardware, contributes a factor of about 25 of that. An erratum published 2026-10-08 says its correction does not change the resource estimates.' },
-  { d: '2025-01-13', lane: 'an', who: 'Reinholdt et al.', venue: 'arXiv 2501.07231', text: 'A critical analysis of quantum-selected configuration interaction, the idea behind SQD, finding that sampling efficiency and determinant selection limit it in the systems studied.' },
-  { d: '2025-11-11', lane: 'hw', id: 'sqd', who: 'IBM and RIKEN, SQD entry', venue: 'Quantum Advantage Tracker, variational track', text: 'The tracker lists this record’s Fe₄S₄ model, the same Hamiltonian in a different orbital basis. The IBM and RIKEN SQD entry reports −326.913 hartree on 77 qubits.' },
-  { d: '2025-11-18', lane: 'cl', who: 'Zhang and Otten', venue: 'arXiv 2511.14734', text: 'A classical method seeded with random determinants (TrimCI) matched a recent quantum SQD energy for a [4Fe-4S] cluster with roughly a million times fewer determinants and CPU-hours.' },
-  { d: '2025-11-20', lane: 'cl', id: 'trimci', who: 'TrimCI entries on the tracker', venue: 'Quantum Advantage Tracker, variational track', text: 'Classical entries on the same tracker model, matching the SQD energy (−326.913 hartree) and reaching −327.175 hartree.' },
-  { d: '2025-11-30', lane: 'an', who: 'Raisuddin et al.', venue: 'arXiv 2512.01012', text: 'A benchmark of SQD across the W4-11 thermochemistry set, which found uneven accuracy across reaction types.' },
-  { d: '2026-03-30', lane: 'cl', who: 'Legeza et al.', venue: 'arXiv 2603.28648', text: 'GPU-accelerated DMRG on the Fe₄S₄ CAS(54,36) model reached −327.24466 hartree. This record’s energy target is that value plus 0.0016 hartree.' },
-  { d: '2026-04-16', lane: 'pg', who: 'Wellcome Leap, Quantum for Bio', venue: 'Program outcome · program launched March 2023', text: 'The announcement names no winner of the $5 million grand prize for quantum advantage. A team led by Algorithmiq, with IBM and Cleveland Clinic, won the $2 million prize for running its photosensitizer workflow on more than 50 qubits at program depth of order 10³ to 10⁴, with a path toward advantage. Wellcome Leap expects a follow-on program.' },
-  { d: '2026-05-01', lane: 'hw', who: 'Merz et al.', venue: 'arXiv 2605.01138 · revised 2026-09-05 · Gordon Bell Prize finalist, 2026-09-09', text: 'A Cleveland Clinic, RIKEN and IBM team ran a fragmented hybrid quantum-classical calculation on protein systems of up to 12,635 atoms, using IBM Heron processors with the Fugaku and Miyabi-G supercomputers. The largest circuit used 94 qubits and 5,758 two-qubit gates. The authors state that they do not regard the results as the basis of a quantum advantage claim.' },
-  { d: '2026-07-23', lane: 'cl', who: 'Belagali et al.', venue: 'arXiv 2607.21337', text: 'A fast classical evaluation of single-layer UCJ circuits, a circuit family used in SQD workflows.' },
-  { d: '2026-07-27', lane: 'pg', who: 'Three IBM-related advantage claims', venue: 'arXiv 2607.24937 · 2607.25941 · 2607.25998, posted 2026-07-27 and 28', text: 'Advantage claims on spin models and sampling tasks. They concern problems other than biological molecules, so they do not bear on this test.' },
+  { d: '2016-05-11', lane: 'ft', url: 'https://arxiv.org/abs/1605.03590', who: 'Reiher et al.', venue: 'PNAS 2017 · arXiv 1605.03590', text: 'A fault-tolerant resource estimate for simulating FeMoco, the iron-molybdenum cofactor of nitrogenase, with error-correction overhead included. An estimate, not a run or a classical comparison.' },
+  { d: '2018-09-27', lane: 'cl', url: 'https://arxiv.org/abs/1809.10307', who: 'Li et al.', venue: 'J. Chem. Phys. 2019 · arXiv 1809.10307', text: 'Found that the FeMoco active space used in the 2016 estimate gives a qualitatively incorrect ground state, and built a larger model with 113 electrons in 76 orbitals.' },
+  { d: '2019-02-06', lane: 'ft', url: 'https://arxiv.org/abs/1902.02134', who: 'Berry et al.', venue: 'Quantum 2019 · arXiv 1902.02134', text: 'New algorithms for chemistry on a fault-tolerant machine. The version of 2019-10-01 estimates about 700 times less surface-code spacetime volume for FeMoco than earlier quantum algorithms, using the larger 2018 model; the first version gave no such factor.' },
+  { d: '2020-11-06', lane: 'ft', url: 'https://arxiv.org/abs/2011.03494', who: 'Lee et al.', venue: 'PRX Quantum 2021 · arXiv 2011.03494', text: 'A projected cost for FeMoco: about 4 million physical qubits and under 4 days, assuming 1 μs cycle times and physical gate error rates no worse than 0.1%. An estimate, not a run.' },
+  { d: '2022-08-03', lane: 'an', url: 'https://arxiv.org/abs/2208.02199', who: 'Lee et al., 18 authors', venue: 'Nature Communications 2023 · arXiv 2208.02199', text: 'Asks whether there is evidence for exponential quantum advantage in ground-state energy estimation, and concludes it has yet to be found across chemical space. It does not consider other tasks and does not rule out polynomial speedups.' },
+  { d: '2023-06-14', lane: 'hw', id: 'kim', url: 'https://doi.org/10.1038/s41586-023-06096-3', who: 'Kim et al.', venue: 'Nature 618:500 (2023)', text: 'A 127-qubit experiment that IBM presented as evidence of the utility of quantum computing before fault tolerance. It concerns a spin model, not a molecule.' },
+  { d: '2023-06-26', lane: 'cl', id: 'tindall', url: 'https://arxiv.org/abs/2306.14887', who: 'Tindall et al.; Begušić and Chan', venue: 'arXiv 2306.14887 (PRX Quantum 2024) · arXiv 2306.16372, posted 2023-06-28', text: 'Classical simulations of that experiment, posted within two weeks of it. This is why the test makes a quantum result wait at least 180 days before it is judged, and counts every classical answer public by the cutoff.' },
+  { d: '2024-05-08', lane: 'hw', url: 'https://arxiv.org/abs/2405.05068', who: 'Robledo-Moreno et al.', venue: 'arXiv 2405.05068', text: 'Sample-based quantum diagonalization (SQD) on quantum hardware, applied to nitrogen and iron-sulfur clusters. Going beyond exact diagonalization is not the same as beating the strongest approximate classical solver.' },
+  { d: '2025-01-10', lane: 'ft', url: 'https://arxiv.org/abs/2501.06165', who: 'Caesura et al.', venue: 'PRX Quantum 6:030337 (2025) · arXiv 2501.06165', text: 'A fault-tolerant estimate on cytochrome P450, an enzyme family central to drug metabolism: about two orders of magnitude faster (233 times for P450) than an earlier algorithm on baseline photonic hardware without Active Volume support. Active Volume compilation, which suits only some hardware, contributes a factor of about 25 of that. An erratum published 2026-10-08 says its correction does not change the resource estimates.' },
+  { d: '2025-01-13', lane: 'an', url: 'https://arxiv.org/abs/2501.07231', who: 'Reinholdt et al.', venue: 'arXiv 2501.07231', text: 'A critical analysis of quantum-selected configuration interaction, the idea behind SQD, finding that sampling efficiency and determinant selection limit it in the systems studied.' },
+  { d: '2025-11-11', lane: 'hw', id: 'sqd', url: 'https://quantum-advantage-tracker.github.io/', who: 'IBM and RIKEN, SQD entry', venue: 'Quantum Advantage Tracker, variational track', text: 'The tracker lists this record’s Fe₄S₄ model, the same Hamiltonian in a different orbital basis. The IBM and RIKEN SQD entry reports −326.913 hartree on 77 qubits.' },
+  { d: '2025-11-18', lane: 'cl', url: 'https://arxiv.org/abs/2511.14734', who: 'Zhang and Otten', venue: 'arXiv 2511.14734', text: 'A classical method seeded with random determinants (TrimCI) matched a recent quantum SQD energy for a [4Fe-4S] cluster with roughly a million times fewer determinants and CPU-hours.' },
+  { d: '2025-11-20', lane: 'cl', id: 'trimci', url: 'https://quantum-advantage-tracker.github.io/', who: 'TrimCI entries on the tracker', venue: 'Quantum Advantage Tracker, variational track', text: 'Classical entries on the same tracker model, matching the SQD energy (−326.913 hartree) and reaching −327.175 hartree.' },
+  { d: '2025-11-30', lane: 'an', url: 'https://arxiv.org/abs/2512.01012', who: 'Raisuddin et al.', venue: 'arXiv 2512.01012', text: 'A benchmark of SQD across the W4-11 thermochemistry set, which found uneven accuracy across reaction types.' },
+  { d: '2026-03-30', lane: 'cl', url: 'https://arxiv.org/abs/2603.28648', who: 'Legeza et al.', venue: 'arXiv 2603.28648', text: 'GPU-accelerated DMRG on the Fe₄S₄ CAS(54,36) model reached −327.24466 hartree. This record’s energy target is that value plus 0.0016 hartree.' },
+  { d: '2026-04-16', lane: 'pg', url: 'https://wellcomeleap.org/', who: 'Wellcome Leap, Quantum for Bio', venue: 'Program outcome · program launched March 2023', text: 'The announcement names no winner of the $5 million grand prize for quantum advantage. A team led by Algorithmiq, with IBM and Cleveland Clinic, won the $2 million prize for running its photosensitizer workflow on more than 50 qubits at program depth of order 10³ to 10⁴, with a path toward advantage. Wellcome Leap expects a follow-on program.' },
+  { d: '2026-05-01', lane: 'hw', url: 'https://arxiv.org/abs/2605.01138', who: 'Merz et al.', venue: 'arXiv 2605.01138 · revised 2026-09-05 · Gordon Bell Prize finalist, 2026-09-09', text: 'A Cleveland Clinic, RIKEN and IBM team ran a fragmented hybrid quantum-classical calculation on protein systems of up to 12,635 atoms, using IBM Heron processors with the Fugaku and Miyabi-G supercomputers. The largest circuit used 94 qubits and 5,758 two-qubit gates. The authors state that they do not regard the results as the basis of a quantum advantage claim.' },
+  { d: '2026-07-23', lane: 'cl', url: 'https://arxiv.org/abs/2607.21337', who: 'Belagali et al.', venue: 'arXiv 2607.21337', text: 'A fast classical evaluation of single-layer UCJ circuits, a circuit family used in SQD workflows.' },
+  { d: '2026-07-27', lane: 'pg', url: 'https://arxiv.org/abs/2607.24937', who: 'Three IBM-related advantage claims', venue: 'arXiv 2607.24937 · 2607.25941 · 2607.25998, posted 2026-07-27 and 28', text: 'Advantage claims on spin models and sampling tasks. They concern problems other than biological molecules, so they do not bear on this test.' },
 ]);
 export const RESPONSE_ARCS = Object.freeze([
   { from: 'kim', to: 'tindall', lines: [`${daysBetween('2023-06-14', '2023-06-26')} and ${daysBetween('2023-06-14', '2023-06-28')} days between posts`, 'a spin model, not a molecule'], side: 'left' },
@@ -204,7 +206,7 @@ export const RESPONSE_ARCS = Object.freeze([
 export const DEFAULT_EVIDENCE = EVIDENCE.findIndex(item => item.id === 'sqd');
 
 const A0 = day('2016-01-01'), A1 = day('2023-01-01'), B1 = day('2027-01-01');
-const XA = [176, 406], XB = [428, 980];
+const XA = [190, 410], XB = [432, 980];
 const ex = iso => {
   const t = day(iso);
   return t < A1 ? XA[0] + (t - A0) / (A1 - A0) * (XA[1] - XA[0]) : XB[0] + (t - A1) / (B1 - A1) * (XB[1] - XB[0]);
@@ -253,7 +255,7 @@ export function evidenceSVG(selected = DEFAULT_EVIDENCE) {
   EVIDENCE.forEach((item, i) => {
     const { x, y } = EVIDENCE_POSITIONS[i];
     const lane = laneOf(item.lane);
-    p.push(`<g class="evidence-mark${i === selected ? ' is-selected' : ''}" tabindex="0" role="button" data-evidence="${i}" aria-pressed="${i === selected}" aria-label="${escapeHTML(`${item.d}, ${lane.name}: ${item.who}`)}"><circle class="target" cx="${x.toFixed(1)}" cy="${y}" r="13"/>${glyph(item.lane, x, y)}</g>`);
+    p.push(`<g class="evidence-mark${i === selected ? ' is-selected' : ''}" tabindex="0" role="button" data-evidence="${i}" aria-pressed="${i === selected}" aria-label="${escapeHTML(`${item.d}, ${lane.name}: ${item.who}`)}"><circle class="target" cx="${x.toFixed(1)}" cy="${y}" r="16"/>${glyph(item.lane, x, y)}</g>`);
   });
   return p.join('');
 }
@@ -261,7 +263,7 @@ export function evidenceSVG(selected = DEFAULT_EVIDENCE) {
 export function evidenceDetail(i = DEFAULT_EVIDENCE) {
   const item = EVIDENCE[i];
   const lane = laneOf(item.lane);
-  return `<div class="evidence-when"><span class="evidence-date">${item.d}</span><span class="evidence-lane lane-text-${lane.key}">${lane.name}</span></div><div class="evidence-body"><h4>${escapeHTML(item.who)}</h4><p class="evidence-venue">${escapeHTML(item.venue)}</p><p>${escapeHTML(item.text)}</p></div>`;
+  return `<div class="evidence-when"><span class="evidence-date">${item.d}</span><span class="evidence-lane lane-text-${lane.key}">${lane.name}</span></div><div class="evidence-body"><h4>${escapeHTML(item.who)}</h4><p class="evidence-venue"><a href="${escapeHTML(item.url)}" rel="noopener" target="_blank">${escapeHTML(item.venue)} <span class="external-glyph" aria-hidden="true">↗</span></a></p><p>${escapeHTML(item.text)}</p></div>`;
 }
 
 /* ---------- The committed future ---------- */
@@ -274,7 +276,7 @@ export function futureSVG() {
   const axis = 128, p = [];
   const w0 = fx(CLOCK.dossierBy), w1 = fx(CLOCK.judged);
   p.push(`<rect class="window" x="${w0.toFixed(1)}" y="44" width="${(w1 - w0).toFixed(1)}" height="${axis - 44}"/>`);
-  p.push(text((w0 + w1) / 2, 66, `${CLOCK.windowDays}-day challenge window`, 'note-classical', 'middle'), text((w0 + w1) / 2, 84, 'every classical answer public by the cutoff counts', 'note', 'middle'));
+  p.push(text((w0 + w1) / 2, 66, `challenge window, at least ${CLOCK.windowDays} days`, 'note-classical', 'middle'), text((w0 + w1) / 2, 84, 'every classical answer public by the cutoff counts', 'note', 'middle'));
   p.push(`<line class="axis" x1="40" x2="960" y1="${axis}" y2="${axis}"/>`);
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   for (const iso of ['2026-11-01', '2027-01-01', '2027-03-01', '2027-05-01', '2027-07-01', '2027-09-01', '2027-11-01', '2028-01-01']) {

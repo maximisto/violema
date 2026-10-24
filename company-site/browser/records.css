@@ -52,6 +52,10 @@
   color: var(--ink-2);
 }
 .record-figure { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* A fading edge says there is more of the chart that way; set by browser/fe4s4.mjs only when the chart overflows. */
+.record-figure.has-more-right { mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent); }
+.record-figure.has-more-left { mask-image: linear-gradient(90deg, transparent, #000 48px); }
+.record-figure.has-more-left.has-more-right { mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent); }
 .record-chart { display: block; width: 100%; height: auto; }
 .race-chart, .future-chart { min-width: 720px; }
 .evidence-chart { min-width: 860px; }
@@ -104,6 +108,7 @@
 .cluster-readout { display: grid; gap: 24px; align-content: start; padding: 24px; border-left: 1px solid var(--line); min-width: 0; }
 .cluster-readout > div { display: grid; gap: 6px; }
 .determinants { display: grid; gap: 10px; padding: 18px 20px; border-top: 1px solid var(--line); }
+.determinant-rows { display: grid; gap: 10px; }
 .determinant-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: center; }
 .determinant-row > span { font-family: var(--font-display); color: var(--ink-2); }
 .cells { display: grid; grid-template-columns: repeat(36, minmax(0, 1fr)); gap: 3px; }
@@ -200,6 +205,8 @@
   .cells { gap: 2px; }
   .cells i { height: 12px; border-radius: 2px; }
   .record-motion { margin-left: 0; }
+  .record-scale { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; border-radius: var(--radius-control); }
+  .record-scale button { padding: 0 6px; border-radius: var(--radius-nested); }
 }
 @media (prefers-reduced-motion: reduce) {
   .cells i, .outcome-list li { transition: none; }

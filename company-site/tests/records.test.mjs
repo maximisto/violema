@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
 import { FE4S4_ROUTE, FE4S4_RECORD_ROUTE } from '../lib/records.mjs';
 import {
-  ENERGIES, GAP, TRIMCI_GAIN, MATCH_DAYS, DETERMINANTS, ENUMERATION_YEARS, CLOCK, LEDGER, LEDGER_EVENTS, EVIDENCE, RESPONSE_ARCS,
+  ENERGIES, GAP, TRIMCI_GAIN, MATCH_DAYS, DETERMINANTS, SINGLETS, FLASH_MS, CLOCK, LEDGER, LEDGER_EVENTS, EVIDENCE, RESPONSE_ARCS,
   OUTCOMES, decide, verdict, raceSVG, RACE_SCALES, daysBetween,
 } from '../lib/fe4s4-figures.mjs';
 
@@ -58,10 +58,16 @@ test('posted energies and the pass line are derived, never typed', () => {
   assert.equal(ENERGIES.bar.eh, Math.round((ENERGIES.reference.eh + 0.0016) * 1e5) / 1e5);
 });
 
-test('the determinant count and the enumeration time are C(36, 27) squared at 0.15 s each', () => {
+test('the determinant and singlet counts are exact, and the strip stays under three flashes a second', () => {
   assert.equal(DETERMINANTS, 94143280n ** 2n);
   assert.equal(DETERMINANTS, 8862957169158400n);
-  assert.equal(Math.round(ENUMERATION_YEARS / 1e6), 42);
+  assert.equal(SINGLETS, 8862957169158400n - 7691780686091040n);
+  assert.equal(SINGLETS, 1171176483067360n);
+  assert.ok(1000 / FLASH_MS <= 2, 'a cell can change at most twice a second');
+});
+
+test('every evidence mark links to its source over https', () => {
+  for (const item of EVIDENCE) assert.match(item.url, /^https:\/\/[a-z0-9.-]+\//, item.who);
 });
 
 test('the clock, the response arcs and the ledger counts add up', () => {

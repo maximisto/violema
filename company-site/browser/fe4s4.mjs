@@ -1,7 +1,7 @@
 // The Fe4S4 record's instruments. The build renders every figure at rest; this module adds motion and interaction
 // and re-renders through the same figures module, so what a reader sees after a click is what the build would draw.
 import {
-  CLUSTER, ATOM_RADIUS, ACTIVE_SPACE, project, raceSVG, evidenceSVG, evidenceDetail, verdict, decide, outcomeList,
+  CLUSTER, ATOM_RADIUS, ACTIVE_SPACE, FLASH_MS, project, raceSVG, evidenceSVG, evidenceDetail, verdict, decide, outcomeList,
 } from './fe4s4-figures.mjs';
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -79,7 +79,7 @@ function enhanceCluster(stage) {
     theta += dt * 0.00018;
     draw();
     flash += dt;
-    if (flash >= 150) { flash = 0; occupy(); }
+    if (flash >= FLASH_MS) { flash = 0; occupy(); }
     frame = requestAnimationFrame(tick);
   }
   const start = () => { if (!frame && moving()) frame = requestAnimationFrame(tick); };
@@ -174,6 +174,22 @@ function enhanceOutcomes(form) {
   form.addEventListener('submit', event => event.preventDefault());
   update();
 }
+
+/* ---------- Wide charts on narrow screens: open on the recent end and show which way there is more ---------- */
+
+function enhanceScroller(figure) {
+  const mark = () => {
+    const more = figure.scrollWidth - figure.clientWidth;
+    figure.classList.toggle('has-more-left', more > 1 && figure.scrollLeft > 1);
+    figure.classList.toggle('has-more-right', more > 1 && figure.scrollLeft < more - 1);
+  };
+  new ResizeObserver(() => {
+    if ('scrollEnd' in figure.dataset && !figure.dataset.scrolled) figure.scrollLeft = figure.scrollWidth;
+    mark();
+  }).observe(figure);
+  figure.addEventListener('scroll', () => { figure.dataset.scrolled = 'true'; mark(); }, { passive: true });
+}
+document.querySelectorAll('[data-scroller]').forEach(enhanceScroller);
 
 const stage = document.querySelector('[data-cluster]');
 if (stage) enhanceCluster(stage);
