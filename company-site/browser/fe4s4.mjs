@@ -184,7 +184,11 @@ function enhanceScroller(figure) {
     figure.classList.toggle('has-more-right', more > 1 && figure.scrollLeft < more - 1);
   };
   new ResizeObserver(() => {
-    if ('scrollEnd' in figure.dataset && !figure.dataset.scrolled) figure.scrollLeft = figure.scrollWidth;
+    if (!figure.dataset.scrolled) {
+      if ('scrollEnd' in figure.dataset) figure.scrollLeft = figure.scrollWidth;
+      // Or open at a stated x of the chart's viewBox, so a phone starts on the part of the chart that makes its point.
+      else if (figure.dataset.scrollTo) figure.scrollLeft = Number(figure.dataset.scrollTo) / figure.querySelector('svg').viewBox.baseVal.width * figure.scrollWidth;
+    }
     mark();
   }).observe(figure);
   figure.addEventListener('scroll', () => { figure.dataset.scrolled = 'true'; mark(); }, { passive: true });

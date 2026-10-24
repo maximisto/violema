@@ -57,7 +57,6 @@
 .record-section-head h2, .record-close h2 { font-size: clamp(2.125rem, 1.25rem + 3vw, 3.5rem); font-weight: 650; line-height: 1.04; letter-spacing: -0.02em; }
 .record-section-head h2 { max-width: 22ch; }
 .record-section-head .lede { max-width: 64ch; margin-top: 20px; }
-.record-close { padding-bottom: var(--section-space); }
 .record-close h2 { max-width: 24ch; }
 .record-coi { max-width: 72ch; margin-top: 20px; }
 
@@ -80,9 +79,9 @@
 }
 .record-figure { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 /* A fading edge says there is more of the chart that way; set by browser/fe4s4.mjs only when the chart overflows. */
-.record-figure.has-more-right { mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent); }
-.record-figure.has-more-left { mask-image: linear-gradient(90deg, transparent, #000 48px); }
-.record-figure.has-more-left.has-more-right { mask-image: linear-gradient(90deg, transparent, #000 48px, #000 calc(100% - 48px), transparent); }
+.record-figure.has-more-right { mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent); }
+.record-figure.has-more-left { mask-image: linear-gradient(90deg, transparent, #000 32px); }
+.record-figure.has-more-left.has-more-right { mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
 .record-chart { display: block; width: 100%; height: auto; }
 /* Wide enough that chart text never renders below its nominal size on a phone; the figure scrolls instead. */
 .race-chart { min-width: 950px; }
@@ -120,6 +119,7 @@
 
 /* Instrument 1 */
 .cluster-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+.cluster-figure { position: relative; min-width: 0; }
 .cluster-stage { position: relative; aspect-ratio: 4 / 3; max-width: 100%; background: radial-gradient(70% 70% at 50% 46%, var(--inst-surface), var(--inst-bg) 72%); }
 .cluster-still, .cluster-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .cluster-still .bond-Fe { stroke: color-mix(in srgb, var(--fe4s4-iron) 70%, var(--inst-bg)); }
@@ -194,6 +194,8 @@
 .evidence-body { display: grid; gap: 6px; min-width: 0; }
 .evidence-body h4 { font-size: 1.0625rem; }
 .evidence-venue { color: var(--ink-2); }
+/* The one outbound link in the panel: a 44 px tap height without moving the detail's rhythm. */
+.evidence-venue a { display: inline-block; padding-block: 9px; margin-block: -9px; text-underline-offset: 3px; }
 .evidence-body p:last-child { color: var(--ink-2); max-width: 72ch; }
 
 /* Instrument 4 */
@@ -247,7 +249,12 @@
   .cells i { height: 12px; border-radius: 2px; }
   .record-motion { margin-left: 0; }
   .record-scale { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; width: 100%; border-radius: var(--radius-control); }
-  .record-scale button { padding: 0 6px; border-radius: var(--radius-nested); }
+  .record-scale button { min-height: 44px; padding: 0 6px; border-radius: var(--radius-nested); }
+  /* The drawing fills the stage's short side, so the legend sits under the stage instead of over the molecule. */
+  .cluster-legend { position: static; gap: 16px; padding: 10px 20px 14px; border-radius: 0; background: transparent; }
+  .record-options-inline { gap: 0 24px; }
+  .record-options-inline .record-option { min-height: 44px; align-items: center; }
+  .record-options-inline .record-option input { margin-top: 0; }
   .outcome-list li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .outcome-list .outcome-tier { order: -1; }
 }
@@ -257,7 +264,7 @@
 
 /* ---------- The full record: the v3 text at the site's type scale ---------- */
 
-.record-doc { --accent-soft: #EEEAF7; --copper-text: #9A5F36; --copper-soft: #F6ECE4; display: grid; gap: 48px; margin-top: 28px; }
+.record-doc { --accent-soft: #EEEAF7; --copper-text: #8F5630; --copper-soft: #F6ECE4; display: grid; gap: 48px; margin-top: 28px; }
 :root[data-theme='dark'] .record-doc { --accent-soft: #252036; --copper-text: #D9AA88; --copper-soft: #2C231E; }
 .record-doc-wrap { width: min(880px, 100% - 2 * var(--gutter)); padding-block: clamp(32px, 5vw, 64px) var(--section-space); }
 .record-breadcrumb { margin-bottom: 12px; }
@@ -273,6 +280,7 @@
 .record-doc .label { display: block; margin: 0; font-family: var(--font-display); font-size: var(--text-caption); font-weight: 500; line-height: 1.4; color: var(--ink-3); }
 .record-doc .mono, .record-doc .hash { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
 .record-doc .num { font-variant-numeric: tabular-nums; }
+.record-doc .date, .record-status .date { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .record-doc .note { color: var(--ink-3); max-width: 52ch; }
 .record-doc .context { padding-left: 14px; border-left: 2px solid var(--line-strong); color: var(--ink-2); }
 .record-doc .context strong { color: var(--ink); }
@@ -319,11 +327,11 @@
 .record-doc .when { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink-2); }
 .record-doc .entry { display: grid; gap: 8px; min-width: 0; }
 .record-doc .entry-top { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
-.record-doc .entry-top h3 a { color: inherit; text-decoration: none; }
+.record-doc .entry-top h3 a { padding-block: 11px; color: inherit; text-decoration: none; }
 .record-doc .entry-top h3 a:hover { text-decoration: underline; }
 .record-doc .venue { color: var(--ink-3); }
 .record-doc .entry p { color: var(--ink-2); }
-.record-doc .kind { justify-self: start; }
+.record-doc .entry > .chip { justify-self: start; }
 .record-doc .kind.estimate { border-color: var(--accent); color: var(--accent); }
 .record-doc .kind.classical { border-color: var(--copper-text); color: var(--copper-text); background: var(--copper-soft); }
 .record-doc .kind.hardware { border-color: transparent; background: var(--accent-soft); color: var(--ink); }
@@ -334,9 +342,15 @@
 .record-doc .maprow { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 4px 16px; color: var(--ink-2); }
 .record-doc .sources ol { display: grid; gap: 8px; margin: 0; padding-left: 1.3rem; color: var(--ink-2); }
 .record-doc .sources li { overflow-wrap: anywhere; }
+.record-doc .sources a { padding-block: 8px; }
 .record-doc .foot { display: grid; gap: 6px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-3); }
 
 @media (max-width: 640px) {
+  .record-doc .test-head, .record-doc dl.fields dt, .record-doc dl.fields dd, .record-doc .policy, .record-doc .decision, .record-doc .panel { padding-inline: 20px; }
+  .record-doc .outcomes { padding: 16px; }
+  .record-doc .claim-top .chip, .record-doc .chips .chip { border-radius: var(--radius-control); }
+  .record-doc .entry-top { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .record-doc .sources ol { padding-left: 2.5rem; }
   .record-doc .claim { padding: 20px; }
   .record-doc .scope, .record-doc .two, .record-doc .indicators, .record-doc .tests-what { grid-template-columns: minmax(0, 1fr); }
   .record-doc .tests-what div { border-right: 0; border-bottom: 1px solid var(--line); }

@@ -326,7 +326,7 @@ export function decide({ dossier, confirmations, contradiction }) {
 
 export function verdict(scenario = DEFAULT_SCENARIO) {
   const outcome = OUTCOMES.find(item => item.id === decide(scenario));
-  const why = outcome.id === 'o-positive-awaiting-confirmation' ? `${outcome.when} Confirmations shown: ${scenario.confirmations}.` : outcome.when;
+  const why = outcome.id === 'o-positive-awaiting-confirmation' ? `${outcome.when} Confirmations shown:\u00a0${scenario.confirmations}.` : outcome.when;
   return { outcome, why };
 }
 
