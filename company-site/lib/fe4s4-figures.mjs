@@ -165,7 +165,7 @@ export function raceSVG(ymax) {
     p.push(text(mx + 16, ry(q) + 4, 'IBM and RIKEN SQD, 77 qubits; TrimCI reached the same energy', 'note'));
   }
   if (best <= ymax) p.push(text(mx + 14, ry(best) + 22, `TrimCI, classical: ${Math.round(TRIMCI_GAIN)} mEh lower, same post`, 'note-classical'));
-  if (ymax >= GAP.dmrg2017 && ymax <= 100) p.push(text(R.left + 10, ry(GAP.dmrg2017) - 8, `DMRG with the 2017 model files, marked not converged: ${GAP.dmrg2017} mEh`, 'note-classical'));
+  if (ymax >= GAP.dmrg2017 && ymax <= 100) p.push(text(R.left + 10, ry(GAP.dmrg2017) - 13, `DMRG with the 2017 model files, marked not converged: ${GAP.dmrg2017} mEh`, 'note-classical'));
   p.push(text(refx - 12, ry(0) - 14, 'GPU DMRG, the reference', 'note-classical', 'end'));
   if (ymax <= 2) p.push(text(right - 10, passY + 22, `Pass line, ${bar} mEh above the reference: at or below it passes`, 'note-bar', 'end'));
   else p.push(text(R.left + 10, passY - 8, `Pass line, ${bar} mEh above the reference`, 'note-bar'));
@@ -360,7 +360,8 @@ export function ledgerSVG() {
   }
   for (const iso of LEDGER.conclusionChanges) p.push(`<path class="conclusion-mark" d="M${(gx(iso) + (shift[iso] || 0)).toFixed(1)},${base + 28} l5,8 h-10 z"/>`);
   const last = gx('2026-10-24');
-  p.push(text(30, 24, 'one dot per dated event · ▲ conclusion changed', 'note'));
+  // Anchored at the right, so the legend stays in view when a phone opens the chart on its recent end.
+  p.push(text(610, 24, 'one dot per dated event · ▲ conclusion changed', 'note', 'end'));
   p.push(`<path class="leader" d="M${last.toFixed(1)},${base - 18} V48 H${(last - 6).toFixed(1)}"/>`, text(last - 10, 52, 'correction, recorded at the time', 'note-bar', 'end'));
   return p.join('');
 }
