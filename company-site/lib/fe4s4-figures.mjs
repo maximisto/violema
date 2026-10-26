@@ -92,14 +92,18 @@ export function clusterSVG(theta = 0.6, width = 640, height = 480) {
 export const ENERGIES = Object.freeze({
   quantum: { eh: -326.913, date: '2025-11-11' },
   trimciBest: { eh: -327.175, date: '2025-11-20' },
-  reference: { eh: -327.24466, date: '2026-03-30' },
-  bar: { eh: -327.24306 },
+  // The reference, by rule: the lowest published, non-extrapolated variational upper bound for the S = 0 state on the
+  // pinned file, frozen when the test is registered. Today that is Zhai et al., arXiv 2601.04621 (v1 2026-01-08, same in
+  // v2), supplementary section 4.1: spin-adapted DMRG with entanglement-minimized orbitals, D = 20,000, spin isomer BS3.
+  // Provisional until registration confirms the spin sector and the file's hash.
+  reference: { eh: -327.247036, date: '2026-01-08' },
+  bar: { eh: -327.245436 },
+  // GPU DMRG, Legeza et al., arXiv 2603.28648, D_SU(2) = 12,288. The paper does not name its integral file; that it
+  // used the pinned Hamiltonian is inferred from agreement with results on the pinned file.
+  legeza: { eh: -327.24466, date: '2026-03-30' },
   // The DMRG value distributed with the model files (Li and Chan, JCTC 2017; bond dimension 4000, marked not
   // converged), which the tracker's SQD entry quotes as its reference.
   dmrg2017: { eh: -327.2396369 },
-  // Zhai et al., arXiv 2601.04621 v1, supplementary section 4.1: the lowest spin-adapted DMRG variational upper bound
-  // on the pinned file (entanglement-minimized orbitals, D = 20,000, spin isomer BS3). Below the reference; not plotted.
-  zhai: { eh: -327.247036 },
 });
 /** The SQD entry's largest diagonalized subspace (Shirakawa et al., arXiv 2511.00224). */
 export const SQD_SUBSPACE = 1e10;
@@ -109,7 +113,7 @@ export const GAP = Object.freeze({
   trimci: millihartreeAbove(ENERGIES.trimciBest.eh),
   bar: millihartreeAbove(ENERGIES.bar.eh),
   dmrg2017: millihartreeAbove(ENERGIES.dmrg2017.eh),
-  zhai: millihartreeAbove(ENERGIES.zhai.eh),
+  legeza: millihartreeAbove(ENERGIES.legeza.eh),
 });
 // What the posted SQD run's quantum time alone would cost at IBM's public pay-as-you-go rate, which starts at
 // US$96 a minute (ibm.com/quantum/pricing, checked 2026-10-24): the tracker posts 36,000 s of QPU time.
@@ -123,7 +127,7 @@ export const MATCH_DAYS = daysBetween(ENERGIES.quantum.date, ENERGIES.trimciBest
 export const RACE_SCALES = Object.freeze([
   { key: 'gap', label: 'Full range', max: 360 },
   { key: 'classical', label: 'Classical entries', max: 80 },
-  { key: 'pass', label: 'Pass line', max: 2 },
+  { key: 'pass', label: 'Pass line', max: 3 },
 ]);
 
 const R = { width: 760, height: 400, left: 74, right: 26, top: 30, bottom: 48 };
@@ -139,21 +143,22 @@ function ticks(max) {
 const text = (x, y, value, cls, anchor = 'start') => `<text class="${cls}" x="${Number(x).toFixed(1)}" y="${Number(y).toFixed(1)}" text-anchor="${anchor}">${value}</text>`;
 
 /**
- * Posted energies at a vertical scale of 0 to ymax millihartree above the GPU DMRG value. Marks only: no line joins
+ * Posted energies at a vertical scale of 0 to ymax millihartree above the reference. Marks only: no line joins
  * entries from different methods or dates, because nothing was posted between them that this record checked.
  * The pass line is one-sided: any verified energy at or below it passes, including one below the DMRG value.
  */
 export function raceSVG(ymax) {
   const ry = v => R.top + plotHeight - (v / ymax) * plotHeight;
   const q = GAP.quantum, best = GAP.trimci, bar = GAP.bar;
-  const qx = rx(ENERGIES.quantum.date), mx = rx(ENERGIES.trimciBest.date), refx = rx(ENERGIES.reference.date), right = R.width - R.right;
+  const qx = rx(ENERGIES.quantum.date), mx = rx(ENERGIES.trimciBest.date), refx = rx(ENERGIES.reference.date), lx = rx(ENERGIES.legeza.date), right = R.width - R.right;
+  const passView = ymax <= 3;
   const p = [];
   p.push(`<defs><clipPath id="race-plot"><rect x="${R.left}" y="${R.top - 1}" width="${right - R.left}" height="${plotHeight + 2}"/></clipPath><pattern id="race-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="hatch-fill" width="6" height="6"/><line class="hatch-line" x1="0" y1="0" x2="0" y2="6"/></pattern></defs>`);
   for (const v of ticks(ymax)) {
     p.push(`<line class="${v === 0 ? 'axis-zero' : 'grid'}" x1="${R.left}" x2="${right}" y1="${ry(v).toFixed(1)}" y2="${ry(v).toFixed(1)}"/>`);
     p.push(text(R.left - 10, ry(v) + 4, v, 'tick', 'end'));
   }
-  p.push(`<text class="axis-label" x="16" y="${R.top + plotHeight / 2}" transform="rotate(-90 16 ${R.top + plotHeight / 2})" text-anchor="middle">mEh above −327.24466 Eh</text>`);
+  p.push(`<text class="axis-label" x="16" y="${R.top + plotHeight / 2}" transform="rotate(-90 16 ${R.top + plotHeight / 2})" text-anchor="middle">mEh above −${Math.abs(ENERGIES.reference.eh)} Eh</text>`);
   for (const [iso, label] of [['2025-11-01', 'Nov 2025'], ['2025-12-01', 'Dec'], ['2026-01-01', 'Jan 2026'], ['2026-02-01', 'Feb'], ['2026-03-01', 'Mar'], ['2026-04-01', 'Apr'], ['2026-05-01', 'May']]) {
     const x = rx(iso);
     p.push(`<line class="grid-tick" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${R.top + plotHeight}" y2="${R.top + plotHeight + 5}"/>`, text(x, R.top + plotHeight + 20, label, 'tick', 'middle'));
@@ -168,6 +173,7 @@ export function raceSVG(ymax) {
   p.push(`<circle class="classical-ring" cx="${mx.toFixed(1)}" cy="${ry(q).toFixed(1)}" r="7"/>`);
   p.push(`<circle class="classical-mark" cx="${mx.toFixed(1)}" cy="${ry(best).toFixed(1)}" r="6.5"/>`);
   p.push(`<circle class="classical-mark" cx="${refx.toFixed(1)}" cy="${ry(0).toFixed(1)}" r="6.5"/>`);
+  p.push(`<circle class="classical-mark" cx="${lx.toFixed(1)}" cy="${ry(GAP.legeza).toFixed(1)}" r="6.5"/>`);
   p.push(`</g>`);
   if (q <= ymax) {
     p.push(`<path class="brace" d="M${qx.toFixed(1)},${(ry(q) - 16).toFixed(1)} v-6 H${mx.toFixed(1)} v6"/>`);
@@ -176,14 +182,15 @@ export function raceSVG(ymax) {
   }
   if (best <= ymax) p.push(text(mx + 14, ry(best) + 22, `TrimCI, classical: ${Math.round(TRIMCI_GAIN)} mEh lower, same post`, 'note-classical'));
   if (ymax >= GAP.dmrg2017 && ymax <= 100) p.push(text(R.left + 10, ry(GAP.dmrg2017) - 13, `DMRG with the 2017 model files, marked not converged: ${GAP.dmrg2017} mEh`, 'note-classical'));
-  p.push(text(refx - 12, ry(0) - 14, 'GPU DMRG, the reference', 'note-classical', 'end'));
-  if (ymax <= 2) p.push(text(right - 10, passY + 22, `Pass line, ${bar} mEh above the reference: at or below it passes`, 'note-bar', 'end'));
+  p.push(text(refx + 12, ry(0) - 14, 'Zhai et al. DMRG, the reference', 'note-classical'));
+  p.push(text(lx + 12, ry(GAP.legeza) - (passView ? 12 : 14), `GPU DMRG, +${GAP.legeza}`, 'note-classical'));
+  if (passView) p.push(text(right - 10, passY + 22, `Pass line, ${bar} mEh above the reference: at or below it passes`, 'note-bar', 'end'));
   else p.push(text(R.left + 10, passY - 8, `Pass line, ${bar} mEh above the reference`, 'note-bar'));
   const offScale = (x, y, label, cls) => p.push(`<path class="${cls}-arrow" d="M${x.toFixed(1)},${y + 16} V${y} M${(x - 6).toFixed(1)},${y + 7} L${x.toFixed(1)},${y} L${(x + 6).toFixed(1)},${y + 7}"/>`, text(x + 12, y + 12, label, cls));
   if (q > ymax) offScale(qx, R.top + 2, `IBM and RIKEN SQD entry above this scale: ${q.toFixed(2)} mEh`, 'note-quantum');
   if (best > ymax) offScale(mx, R.top + 24, `Best TrimCI entry above this scale: ${best.toFixed(2)} mEh`, 'note-classical');
   if (GAP.dmrg2017 > ymax) offScale(R.left + 22, R.top + 46, `2017 DMRG value above this scale: ${GAP.dmrg2017} mEh`, 'note-classical');
-  if (ymax <= 2) p.push(text((R.left + right) / 2, R.top + plotHeight * 0.36, 'A timed attempt counts only if its verified energy reaches this line.', 'note-strong', 'middle'), text((R.left + right) / 2, R.top + plotHeight * 0.36 + 20, 'Nothing drawn here was entered in that test.', 'note', 'middle'));
+  if (passView) p.push(text((R.left + right) / 2, R.top + plotHeight * 0.36, 'A timed attempt counts only if its verified energy reaches this line.', 'note-strong', 'middle'), text((R.left + right) / 2, R.top + plotHeight * 0.36 + 20, 'Nothing drawn here was entered in that test.', 'note', 'middle'));
   return p.join('');
 }
 
@@ -213,8 +220,8 @@ export const EVIDENCE = Object.freeze([
   { d: '2025-11-18', lane: 'cl', url: 'https://arxiv.org/abs/2511.14734', who: 'Zhang and Otten', venue: 'arXiv 2511.14734', text: 'A classical method seeded with random determinants (TrimCI) matched a recent quantum SQD energy for a [4Fe-4S] cluster with roughly a million times fewer determinants and CPU-hours.' },
   { d: '2025-11-20', lane: 'cl', id: 'trimci', url: 'https://quantum-advantage-tracker.github.io/', who: 'TrimCI entries on the tracker', venue: 'Quantum Advantage Tracker, variational track', text: 'Classical entries on the same tracker model, matching the SQD energy (−326.913 hartree) and reaching −327.175 hartree.' },
   { d: '2025-11-30', lane: 'an', url: 'https://arxiv.org/abs/2512.01012', who: 'Raisuddin et al.', venue: 'arXiv 2512.01012', text: 'A benchmark of SQD across the W4-11 thermochemistry set, which found uneven accuracy across reaction types.' },
-  { d: '2026-01-08', lane: 'cl', url: 'https://arxiv.org/abs/2601.04621', who: 'Zhai et al., Chan group', venue: 'arXiv 2601.04621 · v2 2026-06-22', text: 'A classical simulation of the FeMo-cofactor model to chemical accuracy. Its benchmark uses this record’s pinned [Fe₄S₄(SCH₃)₄]²⁻ (54e, 36o) file and reports spin-adapted DMRG upper bounds down to −327.247036 hartree for the lowest of three spin isomers, with entanglement-minimized orbitals: 2.38 mEh below the GPU DMRG value this record uses as its reference. Legeza et al. compare their result with Zhai’s values for one isomer, −327.244001 and an extrapolated −327.245273.' },
-  { d: '2026-03-30', lane: 'cl', url: 'https://arxiv.org/abs/2603.28648', who: 'Legeza et al.', venue: 'arXiv 2603.28648', text: 'GPU-accelerated DMRG on the Fe₄S₄ CAS(54,36) model reached −327.24466 hartree. This record’s energy target is that value plus 0.0016 hartree.' },
+  { d: '2026-01-08', lane: 'cl', url: 'https://arxiv.org/abs/2601.04621', who: 'Zhai et al., Chan group', venue: 'arXiv 2601.04621 · v2 2026-06-22', text: 'A classical simulation of the FeMo-cofactor model to chemical accuracy. Its benchmark uses this record’s pinned [Fe₄S₄(SCH₃)₄]²⁻ (54e, 36o) file and reports spin-adapted DMRG upper bounds down to −327.247036 hartree for the lowest of three spin isomers, with entanglement-minimized orbitals at bond dimension 20,000. That bound is this record’s reference. Legeza et al. compare their result only with Zhai’s values for one isomer, −327.244001 and an extrapolated −327.245273.' },
+  { d: '2026-03-30', lane: 'cl', url: 'https://arxiv.org/abs/2603.28648', who: 'Legeza et al.', venue: 'arXiv 2603.28648', text: 'GPU-accelerated DMRG on the Fe₄S₄ CAS(54,36) model reached −327.24466 hartree at bond dimension 12,288, in about 12.6 hours on one DGX B200 node: 2.38 mEh above the reference. The paper cites the model of Sharma et al. 2014 and does not name an integral file.' },
   { d: '2026-04-16', lane: 'pg', url: 'https://wellcomeleap.org/', who: 'Wellcome Leap, Quantum for Bio', venue: 'Program outcome · program launched March 2023', text: 'The announcement names no winner of the $5 million grand prize for quantum advantage. A team led by Algorithmiq, with IBM and Cleveland Clinic, won the $2 million prize for running its photosensitizer workflow on more than 50 qubits at program depth of order 10³ to 10⁴, with a path toward advantage. Wellcome Leap expects a follow-on program.' },
   { d: '2026-05-01', lane: 'hw', url: 'https://arxiv.org/abs/2605.01138', who: 'Merz et al.', venue: 'arXiv 2605.01138 · revised 2026-09-05 · Gordon Bell Prize finalist, 2026-09-09', text: 'A Cleveland Clinic, RIKEN and IBM team ran a fragmented hybrid quantum-classical calculation on protein systems of up to 12,635 atoms, using IBM Heron processors with the Fugaku and Miyabi-G supercomputers. The largest circuit used 94 qubits and 5,758 two-qubit gates. The authors state that they do not regard the results as the basis of a quantum advantage claim.' },
   { d: '2026-07-23', lane: 'cl', url: 'https://arxiv.org/abs/2607.21337', who: 'Belagali et al.', venue: 'arXiv 2607.21337', text: 'A fast classical evaluation of single-layer UCJ circuits, a circuit family used in SQD workflows.' },
