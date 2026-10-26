@@ -50,13 +50,14 @@ test('the full record carries the checked v3 text inside the shell', async () =>
 });
 
 test('posted energies and the pass line are derived, never typed', () => {
-  assert.equal(GAP.quantum, 331.66);
-  assert.equal(GAP.trimci, 69.66);
+  assert.equal(GAP.quantum, 334.04);
+  assert.equal(GAP.trimci, 72.04);
   assert.equal(GAP.bar, 1.6);
-  assert.equal(GAP.dmrg2017, 5.02);
+  assert.equal(GAP.dmrg2017, 7.4);
+  assert.equal(GAP.legeza, 2.38);
   assert.equal(TRIMCI_GAIN, 262);
   assert.equal(MATCH_DAYS, 9);
-  assert.equal(ENERGIES.bar.eh, Math.round((ENERGIES.reference.eh + 0.0016) * 1e5) / 1e5);
+  assert.equal(ENERGIES.bar.eh, Math.round((ENERGIES.reference.eh + 0.0016) * 1e6) / 1e6);
 });
 
 test('the determinant and singlet counts are exact, and the strip stays under three flashes a second', () => {
@@ -110,8 +111,10 @@ test('a simulated reading’s fixes hold: no identifying line, no sales button, 
   const close = page.slice(page.indexOf('class="section record-close"'));
   assert.doesNotMatch(close.slice(0, close.indexOf('</section>')), /#briefing/, 'the closing section has no briefing button');
   assert.doesNotMatch(page, /<code>o-/, 'rule ids stay out of the reader-facing outcome list');
-  assert.ok(GAP.zhai < 0, 'Zhai et al.’s lowest bound on the pinned file sits below the reference');
-  assert.ok(page.includes(`${Math.abs(GAP.zhai)} mEh below this chart’s zero`));
+  assert.equal(ENERGIES.reference.eh, -327.247036, 'the reference is the lowest published variational S = 0 bound on the pinned file');
+  assert.ok(ENERGIES.bar.eh < ENERGIES.legeza.eh && ENERGIES.bar.eh < -327.244733, 'the GPU DMRG run and the BS1 spin-coupling bounds sit above the pass line');
+  assert.match(page + record, /frozen (when the test is|at) registration/);
+  assert.doesNotMatch(page + record, /open for (the record’s )?review|independent model review/);
   assert.doesNotMatch(page + record, /integrals (were|are) not checked|has not been checked/, 'Zhai et al. name the pinned file as their input');
   assert.equal(SQD_QPU_USD, 57600);
   assert.ok(SQD_QPU_USD > BUDGET_USD / 2, 'the posted run’s quantum time alone is over half the per-run ceiling');
