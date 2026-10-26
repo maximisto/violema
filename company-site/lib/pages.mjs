@@ -51,7 +51,7 @@ function head(route, title, description, { lab = false, notFound = false } = {})
     '<meta name="twitter:image" content="https://violema.com/company-assets/violema-social-hero.jpg">',
     '<meta name="twitter:image:alt" content="Violema scientific evidence systems: a stone handaxe and glass DNA helix above Earth.">',
     ...(indexable ? ['<meta name="googlebot" content="max-image-preview:large">'] : []),
-    ...(route === '/' ? ['<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","@id":"https://violema.com/#webpage","url":"https://violema.com/","name":"Violema: scientific conclusions, with their evidence attached","primaryImageOfPage":{"@type":"ImageObject","url":"https://violema.com/company-assets/violema-social-hero.jpg","width":1200,"height":630}}</script>'] : []),
+    ...(route === '/' ? ['<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","@id":"https://violema.com/#webpage","url":"https://violema.com/","name":"Scientific evidence systems | Violema","primaryImageOfPage":{"@type":"ImageObject","url":"https://violema.com/company-assets/violema-social-hero.jpg","width":1200,"height":630}}</script>'] : []),
     '<link rel="icon" href="/company-assets/violema-icon.png" type="image/png">',
     ...fontFiles.map(file => `<link rel="preload" href="/company-assets/fonts/${file}" as="font" type="font/woff2" crossorigin>`),
     '<script>try{if(localStorage.getItem("violema-theme")==="dark")document.documentElement.dataset.theme="dark"}catch{}</script>',
@@ -127,7 +127,7 @@ function evidenceHero(corpus, trials) {
 
 export function homePage(corpora, stress, trials) {
   const corpus = corpora.find(item => item.id === stress.corpusId);
-  return shell('/', 'Violema: scientific conclusions, with their evidence attached', 'Violema builds scientific evidence systems that connect claims to sources, expose consequential assumptions, and keep conclusions open to review.', homeExperience({
+  return shell('/', 'Scientific evidence systems | Violema', 'Trace scientific claims to sources, study conditions, assumptions, and review status. Explore Violema’s prepared evidence records and their stated limits.', homeExperience({
     corpora,
     hero: evidenceHero(corpus, trials),
     map: evidenceMapSection(evidenceMap, evidenceMapHash),
@@ -150,9 +150,10 @@ export function methodPage(corpora,stress) {
   const c=corpora.find(c=>c.id==='psychdoc');
   const materials=corpora.find(c=>c.id==='perovskite-stability');
   const facts = corpus => `<dl class="facts facts-compact"><div><dt>Claims</dt><dd>${corpus.claims.length}</dd></div><div><dt>Sources</dt><dd>${corpus.sources.length}</dd></div></dl>`;
-  return shell('/method/','The method | Violema','Inspect the path from a scientific source to a claim, its assumptions, and review status. See what is implemented and what remains research.',[
+  return shell('/method/','Scientific evidence method | Violema','See how a scientific evidence system links claims to source records, study conditions, assumptions, review status, and versioned packets.',[
     `<section class="page-head"><div class="wrap split"><div><p class="label">The method</p><h1>A conclusion should<br>show its working.</h1></div><p class="lede page-lede">Sources, studies, claims, and assumptions have different jobs. Keeping them distinct makes it possible to see where evidence ends and interpretation begins.</p></div></section>`,
     `<section class="protocol-band"><div class="wrap">${protocol()}<p class="small protocol-note">This is the organizing workflow. The prepared demonstration uses curated source records; it does not automate every step.</p></div></section>`,
+    `<section class="section" id="scientific-evidence-system" aria-labelledby="scientific-evidence-system-title"><div class="wrap split"><div><p class="label">Scientific evidence systems</p><h2 id="scientific-evidence-system-title">What is a scientific evidence system?</h2></div><div><p class="lede">It is a versioned record of how a scientific claim was assembled and what that claim can support.</p><p>For each conclusion, the record keeps its source material, study context, analytical choices, stated limits, and review status close enough to inspect. A reviewer can follow a claim back to its sources and see when an interpretation extends beyond them.</p><p>Violema’s prepared PsychDoc and materials packets demonstrate parts of this approach with curated inputs. They do not establish that every input has received independent scientific review or that the same analysis works across fields.</p><a class="text-link" href="/demo/">Inspect the two prepared examples <span aria-hidden="true">→</span></a></div></div></section>`,
     howItWorksSection(howItWorks),
     crossFieldSection(howItWorks),
     `<section class="method-row" id="trace" aria-labelledby="trace-title"><div class="wrap method-grid"><div class="method-copy"><p class="label">Trace</p><h2 id="trace-title">Count studies carefully.<br>Keep reports connected.</h2><p>A new publication may describe a new experiment, a follow-up, or an existing sample. These are different kinds of evidence.</p><p>The current packet preserves explicit source-to-claim links. Reviewed study and sample relationships are a development priority. Shared authors alone do not establish shared participants or independence.</p><a class="text-link" href="/demo/">Follow a source-linked claim</a></div><div class="instrument method-specimen"><div class="instrument-head"><p class="instrument-title">Example from the prepared packet</p><span class="pill">${e(c.claims[0].status)}</span></div>${traceSpecimen(c, c.claims[0], { limitLabel: 'Limit recorded beside the claim' })}</div></div></section>`,
@@ -165,7 +166,7 @@ export function methodPage(corpora,stress) {
 
 export function demoPage(corpora,stress) {
   const segments = corpora.map(c => `<a class="segment" href="#corpus-${e(c.id)}" data-corpus-choice="${e(c.id)}"><span class="segment-indicator" aria-hidden="true"></span><span class="segment-text"><span class="segment-domain">${e(c.domain)}</span><strong>${e(c.title)}</strong></span></a>`).join('');
-  return shell('/demo/','Evidence lab | Violema','Inspect two prepared scientific source packets, compare claim conditions, and replay a bounded saved analysis. Review status and provenance remain visible.',[
+  return shell('/demo/','Scientific evidence examples | Violema','Inspect two prepared scientific evidence packets: a source-linked PsychDoc analysis and a materials condition comparison, each with visible limits and review status.',[
     `<section class="page-head demo-head"><div class="wrap split"><div><p class="label">Evidence lab</p><h1>Open the record.</h1><p class="lede">Two research questions. One way to inspect sources, claims, and the limits between them.</p></div><div class="prepared-note"><p class="status-line"><span><strong>Prepared source packets</strong> Manual curation. No live ingestion.<br>Scientific review remains pending.</span></p></div></div></section>`,
     `<div class="wrap lab-toolbar"><nav class="segmented corpus-switch" data-corpus-switch aria-label="Choose a research corpus">${segments}</nav><button class="button button-secondary reset-button" type="button" data-reset hidden>Reset demo <span aria-hidden="true">↺</span></button></div>`,
     '<div class="visually-hidden" data-announcement role="status" aria-live="polite"></div>',
