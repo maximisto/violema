@@ -108,9 +108,9 @@ test('website policies are reachable from every company footer without replacing
 
 test('titles use the house separators',async()=>{
   const title=async file=>(await readFile(join(dist,file),'utf8')).match(/<title>([^<]+)<\/title>/)[1];
-  assert.equal(await title('index.html'),'Violema: scientific conclusions, with their evidence attached');
-  assert.equal(await title('method/index.html'),'The method | Violema');
-  assert.equal(await title('demo/index.html'),'Evidence lab | Violema');
+  assert.equal(await title('index.html'),'Scientific evidence systems | Violema');
+  assert.equal(await title('method/index.html'),'Scientific evidence method | Violema');
+  assert.equal(await title('demo/index.html'),'Scientific evidence examples | Violema');
 });
 
 test('the 404 page works at any address and is never indexed',async()=>{
