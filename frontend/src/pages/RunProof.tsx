@@ -1,3 +1,4 @@
+import ExampleBrief from '../components/ExampleBrief';
 import { Link, useParams } from 'react-router-dom';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
 import Check from 'lucide-react/dist/esm/icons/check.js';
@@ -20,7 +21,7 @@ import { useTheme } from '../lib/useTheme';
 function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="rounded-2xl border border-navy-700/70 bg-navy-950/45 px-4 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
       <p className="mt-2 text-xl font-semibold text-white">{value}</p>
       <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
     </div>
@@ -36,7 +37,7 @@ function RunNotFound() {
       <PublicHeader backHref="/pricing" backLabel="Pricing" actionHref="/signup?next=%2Fdashboard" actionLabel="Apply for beta" />
       <main className="relative mx-auto flex min-h-[calc(100dvh-4.85rem)] max-w-3xl items-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="rounded-[1.9rem] border border-navy-700/70 bg-navy-900/50 p-6 sm:p-8">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Run not found</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Run not found</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-[-0.02em] text-white">This proof run is not available.</h1>
           <p className="mt-3 text-sm leading-6 text-slate-400">
             The public sample run may have moved. Pricing still shows the current Start, Pro, and Enterprise proof set.
@@ -76,7 +77,7 @@ export default function RunProof() {
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-4 py-1.5 text-sm font-medium text-violet-300">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Public sample run
+                Illustrative workflow example
               </div>
               <h1 className="mt-5 max-w-4xl text-4xl font-extrabold leading-[0.95] text-white sm:text-5xl lg:text-[4rem]">
                 {run.title}
@@ -84,6 +85,7 @@ export default function RunProof() {
               <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg">
                 {run.summary}
               </p>
+              <p className="mt-3 text-sm leading-6 text-slate-300">Illustrative stages and costs, not a customer record. Availability and actual usage are confirmed during workflow setup.</p>
               <div className="mt-5 flex flex-wrap gap-2">
                 {run.sources.map((source) => (
                   <span key={source} className="rounded-full border border-cyan-500/20 bg-cyan-500/8 px-3 py-1 text-xs font-medium text-cyan-100">
@@ -119,19 +121,21 @@ export default function RunProof() {
           </div>
         </section>
 
+        {run.id === 'pricing-proof-founder-brief' ? <ExampleBrief /> : null}
+
         <section className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Per run" value={`${formatCredits(run.runCredits)} cr`} detail="Credits held and settled for this sample workflow." />
-          <MetricCard label="Monthly pressure" value={`${formatCredits(monthlyCredits)} cr`} detail={`${run.monthlyRuns} runs at ${run.cadence.toLowerCase()} cadence.`} />
+          <MetricCard label="Per run" value={`${formatCredits(run.runCredits)} cr`} detail="Illustrative credit estimate; not a measured run." />
+          <MetricCard label="Illustrative monthly usage" value={`${formatCredits(monthlyCredits)} cr`} detail={`${run.monthlyRuns} illustrative runs; actual calendar months and usage vary.`} />
           <MetricCard label="Provider cost" value={formatSampleUsd(run.providerCostUsd)} detail="Estimated model and tool provider cost for one run." />
-          <MetricCard label="Credit value" value={formatSampleUsd(creditValueUsd)} detail="Start-plan value of the credits consumed by one run." />
+          <MetricCard label="Credit value" value={formatSampleUsd(creditValueUsd)} detail="Start-plan reference value, not an extra charge or a plan-specific rate." />
         </section>
 
         <section className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
           <div className="rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-5 sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Run ledger</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-white">What happened in the run</h2>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Run ledger</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-white">How the example workflow works</h2>
               </div>
               <span className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-100">
                 {run.approvalState}
@@ -162,7 +166,7 @@ export default function RunProof() {
 
           <div className="grid gap-6">
             <section className="rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-5 sm:p-6">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Evidence trail</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Evidence trail</p>
               <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-white">Sources and approvals stay attached.</h2>
               <div className="mt-5 grid gap-3">
                 {run.ledger.map((event) => (
@@ -175,7 +179,7 @@ export default function RunProof() {
             </section>
 
             <section className="rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-5 sm:p-6">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Cost model</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Cost model</p>
               <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-white">Run economics stay visible.</h2>
               <div className="mt-5 grid gap-3">
                 <div className="flex items-start gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
@@ -198,7 +202,7 @@ export default function RunProof() {
         <section className="mt-6 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-5 sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Related proof</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Related proof</p>
               <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-white">Compare the other plan samples.</h2>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">

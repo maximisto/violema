@@ -40,11 +40,10 @@ assert(/manual approval/i.test(controlledBetaCopy), 'homepage states manual appr
 assert(/confidential/i.test(controlledBetaCopy), 'homepage states beta confidentiality');
 assert(!/buy now|instant access|start checkout/i.test(controlledBetaCopy), 'homepage does not promise self-serve access');
 
-assert(navLabels.includes('Beta access'), 'homepage nav exposes beta access');
-assert(!navLabels.includes('Pricing'), 'homepage nav does not expose pricing as a public primary nav item');
+assert(navLabels.includes('Pricing'), 'homepage nav exposes pricing for beta applicants');
 assert(
-  homepageNav.some((item) => item.label === 'Beta access' && item.href === '#beta-access'),
-  'beta nav item points to beta access section',
+  homepageNav.some((item) => item.label === 'Pricing' && item.href === '/pricing'),
+  'pricing nav item points to the informational pricing page',
 );
 
 assert(betaAccessSteps.length === 3, 'public launch surface explains a three-step beta access process');

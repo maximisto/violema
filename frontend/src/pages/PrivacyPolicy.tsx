@@ -1,6 +1,4 @@
-import { useNavigate } from 'react-router-dom';
 import Shield from 'lucide-react/dist/esm/icons/shield.js';
-import Zap from 'lucide-react/dist/esm/icons/zap.js';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useTheme } from '../lib/useTheme';
@@ -24,7 +22,7 @@ Last updated: August 1, 2026.`,
 
 **Conversation content.** Your messages to VIOLEMA and VIOLEMA's responses are processed and stored to provide conversation history, smart titles, and summaries. See Section 5 for how we handle AI-generated content.
 
-**Connected integrations.** When you connect third-party tools (Slack, GitHub, Stripe, etc.), we receive OAuth access tokens and the minimum data necessary to execute actions on your behalf. We never store raw secrets in plaintext.
+**Connected integrations.** When you connect third-party tools (Slack, GitHub, Stripe, etc.), we receive OAuth access tokens and the minimum data necessary to execute actions on your behalf. Access depends on the permissions you grant and the integration configuration.
 
 **Payment information.** Billing is processed by Stripe. We store only a Stripe customer ID and subscription status — never your card number or CVV.
 
@@ -45,14 +43,14 @@ Last updated: August 1, 2026.`,
 
 • **Analyse aggregate usage** — understand how teams use VIOLEMA at a population level to prioritise our roadmap. This analysis uses anonymised, aggregated data and never targets individual users.
 
-We do **not** use your conversation content or data to train AI models. Your data is yours.`,
+We do **not** use your conversation content or data to train our own AI models. External provider processing is described in Section 5. Your data is yours.`,
   },
   {
     id: 'sharing',
     title: '4. How We Share Your Information',
     content: `We do not sell your personal data. We share it only in these limited circumstances:
 
-**Service providers.** We use trusted vendors to operate the Service: Anthropic (AI inference), Stripe (payments), infrastructure providers, and transactional email providers. Each vendor is expected to process data only as needed to operate the Service.
+**Service providers.** We use trusted vendors to operate the Service: configured AI providers and gateways (see Section 5), Stripe (payments), integration and web-research services, infrastructure providers, and transactional email providers. Each vendor is expected to process data only as needed to operate the Service.
 
 **Connected integrations.** When you instruct VIOLEMA to take an action in a third-party tool, the minimum necessary data is shared with that tool's API. You control which integrations are connected and can revoke access at any time.
 
@@ -62,14 +60,14 @@ We do **not** use your conversation content or data to train AI models. Your dat
   },
   {
     id: 'ai',
-    title: '5. AI Processing & Anthropic',
-    content: `VIOLEMA sends your messages and conversation context to Anthropic's Claude API to generate responses. Anthropic processes this data as a data processor acting on our behalf, governed by Anthropic's data processing agreement.
+    title: '5. AI Processing',
+    content: `VIOLEMA sends messages and relevant workflow context to the AI providers selected by its configured model routes. Supported routes include Anthropic, OpenAI, MiniMax, OpenRouter and Mistral. A gateway such as OpenRouter can route a request to an underlying model provider; the recipient depends on the selected route. Embedding routes can process content used for retrieval and memory.
 
-**We use Anthropic's API under a terms that prohibit Anthropic from training on your data.** Your conversations are not used to improve Claude or any other AI model.
+The configured routes determine which providers receive data. Provider retention, abuse-monitoring and training terms depend on the provider, route and applicable agreement. Contact privacy@violema.com for the processing details relevant to your workspace before connecting sensitive information.
 
-Anthropic retains API inputs/outputs for up to 30 days for trust & safety review as required by their policies. This is standard practice across all major AI API providers.
+Violema does not use your conversation content to train its own AI models. This statement does not replace the processing terms of external providers.
 
-You can delete your conversation history at any time from the dashboard. Deleted conversations are purged from our systems within 30 days.`,
+You may request deletion of your conversation history by emailing privacy@violema.com. See Section 6 for retention information.`,
   },
   {
     id: 'retention',
@@ -105,17 +103,11 @@ To exercise any of these rights, contact us at privacy@violema.com. We will resp
   {
     id: 'security',
     title: '8. Security',
-    content: `We implement industry-standard security measures:
+    content: `Violema uses encrypted connections in transit, workspace-scoped access checks, and workflow review controls. Integration access depends on the permissions granted to each connected service.
 
-• TLS 1.3 encryption for all data in transit
-• AES-256 encryption for data at rest
-• Encrypted credential vault for third-party integration tokens
-• Managed infrastructure security controls and audit logging
-• Regular third-party penetration testing
-• Employee access controls and least-privilege policies
-• Automated anomaly detection and alerting
+AI processing requires the selected providers to process the content sent to them. Encryption in transit is not a claim of end-to-end encryption that prevents those providers from accessing that content.
 
-No system is 100% secure. If you discover a security vulnerability, please report it responsibly to security@violema.com. We offer a responsible disclosure program and will respond within 24 hours.`,
+Contact security@violema.com to discuss specific security requirements or report a vulnerability. Compliance commitments and additional controls must be agreed for your deployment before you rely on them.`,
   },
   {
     id: 'cookies',
@@ -145,9 +137,7 @@ The "last updated" date at the top of this page reflects the most recent revisio
     content: `For privacy-related questions, requests, or concerns:
 
 **Email:** privacy@violema.com
-**Post:** Violema, Inc., Attn: Privacy Team, [Address]
-
-For EU/EEA-specific queries, our EU representative can be reached at eu-privacy@violema.com.
+For postal contact details or EU/EEA-specific queries, email privacy@violema.com.
 
 For security disclosures: security@violema.com`,
   },
@@ -190,7 +180,6 @@ function renderContent(text: string) {
 }
 
 export default function PrivacyPolicy() {
-  const navigate = useNavigate();
   const { scopeClass } = useTheme();
 
   return (
@@ -207,7 +196,7 @@ export default function PrivacyPolicy() {
             </div>
             <div>
               <div className="text-xs text-green-400 font-semibold tracking-wider uppercase">Legal</div>
-              <div className="text-slate-500 text-xs">Last updated August 1, 2026</div>
+              <div className="text-slate-400 text-xs">Last updated August 1, 2026</div>
             </div>
           </div>
           <h1 className="text-5xl font-bold text-white mb-4">Privacy Policy</h1>
@@ -223,13 +212,13 @@ export default function PrivacyPolicy() {
           {/* Sticky TOC */}
           <aside className="hidden lg:block lg:col-span-1">
             <div className="sticky top-28 bg-navy-800/40 border border-navy-700/60 rounded-xl p-4">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Contents</p>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Contents</p>
               <nav className="space-y-1">
                 {SECTIONS.map((s) => (
                   <a
                     key={s.id}
                     href={`#${s.id}`}
-                    className="block text-xs text-slate-500 hover:text-violet-400 py-1 transition-colors leading-relaxed"
+                    className="block text-xs text-slate-400 hover:text-violet-400 py-1 transition-colors leading-relaxed"
                   >
                     {s.title}
                   </a>
@@ -243,14 +232,14 @@ export default function PrivacyPolicy() {
             {/* Summary badges */}
             <div className="grid sm:grid-cols-3 gap-3 p-5 rounded-xl bg-navy-800/40 border border-navy-700/40">
               {[
-                { icon: '🔒', label: 'End-to-end encrypted', sub: 'TLS 1.3 + AES-256' },
+                { icon: '🔒', label: 'Encrypted in transit', sub: 'Protected connections' },
                 { icon: '🚫', label: 'Never sold', sub: 'Your data is yours' },
-                { icon: '🤖', label: 'No AI training', sub: 'On your content' },
+                { icon: '🤖', label: 'AI processing', sub: 'See provider details below' },
               ].map((item) => (
                 <div key={item.label} className="text-center p-3">
                   <div className="text-2xl mb-1">{item.icon}</div>
                   <div className="text-sm font-semibold text-slate-200">{item.label}</div>
-                  <div className="text-xs text-slate-500">{item.sub}</div>
+                  <div className="text-xs text-slate-400">{item.sub}</div>
                 </div>
               ))}
             </div>
@@ -268,7 +257,7 @@ export default function PrivacyPolicy() {
             <div className="p-6 rounded-xl bg-gradient-to-br from-green-900/20 to-navy-800/60 border border-green-700/20 text-center">
               <Shield className="w-8 h-8 text-green-400 mx-auto mb-3" />
               <h3 className="text-white font-semibold mb-2">Questions about your privacy?</h3>
-              <p className="text-slate-400 text-sm mb-4">Our team typically responds within 24 hours.</p>
+              <p className="text-slate-400 text-sm mb-4">Contact us about data access, processing or deletion.</p>
               <a href="mailto:privacy@violema.com" className="btn-primary">
                 Contact Privacy Team
               </a>
