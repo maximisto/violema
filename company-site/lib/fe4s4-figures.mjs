@@ -322,12 +322,12 @@ export function futureSVG() {
 }
 
 export const OUTCOMES = Object.freeze([
-  { id: 'o-established-benchmark', short: 'Established', tier: 'Moves to Established, for this benchmark only', when: 'Positive, at least two independent positive confirmations, no decisive contradictory reproduction.' },
+  { id: 'o-established-benchmark', short: 'Established', tier: 'Moves to Established, for this benchmark only', when: 'Positive, at least two independent positive confirmations, no decisive contradictory reproduction of it.' },
   { id: 'o-contested', short: 'Active debate', tier: 'Moves to Active debate, for this benchmark only', when: 'Positive, and at least one decisive contradictory reproduction exists.' },
-  { id: 'o-positive-awaiting-confirmation', short: 'Speculation', tier: 'Stays Speculation; the positive result is shown on the record with its confirmation count', when: 'Positive, fewer than two independent positive confirmations, no decisive contradictory reproduction.' },
-  { id: 'o-threshold-not-met', short: 'Speculation', tier: 'Stays Speculation; threshold not shown', when: 'The bound dossier fails: its speed score’s upper bound is below 2.0, or it misses the ten-run rule.' },
-  { id: 'o-otherwise', short: 'Speculation', tier: 'Stays Speculation; inconclusive', when: 'The bound dossier is eligible but inconclusive.' },
-  { id: 'o-lapsed', short: 'Speculation', tier: 'Stays Speculation; lapsed', when: 'No dossier was complete, eligible and public by 2027-07-04: no result, never a negative one.' },
+  { id: 'o-positive-awaiting-confirmation', short: 'Speculation', tier: 'Stays Speculation; the positive result is shown on the record with its confirmation count', when: 'Positive, fewer than two independent positive confirmations, no decisive contradictory reproduction of it.' },
+  { id: 'o-threshold-not-met', short: 'Speculation', tier: 'Stays Speculation; threshold not shown', when: 'Every bound dossier fails: its speed score’s upper bound is below 2.0, or it misses the ten-run rule.' },
+  { id: 'o-otherwise', short: 'Speculation', tier: 'Stays Speculation; inconclusive', when: 'No bound dossier is positive, and at least one is eligible but inconclusive.' },
+  { id: 'o-lapsed', short: 'Speculation', tier: 'Stays Speculation; lapsed', when: 'No dossier from any team was complete, eligible and public by 2027-07-04: no result, never a negative one.' },
 ]);
 export const DEFAULT_SCENARIO = Object.freeze({ dossier: 'positive', confirmations: 1, contradiction: false });
 
@@ -339,6 +339,68 @@ export function decide({ dossier, confirmations, contradiction }) {
   if (dossier !== 'positive') throw new RangeError(`Unknown dossier state: ${dossier}`);
   if (contradiction) return 'o-contested';
   return confirmations >= 2 ? 'o-established-benchmark' : 'o-positive-awaiting-confirmation';
+}
+
+/**
+ * Amendment 1 (2026-10-31). Several dossiers may be bound, one per team. This helper selects among dossiers that are
+ * already bound (teams, eligibility and earliest-per-team binding are applied before it is called) and applies the
+ * outcome rule to the selection; the browser scenario still uses decide(), so this is a tested statement of the rule,
+ * not automated adjudication. A dossier is { dossier, confirmations, contradiction, publicAt, sourceId, speedLower? }:
+ * `dossier` 'none' means not bound; `publicAt` is an ISO 8601 instant and `sourceId` a permanent identifier, both
+ * required on every bound dossier (the RFC 3339 profile of ISO 8601 with a zone; impossible dates and loosely parsed forms are refused); `speedLower`, the speed score's conservative lower bound, is required on every
+ * positive one. Instants are compared as times with every accepted fractional digit; identifiers in ascending UTF-16
+ * code-unit order, never by locale, at this stage as at binding.
+ */
+const POSITIVE_RANK = Object.freeze({ 'o-established-benchmark': 3, 'o-contested': 2, 'o-positive-awaiting-confirmation': 1 });
+const compareIds = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|([+-])(\d{2}):(\d{2}))$/;
+/**
+ * Parses a public timestamp in the record's accepted form, the RFC 3339 profile of ISO 8601: `YYYY-MM-DDThh:mm:ss`, an
+ * optional `.` fraction of any length, then `Z` or `±hh:mm`. Calendar-aware: an impossible date such as 30 February is
+ * refused rather than normalized, as are basic-format and comma-fraction variants. Returns the instant as UTC seconds
+ * plus the fraction digits as written, so comparisons keep every accepted digit.
+ */
+export function parseInstant(value) {
+  const match = RFC3339.exec(String(value));
+  if (!match) return null;
+  const [, y, mo, d, h, mi, s, frac = '', sign, oh, om] = match;
+  const [year, month, day, hour, minute, second] = [y, mo, d, h, mi, s].map(Number);
+  if (month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return null;
+  const utc = Date.UTC(year, month - 1, day, hour, minute, second);
+  const probe = new Date(utc);
+  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return null;
+  if (sign && (Number(oh) > 23 || Number(om) > 59)) return null;
+  const offsetSeconds = sign ? (sign === '+' ? 1 : -1) * (Number(oh) * 3600 + Number(om) * 60) : 0;
+  return { seconds: utc / 1000 - offsetSeconds, fraction: frac.replace(/0+$/, '') };
+}
+/** Orders two parsed instants: by UTC seconds, then by every accepted fractional digit. */
+export function compareInstants(a, b) {
+  if (a.seconds !== b.seconds) return a.seconds - b.seconds;
+  const width = Math.max(a.fraction.length, b.fraction.length);
+  const fa = a.fraction.padEnd(width, '0'), fb = b.fraction.padEnd(width, '0');
+  return fa < fb ? -1 : fa > fb ? 1 : 0;
+}
+export function resolve(dossiers) {
+  const bound = [];
+  for (const item of dossiers ?? []) {
+    decide(item);
+    if (item.dossier === 'none') continue;
+    if (typeof item.sourceId !== 'string' || item.sourceId === '') throw new RangeError('A bound dossier needs a permanent source identifier');
+    const at = parseInstant(item.publicAt);
+    if (at === null) throw new RangeError(`Dossier ${item.sourceId} has no valid public timestamp`);
+    if (item.dossier === 'positive' && !Number.isFinite(item.speedLower)) throw new RangeError(`Positive dossier ${item.sourceId} needs its speed score’s lower bound`);
+    bound.push({ item, at });
+  }
+  if (bound.length === 0) return { outcome: 'o-lapsed', resolving: null };
+  const positive = bound.filter(entry => entry.item.dossier === 'positive');
+  if (positive.length === 0) return { outcome: bound.some(entry => entry.item.dossier === 'inconclusive') ? 'o-otherwise' : 'o-threshold-not-met', resolving: null };
+  positive.sort((a, b) =>
+    (POSITIVE_RANK[decide(b.item)] - POSITIVE_RANK[decide(a.item)])
+    || ((b.item.confirmations ?? 0) - (a.item.confirmations ?? 0))
+    || (b.item.speedLower - a.item.speedLower)
+    || compareInstants(a.at, b.at)
+    || compareIds(a.item.sourceId, b.item.sourceId));
+  return { outcome: decide(positive[0].item), resolving: positive[0].item };
 }
 
 export function verdict(scenario = DEFAULT_SCENARIO) {
