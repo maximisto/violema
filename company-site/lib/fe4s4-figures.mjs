@@ -347,20 +347,47 @@ export function decide({ dossier, confirmations, contradiction }) {
  * outcome rule to the selection; the browser scenario still uses decide(), so this is a tested statement of the rule,
  * not automated adjudication. A dossier is { dossier, confirmations, contradiction, publicAt, sourceId, speedLower? }:
  * `dossier` 'none' means not bound; `publicAt` is an ISO 8601 instant and `sourceId` a permanent identifier, both
- * required on every bound dossier (an ISO 8601 instant with a zone, loosely parsed dates are refused); `speedLower`, the speed score's conservative lower bound, is required on every
- * positive one. Instants are compared as times; identifiers by code unit, never by locale.
+ * required on every bound dossier (the RFC 3339 profile of ISO 8601 with a zone; impossible dates and loosely parsed forms are refused); `speedLower`, the speed score's conservative lower bound, is required on every
+ * positive one. Instants are compared as times with every accepted fractional digit; identifiers in ascending UTF-16
+ * code-unit order, never by locale, at this stage as at binding.
  */
 const POSITIVE_RANK = Object.freeze({ 'o-established-benchmark': 3, 'o-contested': 2, 'o-positive-awaiting-confirmation': 1 });
 const compareIds = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|([+-])(\d{2}):(\d{2}))$/;
+/**
+ * Parses a public timestamp in the record's accepted form, the RFC 3339 profile of ISO 8601: `YYYY-MM-DDThh:mm:ss`, an
+ * optional `.` fraction of any length, then `Z` or `±hh:mm`. Calendar-aware: an impossible date such as 30 February is
+ * refused rather than normalized, as are basic-format and comma-fraction variants. Returns the instant as UTC seconds
+ * plus the fraction digits as written, so comparisons keep every accepted digit.
+ */
+export function parseInstant(value) {
+  const match = RFC3339.exec(String(value));
+  if (!match) return null;
+  const [, y, mo, d, h, mi, s, frac = '', sign, oh, om] = match;
+  const [year, month, day, hour, minute, second] = [y, mo, d, h, mi, s].map(Number);
+  if (month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return null;
+  const utc = Date.UTC(year, month - 1, day, hour, minute, second);
+  const probe = new Date(utc);
+  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return null;
+  if (sign && (Number(oh) > 23 || Number(om) > 59)) return null;
+  const offsetSeconds = sign ? (sign === '+' ? 1 : -1) * (Number(oh) * 3600 + Number(om) * 60) : 0;
+  return { seconds: utc / 1000 - offsetSeconds, fraction: frac.replace(/0+$/, '') };
+}
+/** Orders two parsed instants: by UTC seconds, then by every accepted fractional digit. */
+export function compareInstants(a, b) {
+  if (a.seconds !== b.seconds) return a.seconds - b.seconds;
+  const width = Math.max(a.fraction.length, b.fraction.length);
+  const fa = a.fraction.padEnd(width, '0'), fb = b.fraction.padEnd(width, '0');
+  return fa < fb ? -1 : fa > fb ? 1 : 0;
+}
 export function resolve(dossiers) {
   const bound = [];
   for (const item of dossiers ?? []) {
     decide(item);
     if (item.dossier === 'none') continue;
     if (typeof item.sourceId !== 'string' || item.sourceId === '') throw new RangeError('A bound dossier needs a permanent source identifier');
-    const at = ISO_INSTANT.test(String(item.publicAt)) ? Date.parse(item.publicAt) : NaN;
-    if (!Number.isFinite(at)) throw new RangeError(`Dossier ${item.sourceId} has no valid public timestamp`);
+    const at = parseInstant(item.publicAt);
+    if (at === null) throw new RangeError(`Dossier ${item.sourceId} has no valid public timestamp`);
     if (item.dossier === 'positive' && !Number.isFinite(item.speedLower)) throw new RangeError(`Positive dossier ${item.sourceId} needs its speed score’s lower bound`);
     bound.push({ item, at });
   }
@@ -371,7 +398,7 @@ export function resolve(dossiers) {
     (POSITIVE_RANK[decide(b.item)] - POSITIVE_RANK[decide(a.item)])
     || ((b.item.confirmations ?? 0) - (a.item.confirmations ?? 0))
     || (b.item.speedLower - a.item.speedLower)
-    || (a.at - b.at)
+    || compareInstants(a.at, b.at)
     || compareIds(a.item.sourceId, b.item.sourceId));
   return { outcome: decide(positive[0].item), resolving: positive[0].item };
 }

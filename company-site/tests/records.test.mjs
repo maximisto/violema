@@ -7,7 +7,7 @@ import { TRACKER_SRC } from '../lib/analytics.mjs';
 import { FE4S4_ROUTE, FE4S4_RECORD_ROUTE } from '../lib/records.mjs';
 import {
   ENERGIES, GAP, TRIMCI_GAIN, MATCH_DAYS, DETERMINANTS, SINGLETS, FLASH_MS, CLOCK, LEDGER, LEDGER_EVENTS, EVIDENCE, RESPONSE_ARCS,
-  OUTCOMES, decide, resolve as resolveOutcome, verdict, raceSVG, RACE_SCALES, daysBetween, SQD_QPU_USD, BUDGET_USD,
+  OUTCOMES, decide, resolve as resolveOutcome, parseInstant, compareInstants, verdict, raceSVG, RACE_SCALES, daysBetween, SQD_QPU_USD, BUDGET_USD,
 } from '../lib/fe4s4-figures.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -118,6 +118,16 @@ test('Amendment 1: resolve() picks among bound dossiers by the stated order, and
   const utc = d('positive', { confirmations: 1, speedLower: 2.5, publicAt: '2027-05-01T00:00:00Z', sourceId: 'a' });
   assert.equal(resolveOutcome([offset, utc]).resolving.sourceId, 'B', 'equal instants in different offsets tie; identifiers then order by code unit, not locale');
   assert.throws(() => resolveOutcome([d('positive', { publicAt: 'May 2027' })]), RangeError, 'a bound dossier needs a valid instant');
+  assert.throws(() => resolveOutcome([d('positive', { publicAt: '2027-02-30T00:00:00Z' })]), RangeError, 'an impossible date is refused, not normalized');
+  assert.throws(() => resolveOutcome([d('positive', { publicAt: '20270501T000000Z' })]), RangeError, 'basic format is outside the accepted profile');
+  assert.throws(() => resolveOutcome([d('positive', { publicAt: '2027-05-01T00:00:00,5Z' })]), RangeError, 'comma fractions are outside the accepted profile');
+  const fine1 = d('positive', { confirmations: 1, speedLower: 2.5, publicAt: '2027-05-01T00:00:00.0002Z', sourceId: 'a' });
+  const fine2 = d('positive', { confirmations: 1, speedLower: 2.5, publicAt: '2027-05-01T00:00:00.0001Z', sourceId: 'z' });
+  assert.equal(resolveOutcome([fine1, fine2]).resolving.sourceId, 'z', 'fractional digits beyond milliseconds still order the instants');
+  assert.equal(compareInstants(parseInstant('2027-05-01T00:00:00.10Z'), parseInstant('2027-05-01T00:00:00.1Z')), 0, 'trailing zeros do not change an instant');
+  assert.equal(compareInstants(parseInstant('2027-05-01T02:00:00+02:00'), parseInstant('2027-05-01T00:00:00Z')), 0, 'offsets normalize to the same instant');
+  assert.equal(parseInstant('2027-12-31T23:59:60Z'), null, 'leap seconds are outside the accepted profile');
+  assert.equal(parseInstant('2028-02-29T12:00:00Z') === null, false, 'a real leap day parses');
   assert.throws(() => resolveOutcome([d('positive', { sourceId: '' })]), RangeError, 'a bound dossier needs an identifier');
   assert.throws(() => resolveOutcome([d('positive', { speedLower: undefined })]), RangeError, 'a positive dossier needs its speed-score lower bound');
   assert.throws(() => resolveOutcome([d('maybe')]), RangeError);
@@ -134,6 +144,7 @@ test('Amendment 1 is on the record page: per-team binding, the ablation, the tea
   assert.doesNotMatch(html, /The bound dossier/, 'outcomes name the resolving dossier');
   assert.ok(html.includes('team binding, the ablation requirement and tier moves are Violema'));
   assert.ok(html.includes('within a team, identical public timestamps are ordered by permanent source identifier'));
+  assert.ok(html.includes('ascending UTF-16 code-unit order, without locale collation'));
   assert.ok(html.includes('whether or not any of its runs succeeds'));
   assert.ok(html.includes('no decisive contradictory reproduction of it exists'));
   assert.ok(html.includes('Every bound dossier stays on the record'));
