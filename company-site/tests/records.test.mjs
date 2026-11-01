@@ -7,7 +7,7 @@ import { TRACKER_SRC } from '../lib/analytics.mjs';
 import { FE4S4_ROUTE, FE4S4_RECORD_ROUTE } from '../lib/records.mjs';
 import {
   ENERGIES, GAP, TRIMCI_GAIN, MATCH_DAYS, DETERMINANTS, SINGLETS, FLASH_MS, CLOCK, LEDGER, LEDGER_EVENTS, EVIDENCE, RESPONSE_ARCS,
-  OUTCOMES, decide, verdict, raceSVG, RACE_SCALES, daysBetween, SQD_QPU_USD, BUDGET_USD,
+  OUTCOMES, decide, resolve as resolveOutcome, verdict, raceSVG, RACE_SCALES, daysBetween, SQD_QPU_USD, BUDGET_USD,
 } from '../lib/fe4s4-figures.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -91,6 +91,39 @@ test('the outcome rule gives each of the six outcomes, and a contradiction outra
   assert.equal(decide({ dossier: 'positive', confirmations: 1, contradiction: false }), 'o-positive-awaiting-confirmation');
   assert.match(verdict({ dossier: 'positive', confirmations: 1, contradiction: false }).why, /Confirmations shown:\u00a01\./, 'the count stays on the line of its label');
   assert.throws(() => decide({ dossier: 'maybe', confirmations: 0, contradiction: false }), RangeError);
+});
+
+test('Amendment 1: binding is per team, the resolving dossier is chosen by the stated order, and no dossier blocks another', () => {
+  assert.equal(resolveOutcome([]).outcome, 'o-lapsed');
+  assert.equal(resolveOutcome([{ dossier: 'none', confirmations: 0, contradiction: false }]).outcome, 'o-lapsed');
+  assert.equal(resolveOutcome([{ dossier: 'fails', confirmations: 0, contradiction: false }, { dossier: 'fails', confirmations: 0, contradiction: false }]).outcome, 'o-threshold-not-met');
+  assert.equal(resolveOutcome([{ dossier: 'fails', confirmations: 0, contradiction: false }, { dossier: 'inconclusive', confirmations: 0, contradiction: false }]).outcome, 'o-otherwise');
+  const griefer = { dossier: 'fails', confirmations: 0, contradiction: false, publicAt: '2027-03-01', sourceId: 'a' };
+  const real = { dossier: 'positive', confirmations: 0, contradiction: false, publicAt: '2027-06-01', sourceId: 'b' };
+  assert.equal(resolveOutcome([griefer, real]).outcome, 'o-positive-awaiting-confirmation', 'an earlier failing dossier from another team no longer locks the test');
+  const contested = { dossier: 'positive', confirmations: 3, contradiction: true, sourceId: 'c' };
+  const established = { dossier: 'positive', confirmations: 2, contradiction: false, sourceId: 'd' };
+  assert.equal(resolveOutcome([contested, established]).outcome, 'o-established-benchmark', 'a confirmed result is not outranked by another team’s contradicted one');
+  assert.equal(resolveOutcome([contested]).outcome, 'o-contested');
+  const slower = { dossier: 'positive', confirmations: 1, contradiction: false, speedLower: 2.1, publicAt: '2027-02-01', sourceId: 'e' };
+  const faster = { dossier: 'positive', confirmations: 1, contradiction: false, speedLower: 3.4, publicAt: '2027-05-01', sourceId: 'f' };
+  assert.equal(resolveOutcome([slower, faster]).resolving.sourceId, 'f', 'same outcome and confirmations: the higher speed-score lower bound resolves');
+  const tie1 = { dossier: 'positive', confirmations: 1, contradiction: false, speedLower: 2.5, publicAt: '2027-05-01', sourceId: 'h' };
+  const tie2 = { dossier: 'positive', confirmations: 1, contradiction: false, speedLower: 2.5, publicAt: '2027-04-01', sourceId: 'g' };
+  assert.equal(resolveOutcome([tie1, tie2]).resolving.sourceId, 'g', 'then the earlier public timestamp');
+  assert.throws(() => resolveOutcome([{ dossier: 'maybe', confirmations: 0, contradiction: false }]), RangeError);
+});
+
+test('Amendment 1 is on the record page: per-team binding, the ablation, the team declaration and a dated revision row', async () => {
+  const html = await readFile(join(dist, 'records/fe4s4-benchmark/record/index.html'), 'utf8');
+  assert.ok(html.includes('Each team\'s earliest eligible quantum dossier binds for that team'));
+  assert.ok(html.includes('A dossier from one team never prevents another team\'s dossier from binding.'));
+  assert.ok(html.includes('Every quantum dossier also includes an ablation'));
+  assert.ok(html.includes('the ten ablation outcomes with their declared classical source'));
+  assert.ok(html.includes('and a team declaration'));
+  assert.ok(html.includes('Amendment 1, before registration'));
+  assert.doesNotMatch(html, /The bound dossier/, 'outcomes name the resolving dossier');
+  assert.ok(html.includes('team binding, the ablation requirement and tier moves are Violema'));
 });
 
 test('the race chart shows marks only, a one-sided pass line, and no verdict multiplier', async () => {

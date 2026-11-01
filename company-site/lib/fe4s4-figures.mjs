@@ -325,9 +325,9 @@ export const OUTCOMES = Object.freeze([
   { id: 'o-established-benchmark', short: 'Established', tier: 'Moves to Established, for this benchmark only', when: 'Positive, at least two independent positive confirmations, no decisive contradictory reproduction.' },
   { id: 'o-contested', short: 'Active debate', tier: 'Moves to Active debate, for this benchmark only', when: 'Positive, and at least one decisive contradictory reproduction exists.' },
   { id: 'o-positive-awaiting-confirmation', short: 'Speculation', tier: 'Stays Speculation; the positive result is shown on the record with its confirmation count', when: 'Positive, fewer than two independent positive confirmations, no decisive contradictory reproduction.' },
-  { id: 'o-threshold-not-met', short: 'Speculation', tier: 'Stays Speculation; threshold not shown', when: 'The bound dossier fails: its speed score’s upper bound is below 2.0, or it misses the ten-run rule.' },
-  { id: 'o-otherwise', short: 'Speculation', tier: 'Stays Speculation; inconclusive', when: 'The bound dossier is eligible but inconclusive.' },
-  { id: 'o-lapsed', short: 'Speculation', tier: 'Stays Speculation; lapsed', when: 'No dossier was complete, eligible and public by 2027-07-04: no result, never a negative one.' },
+  { id: 'o-threshold-not-met', short: 'Speculation', tier: 'Stays Speculation; threshold not shown', when: 'Every bound dossier fails: its speed score’s upper bound is below 2.0, or it misses the ten-run rule.' },
+  { id: 'o-otherwise', short: 'Speculation', tier: 'Stays Speculation; inconclusive', when: 'No bound dossier is positive, and at least one is eligible but inconclusive.' },
+  { id: 'o-lapsed', short: 'Speculation', tier: 'Stays Speculation; lapsed', when: 'No dossier from any team was complete, eligible and public by 2027-07-04: no result, never a negative one.' },
 ]);
 export const DEFAULT_SCENARIO = Object.freeze({ dossier: 'positive', confirmations: 1, contradiction: false });
 
@@ -339,6 +339,26 @@ export function decide({ dossier, confirmations, contradiction }) {
   if (dossier !== 'positive') throw new RangeError(`Unknown dossier state: ${dossier}`);
   if (contradiction) return 'o-contested';
   return confirmations >= 2 ? 'o-established-benchmark' : 'o-positive-awaiting-confirmation';
+}
+
+/**
+ * Amendment 1 (2026-10-31): each team's earliest eligible dossier binds for that team, so several dossiers may be bound.
+ * Picks the resolving dossier by the record's stated order and applies the outcome rule to it.
+ * A dossier is { dossier, confirmations, contradiction, speedLower?, publicAt?, sourceId? }; the `dossier` state 'none' means not bound.
+ */
+const POSITIVE_RANK = Object.freeze({ 'o-established-benchmark': 3, 'o-contested': 2, 'o-positive-awaiting-confirmation': 1 });
+export function resolve(dossiers) {
+  const bound = (dossiers ?? []).filter(item => { decide(item); return item.dossier !== 'none'; });
+  if (bound.length === 0) return { outcome: 'o-lapsed', resolving: null };
+  const positive = bound.filter(item => item.dossier === 'positive');
+  if (positive.length === 0) return { outcome: bound.some(item => item.dossier === 'inconclusive') ? 'o-otherwise' : 'o-threshold-not-met', resolving: null };
+  const ordered = [...positive].sort((a, b) =>
+    (POSITIVE_RANK[decide(b)] - POSITIVE_RANK[decide(a)])
+    || ((b.confirmations ?? 0) - (a.confirmations ?? 0))
+    || ((b.speedLower ?? 0) - (a.speedLower ?? 0))
+    || String(a.publicAt ?? '').localeCompare(String(b.publicAt ?? ''))
+    || String(a.sourceId ?? '').localeCompare(String(b.sourceId ?? '')));
+  return { outcome: decide(ordered[0]), resolving: ordered[0] };
 }
 
 export function verdict(scenario = DEFAULT_SCENARIO) {
