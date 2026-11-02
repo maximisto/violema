@@ -6,7 +6,7 @@ import { howItWorksSection, crossFieldSection } from './how-it-works.mjs';
 import { howItWorks } from '../data/how-it-works.mjs';
 import { analyticsScript } from './analytics.mjs';
 import { legalPolicies, legalUpdatedAt } from './legal.mjs';
-import { profileCards, profileLinks } from './social.mjs';
+import { founderOrcidLink, profileLinks } from './social.mjs';
 import { escapeHTML as e, sourceURL, corpusPanel, intervalFigure, calculateBiasScenario, chartLegend, biasControl, biasExplanation, referenceNote, scenarioSummary, traceSpecimen } from './render.mjs';
 
 const psychdoc = 'https://psychdoc.ai';
@@ -69,7 +69,7 @@ function siteHeader(route) {
 }
 
 function siteFooter() {
-  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/">Home</a><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="/about/">About Violema</a><a href="/#briefing">Request a briefing</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span></div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><ul class="social-list footer-social" aria-label="Social profiles">${profileLinks()}</ul><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
+  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/">Home</a><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="/about/">About Violema</a><a href="/#briefing">Request a briefing</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span>${founderOrcidLink()}</div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><ul class="social-list footer-social" aria-label="Social profiles">${profileLinks()}</ul><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
 }
 
 export function shell(route, title, description, content, options = {}) {
@@ -278,135 +278,6 @@ export function aboutPage() {
     <div class="guide-foot"><span>Violema, Inc. holds no equity, options, or advisory roles in any drug developer.</span><a href="/company-assets/data/psychdoc.json" download>Download sample packet</a></div>
   </div>`;
 
-  const founderExplorer = `<div class="evidence-guide founder-explorer" data-tabs data-founder-explorer>
-    <div class="guide-topline"><span>Career &amp; systems track record · Select an era to inspect</span><span class="record-status">30+ years</span></div>
-    <nav class="guide-tabs" data-tablist aria-label="Explore Max Markovtsev career eras">
-      <a href="#founder-era-agencies"><span class="era-num">01</span><span class="era-text"><span class="era-title">Agencies</span><span class="era-years">1994–2009</span></span></a>
-      <a href="#founder-era-independent"><span class="era-num">02</span><span class="era-text"><span class="era-title">Own agency</span><span class="era-years">2010–2017</span></span></a>
-      <a href="#founder-era-ai"><span class="era-num">03</span><span class="era-text"><span class="era-title">AI systems</span><span class="era-years">2017–now</span></span></a>
-      <a href="#founder-era-violema"><span class="era-num">04</span><span class="era-text"><span class="era-title">Violema</span><span class="era-years">2026–now</span></span></a>
-      <a href="#founder-era-disclosure"><span class="era-num">05</span><span class="era-text"><span class="era-title">Disclosures</span><span class="era-years">Role &amp; COI</span></span></a>
-    </nav>
-    <div class="guide-panels">
-      <section id="founder-era-agencies" aria-labelledby="founder-era-agencies-heading">
-        <p class="label">J. Walter Thompson · Leo Burnett · BBDO (1994 to 2009)</p>
-        <h3 id="founder-era-agencies-heading">Marketing strategy and business intelligence.</h3>
-        <p class="guide-claim">At 19, Max helped open Leo Burnett’s Moscow office on the Procter &amp; Gamble account. Over the next decade and a half at Leo Burnett, BBDO, and J. Walter Thompson, he served as Senior Digital Strategist and Director of Business Intelligence across global consumer, financial, and public-sector programs.</p>
-        <p class="founder-clients-label" id="founder-clients-label">Selected clients · 1994 to 2017</p>
-        <ul class="founder-client-grid" aria-labelledby="founder-clients-label">
-          <li><span class="founder-client-mark founder-client-wordmark founder-client-wordmark--serif founder-client-wordmark--pg">P&amp;G</span><span class="founder-client-role">Brand &amp; market intelligence</span></li>
-          <li><span class="founder-client-mark founder-client-wordmark"><img class="founder-client-logo founder-client-logo--unilever" src="/company-assets/clients/unilever.svg" width="24" height="24" alt="" loading="lazy" decoding="async">Unilever</span><span class="founder-client-role">Digital transformation &amp; analytics</span></li>
-          <li><span class="founder-client-mark"><img class="founder-client-logo founder-client-logo--wrigley" src="/company-assets/clients/wrigley.svg" width="1024" height="124" alt="Wrigley" loading="lazy" decoding="async"></span><span class="founder-client-role">Global consumer &amp; commercial BI</span></li>
-          <li><span class="founder-client-mark"><img class="founder-client-logo founder-client-logo--nestle" src="/company-assets/clients/nestle.svg" width="300" height="82" alt="Nestlé" loading="lazy" decoding="async"></span><span class="founder-client-role">Strategic research &amp; data systems</span></li>
-          <li><span class="founder-client-mark founder-client-wordmark founder-client-wordmark--serif">Northwestern Mutual</span><span class="founder-client-role">Enterprise digital strategy</span></li>
-          <li><span class="founder-client-mark founder-client-wordmark">U.S. Marine Corps</span><span class="founder-client-role">Digital systems &amp; recruitment BI</span></li>
-        </ul>
-      </section>
-      <section id="founder-era-independent" aria-labelledby="founder-era-independent-heading">
-        <p class="label">Own agency &amp; consulting (2010 to 2017)</p>
-        <h3 id="founder-era-independent-heading">Strategy and analytics, run independently.</h3>
-        <p class="guide-claim">From 2010 to 2017 Max ran his own agency and consulted directly for brands, carrying his agency years of marketing strategy and business intelligence into independent client work.</p>
-      </section>
-      <section id="founder-era-ai" aria-labelledby="founder-era-ai-heading">
-        <p class="label">Purple Orange AI · Purple Orange Group (2017 to present · Chicago)</p>
-        <h3 id="founder-era-ai-heading">Governed multi-agent workflows and human-in-the-loop verification.</h3>
-        <p class="guide-claim">Since 2017 in Chicago, Max has led Purple Orange AI, designing production machine learning and multi-agent systems where every automated step leaves an inspectable audit trail before a human operator approves it.</p>
-        <div class="guide-boundary">
-          <strong>Architectural principle carried into Violema</strong>
-          <p>Never let a language model act as an unverified authority. Use deterministic code for retrieval, schema validation, and math; use AI to draft candidate records with verbatim quotes attached; require human approval at every gate.</p>
-        </div>
-        <a class="text-link" href="https://purpleorange.ai" target="_blank" rel="noopener noreferrer">Visit Purple Orange AI ${external}</a>
-      </section>
-      <section id="founder-era-violema" aria-labelledby="founder-era-violema-heading">
-        <p class="label">Violema, Inc. &amp; PsychDoc.AI (2026 to present · Chicago)</p>
-        <h3 id="founder-era-violema-heading">Scientific evidence infrastructure for contested fields.</h3>
-        <p class="guide-claim">Max founded Violema, Inc. and its first operating division, PsychDoc.AI, to solve the 67-week bottleneck in scientific literature synthesis without sacrificing methodological rigor.</p>
-        <div class="guide-boundary">
-          <strong>What exists today</strong>
-          <p>Two versioned evidence corpora (psychedelic neuroscience &amp; perovskite solar-cell stability), 24 source papers traced into 23 tiered claims across 15 research programs, and a 4-decimal R statistical reproduction of the SYPRES 2026 depression meta-analysis.</p>
-        </div>
-        <a class="text-link" href="${psychdoc}">Explore PsychDoc.AI ${external}</a>
-      </section>
-      <section id="founder-era-disclosure" aria-labelledby="founder-era-disclosure-heading">
-        <p class="label">Academic foundation &amp; conflict-of-interest disclosure</p>
-        <h3 id="founder-era-disclosure-heading">Clear role boundaries and zero commercial drug ties.</h3>
-        <p class="guide-claim">Trained in Economics, Statistics, and Informatics at Moscow State University of Economics, Statistics, and Informatics (MESI, 1991 to 1995), Max leads product architecture, citation-graph engineering, and statistical reproduction at Violema, Inc.</p>
-        <div class="guide-boundary">
-          <strong>Non-clinician &amp; independence disclosure</strong>
-          <p>Max Markovtsev is identified in his engineering and publishing role, not as a clinician or medical reviewer. Scientific conclusions await independent review by domain specialists. Neither Max Markovtsev nor Violema, Inc. holds shares, options, or advisory roles in any psychedelic drug developer.</p>
-        </div>
-        <a class="text-link" href="https://orcid.org/0009-0009-9354-2207" target="_blank" rel="noopener noreferrer">Verify ORCID record 0009-0009-9354-2207 ${external}</a>
-      </section>
-    </div>
-  </div>`;
-
-  const founderLeadSection = `<section class="about-lead-section" id="founder" aria-labelledby="about-page-title">
-    <div class="wrap">
-      <header class="about-page-header">
-        <div>
-          <p class="label">About Violema, Inc. · Founder &amp; Leadership</p>
-          <h1 id="about-page-title">Scientific evidence infrastructure,<br>built to be audited<span>.</span></h1>
-        </div>
-        <p class="lede">Violema, Inc. is a Delaware corporation headquartered in Chicago. We build software and review protocols that connect scientific claims to primary sources, expose consequential assumptions, and keep conclusions open to independent domain sign-off.</p>
-      </header>
-
-      <div class="about-founder-showcase">
-        <div class="founder-aside">
-          <figure class="instrument founder-instrument" aria-label="Max Markovtsev founder dossier">
-            <div class="founder-instrument-head">
-              <span class="pill">Founder &amp; CEO</span>
-              <span class="caption">Chicago, Illinois</span>
-            </div>
-            <div class="founder-portrait-wrap">
-              <img class="founder-portrait" src="/company-assets/max-markovtsev.jpg" width="1024" height="1024" alt="Max Markovtsev, Founder and CEO of Violema, Inc.">
-            </div>
-            <figcaption class="founder-instrument-body">
-              <h2 class="founder-name">Max Markovtsev</h2>
-              <p class="founder-role">Founder &amp; Chief Executive Officer · Violema, Inc.</p>
-              <dl class="founder-ledger" aria-label="Career timeline">
-                <div>
-                  <dt>2026 to present</dt>
-                  <dd><a class="founder-epoch-link" href="#founder-era-violema" data-epoch-target="founder-era-violema"><strong>Violema, Inc. &amp; PsychDoc.AI</strong><span>Founder &amp; CEO · Scientific evidence systems →</span></a></dd>
-                </div>
-                <div>
-                  <dt>2017 to present</dt>
-                  <dd><a class="founder-epoch-link" href="#founder-era-ai" data-epoch-target="founder-era-ai"><strong>Purple Orange AI · Purple Orange Group</strong><span>Founder &amp; Managing Partner · Governed AI systems →</span></a></dd>
-                </div>
-                <div>
-                  <dt>2010 to 2017</dt>
-                  <dd><a class="founder-epoch-link" href="#founder-era-independent" data-epoch-target="founder-era-independent"><strong>Own agency &amp; consulting</strong><span>Founder · Marketing strategy &amp; analytics →</span></a></dd>
-                </div>
-                <div>
-                  <dt>1994 to 2009</dt>
-                  <dd><a class="founder-epoch-link" href="#founder-era-agencies" data-epoch-target="founder-era-agencies"><strong>J. Walter Thompson · Leo Burnett · BBDO</strong><span>Sr. Digital Strategist &amp; Director of BI →</span></a></dd>
-                </div>
-                <div>
-                  <dt>1991 to 1995</dt>
-                  <dd><a class="founder-epoch-link" href="#founder-era-disclosure" data-epoch-target="founder-era-disclosure"><strong>Moscow State University of Economics, Statistics and Informatics (MESI)</strong><span>Economics, Statistics, and Informatics →</span></a></dd>
-                </div>
-              </dl>
-            </figcaption>
-          </figure>
-          <ul class="founder-profiles" aria-label="Max Markovtsev's profiles">${profileCards(['linkedin', 'orcid'])}</ul>
-        </div>
-
-        <div class="founder-narrative">
-          <p class="label">Founder profile · Systems architecture meets scientific synthesis</p>
-          <h2>Thirty years turning complex data into decisions.</h2>
-          <p class="lede">Max Markovtsev is a Chicago-based founder and systems architect who has spent three decades in marketing strategy, business intelligence, and governed AI systems for high-stakes decisions.</p>
-          <p>Before founding Violema, Inc. and its first scientific division, <a href="${psychdoc}">PsychDoc.AI ${external}</a>, Max spent fifteen years in marketing strategy and business intelligence at Leo Burnett, BBDO, and J. Walter Thompson, then ran his own agency and consultancy from 2010 to 2017. Since 2017 he has built governed machine-learning and multi-agent verification pipelines in Chicago.</p>
-
-          <div class="guide-boundary founder-callout">
-            <strong>Why a systems architect builds scientific evidence infrastructure</strong>
-            <p>Most AI tools fail science because they treat papers as text to summarize rather than experiments to audit. Violema was built on a different premise: let deterministic code handle citation graphs, sample-overlap tracking, and statistical reproduction, and ask named domain scientists to review the scientific conclusions.</p>
-          </div>
-
-          ${founderExplorer}
-        </div>
-      </div>
-    </div>
-  </section>`;
-
   const corporateDirectory = `<section class="experience-chapter about-directory-section" id="about-connect" aria-labelledby="about-closing-title">
     <div class="wrap">
       <div class="chapter-heading">
@@ -442,9 +313,8 @@ export function aboutPage() {
     </div>
   </section>`;
 
-  return shell('/about/', 'About Violema | Violema', 'Who builds Violema, how Violema, Inc. structures scientific accountability across PsychDoc.AI and future fields, and founder Max Markovtsev’s background.', [
-    founderLeadSection,
-    `<section class="experience-chapter chapter-method" id="company" aria-labelledby="company-title"><div class="wrap"><p class="chapter-label"><span aria-hidden="true">01</span>The company &amp; charter</p><div class="about-company-layout"><div class="about-company-left"><h2 id="company-title">One evidence engine.<br>Built for contested science.</h2><p class="lede">When a scientific field moves fast and papers disagree, a paragraph summary hides the exact details a decision depends on.</p>${companyGuide}</div><div class="about-company-right">${accountabilityInstrument}</div></div></div></section>`,
+  return shell('/about/', 'About Violema | Violema', 'The company and charter behind Violema: scientific accountability, the shared evidence engine, PsychDoc.AI and future fields.', [
+    `<section class="experience-chapter chapter-method" id="company" aria-labelledby="company-title"><div class="wrap"><p class="chapter-label"><span aria-hidden="true">01</span>The company &amp; charter</p><div class="about-company-layout"><div class="about-company-left"><h1 id="company-title">One evidence engine.<br>Built for contested science.</h1><p class="lede">When a scientific field moves fast and papers disagree, a paragraph summary hides the exact details a decision depends on.</p>${companyGuide}</div><div class="about-company-right">${accountabilityInstrument}</div></div></div></section>`,
     `<section class="experience-chapter chapter-applications" id="about-applications" aria-labelledby="about-applications-title"><div class="wrap"><div class="chapter-heading"><p class="chapter-label"><span aria-hidden="true">02</span>Divisions &amp; roadmap</p><h2 id="about-applications-title">Focused products.<br>Shared verification.</h2><p class="lede">Each Violema division stays clean and dedicated to its own scientific community, while company and governance records live here on violema.com.</p></div><article class="product-feature" aria-labelledby="about-psychdoc-title"><div class="product-identity"><p class="label">First division · Live in production</p><h3 id="about-psychdoc-title" class="product-logo"><img class="psychdoc-logo-light" src="/company-assets/psychdoc-wordmark-light.svg" width="1774" height="372" alt="PsychDoc.AI"><img class="psychdoc-logo-dark" src="/company-assets/psychdoc-wordmark-dark.svg" width="1774" height="372" alt="PsychDoc.AI"></h3><p class="product-tagline">Psychedelic research, claim by claim.</p><p>Living public syntheses, interactive bias stress tests, molecule-to-clinic evidence chains, and commissioned reviews for drug developers, investors, and academic trial teams.</p><a class="button button-primary" href="${psychdoc}">Open PsychDoc.AI ${external}</a><p class="caption">Version 2.2 · 24 papers read from 15 research programs.</p></div><div class="product-paths"><p class="label">Live capabilities on PsychDoc.AI</p><a href="${psychdoc}/evidence/psilocybin-rewiring"><span><strong>Living synthesis dossier</strong><small>Does one dose of psilocybin rewire the brain? 23 tiered claims, each linked to its sources.</small></span>${external}</a><a href="${psychdoc}/#stress"><span><strong>Interactive bias stress test</strong><small>SYPRES 2026 meta-analysis reproduced to four decimals; drag in assumed bias until claims break.</small></span>${external}</a><a href="${psychdoc}/#chain"><span><strong>Molecule-to-clinic chain</strong><small>Psilocybin alongside GH001 and SPL026, showing every published link and every unstudied gap.</small></span>${external}</a></div></article><article class="materials-feature" aria-labelledby="about-materials-title"><div><p class="label">Second field specimen</p><h3 id="about-materials-title">Materials science</h3><span class="example-label">Live at violema.com/demo</span></div><div><h4>Perovskite solar-cell stability under ISOS reporting rules</h4><p>Demonstrates how the Violema record travels outside medicine: four perovskite stability reports traced claim by claim, exposing where incompatible illumination, temperature, and humidity conditions forbid a pooled statistical estimate.</p><p class="small">Next horizon: pre-publication claim verification tools for peer reviewers, journals, and universities.</p><a class="text-link" href="/demo/#corpus-perovskite-stability">Inspect the materials specimen</a></div></article></div></section>`,
     corporateDirectory,
   ].join(''), { lab: true });
