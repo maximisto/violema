@@ -397,6 +397,7 @@ code {
 .footer-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: 12px 32px;
   padding-top: 20px;
@@ -409,6 +410,8 @@ code {
 .footer-legal { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .footer-legal a { display: inline-flex; align-items: center; min-height: 44px; font-size: var(--text-caption); color: var(--ink); text-underline-offset: 4px; }
 .footer-meta > a { color: var(--ink-2); }
+.footer-orcid { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; text-underline-offset: 4px; }
+.footer-orcid svg { flex: none; }
 /* Profile links: brand glyphs in the page's ink, 44px targets, as the theme control. */
 .social-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .social-link { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: var(--ink-2); }
@@ -1809,6 +1812,10 @@ tr > *:last-child { border-right: 0; }
 .about-company-left {
   grid-column: 1 / span 6;
 }
+.about-company-left > h1 {
+  font-size: var(--text-title);
+  line-height: 1.12;
+}
 .about-company-left > .lede {
   margin-top: 18px;
   margin-bottom: 28px;
@@ -2319,6 +2326,7 @@ tr > *:last-child { border-right: 0; }
   color: var(--ink);
   font-weight: 500;
 }
+.about-corp-facts a[href^="mailto:"] { overflow-wrap: anywhere; }
 @media (max-width: 1023px) {
   .about-page-header,
   .about-company-layout,

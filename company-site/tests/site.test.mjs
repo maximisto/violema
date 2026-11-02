@@ -12,6 +12,7 @@ import { profiles, profileIcon } from '../lib/social.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
+const founderArchive=join(root,'archive/about-founder-20261102');
 const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html'],['/review/','review/index.html'],['/about/','about/index.html'],['/legal/terms/','legal/terms/index.html'],['/legal/privacy/','legal/privacy/index.html']];
 const decode = value => value.replaceAll('&amp;','&');
 
@@ -174,8 +175,8 @@ test('browser module paths and self-hosted stylesheet assets resolve in the gene
   assert.ok(!(await readdir(dist)).includes('assets'),'Legacy app asset namespace is preserved');
 });
 
-test('/about/ shows the six former clients as one-ink marks, each with an accessible name',async()=>{
-  const html=await readFile(join(dist,'about/index.html'),'utf8');
+test('the founder archive retains six former-client marks and their original assets for restoration',async()=>{
+  const html=await readFile(join(founderArchive,'founder-section.html'),'utf8');
   const grid=html.match(/<ul class="founder-client-grid"[\s\S]*?<\/ul>/)?.[0]??'';
   assert.equal((grid.match(/<li>/g)||[]).length,6);
   assert.match(grid,/<img class="founder-client-logo founder-client-logo--wrigley" src="\/company-assets\/clients\/wrigley\.svg"[^>]* alt="Wrigley"/);
@@ -209,24 +210,46 @@ test('every footer links the company profiles as icon links; a row without a con
   }
 });
 
-test('/about/ puts LinkedIn and ORCID cards with their handles under the founder card, brand colours there only',async()=>{
+test('/about/ leads with the company and charter while the founder section stays outside the public build',async()=>{
   const html=await readFile(join(dist,'about/index.html'),'utf8');
-  const aside=html.match(/<div class="founder-aside">([\s\S]*?)<div class="founder-narrative">/)?.[1]??'';
-  assert.match(aside,/<\/figure>\s*<ul class="founder-profiles" aria-label="Max Markovtsev's profiles">/);
-  const cards=[...aside.matchAll(/<a class="profile-card profile-card--([a-z]+)" href="([^"]+)"[^>]* aria-label="([^"]+)">[\s\S]*?<span class="profile-card-handle">([^<]+)<\/span>/g)].map(match=>match.slice(1));
-  assert.deepEqual(cards,[
-    ['linkedin','https://www.linkedin.com/in/maximisto/','Max Markovtsev on LinkedIn: in/maximisto','in/maximisto'],
-    ['orcid','https://orcid.org/0009-0009-9354-2207','Max Markovtsev on ORCID: 0009-0009-9354-2207','0009-0009-9354-2207'],
-  ]);
-  // The cards replace the card's former text badges.
-  assert.doesNotMatch(html,/founder-badge/);
-  const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
-  assert.deepEqual(css.match(/[^\n]*#A6CE39[^\n]*/gi).length,1,'ORCID green appears once, on the card mark');
-  assert.match(css,/\.profile-card--orcid svg \{ color: #A6CE39;/);
+  const main=html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/)?.[1]??'';
+  assert.match(main,/^\s*<section\b[^>]* id="company"/);
+  assert.match(main,/<h1 id="company-title">One evidence engine\.<br>Built for contested science\.<\/h1>/);
+  assert.equal((main.match(/<h1[ >]/g)||[]).length,1);
+  assert.doesNotMatch(main,/founder|Max Markovtsev|max-markovtsev\.jpg|\/company-assets\/clients\/|linkedin\.com\/in\/maximisto/);
+  for(const id of ['charter-problem','charter-divisions','charter-firewall','about-applications','about-connect'])assert.ok(main.includes(`id="${id}"`),id);
+  assert.ok(main.includes('href="/#briefing"'));
+  const head=html.match(/<head>([\s\S]*?)<\/head>/)?.[1]??'';
+  assert.doesNotMatch(head,/founder|Max Markovtsev/);
+  assert.doesNotMatch(await readFile(join(dist,'llms.txt'),'utf8'),/founder Max Markovtsev/);
+  assert.ok(!(await readdir(dist)).includes('archive'),'Founder backup is not a public route');
+  assert.ok(!(await readdir(join(dist,'company-assets'))).some(name=>name.includes('founder-section')||name==='archive'),'Founder backup is not a public asset');
+  assert.deepEqual(await readFile(join(dist,'company-assets/max-markovtsev.jpg')),await readFile(join(root,'assets/max-markovtsev.jpg')),'Original portrait remains available for restoration');
 });
 
-test('/about/ career explorer has five eras in order, each tab with a short title and its years',async()=>{
-  const html=await readFile(join(dist,'about/index.html'),'utf8');
+test('every footer preserves the founder ORCID separately from company social accounts',async()=>{
+  const files=[...pages.map(([,file])=>file),'404.html','records/fe4s4-benchmark/index.html','records/fe4s4-benchmark/record/index.html'];
+  for(const file of files){
+    const html=await readFile(join(dist,file),'utf8');
+    const footer=html.match(/<footer class="site-footer">[\s\S]*?<\/footer>/)?.[0]??'';
+    const link=footer.match(/<a class="footer-orcid"[^>]*>[\s\S]*?<\/a>/)?.[0]??'';
+    assert.match(link,/href="https:\/\/orcid\.org\/0009-0009-9354-2207"/,file);
+    assert.match(link,/target="_blank" rel="noopener noreferrer"/,file);
+    assert.match(link,/aria-label="Max Markovtsev on ORCID: 0009-0009-9354-2207"/,file);
+    assert.match(link,/<svg\b[^>]* aria-hidden="true"/,file);
+    assert.match(link,/<span>ORCID<\/span>/,file);
+    assert.equal((footer.match(/href="https:\/\/orcid\.org\/0009-0009-9354-2207"/g)||[]).length,1,file);
+    const companyProfiles=footer.match(/<ul class="social-list footer-social"[\s\S]*?<\/ul>/)?.[0]??'';
+    assert.doesNotMatch(companyProfiles,/orcid\.org/,`${file} ORCID is a personal identity, not a company account`);
+  }
+});
+
+test('the founder archive retains the biography, profile cards and five career eras for restoration',async()=>{
+  const html=await readFile(join(founderArchive,'founder-section.html'),'utf8');
+  assert.match(html,/<img class="founder-portrait" src="\/company-assets\/max-markovtsev\.jpg"/);
+  assert.match(html,/Max Markovtsev is a Chicago-based founder and systems architect/);
+  assert.match(html,/href="https:\/\/www\.linkedin\.com\/in\/maximisto\/"/);
+  assert.match(html,/href="https:\/\/orcid\.org\/0009-0009-9354-2207"/);
   const nav=html.match(/<nav class="guide-tabs" data-tablist aria-label="Explore Max Markovtsev career eras">([\s\S]*?)<\/nav>/)?.[1]??'';
   const tabs=[...nav.matchAll(/<a href="#(founder-era-[a-z]+)"><span class="era-num">(\d+)<\/span><span class="era-text"><span class="era-title">([^<]+)<\/span><span class="era-years">([^<]*)<\/span><\/span><\/a>/g)].map(match=>match.slice(1));
   assert.deepEqual(tabs.map(([id])=>id),['founder-era-agencies','founder-era-independent','founder-era-ai','founder-era-violema','founder-era-disclosure']);
@@ -235,6 +258,9 @@ test('/about/ career explorer has five eras in order, each tab with a short titl
   // Every ledger row in the founder card opens an existing era.
   for(const [,target] of html.matchAll(/data-epoch-target="([^"]+)"/g))assert.ok(tabs.some(([id])=>id===target),target);
   assert.doesNotMatch(html,/Enterprise BI/);
+  const source=await readFile(join(founderArchive,'founder-section.mjs.txt'),'utf8');
+  assert.match(source,/const founderExplorer = `/);
+  assert.match(source,/const founderLeadSection = `/);
 });
 
 test('self-hosted fonts match their recorded checksums and ship with their licences',async()=>{
