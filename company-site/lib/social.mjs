@@ -28,8 +28,8 @@ export const profiles = [
   { id: 'github', name: 'GitHub', owner: 'Violema', href: null },
 ];
 
-// The founder's own profiles, shown as labelled cards under the founder portrait on /about/
-// and nowhere else. ORCID and LinkedIn are the two identifiers a scientific reader checks.
+// The founder's own profiles, kept separate from company accounts. ORCID appears in the
+// shared footer; the original profile cards are retained for the archived founder section.
 export const founderProfiles = [
   { id: 'linkedin', name: 'LinkedIn', owner: 'Max Markovtsev', href: 'https://www.linkedin.com/in/maximisto/', handle: 'in/maximisto' },
   { id: 'orcid', name: 'ORCID', owner: 'Max Markovtsev', href: 'https://orcid.org/0009-0009-9354-2207', handle: '0009-0009-9354-2207' },
@@ -38,6 +38,11 @@ export const founderProfiles = [
 export function profileIcon(id) {
   if (!glyphs[id]) throw new Error(`No glyph for profile "${id}"`);
   return `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="${glyphs[id]}"/></svg>`;
+}
+
+export function founderOrcidLink() {
+  const profile = founderProfiles.find(entry => entry.id === 'orcid');
+  return `<a class="footer-orcid" href="${profile.href}" target="_blank" rel="noopener noreferrer" aria-label="${profile.owner} on ${profile.name}: ${profile.handle}" title="${profile.owner} on ${profile.name}">${profileIcon(profile.id)}<span>ORCID</span></a>`;
 }
 
 // Icon-only links name their destination for screen readers and show it on hover. A profile
