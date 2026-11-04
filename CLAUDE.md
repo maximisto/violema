@@ -1,6 +1,8 @@
 # CLAUDE.md — Violema
 
-This repo is the **Violema** application: the outcome-first AI operator for recurring founder/team workflows. Live at https://violema.com.
+This repo contains the **Violema scientific company site** in `company-site/`, live at https://violema.com, and retained code from the former operator application. The former Violema AI coworker is now **Purple Orange Agent** at https://agent.purpleorange.ai.
+
+Older operator, pricing and product-split references below concern the earlier application. They do not describe current scientific-company positioning or authorize an Agent deployment from this repository. Read `README.md` for the current identity and historical code boundaries. All safety and deployment rules below still apply.
 
 It is **not** standalone. It is one node in Max's operating system, and the Second Brain vault is the truth layer above it.
 

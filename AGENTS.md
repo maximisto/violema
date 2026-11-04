@@ -4,7 +4,7 @@
 
 ## The short version
 
-- This repo is the **Violema** app (https://violema.com). It is one node in Max's operating system.
+- This repo contains the **Violema scientific company site** (`company-site/`, https://violema.com) and retained code from the former operator application. That operator is now **Purple Orange Agent** at https://agent.purpleorange.ai. See `README.md` for the current identity and historical code boundaries.
 - The **Second Brain vault is the truth layer above it:** `/Users/maximisto/SecondBrain/MySecondBrain`
 - Company facts — raise, entity, pricing, positioning — live in the vault. Read them there; never restate them in repo code or docs.
 - Code and deploy truth lives here. When the vault is wrong about the repo, fix the vault.
