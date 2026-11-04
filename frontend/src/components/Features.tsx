@@ -86,7 +86,7 @@ function ChatOps() {
 
             <p className="mt-6 flex items-center gap-2 text-sm text-[#8793ad]">
               <Lock className="h-4 w-4 flex-none text-signal-400/90" />
-              No new logins · OAuth + audit trail · approvals before anything ships.
+              Google or Microsoft sign-in · Run history · Review controls follow your workflow policy.
             </p>
           </Reveal>
 
@@ -299,7 +299,7 @@ function Comparison() {
           <div>
             <p className="text-telemetry text-[0.62rem] text-signal-400">// positioning</p>
             <h2 className="mt-4 font-display text-[2.6rem] font-semibold leading-[0.98] tracking-[-0.03em] sm:text-[3.5rem]">
-              Not a chatbot. Not brittle automation.
+              A workflow you can return to every week.
             </h2>
             <a
               href="#beta-access"

@@ -89,7 +89,7 @@ function ChartCardArt({ compact = false }: { compact?: boolean }) {
           </div>
         ))}
       </div>
-      <p className={`text-[#6b6253] ${compact ? 'mt-1.5 text-[0.44rem]' : 'mt-2.5 text-[0.52rem]'}`}>Violema · evidence-linked run data</p>
+      <p className={`text-[#6b6253] ${compact ? 'mt-1.5 text-[0.44rem]' : 'mt-2.5 text-[0.52rem]'}`}>Illustrative example · sample data</p>
     </div>
   );
 }

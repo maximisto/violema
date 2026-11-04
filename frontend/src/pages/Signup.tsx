@@ -1,3 +1,4 @@
+import { foundingOffer } from '../content/betaOffer';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
@@ -57,7 +58,7 @@ const EDUCATION_CARDS: EducationCard[] = [
   {
     icon: MonitorSmartphone,
     title: 'Built for real execution',
-    body: 'One manager coordinates a team of specialists to handle research, execution, and automation without wasting context or tokens.',
+    body: 'Start with a founder update or competitor brief. Inspect the sources, review the draft and choose where the finished work goes.',
   },
 ];
 
@@ -240,6 +241,13 @@ export default function Signup() {
             </div>
 
             <div className="mt-6">
+              <div className="mb-5 rounded-2xl border border-violet-400/25 bg-violet-500/10 p-4 text-sm leading-6 text-slate-300">
+                <p className="font-semibold text-white">What happens after you apply</p>
+                <p className="mt-2">We review your application manually and follow up by email to scope one recurring workflow. Access requires verified identity, accepted beta terms and approval.</p>
+                <p className="mt-2">{foundingOffer}</p>
+                <a href="/runs/pricing-proof-founder-brief" className="mt-3 inline-flex min-h-11 items-center text-violet-200 underline underline-offset-4">Read an example before applying</a>
+                <p className="mt-2">Evaluating an investment or partnership? <a href="mailto:hello@violema.com?subject=Violema%20demo%20request" className="text-violet-200 underline underline-offset-4">Request a demo by email.</a></p>
+              </div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">I am joining as</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 {PARTICIPANT_OPTIONS.map((option) => (
@@ -322,7 +330,7 @@ export default function Signup() {
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Max Markovtsev"
+                  placeholder="Your full name"
                   className="w-full rounded-2xl border border-navy-700/80 bg-navy-950/50 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500/40"
                 />
               </label>
@@ -412,7 +420,7 @@ export default function Signup() {
                 ))}
               </div>
               <p className="mt-3 text-xs leading-relaxed text-slate-500">
-                One manager leads six resident specialists and opens four elastic lanes only when the run justifies it.
+                Start with one recurring workflow and a clear review and delivery policy.
               </p>
             </div>
           </div>

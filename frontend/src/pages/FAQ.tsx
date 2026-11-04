@@ -1,3 +1,4 @@
+import { foundingOffer } from '../content/betaOffer';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down.js';
@@ -28,7 +29,7 @@ const CATEGORIES = [
       },
       {
         q: 'How is VIOLEMA different from ChatGPT or Claude.ai?',
-        a: 'Consumer AI tools are conversational interfaces. VIOLEMA is a work execution layer. It connects to your actual systems, remembers workflow context, runs multi-step work, and operates in configurable autonomy modes so you stay in control. Each run shows the steps taken, tools used, outputs produced, approval state, and delivery history.',
+        a: 'General-purpose AI products can connect tools, schedule tasks and support review. Violema focuses on recurring founder workflows that we scope with you: a defined output, source links, a review policy, delivery history and visible costs. Compare the complete workflow and the setup it requires, not just a list of agent features.',
       },
       {
         q: 'How is VIOLEMA different from task bots or coding agents?',
@@ -62,7 +63,7 @@ const CATEGORIES = [
       },
       {
         q: 'Can VIOLEMA run scheduled tasks automatically?',
-        a: 'Yes. You can tell VIOLEMA to run any task on a recurring schedule — "send the weekly eng standup digest every Monday at 9am", "check CAC from PostHog every Friday", etc. Automations run in the background and surface results in your dashboard.',
+        a: 'Yes. You can tell VIOLEMA to schedule supported workflows — "send the weekly eng standup digest every Monday at 9am", "review competitor launch notes every Friday", etc. Automations run in the background and surface results in your dashboard.',
       },
       {
         q: 'Does VIOLEMA have memory?',
@@ -84,7 +85,7 @@ const CATEGORIES = [
       },
       {
         q: 'Who builds the AI that powers VIOLEMA?',
-        a: 'VIOLEMA uses a routed model stack rather than a single model. Claude Sonnet 5 handles most interactive work, Claude Opus 5 covers harder reasoning and critical high-stakes tasks, GPT-4.1 mini and Claude Haiku handle lightweight and operational lanes, and Mistral handles embeddings and memory. That keeps the system both capable and efficient.',
+        a: 'VIOLEMA routes work through configurable AI providers rather than one fixed model. Routes can include Anthropic, OpenAI-compatible providers and gateways such as OpenRouter, with separate embedding routes for memory. The providers and models used depend on the workspace configuration. Review AI Processing in our Privacy Policy and contact us about data-processing requirements before connecting sensitive information.',
       },
       {
         q: 'Can I connect VIOLEMA to my internal tools without exposing credentials?',
@@ -106,7 +107,7 @@ const CATEGORIES = [
     faqs: [
       {
         q: 'How does beta billing work?',
-        a: 'VIOLEMA is in controlled beta. We scope the first workflow with each approved customer before attaching billing, because package limits, support load, and run profitability depend on the work being automated.',
+        a: foundingOffer,
       },
       {
         q: 'What do credits actually represent?',
@@ -114,7 +115,7 @@ const CATEGORIES = [
       },
       {
         q: 'Can I cancel any time?',
-        a: 'Yes. Any paid beta or workspace agreement can be stopped according to the terms agreed during onboarding. Your workspace data and conversation history remain intact unless you ask us to delete them.',
+        a: 'You can cancel a subscription at any time, effective at the end of the current billing period. The Terms of Service explain refunds; the Privacy Policy explains retention and deletion requests.',
       },
     ],
   },
