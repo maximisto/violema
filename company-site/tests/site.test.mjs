@@ -5,7 +5,7 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { corpora, stressTest } from '../data/corpora.mjs';
-import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen } from '../lib/render.mjs';
+import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen, reviewStatusLabel } from '../lib/render.mjs';
 import { homePage } from '../lib/pages.mjs';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
 import { profiles, profileIcon } from '../lib/social.mjs';
@@ -346,7 +346,7 @@ test('demo bench keeps one rail, one dark instrument and one evidence column per
       assert.ok(panel.includes(`id="claim-heading-${claim.id}"`)&&panel.includes(`id="evidence-${claim.id}"`));
       assert.ok(panel.includes(escapeHTML(claim.status)));
     }
-    assert.ok(panel.includes(escapeHTML(corpus.reviewStatus))&&panel.includes(escapeHTML(corpus.scopeNote)));
+    assert.ok(panel.includes(escapeHTML(reviewStatusLabel(corpus.reviewStatus)))&&panel.includes(escapeHTML(corpus.scopeNote)));
   }
   assert.match(html,/class="table-scroll" tabindex="0" role="region"/);
 });
@@ -365,7 +365,7 @@ test('approved copy: the copyright line and the materials example replace the Or
   }
   const home=await readFile(join(dist,'index.html'),'utf8');
   assert.doesNotMatch(home,/Oryx/);
-  for(const text of ['Second example','Materials research','Curated demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
+  for(const text of ['Second example','Materials research','Prepared demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
 });
 
 test('the 12 trial records match primary.studies, primary.k and, when given, the pinned CSV',async()=>{
@@ -476,6 +476,17 @@ test('the release is discoverable while the physician walkthrough remains noinde
   for(const route of ['/','/method/','/demo/'])assert.ok(sitemap.includes(`<loc>https://violema.com${route}</loc>`));
   assert.doesNotMatch(sitemap,/\/review\//);
   assert.match(await readFile(join(dist,'review/index.html'),'utf8'),/<meta name="robots" content="noindex,follow">/);
+});
+
+// "Curated" is banned in public copy. The frozen packets keep the status they recorded (data/corpora.mjs is
+// hash-pinned by the portability receipt), and pages show it through reviewStatusLabel.
+test('no page or llms.txt says curated, while the pinned packets keep their recorded status',async()=>{
+  for(const file of [...PAGES.map(page=>page.file),'llms.txt'])assert.doesNotMatch(await readFile(join(dist,file),'utf8'),/\bcurat(?:e|ed|es|ing|ion|or|ors)\b/i,file);
+  for(const corpus of corpora){
+    assert.match(corpus.reviewStatus,/^Curated demonstration · /,`${corpus.id} keeps its recorded status`);
+    assert.equal(reviewStatusLabel(corpus.reviewStatus),corpus.reviewStatus.replace('Curated demonstration','Prepared demonstration'));
+  }
+  assert.equal(reviewStatusLabel(stressTest.reviewStatus),stressTest.reviewStatus,'any other status is shown as recorded');
 });
 
 // Read from the built pages, not the registry, so a page written outside the registry or indexed by mistake still shows up.
