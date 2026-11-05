@@ -31,6 +31,9 @@ const shareCard = {
   twitterAlt: 'Violema scientific evidence systems: a stone handaxe and glass DNA helix above Earth.',
 };
 
+// Dates in running text read as "31 December 2027".
+export const longDate = iso => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`));
+
 // Indexing and the 404 page's missing canonical come from the page registry; records are articles rather than site pages.
 function head(route, title, description, { lab = false, ogType = 'website' } = {}) {
   const { indexable, notFound } = pageFor(route);
@@ -89,7 +92,7 @@ export function legalPage(slug) {
   const policy = legalPolicies.find(item => item.slug === slug);
   if (!policy) throw new Error(`Unknown website policy: ${slug}`);
   const updatedAt = policy.updatedAt || legalUpdatedAt;
-  const effectiveDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${updatedAt}T00:00:00Z`));
+  const effectiveDate = longDate(updatedAt);
   const sections = policy.sections.map(section => `<section id="${e(section.id)}" class="legal-section" aria-labelledby="${e(section.id)}-title"><h2 id="${e(section.id)}-title">${e(section.title)}</h2>${section.html}</section>`).join('');
   return shell(`/legal/${slug}/`, `${policy.title} | Violema`, policy.description, `<article class="wrap legal-document"><nav class="legal-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span aria-current="page">${e(policy.title)}</span></nav><header class="legal-heading"><p class="label">Violema, Inc. · Delaware corporation</p><h1>${e(policy.title)}</h1><p class="lede">${e(policy.summary)}</p><p class="caption">Effective date: <time datetime="${e(updatedAt)}">${e(effectiveDate)}</time></p></header><nav class="legal-contents" aria-label="On this page"><p>On this page</p><ol>${policy.sections.map(section => `<li><a href="#${e(section.id)}">${e(section.title)}</a></li>`).join('')}</ol></nav><div class="legal-body">${sections}</div></article>`);
 }
