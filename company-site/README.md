@@ -115,7 +115,7 @@ Edit the owned source records, preserve source identities and review status, the
 Once a packet is published, any change to it, wording included, is a new dated revision:
 
 1. Copy the served `corpora.mjs`, both packet JSONs, `portability-receipt.json` and `provenance.md` unchanged into `data/archive/<current version>/`. The build serves them at `/company-assets/data/archive/<version>/`, and `tests/corpora.test.mjs` checks the archived module still matches its own receipt.
-2. Set `packetRevision` in `data/corpora.mjs`: the new `version` and `revisedAt`, a plain `note` saying what changed and what did not, and `previous`.
+2. Set `packetRevision` in `data/corpora.mjs`: the new `version` and `revisedAt`, a `note` for the packet download saying exactly what changed and what did not, a shorter plain `summary` for the evidence lab page, and `previous`.
 3. Make the change, run `node scripts/export-corpora.mjs`, and re-run the portability check (see `data/provenance.md`), which writes a new receipt naming the revision. Never edit the receipt by hand.
 4. Add the revision to "Revisions" in `data/provenance.md`, and update the test that compares the current revision with the previous one.
 

@@ -160,7 +160,7 @@ test('the evidence lab names each packet revision and links the archived one bef
   const demo=await readFile(join(dist,'demo/index.html'),'utf8');
   for(const corpus of corpora){
     const href=archivedPacketURL(corpus,packetRevision.previous);
-    assert.ok(demo.includes(`<p>Revision <code>${packetRevision.version}</code>. ${escapeHTML(packetRevision.note)} <a href="${href}" download>Download revision ${packetRevision.previous}</a></p>`),corpus.id);
+    assert.ok(demo.includes(`<p>Revision <code>${packetRevision.version}</code>. ${escapeHTML(packetRevision.summary)} <a href="${href}" download>Download revision ${packetRevision.previous}</a></p>`),corpus.id);
     await stat(join(dist,href));
   }
 });

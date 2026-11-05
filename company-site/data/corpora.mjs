@@ -4,7 +4,9 @@ export const packetRevision = {
   version: '2026-11-05.1',
   revisedAt: '2026-11-05',
   selectedAt: '2026-10-10',
+  // note travels in the packet download; summary is the plain line pages show beside the version.
   note: 'The status label and version changed, the date field is now selectedAt, and revision fields were added. No source, claim, condition, caveat or number changed.',
+  summary: 'Status label reworded. No source, claim, condition, caveat or number changed.',
   previous: '2026-10-10.1',
 };
 
