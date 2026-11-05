@@ -221,6 +221,9 @@ test('/about/ leads with the company and charter while the founder section stays
   assert.doesNotMatch(main,/founder|Max Markovtsev|max-markovtsev\.jpg|\/company-assets\/clients\/|linkedin\.com\/in\/maximisto/);
   for(const id of ['charter-problem','charter-divisions','charter-firewall','about-applications','about-connect'])assert.ok(main.includes(`id="${id}"`),id);
   assert.ok(main.includes('href="/#briefing"'));
+  // Max, 2026-11-05: "can commission", so the line describes an offer rather than implying existing buyers.
+  assert.match(main,/university trial groups can commission a synthesis on their own question\./);
+  assert.doesNotMatch(main,/pay to commission/);
   const head=html.match(/<head>([\s\S]*?)<\/head>/)?.[1]??'';
   assert.doesNotMatch(head,/founder|Max Markovtsev/);
   assert.doesNotMatch(await readFile(join(dist,'llms.txt'),'utf8'),/founder Max Markovtsev/);

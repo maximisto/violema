@@ -279,7 +279,7 @@ export function aboutPage() {
       <section id="charter-firewall" aria-labelledby="charter-firewall-heading">
         <p class="label">How Violema makes money without compromising conclusions</p>
         <h3 id="charter-firewall-heading">Free to read. Paid to commission.</h3>
-        <p class="guide-claim">Public living syntheses are free for researchers, clinicians, and the press. Drug developers, R&amp;D teams, and university trial groups pay to commission a synthesis on their own question.</p>
+        <p class="guide-claim">Public living syntheses are free for researchers, clinicians, and the press. Drug developers, R&amp;D teams, and university trial groups can commission a synthesis on their own question.</p>
         <div class="guide-boundary">
           <strong>Three firewall rules</strong>
           <p>1. Sponsors choose the research question, never the tier or the conclusion. 2. A sponsor never edits, approves or previews conclusions before the scientific editor signs them off. 3. Every commissioned review is published within six months of delivery, with its funder named.</p>
