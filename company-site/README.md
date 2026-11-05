@@ -11,7 +11,7 @@ npm test
 npm run preview
 ```
 
-Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/legal/terms/` and `/legal/privacy/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method, demo, about and website policy HTML is indexable for the owner-authorized release; robots.txt allows crawling and the sitemap lists those six routes. The physician review page uses `noindex,follow` and is excluded from the sitemap. So are the hypothesis records under `/records/` (see "Hypothesis records" below), which are also left out of `llms.txt`. This is discoverability control, not authentication. Missing static paths return 404 locally. The links `/login`, `/terms` and `/privacy` belong to the preserved production application and are not part of this bundle.
+Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/fields/quantum-advantage/`, `/records/fe4s4-benchmark/`, `/legal/terms/` and `/legal/privacy/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method, demo, about, field, record and website policy HTML is indexable; robots.txt allows crawling and the sitemap lists those nine routes. The physician review page uses `noindex,follow` and is excluded from the sitemap. This is discoverability control, not authentication. Missing static paths return 404 locally. The links `/login`, `/terms` and `/privacy` belong to the preserved production application and are not part of this bundle.
 
 ## Layout
 
@@ -20,7 +20,9 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/le
 - `lib/legal.mjs`: public website terms and privacy copy; separate from legacy workspace policies. The privacy wording follows the visit-statistics switch.
 - `lib/social.mjs`: the company's profiles (`profiles`: LinkedIn, Instagram, X, YouTube, Reddit, Facebook, GitHub, all Violema's own accounts) rendered as icon links in every footer. Max Markovtsev's existing ORCID is a separate, labelled footer link with his name and identifier in its accessible label. The founder profile data and card renderer remain available for restoring the archived biography. Brand glyphs are Simple Icons 13.21.0 (CC0; LinkedIn from purpleorange.ai). A company row whose URL is not yet confirmed has `href: null`: it keeps its place, links to `/` and its label says the page is to come. Never guess a handle.
 - `lib/briefing.mjs` and `browser/briefing.mjs`: the briefing form (see "Briefing form" below).
-- `lib/records.mjs`, `lib/fe4s4-figures.mjs`, `browser/fe4s4.mjs` and `browser/records.css`: the unlisted hypothesis records (see "Hypothesis records" below). `data/fe4s4-record.html` holds the Fe₄S₄ record's checked text.
+- `lib/routes.mjs`: the field and record routes, imported by the shell (the header's Records link) and by both page modules.
+- `lib/fields.mjs`: the Quantum advantage field page, which lists the field's records (see "Fields and hypothesis records" below).
+- `lib/records.mjs`, `lib/fe4s4-figures.mjs`, `browser/fe4s4.mjs` and `browser/records.css`: the hypothesis records and the field page's styles (see "Fields and hypothesis records" below). `data/fe4s4-record.html` holds the Fe₄S₄ record's checked text.
 - `lib/analytics.mjs`: the visit-statistics switch (Umami website ID and policy date) and the tracker tag. See "Visit statistics" below.
 - `lib/how-it-works.mjs`: the method page's "How it works" and "Where this is going" sections: two inline SVG diagrams of PsychDoc's evidence system, coloured only through tokens, with their figures read from `data/how-it-works.mjs`.
 - `lib/render.mjs`: shared evidence renderer: escaped text, safe source links, bounded additive-shift arithmetic, the interval scale, the trace specimen (a claim joined to its cited source records), the bias control and the demo bench.
@@ -53,7 +55,9 @@ The homepage follows five chapters: overview, guided evidence, method, applicati
 
 `/review/` is a generic physician/researcher walkthrough: one primary claim, the four linked sources, an assumed-shift replay, the animal/human scope boundary and five focused questions. It makes no advisor appointment or affiliation claim, collects no submissions and asks for published sources without patient information. `/demo/` continues to hold both full packets and the fixed Claim 1 replay scope.
 
-## Hypothesis records
+## Fields and hypothesis records
+
+A field is a front door for committed-test records that share one kind of claim. `/fields/quantum-advantage/` holds claims that a quantum computer beats the best classical methods on a defined problem, chemistry first: what every record there fixes before any result counts, the records in the order they were opened (one so far), and what the field does not claim. Max chose the name and scope on 2026-11-04. The header's Records link, the footer, the evidence lab's closing row, the sitemap and `llms.txt` all point at it, and the header marks Records while a record is open. Both record pages carry a breadcrumb through the field.
 
 `/records/fe4s4-benchmark/` shows one hypothesis record as four instruments, each a dark `.instrument` under a light section heading:
 - the Fe₄S₄ cluster and the size of its determinant space;
@@ -65,7 +69,7 @@ A strip at the end shows the event ledger on PsychDoc's map. `/records/fe4s4-ben
 
 The figures are pure functions in `lib/fe4s4-figures.mjs`. The build renders every figure as SVG, so each page is complete without JavaScript. `browser/fe4s4.mjs`, which `site.mjs` loads only where `[data-fe4s4]` exists, re-renders through the same module (copied to `company-assets/browser/fe4s4-figures.mjs`). It adds the turning cluster, the random configurations, the scale control, the timeline selection and the outcome builder. Motion stops under reduced motion, in a hidden tab, off screen, and on Pause.
 
-Every number on the page is a value from the record or is derived from one in the figures module, and `tests/records.test.mjs` pins the derivations. Record pages are `noindex,follow`, outside the sitemap and `llms.txt`, and reached by a link the owner shares. The violema.com vhost serves an allowlist of exact routes, so each new record route also needs its locations in `deploy/scientific-site/routing.mjs` and on the server; release `fe4s4-record-20261024` shows the block and the guarded script that adds it.
+Every number on the page is a value from the record or is derived from one in the figures module, and `tests/records.test.mjs` pins the derivations. Its opening section repeats the record history's dated Amendment 1 line (`AMENDMENT_NOTE`) and links that history. The field and record pages are public: `index,follow`, in the sitemap and `llms.txt`, typed as articles (records) for link previews. `tests/fields.test.mjs` pins the field page, the links to it and the breadcrumbs. The violema.com vhost serves an allowlist of exact routes, so each new field or record route also needs its locations in `deploy/scientific-site/routing.mjs` and on the server. Release `fe4s4-record-20261024` shows the record block and the guarded script that adds it; `deploy/scientific-site/fields.nginx.conf.snippet` is the field block, and a routing test keeps it equal to the model.
 
 ## Briefing form
 

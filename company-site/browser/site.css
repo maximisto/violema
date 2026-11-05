@@ -324,7 +324,12 @@ code {
   transition: color var(--duration-fast) var(--ease), background-color var(--duration-fast) var(--ease);
 }
 .primary-nav a:hover { color: var(--ink); background: var(--surface-2); }
-.primary-nav a[aria-current='page'] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
+.primary-nav a[aria-current='page'], .primary-nav a[aria-current='true'] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
+/* Seven links: between the phone menu and wide screens they tighten (appearance.css sets the gap and padding) so each label stays on one line. */
+.primary-nav a { white-space: nowrap; }
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .primary-nav { gap: 0; }
+}
 
 /* Narrow headers: the approved logo, unchanged, takes the widest space the header allows while
    the navigation stays on one line. A legible phone lockup needs a new asset (see design plan). */
@@ -1616,6 +1621,7 @@ tr > *:last-child { border-right: 0; }
   border-top: 1px solid var(--line);
 }
 .demo-closing p { margin: 0; font-size: var(--text-small); color: var(--ink-2); }
+.demo-closing-links { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .demo-closing + .site-footer { margin-top: 48px; }
 
 @media (max-width: 1199px) {

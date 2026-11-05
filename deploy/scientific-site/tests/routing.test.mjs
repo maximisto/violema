@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { classify, backend } from '../routing.mjs';
+import { classify, backend, companyPages } from '../routing.mjs';
 import { render } from '../render.mjs';
 
 const packet = fileURLToPath(new URL('../', import.meta.url));
@@ -38,7 +38,7 @@ test('old workspace pages, old assets and unknown paths are the company 404 page
 });
 
 test('company pages and metadata use company HTML; non-read methods are refused', () => {
-  const pages = ['/', '/index.html', '/method', '/method/', '/method/index.html', '/demo', '/demo/', '/demo/index.html', '/review', '/review/', '/review/index.html', '/about', '/about/', '/about/index.html', '/legal/terms', '/legal/terms/', '/legal/privacy/', '/legal/privacy/index.html', '/records/fe4s4-benchmark', '/records/fe4s4-benchmark/', '/records/fe4s4-benchmark/index.html', '/records/fe4s4-benchmark/record', '/records/fe4s4-benchmark/record/', '/records/fe4s4-benchmark/record/index.html', '/robots.txt', '/sitemap.xml', '/llms.txt', '/company-assets/site.css', '/company-assets/data/psychdoc.json'];
+  const pages = ['/', '/index.html', '/method', '/method/', '/method/index.html', '/demo', '/demo/', '/demo/index.html', '/review', '/review/', '/review/index.html', '/about', '/about/', '/about/index.html', '/legal/terms', '/legal/terms/', '/legal/privacy/', '/legal/privacy/index.html', '/fields/quantum-advantage', '/fields/quantum-advantage/', '/fields/quantum-advantage/index.html', '/records/fe4s4-benchmark', '/records/fe4s4-benchmark/', '/records/fe4s4-benchmark/index.html', '/records/fe4s4-benchmark/record', '/records/fe4s4-benchmark/record/', '/records/fe4s4-benchmark/record/index.html', '/robots.txt', '/sitemap.xml', '/llms.txt', '/company-assets/site.css', '/company-assets/data/psychdoc.json'];
   for (const host of oldHosts) for (const target of pages) {
     assert.equal(classify({ host, target }).kind, 'company', target);
     assert.equal(classify({ host, method: 'POST', target }).kind, 'method-not-allowed', target);
@@ -97,4 +97,15 @@ test('fresh source inventory: app routes, callbacks, cookie and one-process assu
 test('prepared runtime patch remains applicable without modifying its target files', () => {
   const result = spawnSync('git', ['apply', '--check', 'deploy/scientific-site/runtime-origin-changes.patch'], { cwd: repo, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
+});
+
+test('the live-vhost fields snippet holds exactly the modelled field routes', () => {
+  const snippet = readFileSync(resolve(packet, 'fields.nginx.conf.snippet'), 'utf8');
+  const exact = [...snippet.matchAll(/location = (\S+) \{/g)].map(match => match[1]);
+  assert.deepEqual(exact, companyPages.filter(([route]) => route.startsWith('/fields/')).map(([route]) => route));
+  for (const block of snippet.split('location = ').slice(1)) {
+    assert.match(block, /if \(\$request_method !~ \^\(GET\|HEAD\)\$\) \{ return 405; \}/);
+    assert.match(block, /try_files \/fields\/quantum-advantage\/index\.html =404;/);
+  }
+  assert.match(snippet, /^    # BEGIN VIOLEMA FIELDS\n[\s\S]*\n    # END VIOLEMA FIELDS\n$/);
 });

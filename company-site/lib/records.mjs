@@ -6,12 +6,16 @@ import {
   ledgerSVG, LEDGER, LEDGER_EVENTS, RECORD_CHECKED, IBM_USD_PER_QPU_MINUTE, SQD_QPU_USD, BUDGET_USD,
 } from './fe4s4-figures.mjs';
 
-// Hypothesis records are unlisted: noindex, outside the sitemap and llms.txt, reached by a link the owner shares.
-export const FE4S4_ROUTE = '/records/fe4s4-benchmark/';
-export const FE4S4_RECORD_ROUTE = '/records/fe4s4-benchmark/record/';
+import { FIELD, FE4S4_ROUTE, FE4S4_RECORD_ROUTE } from './routes.mjs';
+
+// Hypothesis records are public: indexed, in the sitemap and llms.txt, and listed on their field's page.
+export { FE4S4_ROUTE, FE4S4_RECORD_ROUTE };
+
+// The amendment the record's history dates, repeated where the record is first read.
+export const AMENDMENT_NOTE = '2026-10-31 · Amendment 1, before registration: binding is per team, and every quantum dossier includes an ablation.';
 
 // ISO dates stay whole on narrow screens: each one in running text, never inside a tag or an identifier such as a DOI, gets a no-wrap span.
-const keepDates = html => html.split(/(<[^>]*>)/).map(part => (part.startsWith('<') ? part : part.replace(/(?<![\w/-])\d{4}-\d{2}-\d{2}(?![\w-])/g, '<span class="date">$&</span>'))).join('');
+export const keepDates = html => html.split(/(<[^>]*>)/).map(part => (part.startsWith('<') ? part : part.replace(/(?<![\w/-])\d{4}-\d{2}-\d{2}(?![\w-])/g, '<span class="date">$&</span>'))).join('');
 const recordMarkup = keepDates(readFileSync(new URL('../data/fe4s4-record.html', import.meta.url), 'utf8'));
 const eh = value => `−${Math.abs(value).toFixed(String(value).split('.')[1]?.length ?? 0)} Eh`;
 
@@ -24,6 +28,11 @@ function seededOccupation(seed) {
   const on = new Set(order.slice(0, ACTIVE_SPACE.alpha));
   return Array.from({ length: ACTIVE_SPACE.orbitals }, (_, i) => `<i${on.has(i) ? ' class="is-occupied"' : ''}></i>`).join('');
 }
+
+// Both record pages share one card and are typed as articles for link previews.
+const recordHead = { ogType: 'article' };
+// Home, the field, then the record's own pages; the last entry is the current page.
+const breadcrumb = (...trail) => `<nav class="legal-breadcrumb record-breadcrumb" aria-label="Breadcrumb">${[['Home', '/'], [FIELD.name, FIELD.route], ...trail].map(([label, href], i, all) => (i === all.length - 1 ? `<span aria-current="page">${label}</span>` : `<a href="${href}">${label}</a><span aria-hidden="true">/</span>`)).join('')}</nav>`;
 
 const instrument = (id, title, body, foot, control = '') => `<div class="instrument record-instrument" role="group" aria-labelledby="${id}-instrument"><div class="instrument-head"><p class="instrument-title" id="${id}-instrument">${title}</p>${control}</div>${body}<p class="instrument-foot record-foot">${foot}</p></div>`;
 // Numbered like the homepage chapters: a violet numeral, the chapter's name, then the heading.
@@ -63,20 +72,24 @@ function ledgerSection() {
   return `<section class="section record-section" id="ledger" aria-labelledby="ledger-title"><div class="wrap">${sectionHead('ledger', '05', 'The ledger behind it', 'The same engine already holds a real map’s history', 'Records like this one sit on a dated event ledger. Here it is on PsychDoc’s psilocybin evidence map: every claim and relation, when it entered, and when its meaning changed.')}${instrument('ledger', 'PsychDoc map events', body, 'In a release being prepared; not yet on psychdoc.ai. Counts are from the map’s exported ledger on the release branch.')}</div></section>`;
 }
 
-export function fe4s4Page() {
-  const facts = [
+// The record's five facts, shared by its own page and the field page's record list.
+export function fe4s4Facts() {
+  return [
     ['System', '[Fe₄S₄(SCH₃)₄]²⁻', 'CAS(54, 36), one pinned file'],
-    ['Pass line', `≤ ${eh(ENERGIES.bar.eh)}`, 'a verified variational upper bound', 'is-bar'],
-    ['The test', 'Speed score ≥ 2', 'the slowest of ten quantum runs is at least twice as fast as the fastest classical run that reaches the line'],
+    ['Pass line', `≤ ${eh(ENERGIES.bar.eh)}`, 'a verified variational upper bound; provisional until registration', 'is-bar'],
+    ['The test', 'Speed score ≥ 2', 'the slowest of ten quantum runs is at least twice as fast as the fastest classical run that reaches the line, with timing uncertainty counted against the claim'],
     ['The budget', 'US$100,000 and 168 hours', 'ceiling per run, at public prices; donated access valued the same way'],
-    ['The clock', `<span class="nobr">${CLOCK.dossierBy}</span> → <span class="nobr">${CLOCK.judged}</span>`, 'public by, then judged once'],
+    ['The clock', `<span class="nobr">${CLOCK.dossierBy}</span> → <span class="nobr">${CLOCK.judged}</span>`, 'quantum dossier public by, then judged once'],
   ].map(([label, value, note, cls]) => `<div><dt>${label}</dt><dd><span class="fact-value${cls ? ` ${cls}` : ''}">${value}</span><span class="fact-note">${note}</span></dd></div>`).join('');
-  const head = `<section class="page-head record-head" data-fe4s4><div class="wrap"><p class="label">Hypothesis record · Draft protocol, not yet registered</p><h1>Can quantum assistance halve the time to a verified iron-sulfur result?</h1><p class="lede">One molecule, one fixed Hamiltonian and one test, to be registered before any result that counts; results already public stay outside it. Three charts show what has been posted on this problem, how soon classical work has followed hardware results, and how the draft rule would grade the claim under every possible outcome on 31 December 2027; a fourth shows the dated ledger records like this one run on.</p><div class="actions"><a class="button button-primary" href="${FE4S4_RECORD_ROUTE}">Read the full record</a><a class="button button-secondary" href="/method/">How the method works</a></div><dl class="instrument record-facts">${facts}</dl></div></section>`;
+}
+
+export function fe4s4Page() {
+  const head = `<section class="page-head record-head" data-fe4s4><div class="wrap">${breadcrumb(['Fe₄S₄ benchmark', FE4S4_ROUTE])}<p class="label">Hypothesis record · Draft protocol, not yet registered</p><h1>Can quantum assistance halve the time to a verified iron-sulfur result?</h1><p class="lede">One molecule, one fixed Hamiltonian and one test, to be registered before any result that counts; results already public stay outside it. Three charts show what has been posted on this problem, how soon classical work has followed hardware results, and how the draft rule would grade the claim under every possible outcome on 31 December 2027; a fourth shows the dated ledger records like this one run on.</p><p class="caption record-status record-amendment">${keepDates(AMENDMENT_NOTE)} <a href="${FE4S4_RECORD_ROUTE}#map-h">Read the record’s history</a></p><div class="actions"><a class="button button-primary" href="${FE4S4_RECORD_ROUTE}">Read the full record</a><a class="button button-secondary" href="/method/">How the method works</a></div><dl class="instrument record-facts">${fe4s4Facts()}</dl></div></section>`;
   const close = `<section class="section record-close" aria-labelledby="close-title"><div class="wrap"><h2 id="close-title">Not a forecast, and no probabilities.</h2><p class="lede">The outcomes of this test map to tiers written in advance, the way a funder’s prize criteria already work. The historical marks are observations, not tiered claims. Facts are from the hypothesis record, checked against primary sources on ${RECORD_CHECKED}; no domain expert has reviewed it yet.</p><p class="caption record-coi">Cited work includes IBM, RIKEN, Algorithmiq and Cleveland Clinic. IBM and Algorithmiq also sell hardware and software used in that work. That is context, not grounds to exclude anything: the same eligibility and comparison rules apply to every team, and naming an institution is not a claim that anyone there has joined this test. Violema builds evidence records and has a commercial interest in this one being read.</p><div class="actions"><a class="button button-primary" href="${FE4S4_RECORD_ROUTE}">Read the full record</a></div></div></section>`;
-  return shell(FE4S4_ROUTE, 'Fe₄S₄ benchmark record | Violema', 'A hypothesis record on one narrow quantum-advantage test: an iron-sulfur benchmark, the energies posted on it, ten years of evidence in order, and a draft rule for every outcome, written before any result that counts.', [head, problemSection(), raceSection(), evidenceSection(), futureSection(), ledgerSection(), close].join(''));
+  return shell(FE4S4_ROUTE, 'Fe₄S₄ benchmark record | Violema', 'A hypothesis record on one narrow quantum-advantage test: an iron-sulfur benchmark, the energies posted on it, ten years of evidence in order, and a draft rule for every outcome, written before any result that counts.', [head, problemSection(), raceSection(), evidenceSection(), futureSection(), ledgerSection(), close].join(''), recordHead);
 }
 
 export function fe4s4RecordPage() {
-  const head = `<nav class="legal-breadcrumb record-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><a href="${FE4S4_ROUTE}">Fe₄S₄ benchmark</a><span aria-hidden="true">/</span><span aria-current="page">Full record</span></nav><p class="caption record-status">${keepDates('Demo record. Built 2026-10-23, fact-checked 2026-10-24')} after reviews by two AI models from different providers and a check of load-bearing facts against primary sources, ${keepDates('amended 2026-10-31')}: binding per team and an ablation in every quantum dossier, as the record's history states. No domain expert has reviewed it yet. Draft protocol, not yet registered.</p>`;
-  return shell(FE4S4_RECORD_ROUTE, 'Fe₄S₄ benchmark: full record | Violema', 'The full hypothesis record for one narrow quantum-advantage test on an iron-sulfur benchmark: the claim, the committed test and its outcome rule, the decision it serves, and the evidence in the order it became public.', `<div class="wrap record-doc-wrap">${head}<article class="record-doc">${recordMarkup}</article></div>`);
+  const head = `${breadcrumb(['Fe₄S₄ benchmark', FE4S4_ROUTE], ['Full record', FE4S4_RECORD_ROUTE])}<p class="caption record-status">${keepDates('Demo record. Built 2026-10-23, fact-checked 2026-10-24')} after reviews by two AI models from different providers and a check of load-bearing facts against primary sources, ${keepDates('amended 2026-10-31')}: binding per team and an ablation in every quantum dossier, as the record's history states. No domain expert has reviewed it yet. Draft protocol, not yet registered.</p>`;
+  return shell(FE4S4_RECORD_ROUTE, 'Fe₄S₄ benchmark: full record | Violema', 'The full hypothesis record for one narrow quantum-advantage test on an iron-sulfur benchmark: the claim, the draft test and its outcome rule, the decision it serves, and the evidence in the order it became public.', `<div class="wrap record-doc-wrap">${head}<article class="record-doc">${recordMarkup}</article></div>`, recordHead);
 }

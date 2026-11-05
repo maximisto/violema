@@ -13,7 +13,7 @@ import { profiles, profileIcon } from '../lib/social.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
 const founderArchive=join(root,'archive/about-founder-20261102');
-const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html'],['/review/','review/index.html'],['/about/','about/index.html'],['/legal/terms/','legal/terms/index.html'],['/legal/privacy/','legal/privacy/index.html']];
+const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html'],['/review/','review/index.html'],['/about/','about/index.html'],['/legal/terms/','legal/terms/index.html'],['/legal/privacy/','legal/privacy/index.html'],['/fields/quantum-advantage/','fields/quantum-advantage/index.html']];
 const decode = value => value.replaceAll('&amp;','&');
 
 test('additive replay preserves original result and interval width throughout declared domain',()=>{

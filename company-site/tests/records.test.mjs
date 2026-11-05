@@ -14,12 +14,15 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
 const records = [[FE4S4_ROUTE, 'records/fe4s4-benchmark/index.html'], [FE4S4_RECORD_ROUTE, 'records/fe4s4-benchmark/record/index.html']];
 
-for (const [route, file] of records) test(`${route} is an unlisted page in the site shell with no third-party requests`, async () => {
+for (const [route, file] of records) test(`${route} is a public page in the site shell with no third-party requests`, async () => {
   const html = await readFile(join(dist, file), 'utf8');
   assert.match(html, /<!doctype html>/i);
   assert.equal((html.match(/<h1[ >]/g) || []).length, 1);
   assert.ok(html.includes(`rel="canonical" href="https://violema.com${route}"`));
-  assert.ok(html.includes('<meta name="robots" content="noindex,follow">'));
+  assert.ok(html.includes('<meta name="robots" content="index,follow">'));
+  assert.ok(html.includes('<meta name="googlebot" content="max-image-preview:large">'));
+  assert.ok(html.includes('<meta property="og:type" content="article">'));
+  assert.ok(html.includes(`<meta property="og:url" content="https://violema.com${route}">`));
   assert.ok(html.includes('<link rel="stylesheet" href="/company-assets/records.css">'));
   assert.ok(html.includes(`src="${TRACKER_SRC}"`), 'visit statistics run as on every other page');
   assert.match(html, /class="site-header"/);
@@ -29,9 +32,13 @@ for (const [route, file] of records) test(`${route} is an unlisted page in the s
   assert.doesNotMatch(html, /\b(curated|thought leaders|disrupt|game-changing|reimagining|seamless|delve|elevate)\b/i);
 });
 
-test('hypothesis records stay out of the sitemap and llms.txt', async () => {
-  assert.doesNotMatch(await readFile(join(dist, 'sitemap.xml'), 'utf8'), /\/records\//);
-  assert.doesNotMatch(await readFile(join(dist, 'llms.txt'), 'utf8'), /\/records\//);
+test('hypothesis records are listed in the sitemap and llms.txt', async () => {
+  const sitemap = await readFile(join(dist, 'sitemap.xml'), 'utf8');
+  const llms = await readFile(join(dist, 'llms.txt'), 'utf8');
+  for (const [route] of records) {
+    assert.ok(sitemap.includes(`<loc>https://violema.com${route}</loc>`), route);
+    assert.ok(llms.includes(`(https://violema.com${route})`), route);
+  }
 });
 
 test('the benchmark page renders every instrument at rest and links the full record on this site', async () => {
