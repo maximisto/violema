@@ -342,11 +342,23 @@ export const OUTCOMES = Object.freeze([
   { id: 'o-established-benchmark', short: 'Established', tier: 'Moves to Established, for this benchmark only', when: 'Positive, at least two independent positive confirmations, no decisive contradictory reproduction of it.' },
   { id: 'o-contested', short: 'Active debate', tier: 'Moves to Active debate, for this benchmark only', when: 'Positive, and at least one decisive contradictory reproduction exists.' },
   { id: 'o-positive-awaiting-confirmation', short: 'Speculation', tier: 'Stays Speculation; the positive result is shown on the record with its confirmation count', when: 'Positive, fewer than two independent positive confirmations, no decisive contradictory reproduction of it.' },
-  { id: 'o-threshold-not-met', short: 'Speculation', tier: 'Stays Speculation; threshold not shown', when: 'Every bound dossier fails: its speed score’s upper bound is below 2.0, or it misses the ten-run rule.' },
+  { id: 'o-threshold-not-met', short: 'Not met (2027)', tier: 'Moves to Not met under this test (2027), for this benchmark only', when: 'Every bound dossier fails: its speed score’s upper bound is below 2.0, or it misses the ten-run rule.' },
   { id: 'o-otherwise', short: 'Speculation', tier: 'Stays Speculation; inconclusive', when: 'No bound dossier is positive, and at least one is eligible but inconclusive.' },
   { id: 'o-lapsed', short: 'Speculation', tier: 'Stays Speculation; lapsed', when: 'No dossier from any team was complete, eligible and public by 2027-07-04: no result, never a negative one.' },
 ]);
 export const DEFAULT_SCENARIO = Object.freeze({ dossier: 'positive', confirmations: 1, contradiction: false });
+
+// Amendment 2's ceiling rule: with every required classical family present and no classical execution reaching the
+// target within both ceilings, classical time is taken as the elapsed-time ceiling. A dossier that meets the ten-run
+// requirement is then positive only if the speed score's lower bound, ceiling / slowest quantum run, reaches the threshold.
+export const ELAPSED_CEILING_HOURS = 168;
+export const SPEED_THRESHOLD = 2;
+export const CEILING_RULE_MAX_QUANTUM_HOURS = ELAPSED_CEILING_HOURS / SPEED_THRESHOLD;
+/** Applies the ceiling rule to the upper time bound of a dossier's slowest quantum execution, in hours. */
+export function ceilingRule(slowestQuantumHours) {
+  if (!(slowestQuantumHours > 0)) throw new RangeError('The slowest quantum execution needs a positive time');
+  return ELAPSED_CEILING_HOURS / slowestQuantumHours >= SPEED_THRESHOLD ? 'positive' : 'inconclusive';
+}
 
 /** The record's outcome rule, applied once at the cutoff. The outcomes do not overlap. */
 export function decide({ dossier, confirmations, contradiction }) {

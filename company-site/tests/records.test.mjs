@@ -8,7 +8,7 @@ import { FE4S4_RECORD_ROUTE, PAGES } from '../lib/routes.mjs';
 import {
   ENERGIES, GAP, TRIMCI_GAIN, MATCH_DAYS, DETERMINANTS, SINGLETS, FLASH_MS, CLOCK, LEDGER, LEDGER_EVENTS, EVIDENCE, RESPONSE_ARCS,
   OUTCOMES, decide, resolve as resolveOutcome, parseInstant, compareInstants, verdict, raceSVG, RACE_SCALES, daysBetween, SQD_QPU_USD, BUDGET_USD,
-  QUANTUM_GAP_BY_YEAR, RESPONSE_DAYS,
+  QUANTUM_GAP_BY_YEAR, RESPONSE_DAYS, ceilingRule, CEILING_RULE_MAX_QUANTUM_HOURS, ELAPSED_CEILING_HOURS,
 } from '../lib/fe4s4-figures.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -151,7 +151,7 @@ test('Amendment 1 is on the record page: per-team binding, the ablation, the tea
   assert.ok(html.includes('and a team declaration'));
   assert.ok(html.includes('Amendment 1, before registration'));
   assert.doesNotMatch(html, /The bound dossier/, 'outcomes name the resolving dossier');
-  assert.ok(html.includes('team binding, the ablation requirement and tier moves are Violema'));
+  assert.ok(html.includes('team binding, the ablation requirement, the ceiling rule, the frozen price table, the singlet tolerance and tier moves are Violema'));
   assert.ok(html.includes('within a team, identical public timestamps are ordered by permanent source identifier'));
   assert.ok(html.includes('ascending UTF-16 code-unit order, without locale collation'));
   assert.ok(html.includes('whether or not any of its runs succeeds'));
@@ -165,6 +165,30 @@ test('Amendment 1 is on the record page: per-team binding, the ablation, the tea
   const record = await readFile(join(dist, 'records/fe4s4-benchmark/record/index.html'), 'utf8');
   assert.match(record, /checked against primary sources <[^>]*>2026-10-24<\/[^>]*>/);
   assert.ok(record.includes('amended'), 'the record status names the amendment');
+});
+
+test('Amendment 2: the ceiling rule closes the inconclusive trap only when every classical family is present', () => {
+  assert.equal(CEILING_RULE_MAX_QUANTUM_HOURS, 84);
+  assert.equal(ceilingRule(84), 'positive');
+  assert.equal(ceilingRule(84.001), 'inconclusive');
+  assert.equal(ceilingRule(1), 'positive');
+  assert.throws(() => ceilingRule(0), RangeError);
+});
+
+test('Amendment 2 is on the record: ceiling rule, frozen prices, a Not met tier and the singlet check', async () => {
+  const html = await readFile(join(dist, 'records/fe4s4-benchmark/record/index.html'), 'utf8');
+  assert.doesNotMatch(html, /If no classical contender reaches the target, the comparison is inconclusive/, 'B1: the trap is gone');
+  assert.ok(html.includes(`the classical time is taken as the ${ELAPSED_CEILING_HOURS}-hour elapsed ceiling`));
+  assert.ok(html.includes(`every quantum execution finishes within ${CEILING_RULE_MAX_QUANTUM_HOURS} hours`));
+  assert.ok(html.includes('A missing comparator family still makes the comparison inconclusive'));
+  assert.doesNotMatch(html, /on the comparison date/, 'B2: prices no longer float to the comparison date');
+  assert.ok(html.includes('one price table, frozen and published when this record is registered'));
+  const notMet = OUTCOMES.find(item => item.id === 'o-threshold-not-met');
+  assert.equal(notMet.tier, 'Moves to Not met under this test (2027), for this benchmark only', 'B3');
+  assert.ok(html.includes(`<span class="to to-tier">${notMet.tier}</span>`), 'the record and the picker give the same tier');
+  assert.equal(OUTCOMES.filter(item => item.short === 'Speculation').length, 3, 'three outcomes stay at Speculation, not four');
+  assert.ok(html.includes('its ⟨S²⟩, with its published deterministic error bound added, is at most 1 × 10⁻³'), 'B4');
+  assert.ok(html.includes('Amendment 2, before registration.'), 'a dated history row');
 });
 
 test('the full record header leads with its status and a reviewer call; AI reviews live in the history', async () => {
