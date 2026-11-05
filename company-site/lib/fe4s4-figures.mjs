@@ -348,15 +348,18 @@ export const OUTCOMES = Object.freeze([
 ]);
 export const DEFAULT_SCENARIO = Object.freeze({ dossier: 'positive', confirmations: 1, contradiction: false });
 
-// Amendment 2's ceiling rule: with every required classical family present and no classical execution reaching the
-// target within both ceilings, classical time is taken as the elapsed-time ceiling. A dossier that meets the ten-run
-// requirement is then positive only if the speed score's lower bound, ceiling / slowest quantum run, reaches the threshold.
+// Amendment 2's ceiling rule decides a comparison in which no eligible classical execution reached the target within
+// both ceilings. Classical time is taken as the elapsed-time ceiling only when every required family has a contender
+// that qualifies for the rule and no public classical calculation documents the target within both ceilings; otherwise
+// the comparison stays inconclusive. A dossier that meets the ten-run requirement is then positive only if the speed
+// score's lower bound, ceiling / slowest quantum run, reaches the threshold.
 export const ELAPSED_CEILING_HOURS = 168;
 export const SPEED_THRESHOLD = 2;
 export const CEILING_RULE_MAX_QUANTUM_HOURS = ELAPSED_CEILING_HOURS / SPEED_THRESHOLD;
-/** Applies the ceiling rule to the upper time bound of a dossier's slowest quantum execution, in hours. */
-export function ceilingRule(slowestQuantumHours) {
+/** slowestQuantumHours is the upper time bound of the dossier's slowest quantum execution, in hours. */
+export function ceilingRule({ slowestQuantumHours, everyFamilyQualifies, publicClassicalWithinCeilings }) {
   if (!(slowestQuantumHours > 0)) throw new RangeError('The slowest quantum execution needs a positive time');
+  if (everyFamilyQualifies !== true || publicClassicalWithinCeilings !== false) return 'inconclusive';
   return ELAPSED_CEILING_HOURS / slowestQuantumHours >= SPEED_THRESHOLD ? 'positive' : 'inconclusive';
 }
 

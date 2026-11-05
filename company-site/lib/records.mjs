@@ -14,7 +14,7 @@ export const FE4S4_TITLE = 'Can quantum assistance halve the time to a verified 
 export const FE4S4_JUDGED_ON = longDate(CLOCK.judged);
 
 // The amendment the record's history dates, repeated where the record is first read.
-export const AMENDMENT_NOTE = '2026-11-05 · Amendment 2, before registration: a classical miss within the ceilings can decide the test, prices are frozen at registration, a failed test reads Not met, and the singlet check is stated.';
+export const AMENDMENT_NOTE = '2026-11-05 · Amendment 2, before registration: qualified classical contenders that all miss the target within the ceilings can decide the test, prices are frozen at registration, a failed test reads Not met, and the singlet check is stated.';
 
 // The outside timestamp on the release that first published this record. Its SHA-256 manifest lists every file the
 // release served, and the manifest's own hash went to OpenTimestamps. data/anchors keeps the manifest, its proof and
@@ -104,7 +104,7 @@ export function fe4s4Facts() {
   return [
     ['System', '[Fe₄S₄(SCH₃)₄]²⁻', 'CAS(54, 36), one pinned file'],
     ['Pass line', `≤ ${eh(ENERGIES.bar.eh)}`, 'a verified variational upper bound; provisional until registration', 'is-bar'],
-    ['The test', 'Speed score ≥ 2', 'the slowest of ten quantum runs is at least twice as fast as the fastest classical run that reaches the line, with timing uncertainty counted against the claim'],
+    ['The test', 'Speed score ≥ 2', 'the slowest of ten quantum runs is at least twice as fast as the fastest classical run that reaches the line, or than the 168-hour ceiling if qualified classical contenders all miss it, with timing uncertainty counted against the claim'],
     ['The budget', 'US$100,000 and 168 hours', 'ceiling per run, at prices frozen at registration; donated access valued the same way'],
     ['The clock', `<span class="nobr">${CLOCK.dossierBy}</span> → <span class="nobr">${CLOCK.judged}</span>`, 'quantum dossier public by, then judged once'],
   ].map(([label, value, note, cls]) => `<div><dt>${label}</dt><dd><span class="fact-value${cls ? ` ${cls}` : ''}">${value}</span><span class="fact-note">${note}</span></dd></div>`).join('');
