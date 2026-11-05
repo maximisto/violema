@@ -24,19 +24,18 @@ const fontFiles = ['instrument-sans-latin-wght-normal.woff2', 'inter-latin-wght-
 // replay enhance without a second round trip.
 const labModules = ['/company-assets/browser/tabs.mjs', '/company-assets/browser/lab.mjs', '/company-assets/browser/render.mjs', '/company-assets/data/corpora.mjs'];
 
-// The share card every page uses unless it brings its own 1200 × 630 JPEG (see docs/social-preview.md).
-export const defaultSocial = {
+// The 1200 × 630 share card every page uses (see docs/social-preview.md).
+const shareCard = {
   image: '/company-assets/violema-social-hero.jpg',
   ogAlt: 'Violema: Know which conclusions hold. And why. A stone handaxe and glass DNA helix above Earth.',
   twitterAlt: 'Violema scientific evidence systems: a stone handaxe and glass DNA helix above Earth.',
 };
 
 // notFound marks the 404 page: nginx serves it at whatever address missed, so it has no canonical URL of its own.
-// A page with its own share card passes social: { image, alt }; records are articles rather than site pages.
-function head(route, title, description, { lab = false, notFound = false, social, ogType = 'website' } = {}) {
+// Records are articles rather than site pages.
+function head(route, title, description, { lab = false, notFound = false, ogType = 'website' } = {}) {
   // The physician walkthrough is reached by a shared link, not by search.
   const indexable = route !== '/review/' && !notFound;
-  const card = social ? { image: social.image, ogAlt: social.alt, twitterAlt: social.alt } : defaultSocial;
   return [
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -52,16 +51,16 @@ function head(route, title, description, { lab = false, notFound = false, social
     `<meta property="og:title" content="${e(title)}">`,
     `<meta property="og:description" content="${e(description)}">`,
     ...(notFound ? [] : [`<meta property="og:url" content="https://violema.com${route}">`]),
-    `<meta property="og:image" content="https://violema.com${card.image}">`,
+    `<meta property="og:image" content="https://violema.com${shareCard.image}">`,
     '<meta property="og:image:type" content="image/jpeg">',
     '<meta property="og:image:width" content="1200">',
     '<meta property="og:image:height" content="630">',
-    `<meta property="og:image:alt" content="${e(card.ogAlt)}">`,
+    `<meta property="og:image:alt" content="${e(shareCard.ogAlt)}">`,
     '<meta name="twitter:card" content="summary_large_image">',
     `<meta name="twitter:title" content="${e(title)}">`,
     `<meta name="twitter:description" content="${e(description)}">`,
-    `<meta name="twitter:image" content="https://violema.com${card.image}">`,
-    `<meta name="twitter:image:alt" content="${e(card.twitterAlt)}">`,
+    `<meta name="twitter:image" content="https://violema.com${shareCard.image}">`,
+    `<meta name="twitter:image:alt" content="${e(shareCard.twitterAlt)}">`,
     ...(indexable ? ['<meta name="googlebot" content="max-image-preview:large">'] : []),
     ...(route === '/' ? ['<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","@id":"https://violema.com/#webpage","url":"https://violema.com/","name":"Scientific evidence systems | Violema","primaryImageOfPage":{"@type":"ImageObject","url":"https://violema.com/company-assets/violema-social-hero.jpg","width":1200,"height":630}}</script>'] : []),
     '<link rel="icon" href="/company-assets/violema-icon.png" type="image/png">',
