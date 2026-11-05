@@ -9,7 +9,7 @@ import { fe4s4Facts, keepDates, AMENDMENT_NOTE, FE4S4_TITLE, FE4S4_JUDGED_ON, br
 const fixedTerms = [
   ['Problem', 'One public input file, pinned, so every team computes the same thing.'],
   ['Pass line', 'The threshold every run has to meet, and how a result is verified.'],
-  ['Comparison', 'Quantum is judged on its slowest run against the fastest classical run that reaches the same line. That pairing already takes the hardest case for the claim, so no statistical interval is taken over runs; only the timing uncertainty in the published logs is counted, against the claim. Every quantum dossier also reruns its own workflow with each quantum output replaced by a classical source declared in advance, and its successful runs compete as classical entries.'],
+  ['Comparison', 'Quantum is judged on its slowest run against the fastest classical run that reaches the same line. That pairing already takes the hardest case for the claim among the observed runs, so no statistical interval is taken over runs; only the timing uncertainty in the published logs is counted, against the claim. Every quantum dossier also reruns its own workflow with each quantum output replaced by a classical source declared in advance, and its successful runs compete as classical entries.'],
   ['Budget and clock', 'A ceiling on compute charges, valued at published prices, and on elapsed time for every run; deadlines for evidence; and one judgment date.'],
   ['Outcome rule', 'Every possible outcome is mapped to a tier in advance. A tier moves only on results under the test.'],
 ];

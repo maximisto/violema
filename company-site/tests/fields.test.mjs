@@ -83,7 +83,7 @@ test('home and About list the field beside the other applications', async () => 
 
 test('the field page gives the reason for judging the slowest quantum run against the fastest classical one', async () => {
   const field = text(await read(fieldFile));
-  assert.ok(field.includes('That pairing already takes the hardest case for the claim, so no statistical interval is taken over runs'));
+  assert.ok(field.includes('That pairing already takes the hardest case for the claim among the observed runs, so no statistical interval is taken over runs'));
   assert.ok(field.includes('No probabilities yet.'));
 });
 

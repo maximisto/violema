@@ -186,8 +186,11 @@ test('section 04 shows dated readings and no probabilities, from the record’s 
   assert.deepEqual(QUANTUM_GAP_BY_YEAR, [{ year: 2024, mEh: 612.04 }, { year: 2025, mEh: 334.04 }]);
   assert.equal(Math.round((QUANTUM_GAP_BY_YEAR[0].mEh - QUANTUM_GAP_BY_YEAR[1].mEh) * 10) / 10, 278, 'the 278 mEh step Shirakawa et al. report');
   assert.deepEqual({ ...RESPONSE_DAYS }, { spin2023: 12, spin2023Second: 14, fe4s4Preprint2025: 18, fe4s4Tracker2025: 20 });
-  assert.ok(page.includes('612 mEh (2024) → 334 mEh (2025)'));
-  assert.ok(page.includes('12 days (2023) → 18 days (2025)'));
+  // Year-labelled values, not arrows: two dated points on different problems are not a trajectory.
+  assert.ok(page.includes('2024: 612 mEh · 2025: 334 mEh'));
+  assert.ok(page.includes('2023: 12 days · 2025: 18 days'));
+  assert.doesNotMatch(page.match(/<dl class="record-facts future-readings">[\s\S]*?<\/dl>/)[0], /→/);
+  assert.ok(page.includes('lowest non-extrapolated SQD energy from quantum-hardware samples'), 'the 2025 paper also reports a lower extrapolated estimate');
   assert.ok(page.includes('reached the tracker 20 days after the quantum preprint'), 'the reading names the arc’s 20 days, so the two counts do not conflict');
   assert.ok(RESPONSE_ARCS[1].lines[0].startsWith('20 days'), 'the evidence arc still counts to the tracker entry');
   const record = await readFile(join(dist, 'records/fe4s4-benchmark/record/index.html'), 'utf8');
