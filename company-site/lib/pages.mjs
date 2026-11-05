@@ -4,6 +4,7 @@ import { evidenceMapSection } from './evidence-map.mjs';
 import { homeExperience } from './experience.mjs';
 import { howItWorksSection, crossFieldSection } from './how-it-works.mjs';
 import { howItWorks } from '../data/how-it-works.mjs';
+import { packetRevision } from '../data/corpora.mjs';
 import { analyticsScript } from './analytics.mjs';
 import { legalPolicies, legalUpdatedAt } from './legal.mjs';
 import { founderOrcidLink, profileLinks } from './social.mjs';
@@ -183,7 +184,7 @@ export function demoPage(corpora,stress) {
     `<div class="wrap lab-toolbar"><nav class="segmented corpus-switch" data-corpus-switch aria-label="Choose a research corpus">${segments}</nav><button class="button button-secondary reset-button" type="button" data-reset hidden>Reset demo <span aria-hidden="true">↺</span></button></div>`,
     '<div class="visually-hidden" data-announcement role="status" aria-live="polite"></div>',
     '<noscript><p class="wrap no-js-note">JavaScript is off. Both prepared packets and all claims are shown below; source links and packet downloads remain available. The bias control requires JavaScript.</p></noscript>',
-    `<div class="wrap lab-content">${corpora.map(c=>corpusPanel(c,stress)).join('')}</div>`,
+    `<div class="wrap lab-content">${corpora.map(c=>corpusPanel(c,stress,packetRevision)).join('')}</div>`,
     `<section class="wrap demo-closing" aria-label="Scope of this demonstration"><p>This demonstration supports inspection and expert criticism. It is not clinical guidance, a comprehensive literature review, or a claim of validated analysis across arbitrary corpora.</p><div class="demo-closing-links"><a class="text-link" href="/method/">Understand the method</a><a class="text-link" href="${FIELD.route}">See the committed-test records</a></div></section>`,
   ].join(''), { lab: true });
 }

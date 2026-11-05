@@ -4,8 +4,8 @@ import { readFile, stat, readdir } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { corpora, stressTest } from '../data/corpora.mjs';
-import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen, reviewStatusLabel } from '../lib/render.mjs';
+import { corpora, stressTest, packetRevision } from '../data/corpora.mjs';
+import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen, archivedPacketURL } from '../lib/render.mjs';
 import { homePage } from '../lib/pages.mjs';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
 import { profiles, profileIcon } from '../lib/social.mjs';
@@ -153,6 +153,15 @@ test('downloaded packets stay identical to source and do not leak analysis acros
     const packet=JSON.parse(served);
     assert.equal(packet.corpus.id,corpus.id);
     if(corpus.id!==stressTest.corpusId)assert.equal(packet.analysis,null);
+  }
+});
+
+test('the evidence lab names each packet revision and links the archived one before it',async()=>{
+  const demo=await readFile(join(dist,'demo/index.html'),'utf8');
+  for(const corpus of corpora){
+    const href=archivedPacketURL(corpus,packetRevision.previous);
+    assert.ok(demo.includes(`<p>Revision <code>${packetRevision.version}</code>. ${escapeHTML(packetRevision.note)} <a href="${href}" download>Download revision ${packetRevision.previous}</a></p>`),corpus.id);
+    await stat(join(dist,href));
   }
 });
 
@@ -356,7 +365,7 @@ test('demo bench keeps one rail, one dark instrument and one evidence column per
       assert.ok(panel.includes(`id="claim-heading-${claim.id}"`)&&panel.includes(`id="evidence-${claim.id}"`));
       assert.ok(panel.includes(escapeHTML(claim.status)));
     }
-    assert.ok(panel.includes(escapeHTML(reviewStatusLabel(corpus.reviewStatus)))&&panel.includes(escapeHTML(corpus.scopeNote)));
+    assert.ok(panel.includes(escapeHTML(corpus.reviewStatus))&&panel.includes(escapeHTML(corpus.scopeNote)));
   }
   assert.match(html,/class="table-scroll" tabindex="0" role="region"/);
 });
@@ -375,7 +384,7 @@ test('approved copy: the copyright line and the materials example replace the Or
   }
   const home=await readFile(join(dist,'index.html'),'utf8');
   assert.doesNotMatch(home,/Oryx/);
-  for(const text of ['Second example','Materials research','Prepared demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
+  for(const text of ['Second example','Materials research','Hand-selected demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
 });
 
 test('the 12 trial records match primary.studies, primary.k and, when given, the pinned CSV',async()=>{
