@@ -69,6 +69,24 @@ test('Records in the header marks the field page, and the field while a record i
   for (const file of ['index.html', 'demo/index.html', 'about/index.html']) assert.equal(link(await read(file)), '', file);
 });
 
+test('home and About list the field beside the other applications', async () => {
+  const home = await read('index.html');
+  const applications = home.match(/<section class="experience-chapter chapter-applications"[\s\S]*?<\/section>/)[0];
+  assert.ok(applications.includes(`<h3 id="quantum-title">${FIELD.name}</h3>`) && applications.includes(`href="${FIELD.route}"`));
+  const about = await read('about/index.html');
+  const divisions = about.match(/<section id="charter-divisions"[\s\S]*?<\/section>/)[0];
+  assert.ok(divisions.includes(`<a href="${FIELD.route}">Open the quantum advantage field</a>`), 'the division list names the field');
+  assert.ok(about.includes(`<dt>Third field</dt><dd><a href="${FIELD.route}">${FIELD.name} records</a></dd>`));
+  assert.ok(about.includes('<h3 id="about-quantum-title">'));
+  assert.doesNotMatch(about, /Interactive architecture|Active architecture|until claims break|stays clean/, 'About in a plainer register');
+});
+
+test('the field page gives the reason for judging the slowest quantum run against the fastest classical one', async () => {
+  const field = text(await read(fieldFile));
+  assert.ok(field.includes('That pairing already takes the hardest case for the claim, so no statistical interval is taken over runs'));
+  assert.ok(field.includes('No probabilities yet.'));
+});
+
 test('the field is linked from the footer, the evidence lab, the sitemap and llms.txt', async () => {
   for (const file of ['index.html', fieldFile, ...recordFiles]) {
     const footer = (await read(file)).match(/<footer class="site-footer">[\s\S]*?<\/footer>/)[0];
