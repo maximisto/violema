@@ -76,10 +76,10 @@ function ledgerSection() {
 export function fe4s4Facts() {
   return [
     ['System', '[Fe₄S₄(SCH₃)₄]²⁻', 'CAS(54, 36), one pinned file'],
-    ['Pass line', `≤ ${eh(ENERGIES.bar.eh)}`, 'a verified variational upper bound', 'is-bar'],
-    ['The test', 'Speed score ≥ 2', 'the slowest of ten quantum runs is at least twice as fast as the fastest classical run that reaches the line'],
+    ['Pass line', `≤ ${eh(ENERGIES.bar.eh)}`, 'a verified variational upper bound; provisional until registration', 'is-bar'],
+    ['The test', 'Speed score ≥ 2', 'the slowest of ten quantum runs is at least twice as fast as the fastest classical run that reaches the line, with timing uncertainty counted against the claim'],
     ['The budget', 'US$100,000 and 168 hours', 'ceiling per run, at public prices; donated access valued the same way'],
-    ['The clock', `<span class="nobr">${CLOCK.dossierBy}</span> → <span class="nobr">${CLOCK.judged}</span>`, 'public by, then judged once'],
+    ['The clock', `<span class="nobr">${CLOCK.dossierBy}</span> → <span class="nobr">${CLOCK.judged}</span>`, 'quantum dossier public by, then judged once'],
   ].map(([label, value, note, cls]) => `<div><dt>${label}</dt><dd><span class="fact-value${cls ? ` ${cls}` : ''}">${value}</span><span class="fact-note">${note}</span></dd></div>`).join('');
 }
 
@@ -91,5 +91,5 @@ export function fe4s4Page() {
 
 export function fe4s4RecordPage() {
   const head = `${breadcrumb(['Fe₄S₄ benchmark', FE4S4_ROUTE], ['Full record', FE4S4_RECORD_ROUTE])}<p class="caption record-status">${keepDates('Demo record. Built 2026-10-23, fact-checked 2026-10-24')} after reviews by two AI models from different providers and a check of load-bearing facts against primary sources, ${keepDates('amended 2026-10-31')}: binding per team and an ablation in every quantum dossier, as the record's history states. No domain expert has reviewed it yet. Draft protocol, not yet registered.</p>`;
-  return shell(FE4S4_RECORD_ROUTE, 'Fe₄S₄ benchmark: full record | Violema', 'The full hypothesis record for one narrow quantum-advantage test on an iron-sulfur benchmark: the claim, the committed test and its outcome rule, the decision it serves, and the evidence in the order it became public.', `<div class="wrap record-doc-wrap">${head}<article class="record-doc">${recordMarkup}</article></div>`, recordHead);
+  return shell(FE4S4_RECORD_ROUTE, 'Fe₄S₄ benchmark: full record | Violema', 'The full hypothesis record for one narrow quantum-advantage test on an iron-sulfur benchmark: the claim, the draft test and its outcome rule, the decision it serves, and the evidence in the order it became public.', `<div class="wrap record-doc-wrap">${head}<article class="record-doc">${recordMarkup}</article></div>`, recordHead);
 }

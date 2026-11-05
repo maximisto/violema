@@ -34,7 +34,7 @@ test('the field page keeps the house voice and makes no partner, customer or for
   assert.doesNotMatch(html, /\b(curated|thought leaders|disrupt|game-changing|reimagining|seamless|delve|elevate|actionable insights|like-minded)\b/i);
   assert.doesNotMatch(text(html), /\b(partners?|customers?|clients?|validated|accuracy|forecasts?)\b/i);
   assert.match(text(html), /It does not say whether quantum advantage exists, or when it will\./);
-  assert.match(text(html), /Classical methods enter under the same rules, and they can win\./);
+  assert.match(text(html), /Classical methods compete for the same target under the same ceilings, and they can win\./);
 });
 
 // The record's history keeps its dated row saying the note changed; history rows are not rewritten.
