@@ -89,7 +89,7 @@
   .primary-nav a { min-height: 56px; padding: 8px 12px; font-size: 1.125rem; }
   .site-header[data-nav-ready] .primary-nav { display: none; position: absolute; top: 100%; left: 0; right: 0; width: auto; padding: 12px var(--gutter) 20px; max-height: calc(100svh - var(--header-height)); overflow-y: auto; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 16px 28px -20px rgb(0 0 0 / 24%); }
   .site-header[data-nav-ready][data-menu-open='true'] .primary-nav { display: grid; }
-  .primary-nav a[aria-current='page'] { box-shadow: inset 3px 0 0 var(--accent); }
+  .primary-nav a[aria-current='page'], .primary-nav a[aria-current='true'] { box-shadow: inset 3px 0 0 var(--accent); }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; }

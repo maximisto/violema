@@ -7,13 +7,16 @@ import { howItWorks } from '../data/how-it-works.mjs';
 import { analyticsScript } from './analytics.mjs';
 import { legalPolicies, legalUpdatedAt } from './legal.mjs';
 import { founderOrcidLink, profileLinks } from './social.mjs';
+import { FIELD } from './routes.mjs';
 import { escapeHTML as e, sourceURL, corpusPanel, intervalFigure, calculateBiasScenario, chartLegend, biasControl, biasExplanation, referenceNote, scenarioSummary, traceSpecimen } from './render.mjs';
 
 const psychdoc = 'https://psychdoc.ai';
 const mapBytes = readFileSync(new URL('../data/evidence-map.json', import.meta.url));
 const evidenceMap = JSON.parse(mapBytes);
 const evidenceMapHash = createHash('sha256').update(mapBytes).digest('hex');
-const nav = (route,href,label) => `<a href="${href}"${route===href?' aria-current="page"':''}>${label}</a>`;
+// Records sit under their field, so the field's link stays marked while a record is open.
+const navCurrent = (route, href) => (route === href ? ' aria-current="page"' : href === FIELD.route && route.startsWith('/records/') ? ' aria-current="true"' : '');
+const nav = (route,href,label) => `<a href="${href}"${navCurrent(route, href)}>${label}</a>`;
 const external = '<span class="external-glyph" aria-hidden="true">↗</span>';
 const fontFiles = ['instrument-sans-latin-wght-normal.woff2', 'inter-latin-wght-normal.woff2'];
 
@@ -21,10 +24,19 @@ const fontFiles = ['instrument-sans-latin-wght-normal.woff2', 'inter-latin-wght-
 // replay enhance without a second round trip.
 const labModules = ['/company-assets/browser/tabs.mjs', '/company-assets/browser/lab.mjs', '/company-assets/browser/render.mjs', '/company-assets/data/corpora.mjs'];
 
+// The share card every page uses unless it brings its own 1200 × 630 JPEG (see docs/social-preview.md).
+export const defaultSocial = {
+  image: '/company-assets/violema-social-hero.jpg',
+  ogAlt: 'Violema: Know which conclusions hold. And why. A stone handaxe and glass DNA helix above Earth.',
+  twitterAlt: 'Violema scientific evidence systems: a stone handaxe and glass DNA helix above Earth.',
+};
+
 // notFound marks the 404 page: nginx serves it at whatever address missed, so it has no canonical URL of its own.
-function head(route, title, description, { lab = false, notFound = false } = {}) {
-  // The physician walkthrough and hypothesis records are reached by a shared link, not by search.
-  const indexable = route !== '/review/' && !route.startsWith('/records/') && !notFound;
+// A page with its own share card passes social: { image, alt }; records are articles rather than site pages.
+function head(route, title, description, { lab = false, notFound = false, social, ogType = 'website' } = {}) {
+  // The physician walkthrough is reached by a shared link, not by search.
+  const indexable = route !== '/review/' && !notFound;
+  const card = social ? { image: social.image, ogAlt: social.alt, twitterAlt: social.alt } : defaultSocial;
   return [
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -35,21 +47,21 @@ function head(route, title, description, { lab = false, notFound = false } = {})
     '<meta name="theme-color" content="#F5F6F8">',
     ...(notFound ? [] : [`<link rel="canonical" href="https://violema.com${route}">`]),
     '<script type="application/ld+json">{"@context":"https://schema.org","@type":"Corporation","@id":"https://violema.com/#organization","name":"Violema","legalName":"Violema, Inc.","url":"https://violema.com/"}</script>',
-    '<meta property="og:type" content="website">',
+    `<meta property="og:type" content="${ogType}">`,
     '<meta property="og:site_name" content="Violema">',
     `<meta property="og:title" content="${e(title)}">`,
     `<meta property="og:description" content="${e(description)}">`,
     ...(notFound ? [] : [`<meta property="og:url" content="https://violema.com${route}">`]),
-    '<meta property="og:image" content="https://violema.com/company-assets/violema-social-hero.jpg">',
+    `<meta property="og:image" content="https://violema.com${card.image}">`,
     '<meta property="og:image:type" content="image/jpeg">',
     '<meta property="og:image:width" content="1200">',
     '<meta property="og:image:height" content="630">',
-    '<meta property="og:image:alt" content="Violema: Know which conclusions hold. And why. A stone handaxe and glass DNA helix above Earth.">',
+    `<meta property="og:image:alt" content="${e(card.ogAlt)}">`,
     '<meta name="twitter:card" content="summary_large_image">',
     `<meta name="twitter:title" content="${e(title)}">`,
     `<meta name="twitter:description" content="${e(description)}">`,
-    '<meta name="twitter:image" content="https://violema.com/company-assets/violema-social-hero.jpg">',
-    '<meta name="twitter:image:alt" content="Violema scientific evidence systems: a stone handaxe and glass DNA helix above Earth.">',
+    `<meta name="twitter:image" content="https://violema.com${card.image}">`,
+    `<meta name="twitter:image:alt" content="${e(card.twitterAlt)}">`,
     ...(indexable ? ['<meta name="googlebot" content="max-image-preview:large">'] : []),
     ...(route === '/' ? ['<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","@id":"https://violema.com/#webpage","url":"https://violema.com/","name":"Scientific evidence systems | Violema","primaryImageOfPage":{"@type":"ImageObject","url":"https://violema.com/company-assets/violema-social-hero.jpg","width":1200,"height":630}}</script>'] : []),
     '<link rel="icon" href="/company-assets/violema-icon.png" type="image/png">',
@@ -59,17 +71,17 @@ function head(route, title, description, { lab = false, notFound = false } = {})
     '<link rel="stylesheet" href="/company-assets/appearance.css">',
     ...(['/', '/about/'].includes(route) ? ['<link rel="stylesheet" href="/company-assets/experience.css">'] : []),
     ...(route === '/method/' ? ['<link rel="stylesheet" href="/company-assets/diagrams.css">'] : []),
-    ...(route.startsWith('/records/') ? ['<link rel="stylesheet" href="/company-assets/records.css">'] : []),
+    ...(route.startsWith('/records/') || route.startsWith('/fields/') ? ['<link rel="stylesheet" href="/company-assets/records.css">'] : []),
     ...(lab ? labModules : []).map(href => `<link rel="modulepreload" href="${href}">`),
   ].join('');
 }
 
 function siteHeader(route) {
-  return `<header class="site-header" data-site-header><div class="wrap header-inner"><a class="brand" href="/" aria-label="Violema home"><img class="brand-light" src="/company-assets/violema-logo.png" width="2172" height="724" alt="Violema"><img class="brand-dark" src="/company-assets/violema-logo-dark.png" width="2172" height="724" alt="Violema" loading="lazy"></a><nav class="primary-nav" id="primary-navigation" aria-label="Main navigation">${nav(route, '/', 'Home')}${nav(route, '/method/', 'Method')}${nav(route, '/demo/', 'Evidence lab')}${nav(route, '/review/', 'For reviewers')}${nav(route, '/about/', 'About')}<a href="${psychdoc}">PsychDoc.AI ${external}</a></nav><button class="theme-control" type="button" aria-label="Switch to dark mode" title="Switch to dark mode" hidden data-theme-control><svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20.9 13.1A9 9 0 0 1 10.9 3.1a9 9 0 1 0 10 10Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></button><button class="mobile-menu-control" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="primary-navigation" hidden data-menu-control><svg class="menu-open-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="menu-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div></header>`;
+  return `<header class="site-header" data-site-header><div class="wrap header-inner"><a class="brand" href="/" aria-label="Violema home"><img class="brand-light" src="/company-assets/violema-logo.png" width="2172" height="724" alt="Violema"><img class="brand-dark" src="/company-assets/violema-logo-dark.png" width="2172" height="724" alt="Violema" loading="lazy"></a><nav class="primary-nav" id="primary-navigation" aria-label="Main navigation">${nav(route, '/', 'Home')}${nav(route, '/method/', 'Method')}${nav(route, '/demo/', 'Evidence lab')}${nav(route, FIELD.route, 'Records')}${nav(route, '/review/', 'For reviewers')}${nav(route, '/about/', 'About')}<a href="${psychdoc}">PsychDoc.AI ${external}</a></nav><button class="theme-control" type="button" aria-label="Switch to dark mode" title="Switch to dark mode" hidden data-theme-control><svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20.9 13.1A9 9 0 0 1 10.9 3.1a9 9 0 1 0 10 10Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></button><button class="mobile-menu-control" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="primary-navigation" hidden data-menu-control><svg class="menu-open-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="menu-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div></header>`;
 }
 
 function siteFooter() {
-  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/">Home</a><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="/review/">For scientific reviewers</a><a href="/about/">About Violema</a><a href="/#briefing">Request a briefing</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span>${founderOrcidLink()}</div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><ul class="social-list footer-social" aria-label="Social profiles">${profileLinks()}</ul><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
+  return `<footer class="site-footer"><div class="wrap"><div class="footer-main"><a class="footer-wordmark" href="/">Violema</a><p class="footer-tagline">Scientific conclusions.<br>With their evidence attached.</p><nav class="footer-nav" aria-label="Footer navigation"><a href="/">Home</a><a href="/method/">Method</a><a href="/demo/">Evidence lab</a><a href="${FIELD.route}">${FIELD.name} records</a><a href="/review/">For scientific reviewers</a><a href="/about/">About Violema</a><a href="/#briefing">Request a briefing</a></nav></div><div class="footer-meta"><span>Prepared demonstration · independent scientific review pending</span>${founderOrcidLink()}</div><div class="footer-end"><p class="footer-copyright">Copyright 2026 Violema, Inc.</p><ul class="social-list footer-social" aria-label="Social profiles">${profileLinks()}</ul><nav class="footer-legal" aria-label="Legal"><a href="/legal/terms/">Terms of Use</a><a href="/legal/privacy/">Privacy Policy</a></nav></div></div></footer>`;
 }
 
 export function shell(route, title, description, content, options = {}) {
@@ -172,7 +184,7 @@ export function demoPage(corpora,stress) {
     '<div class="visually-hidden" data-announcement role="status" aria-live="polite"></div>',
     '<noscript><p class="wrap no-js-note">JavaScript is off. Both prepared packets and all claims are shown below; source links and packet downloads remain available. The bias control requires JavaScript.</p></noscript>',
     `<div class="wrap lab-content">${corpora.map(c=>corpusPanel(c,stress)).join('')}</div>`,
-    '<section class="wrap demo-closing" aria-label="Scope of this demonstration"><p>This demonstration supports inspection and expert criticism. It is not clinical guidance, a comprehensive literature review, or a claim of validated analysis across arbitrary corpora.</p><a class="text-link" href="/method/">Understand the method</a></section>',
+    `<section class="wrap demo-closing" aria-label="Scope of this demonstration"><p>This demonstration supports inspection and expert criticism. It is not clinical guidance, a comprehensive literature review, or a claim of validated analysis across arbitrary corpora.</p><div class="demo-closing-links"><a class="text-link" href="/method/">Understand the method</a><a class="text-link" href="${FIELD.route}">See the committed-test records</a></div></section>`,
   ].join(''), { lab: true });
 }
 
