@@ -479,7 +479,7 @@ test('the release is discoverable while the physician walkthrough remains noinde
 });
 
 // Read from the built pages, not the registry, so a page written outside the registry or indexed by mistake still shows up.
-test('every built page is registered, and exactly the indexable ones are in the sitemap and llms.txt',async()=>{
+test('every built page is registered, the sitemap lists exactly the indexable pages, and llms.txt links each but the home page',async()=>{
   const built=(await readdir(dist,{recursive:true})).filter(name=>name.endsWith('.html')).sort();
   assert.deepEqual(built,PAGES.map(page=>page.file).sort(),'every HTML file in dist is a registered page');
   const sitemap=await readFile(join(dist,'sitemap.xml'),'utf8');
