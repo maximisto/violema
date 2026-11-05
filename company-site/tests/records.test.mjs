@@ -188,7 +188,10 @@ test('Amendment 2 is on the record: ceiling rule, frozen prices, a Not met tier 
   assert.ok(html.includes(`every quantum execution finishes within ${CEILING_RULE_MAX_QUANTUM_HOURS} hours`));
   assert.ok(html.includes('a run that ends earlier for any other reason earns no ceiling credit'), 'B1: early stops earn nothing');
   assert.ok(html.includes('its protocol must name, before its counted runs, the strongest published calculation in its family on this input and use settings no weaker'));
-  assert.ok(html.includes('When the rule does not apply, the comparison is inconclusive: a missing or unqualified comparator family makes it so'));
+  assert.ok(html.includes('When no eligible classical execution reaches the target and the rule does not apply, the comparison is inconclusive: a missing or unqualified comparator family makes it so'));
+  // Independence is judged per dossier, so one team's failed quantum dossier cannot disqualify a contender for another team.
+  assert.ok(html.includes('of the team whose quantum dossier is being judged, so qualification is assessed separately for each dossier'));
+  assert.doesNotMatch(html, /independent of every bound quantum dossier/);
   assert.doesNotMatch(html, /on the comparison date/, 'B2: prices no longer float to the comparison date');
   assert.ok(html.includes('one price table, frozen and published when this record is registered'));
   assert.doesNotMatch(html, /listed class that the team names|list no rental price/, 'B2: teams no longer pick their own valuation, and Fugaku does publish a price');
