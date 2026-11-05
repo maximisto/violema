@@ -13,6 +13,8 @@ const text = html => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 const fieldFile = 'fields/quantum-advantage/index.html';
 const recordFiles = ['records/fe4s4-benchmark/index.html', 'records/fe4s4-benchmark/record/index.html'];
 const breadcrumb = html => html.match(/<nav class="legal-breadcrumb record-breadcrumb" aria-label="Breadcrumb">([\s\S]*?)<\/nav>/)?.[1] ?? '';
+// Text that search results and link previews show from <head>, which text() drops with the tags.
+const previewText = html => [...html.matchAll(/<meta (?:name|property)="(?:description|(?:og|twitter):(?:title|description|image:alt))" content="([^"]*)">/g)].map(match => match[1]);
 
 test('the field page is a public page that lists Fe4S4 as its first record', async () => {
   const html = await read(fieldFile);
@@ -32,7 +34,9 @@ test('the field page keeps the house voice and makes no partner, customer or for
   const html = await read(fieldFile);
   assert.doesNotMatch(html, /—/);
   assert.doesNotMatch(html, /\b(curated|thought leaders|disrupt|game-changing|reimagining|seamless|delve|elevate|actionable insights|like-minded)\b/i);
-  assert.doesNotMatch(text(html), /\b(partners?|customers?|clients?|validated|accuracy|forecasts?)\b/i);
+  const preview = previewText(html);
+  assert.equal(preview.length, 7, 'the description, and the og and twitter title, description and image alt');
+  assert.doesNotMatch(`${text(html)} ${preview.join(' ')}`, /\b(partners?|customers?|clients?|validated|accuracy|forecasts?)\b/i);
   assert.match(text(html), /It does not say whether quantum advantage exists, or when it will\./);
   assert.match(text(html), /Classical methods compete for the same target under the same ceilings, and they can win\./);
 });
