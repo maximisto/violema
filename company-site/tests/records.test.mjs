@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
-import { FE4S4_ROUTE, FE4S4_RECORD_ROUTE } from '../lib/records.mjs';
+import { FE4S4_RECORD_ROUTE, PAGES } from '../lib/routes.mjs';
 import {
   ENERGIES, GAP, TRIMCI_GAIN, MATCH_DAYS, DETERMINANTS, SINGLETS, FLASH_MS, CLOCK, LEDGER, LEDGER_EVENTS, EVIDENCE, RESPONSE_ARCS,
   OUTCOMES, decide, resolve as resolveOutcome, parseInstant, compareInstants, verdict, raceSVG, RACE_SCALES, daysBetween, SQD_QPU_USD, BUDGET_USD,
@@ -12,7 +12,8 @@ import {
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
-const records = [[FE4S4_ROUTE, 'records/fe4s4-benchmark/index.html'], [FE4S4_RECORD_ROUTE, 'records/fe4s4-benchmark/record/index.html']];
+// Every registered page that sits under a field is a record page.
+const records = PAGES.filter(page => page.field).map(page => [page.route, page.file]);
 
 for (const [route, file] of records) test(`${route} is a public page in the site shell with no third-party requests`, async () => {
   const html = await readFile(join(dist, file), 'utf8');

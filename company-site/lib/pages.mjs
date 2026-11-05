@@ -7,7 +7,7 @@ import { howItWorks } from '../data/how-it-works.mjs';
 import { analyticsScript } from './analytics.mjs';
 import { legalPolicies, legalUpdatedAt } from './legal.mjs';
 import { founderOrcidLink, profileLinks } from './social.mjs';
-import { FIELD } from './routes.mjs';
+import { FIELD, pageFor } from './routes.mjs';
 import { escapeHTML as e, sourceURL, corpusPanel, intervalFigure, calculateBiasScenario, chartLegend, biasControl, biasExplanation, referenceNote, scenarioSummary, traceSpecimen } from './render.mjs';
 
 const psychdoc = 'https://psychdoc.ai';
@@ -15,7 +15,7 @@ const mapBytes = readFileSync(new URL('../data/evidence-map.json', import.meta.u
 const evidenceMap = JSON.parse(mapBytes);
 const evidenceMapHash = createHash('sha256').update(mapBytes).digest('hex');
 // Records sit under their field, so the field's link stays marked while a record is open.
-const navCurrent = (route, href) => (route === href ? ' aria-current="page"' : href === FIELD.route && route.startsWith('/records/') ? ' aria-current="true"' : '');
+const navCurrent = (route, href) => (route === href ? ' aria-current="page"' : href === pageFor(route).field ? ' aria-current="true"' : '');
 const nav = (route,href,label) => `<a href="${href}"${navCurrent(route, href)}>${label}</a>`;
 const external = '<span class="external-glyph" aria-hidden="true">↗</span>';
 const fontFiles = ['instrument-sans-latin-wght-normal.woff2', 'inter-latin-wght-normal.woff2'];
@@ -31,11 +31,9 @@ const shareCard = {
   twitterAlt: 'Violema scientific evidence systems: a stone handaxe and glass DNA helix above Earth.',
 };
 
-// notFound marks the 404 page: nginx serves it at whatever address missed, so it has no canonical URL of its own.
-// Records are articles rather than site pages.
-function head(route, title, description, { lab = false, notFound = false, ogType = 'website' } = {}) {
-  // The physician walkthrough is reached by a shared link, not by search.
-  const indexable = route !== '/review/' && !notFound;
+// Indexing and the 404 page's missing canonical come from the page registry; records are articles rather than site pages.
+function head(route, title, description, { lab = false, ogType = 'website' } = {}) {
+  const { indexable, notFound } = pageFor(route);
   return [
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -98,7 +96,7 @@ export function legalPage(slug) {
 
 // Served by nginx (error_page 404) at any address that matches no page, so every link and asset is root-absolute.
 export function notFoundPage() {
-  return shell('/404', 'Page not found | Violema', 'This address does not match a page on the Violema scientific website. It may be mistyped, or the page may have moved.', `<article class="wrap legal-document"><header class="legal-heading"><p class="label">Error 404</p><h1>Page not found</h1><p class="lede">This address does not match a page on the Violema website. It may be mistyped, or the page may have moved.</p></header><div class="actions"><a class="button button-primary" href="/">Go to the homepage</a><a class="button button-secondary" href="/method/">Read the method</a></div></article>`, { notFound: true });
+  return shell('/404', 'Page not found | Violema', 'This address does not match a page on the Violema scientific website. It may be mistyped, or the page may have moved.', `<article class="wrap legal-document"><header class="legal-heading"><p class="label">Error 404</p><h1>Page not found</h1><p class="lede">This address does not match a page on the Violema website. It may be mistyped, or the page may have moved.</p></header><div class="actions"><a class="button button-primary" href="/">Go to the homepage</a><a class="button button-secondary" href="/method/">Read the method</a></div></article>`);
 }
 
 // The six records of the method. Interactive on /method/ so each station inspects its concrete schema and jumps to the section below.

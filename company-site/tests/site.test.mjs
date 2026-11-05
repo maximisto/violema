@@ -9,11 +9,13 @@ import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigu
 import { homePage } from '../lib/pages.mjs';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
 import { profiles, profileIcon } from '../lib/social.mjs';
+import { PAGES } from '../lib/routes.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
 const founderArchive=join(root,'archive/about-founder-20261102');
-const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html'],['/review/','review/index.html'],['/about/','about/index.html'],['/legal/terms/','legal/terms/index.html'],['/legal/privacy/','legal/privacy/index.html'],['/fields/quantum-advantage/','fields/quantum-advantage/index.html']];
+// Every registered page with a canonical address; the 404 page has its own test.
+const pages=PAGES.filter(page=>!page.notFound).map(page=>[page.route,page.file]);
 const decode = value => value.replaceAll('&amp;','&');
 
 test('additive replay preserves original result and interval width throughout declared domain',()=>{
@@ -228,7 +230,7 @@ test('/about/ leads with the company and charter while the founder section stays
 });
 
 test('every footer preserves the founder ORCID separately from company social accounts',async()=>{
-  const files=[...pages.map(([,file])=>file),'404.html','records/fe4s4-benchmark/index.html','records/fe4s4-benchmark/record/index.html'];
+  const files=[...pages.map(([,file])=>file),'404.html'];
   for(const file of files){
     const html=await readFile(join(dist,file),'utf8');
     const footer=html.match(/<footer class="site-footer">[\s\S]*?<\/footer>/)?.[0]??'';
@@ -474,4 +476,25 @@ test('the release is discoverable while the physician walkthrough remains noinde
   for(const route of ['/','/method/','/demo/'])assert.ok(sitemap.includes(`<loc>https://violema.com${route}</loc>`));
   assert.doesNotMatch(sitemap,/\/review\//);
   assert.match(await readFile(join(dist,'review/index.html'),'utf8'),/<meta name="robots" content="noindex,follow">/);
+});
+
+// Read from the built pages, not the registry, so a page written outside the registry or indexed by mistake still shows up.
+test('every built page is registered, and exactly the indexable ones are in the sitemap and llms.txt',async()=>{
+  const built=(await readdir(dist,{recursive:true})).filter(name=>name.endsWith('.html')).sort();
+  assert.deepEqual(built,PAGES.map(page=>page.file).sort(),'every HTML file in dist is a registered page');
+  const sitemap=await readFile(join(dist,'sitemap.xml'),'utf8');
+  const listed=[...sitemap.matchAll(/<loc>https:\/\/violema\.com([^<]+)<\/loc>/g)].map(match=>match[1]);
+  const llms=await readFile(join(dist,'llms.txt'),'utf8');
+  const indexed=[];
+  for(const file of built){
+    const html=await readFile(join(dist,file),'utf8');
+    if(!html.includes('<meta name="robots" content="index,follow">'))continue;
+    const route=html.match(/<link rel="canonical" href="https:\/\/violema\.com([^"]+)">/)?.[1];
+    assert.ok(route,`${file} is indexable, so it has a canonical address`);
+    indexed.push(route);
+    if(route!=='/')assert.ok(llms.includes(`(https://violema.com${route})`),`${route} is linked from llms.txt`);
+  }
+  assert.ok(indexed.includes('/'),'the indexable pages were found');
+  assert.equal(new Set(listed).size,listed.length,'no page is listed twice');
+  assert.deepEqual([...listed].sort(),indexed.sort(),'the sitemap lists every indexable built page and nothing else');
 });

@@ -3,8 +3,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { corpora, stressTest } from '../data/corpora.mjs';
 import { homePage, methodPage, demoPage, reviewPage, aboutPage, legalPage, notFoundPage } from '../lib/pages.mjs';
-import { fe4s4Page, fe4s4RecordPage, FE4S4_ROUTE, FE4S4_RECORD_ROUTE } from '../lib/records.mjs';
-import { fieldPage, FIELD } from '../lib/fields.mjs';
+import { fe4s4Page, fe4s4RecordPage } from '../lib/records.mjs';
+import { fieldPage } from '../lib/fields.mjs';
+import { PAGES, FIELD, FE4S4_ROUTE, FE4S4_RECORD_ROUTE } from '../lib/routes.mjs';
 import { exportCorpora } from './export-corpora.mjs';
 import { checkTrials } from './export-trials.mjs';
 
@@ -35,23 +36,31 @@ await exportCorpora(undefined, { check: true });
 const trials = await checkTrials({ csv: process.env.SYPRES_CSV });
 // Only the generated company-site directory is removed; application output is separate.
 await rm(dist, { recursive: true, force: true });
-for (const directory of ['method', 'demo', 'review', 'about', 'legal/terms', 'legal/privacy', 'fields/quantum-advantage', 'records/fe4s4-benchmark/record', 'company-assets/browser', 'company-assets/data', 'company-assets/fonts', 'company-assets/clients']) {
+for (const directory of ['company-assets/browser', 'company-assets/data', 'company-assets/fonts', 'company-assets/clients']) {
   await mkdir(join(dist, directory), { recursive: true });
 }
-for (const [route, markup] of [
-  ['index.html', homePage(corpora, stressTest, trials)],
-  ['method/index.html', methodPage(corpora, stressTest)],
-  ['demo/index.html', demoPage(corpora, stressTest)],
-  ['review/index.html', reviewPage(corpora, stressTest)],
-  ['about/index.html', aboutPage()],
-  ['legal/terms/index.html', legalPage('terms')],
-  ['legal/privacy/index.html', legalPage('privacy')],
-  ['404.html', notFoundPage()],
+// One renderer per registered page; the registry in lib/routes.mjs gives each page its file and whether it is indexed.
+const rendered = new Map([
+  ['/', homePage(corpora, stressTest, trials)],
+  ['/method/', methodPage(corpora, stressTest)],
+  ['/demo/', demoPage(corpora, stressTest)],
+  ['/review/', reviewPage(corpora, stressTest)],
+  ['/about/', aboutPage()],
+  ['/legal/terms/', legalPage('terms')],
+  ['/legal/privacy/', legalPage('privacy')],
+  ['/404', notFoundPage()],
   // The field and its hypothesis records: public, indexed and listed in the sitemap and llms.txt below.
-  ['fields/quantum-advantage/index.html', fieldPage()],
-  ['records/fe4s4-benchmark/index.html', fe4s4Page()],
-  ['records/fe4s4-benchmark/record/index.html', fe4s4RecordPage()],
-]) await writeFile(join(dist, route), markup);
+  [FIELD.route, fieldPage()],
+  [FE4S4_ROUTE, fe4s4Page()],
+  [FE4S4_RECORD_ROUTE, fe4s4RecordPage()],
+]);
+// The shell refuses an unregistered route, so the only gap left is a registered page with no renderer.
+const unrendered = PAGES.filter(page => !rendered.has(page.route)).map(page => page.route);
+if (unrendered.length) throw new Error(`Registered pages with no renderer: ${unrendered.join(', ')}`);
+for (const { route, file } of PAGES) {
+  await mkdir(dirname(join(dist, file)), { recursive: true });
+  await writeFile(join(dist, file), rendered.get(route));
+}
 for (const [source, destination] of [
   ['browser/site.css', 'company-assets/site.css'],
   ['browser/appearance.css', 'company-assets/appearance.css'],
@@ -88,9 +97,10 @@ for (const name of clientLogoFiles) await copyFile(join(assets, 'clients', name)
 await copyFile(join(assets, 'violema-social-hero.jpg'), join(dist, 'company-assets/violema-social-hero.jpg'));
 await copyFile(join(assets, 'max-markovtsev.jpg'), join(dist, 'company-assets/max-markovtsev.jpg'));
 await writeFile(join(dist, 'robots.txt'), 'User-agent: *\nAllow: /\n\nSitemap: https://violema.com/sitemap.xml\n');
-// Every indexable route; the physician walkthrough and the 404 page stay out.
-const sitemapRoutes = ['/', '/method/', '/demo/', '/about/', FIELD.route, FE4S4_ROUTE, FE4S4_RECORD_ROUTE, '/legal/terms/', '/legal/privacy/'];
+// Every indexable page in registry order; the physician walkthrough and the 404 page stay out.
+const sitemapRoutes = PAGES.filter(page => page.indexable).map(page => page.route);
 await writeFile(join(dist, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + sitemapRoutes.map(path => `<url><loc>https://violema.com${path}</loc></url>`).join('') + '</urlset>\n');
+// Written by hand, one line per page; tests/site.test.mjs checks that every indexable page but the home page is linked.
 await writeFile(join(dist, 'llms.txt'), '# Violema\n\nScientific evidence systems that connect claims to sources, make consequential assumptions visible, and keep the record open to review. Prepared demonstrations remain subject to independent scientific review.\n\n- [Method](https://violema.com/method/): source, claim, assumption, review and version records.\n- [Evidence lab](https://violema.com/demo/): two manually curated packets; shared presentation, not universal scientific validity.\n- [About Violema](https://violema.com/about/): company charter, scientific governance, and divisions.\n- [Quantum advantage records](https://violema.com/fields/quantum-advantage/): draft protocols for committed tests of claims that a quantum-assisted workflow beats the strongest publicly tested classical methods on a defined problem, chemistry first.\n- [Fe₄S₄ benchmark record](https://violema.com/records/fe4s4-benchmark/): a draft committed test of one narrow quantum-advantage claim on an iron-sulfur benchmark, with its outcome rule written before any result counts.\n- [Fe₄S₄ full record](https://violema.com/records/fe4s4-benchmark/record/): the claim, the test and its outcome rule, and the evidence in the order it became public.\n- [PsychDoc](https://psychdoc.ai/): first scientific application.\n- [Website Terms of Use](https://violema.com/legal/terms/): public scientific website terms.\n- [Website Privacy Policy](https://violema.com/legal/privacy/): public scientific website information practices.\n');
 console.log(`Built seven static pages, one field page, two record pages, the 404 page and ${corpora.length} source packets in company-site/dist.`);
 
