@@ -245,6 +245,10 @@ test('registration, not a timestamp alone, makes the draft a commitment', async 
   assert.ok(page.includes('It becomes a commitment only when its final text is registered.'));
   assert.ok(record.includes('A timestamp alone, like the one in the header, does not register it.'));
   assert.doesNotMatch(record, /No outside timestamp yet/);
+  // The proof was public before the rule change was approved, so the history says so rather than asserting it settled.
+  assert.match(record, /The proof was already public in Violema(?:'|&#39;|’)s public code repository when the rule changed/);
+  assert.ok(record.includes('Under the old wording, that timestamp could be read as registering the draft.'));
+  assert.doesNotMatch(record, /The registration rule changed the same day, before registration/);
 });
 
 test('the ledger section says the map events are live, and the participation line is plain', async () => {
