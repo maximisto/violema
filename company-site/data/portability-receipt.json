@@ -9,7 +9,7 @@
     "lib/synthesis/corpus.ts": "e07f56ef2eff364d5de80da1f3478121c2dcdf884b0d4e986ab95ba6754c3955",
     "analysis/stage_b/results/stability.json": "7289ec7d89f6df0061d2aa7508f58c4d46c37a611a5838162470596ff1e1ace1"
   },
-  "packetModuleSha256": "2d59c417651d7ea73447e7bfd54333511a69e7f79b381f16e33fbbac224ad5a4",
+  "packetModuleSha256": "a0d7d377fa91068738b6b4ffed0e43aa20333cd5e50208d6d12406bbbe979b12",
   "adapterSha256": "be7ea59a758886005e8dbe58bb465ec495030c00cd7d3e3ea24fd3fba9bf747c",
   "execution": "Existing tsx executes unchanged, hash-checked PsychDoc schema.ts and trust.ts with the same new presentation adapter for both packets.",
   "coreEdits": 0,

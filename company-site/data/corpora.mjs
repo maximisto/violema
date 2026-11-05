@@ -4,7 +4,7 @@ export const packetRevision = {
   version: '2026-11-05.1',
   revisedAt: '2026-11-05',
   selectedAt: '2026-10-10',
-  note: 'Wording only: the status label and version changed, and the date field is now selectedAt. No source, claim, condition, caveat or number changed.',
+  note: 'The status label and version changed, the date field is now selectedAt, and revision fields were added. No source, claim, condition, caveat or number changed.',
   previous: '2026-10-10.1',
 };
 
