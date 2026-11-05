@@ -71,6 +71,19 @@ The figures are pure functions in `lib/fe4s4-figures.mjs`. The build renders eve
 
 Every number on the page is a value from the record or is derived from one in the figures module, and `tests/records.test.mjs` pins the derivations. Its opening section repeats the record history's dated Amendment 1 line (`AMENDMENT_NOTE`) and links that history. The field and record pages are public: `index,follow`, in the sitemap and `llms.txt`, typed as articles (records) for link previews. `tests/fields.test.mjs` pins the field page, the links to it and the breadcrumbs. The violema.com vhost serves an allowlist of exact routes, so each new field or record route also needs its entry in `lib/routes.mjs`, its locations in `deploy/scientific-site/routing.mjs` and its locations on the server. Release `fe4s4-record-20261024` shows the record block and the guarded script that adds it; `deploy/scientific-site/fields.nginx.conf.snippet` is the field block, and a routing test keeps it equal to the model.
 
+## Timestamp anchors
+
+An anchor fixes what a release served without registering anything. `data/anchors/<release>/` holds the release's SHA-256 manifest (one `<sha256>  <path>` line per published file), the OpenTimestamps proof of the manifest's own hash, and `release/<path>` byte copies of the record pages it names, so their hashes stay checkable after the live pages change. The build copies the directory to `/company-assets/data/anchors/`, and `ANCHOR` in `lib/records.mjs` drives the full record's "Timestamped, not registered" line. The site test's page walk skips these copies: they are evidence, not pages.
+
+The first anchor is release `20261104-df24c20` (65 files, manifest hash `6fb0ba55…aaf266b`), stamped on 2026-11-05. Building commit `df24c20` reproduces all 65 hashes: its `company-site` tree is identical to `4c3120f`, whose build matched the manifest on 2026-11-05.
+
+A proof is pending until a calendar's Bitcoin transaction confirms, usually a few hours. Before publishing a new anchor:
+1. `ots upgrade <manifest>.ots`, repeated until it reports success, then `ots verify <manifest>.ots` from the directory that holds the manifest.
+2. Set `bitcoinBlock` in `ANCHOR` to the earliest block `ots verify` reports, `{ height, date }` with the block's UTC date.
+3. `npm run build && npm test`. `tests/anchors.test.mjs` fails while the proof is pending, reads the block heights out of the proof itself, and checks the manifest, the kept pages and the served copies byte for byte.
+
+A reader checks a kept page with `shasum -a 256 --ignore-missing -c <manifest>` from a folder that holds `release/`'s paths.
+
 ## Briefing form
 
 The homepage's closing chapter holds the site's one form, `id="briefing"`, and every "Request a briefing" link on the site (hero, footer, About) points at it. The markup is rendered at build time; `browser/briefing.mjs`, loaded by `site.mjs` only where the form exists, enables the button and posts the fields as JSON to `/api/briefing` on this host. Without JavaScript the button stays disabled and a `noscript` line names the same form on PsychDoc.AI, because a plain form post cannot reach the handler.

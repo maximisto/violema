@@ -1,4 +1,4 @@
-import { mkdir, writeFile, copyFile, rm, access, readdir } from 'node:fs/promises';
+import { mkdir, writeFile, copyFile, cp, rm, access, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { corpora, stressTest } from '../data/corpora.mjs';
@@ -99,6 +99,8 @@ for (const version of await readdir(join(root, 'data/archive'))) {
     if (!name.startsWith('.')) await copyFile(join(root, 'data/archive', version, name), join(dist, 'company-assets/data/archive', version, name));
   }
 }
+// Timestamp anchors: a release manifest, its OpenTimestamps proof and the stamped pages it names, byte for byte.
+await cp(join(root, 'data/anchors'), join(dist, 'company-assets/data/anchors'), { recursive: true, filter: source => !source.split(/[\\/]/).pop().startsWith('.') });
 for (const [source, destination] of fontFiles) await copyFile(join(assets, source), join(dist, 'company-assets', destination));
 for (const [source, destination] of logoFiles) await copyFile(join(root, 'brand', source), join(dist, 'company-assets', destination));
 for (const name of clientLogoFiles) await copyFile(join(assets, 'clients', name), join(dist, 'company-assets/clients', name));

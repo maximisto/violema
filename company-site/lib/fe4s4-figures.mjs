@@ -107,6 +107,9 @@ export const ENERGIES = Object.freeze({
 });
 /** The SQD entry's largest diagonalized subspace (Shirakawa et al., arXiv 2511.00224). */
 export const SQD_SUBSPACE = 1e10;
+// The same team's 2024 SQD energy on this model (Robledo-Moreno et al., arXiv 2405.05068, v1 2024-05-08), as Shirakawa
+// et al. quote it in their introduction; the 2024 paper shows it only in a figure. They report a 278 mEh improvement.
+export const SQD_2024 = Object.freeze({ eh: -326.635, date: '2024-05-08' });
 export const millihartreeAbove = eh => Math.round((eh - ENERGIES.reference.eh) * 1e5) / 100;
 export const GAP = Object.freeze({
   quantum: millihartreeAbove(ENERGIES.quantum.eh),
@@ -124,6 +127,20 @@ export const BUDGET_USD = 100000;
 export const TRIMCI_GAIN = Math.round((GAP.quantum - GAP.trimci) * 100) / 100;
 export const KCAL_PER_MILLIHARTREE = 0.6275095;
 export const MATCH_DAYS = daysBetween(ENERGIES.quantum.date, ENERGIES.trimciBest.date);
+// Best quantum hardware energy on this model by year, against the same reference as the race chart.
+export const QUANTUM_GAP_BY_YEAR = Object.freeze([
+  { year: 2024, mEh: millihartreeAbove(SQD_2024.eh) },
+  { year: 2025, mEh: GAP.quantum },
+]);
+// Days from a hardware result to the classical answers to it, by first public version. 2023: Kim et al. (Nature,
+// online 2023-06-14) to Tindall et al. (arXiv 2306.14887) and Begušić and Chan (arXiv 2306.16372). 2025: Shirakawa
+// et al. (arXiv 2511.00224) to Zhang and Otten's matching preprint (arXiv 2511.14734) and to their tracker entries.
+export const RESPONSE_DAYS = Object.freeze({
+  spin2023: daysBetween('2023-06-14', '2023-06-26'),
+  spin2023Second: daysBetween('2023-06-14', '2023-06-28'),
+  fe4s4Preprint2025: daysBetween('2025-10-31', '2025-11-18'),
+  fe4s4Tracker2025: daysBetween('2025-10-31', '2025-11-20'),
+});
 export const RACE_SCALES = Object.freeze([
   { key: 'gap', label: 'Full range', max: 360 },
   { key: 'classical', label: 'Classical entries', max: 80 },
@@ -228,8 +245,8 @@ export const EVIDENCE = Object.freeze([
   { d: '2026-07-27', lane: 'pg', url: 'https://arxiv.org/abs/2607.24937', who: 'Three IBM-related advantage claims', venue: 'arXiv 2607.24937 · 2607.25941 · 2607.25998, posted 2026-07-27 and 28', text: 'Advantage claims on spin models and sampling tasks. They concern problems other than biological molecules, so they do not bear on this test.' },
 ]);
 export const RESPONSE_ARCS = Object.freeze([
-  { from: 'kim', to: 'tindall', lines: [`${daysBetween('2023-06-14', '2023-06-26')} and ${daysBetween('2023-06-14', '2023-06-28')} days between posts`, 'a spin model, not a molecule'], side: 'left' },
-  { from: 'sqd', to: 'trimci', lines: [`${daysBetween('2025-10-31', '2025-11-20')} days from the preprint`, 'to a matching classical entry'], side: 'left' },
+  { from: 'kim', to: 'tindall', lines: [`${RESPONSE_DAYS.spin2023} and ${RESPONSE_DAYS.spin2023Second} days between posts`, 'a spin model, not a molecule'], side: 'left' },
+  { from: 'sqd', to: 'trimci', lines: [`${RESPONSE_DAYS.fe4s4Tracker2025} days from the preprint`, 'to a matching classical entry'], side: 'left' },
 ]);
 export const DEFAULT_EVIDENCE = EVIDENCE.findIndex(item => item.id === 'sqd');
 
@@ -415,7 +432,8 @@ export function outcomeList(selectedId = decide(DEFAULT_SCENARIO)) {
 
 /* ---------- The ledger behind it ---------- */
 
-// PsychDoc's psilocybin map on the feat/map-events branch (not yet deployed): events by revision date.
+// PsychDoc's psilocybin map, live on psychdoc.ai since 2026-10-26 (PR #66, 8a60481): events by revision date. Checked
+// against the live ledger export on 2026-11-05.
 export const LEDGER = Object.freeze({
   byDate: [['2026-07-19', 12], ['2026-09-29', 19], ['2026-10-05', 4], ['2026-10-10', 29], ['2026-10-11', 22], ['2026-10-24', 2]],
   conclusionChanges: ['2026-09-29', '2026-10-11', '2026-10-24'],

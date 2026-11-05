@@ -8,6 +8,7 @@ import { FE4S4_RECORD_ROUTE, PAGES } from '../lib/routes.mjs';
 import {
   ENERGIES, GAP, TRIMCI_GAIN, MATCH_DAYS, DETERMINANTS, SINGLETS, FLASH_MS, CLOCK, LEDGER, LEDGER_EVENTS, EVIDENCE, RESPONSE_ARCS,
   OUTCOMES, decide, resolve as resolveOutcome, parseInstant, compareInstants, verdict, raceSVG, RACE_SCALES, daysBetween, SQD_QPU_USD, BUDGET_USD,
+  QUANTUM_GAP_BY_YEAR, RESPONSE_DAYS,
 } from '../lib/fe4s4-figures.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -162,8 +163,53 @@ test('Amendment 1 is on the record page: per-team binding, the ablation, the tea
   assert.ok(benchmark.includes('of the resolving dossier by the cutoff'));
   assert.doesNotMatch(benchmark, /the earliest complete quantum dossier/);
   const record = await readFile(join(dist, 'records/fe4s4-benchmark/record/index.html'), 'utf8');
-  assert.match(record, /fact-checked <[^>]*>2026-10-24<\/[^>]*>|fact-checked 2026-10-24/);
+  assert.match(record, /checked against primary sources <[^>]*>2026-10-24<\/[^>]*>/);
   assert.ok(record.includes('amended'), 'the record status names the amendment');
+});
+
+test('the full record header leads with its status and a reviewer call; AI reviews live in the history', async () => {
+  const record = await readFile(join(dist, 'records/fe4s4-benchmark/record/index.html'), 'utf8');
+  const header = record.slice(0, record.indexOf('<article class="record-doc">'));
+  assert.doesNotMatch(header, /AI model|AI reviewer/, 'the header no longer leads with AI review');
+  assert.ok(header.includes('Reviewer sought.') && header.includes('has run DMRG or SQD on iron-sulfur clusters, and anyone can challenge a rule'));
+  assert.ok(header.includes('<a href="/#briefing">Offer a review or challenge a rule</a>'), 'a route to challenge a rule');
+  assert.ok(header.includes('“To review the science”'), 'the route names a choice the briefing form offers');
+  const history = record.slice(record.indexOf('id="map-h"'));
+  assert.ok(history.includes('Revised after reviews by two AI models from different providers'), 'the history keeps the reviews');
+});
+
+test('section 04 shows dated readings and no probabilities, from the record’s own sources', async () => {
+  const page = await readFile(join(dist, 'records/fe4s4-benchmark/index.html'), 'utf8');
+  assert.doesNotMatch(page, /This is not a forecast|Not a forecast/);
+  assert.ok(page.includes('Two dated readings, and no probabilities yet.'));
+  // -326.635 Eh (2024, as Shirakawa et al. quote it) and -326.913 Eh (2025, the tracker entry), against -327.247036 Eh.
+  assert.deepEqual(QUANTUM_GAP_BY_YEAR, [{ year: 2024, mEh: 612.04 }, { year: 2025, mEh: 334.04 }]);
+  assert.equal(Math.round((QUANTUM_GAP_BY_YEAR[0].mEh - QUANTUM_GAP_BY_YEAR[1].mEh) * 10) / 10, 278, 'the 278 mEh step Shirakawa et al. report');
+  assert.deepEqual({ ...RESPONSE_DAYS }, { spin2023: 12, spin2023Second: 14, fe4s4Preprint2025: 18, fe4s4Tracker2025: 20 });
+  assert.ok(page.includes('612 mEh (2024) → 334 mEh (2025)'));
+  assert.ok(page.includes('12 days (2023) → 18 days (2025)'));
+  assert.ok(page.includes('reached the tracker 20 days after the quantum preprint'), 'the reading names the arc’s 20 days, so the two counts do not conflict');
+  assert.ok(RESPONSE_ARCS[1].lines[0].startsWith('20 days'), 'the evidence arc still counts to the tracker entry');
+  const record = await readFile(join(dist, 'records/fe4s4-benchmark/record/index.html'), 'utf8');
+  assert.ok(record.includes('came 18 days after the quantum preprint'), 'the record’s indicator gives the same 2025 count');
+});
+
+test('registration, not a timestamp alone, makes the draft a commitment', async () => {
+  const page = await readFile(join(dist, 'records/fe4s4-benchmark/index.html'), 'utf8');
+  const record = await readFile(join(dist, 'records/fe4s4-benchmark/record/index.html'), 'utf8');
+  for (const html of [page, record]) assert.doesNotMatch(html, /commitment (only )?when (its|the) full text (receives|has) a public timestamp/);
+  assert.ok(page.includes('It becomes a commitment only when its final text is registered.'));
+  assert.ok(record.includes('A timestamp alone, like the one in the header, does not register it.'));
+  assert.doesNotMatch(record, /No outside timestamp yet/);
+});
+
+test('the ledger section says the map events are live, and the participation line is plain', async () => {
+  const page = await readFile(join(dist, 'records/fe4s4-benchmark/index.html'), 'utf8');
+  assert.doesNotMatch(page, /not yet on psychdoc\.ai|release being prepared/);
+  assert.match(page, /Live on psychdoc\.ai since <span class="date">2026-10-26<\/span>/);
+  const record = await readFile(join(dist, 'records/fe4s4-benchmark/record/index.html'), 'utf8');
+  assert.ok(record.includes('No team has agreed to take part, and nobody outside Violema funds this record.'));
+  assert.doesNotMatch(record, /No team is represented as having agreed/);
 });
 
 test('the race chart shows marks only, a one-sided pass line, and no verdict multiplier', async () => {
