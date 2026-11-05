@@ -75,11 +75,11 @@ Every number on the page is a value from the record or is derived from one in th
 
 An anchor fixes what a release served without registering anything. `data/anchors/<release>/` holds the release's SHA-256 manifest (one `<sha256>  <path>` line per published file), the OpenTimestamps proof of the manifest's own hash, and `release/<path>` byte copies of the record pages it names, so their hashes stay checkable after the live pages change. The build copies the directory to `/company-assets/data/anchors/`, and `ANCHOR` in `lib/records.mjs` drives the full record's "Timestamped, not registered" line. The site test's page walk skips these copies: they are evidence, not pages.
 
-The first anchor is release `20261104-df24c20` (65 files, manifest hash `6fb0ba55…aaf266b`), stamped on 2026-11-05. Building commit `df24c20` reproduces all 65 hashes: its `company-site` tree is identical to `4c3120f`, whose build matched the manifest on 2026-11-05.
+The first anchor is release `20261104-df24c20` (65 files, manifest hash `6fb0ba55…aaf266b`), stamped on 2026-11-05. Building commit `df24c20` reproduces all 65 hashes: its `company-site` tree is identical to `4c3120f`, whose build matched the manifest on 2026-11-05. Its proof upgraded at 11:53 UTC the same day with one Bitcoin attestation, block 974,660, mined at 11:10:25 UTC. The proof's commitment at that block, `d3fbe88f…b5619` in display order, matched the block's Merkle root on both blockstream.info and mempool.space at six confirmations; no local Bitcoin node was available for `ots verify`.
 
 A proof is pending until a calendar's Bitcoin transaction confirms, usually a few hours. Before publishing a new anchor:
-1. `ots upgrade <manifest>.ots`, repeated until it reports success, then `ots verify <manifest>.ots` from the directory that holds the manifest.
-2. Set `bitcoinBlock` in `ANCHOR` to the earliest block `ots verify` reports, `{ height, date }` with the block's UTC date.
+1. `ots upgrade <manifest>.ots`, repeated until it reports success, then `ots verify <manifest>.ots` from the directory that holds the manifest. `ots verify` reads block headers from a local Bitcoin node. Without one, it stops at "Could not connect to Bitcoin node" and prints the attested height: then load the proof with the `opentimestamps` Python library, take the commitment at each `BitcoinBlockHeaderAttestation` (byte-reversed for display order), and check it against that block's Merkle root on two independent block explorers.
+2. Set `bitcoinBlock` in `ANCHOR` to the earliest attested block, `{ height, date }` with the block's UTC date.
 3. `npm run build && npm test`. `tests/anchors.test.mjs` fails while the proof is pending, reads the block heights out of the proof itself, and checks the manifest, the kept pages and the served copies byte for byte.
 
 A reader checks a kept page with `shasum -a 256 --ignore-missing -c <manifest>` from a folder that holds `release/`'s paths.

@@ -19,14 +19,14 @@ export const AMENDMENT_NOTE = '2026-11-05 · Amendment 2, before registration: q
 // The outside timestamp on the release that first published this record. Its SHA-256 manifest lists every file the
 // release served, and the manifest's own hash went to OpenTimestamps. data/anchors keeps the manifest, its proof and
 // the three Quantum advantage pages as that release served them, so their hashes stay checkable after the pages change.
-// bitcoinBlock is set only after `ots upgrade` and `ots verify` pass (see README, "Timestamp anchors").
+// bitcoinBlock is set only after `ots upgrade` passes and the attestation is verified (see README, "Timestamp anchors").
 export const ANCHOR = Object.freeze({
   release: '20261104-df24c20',
   files: 65,
   manifest: 'release-20261104-df24c20-quantum-advantage.SHA256SUMS',
   manifestSha256: '6fb0ba55bd4c84f54d18b996aaac1bc30b639260a6fe160a3f4ac1472aaf266b',
   submitted: '2026-11-05',
-  bitcoinBlock: null,
+  bitcoinBlock: { height: 974660, date: '2026-11-05' },
   url: '/company-assets/data/anchors/20261104-df24c20/',
   pages: Object.freeze(['fields/quantum-advantage/index.html', 'records/fe4s4-benchmark/index.html', 'records/fe4s4-benchmark/record/index.html']),
 });
