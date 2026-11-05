@@ -112,6 +112,15 @@ The header shows the owner-approved scientific logos and the favicon uses the ma
 
 Edit the owned source records, preserve source identities and review status, then run `node scripts/export-corpora.mjs`. Review the JSON packet diff. Build fails if a packet is stale or its contract fails. The optional source-engine portability check is documented in `data/provenance.md`; the normal build does not import or require the other application.
 
+Once a packet is published, any change to it, wording included, is a new dated revision:
+
+1. Copy the served `corpora.mjs`, both packet JSONs, `portability-receipt.json` and `provenance.md` unchanged into `data/archive/<current version>/`. The build serves them at `/company-assets/data/archive/<version>/`, and `tests/corpora.test.mjs` checks the archived module still matches its own receipt.
+2. Set `packetRevision` in `data/corpora.mjs`: the new `version` and `revisedAt`, a plain `note` saying what changed and what did not, and `previous`.
+3. Make the change, run `node scripts/export-corpora.mjs`, and re-run the portability check (see `data/provenance.md`), which writes a new receipt naming the revision. Never edit the receipt by hand.
+4. Add the revision to "Revisions" in `data/provenance.md`, and update the test that compares the current revision with the previous one.
+
+The stable download URLs always serve the newest revision.
+
 The JavaScript renderer reads the same frozen data module as the static build. Without JavaScript, both corpus packets, all claims, condition tables, source links and downloads remain available. The slider is hidden until enhancement initializes. Selecting the materials corpus clears the clinical shift; reset returns to the first corpus, first claim and zero shift. Numbers shown in prose are rounded for reading; packet and calculation values retain full precision.
 
 ## Browser acceptance

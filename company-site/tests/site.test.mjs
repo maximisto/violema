@@ -488,15 +488,18 @@ test('the release is discoverable while the physician walkthrough remains noinde
   assert.match(await readFile(join(dist,'review/index.html'),'utf8'),/<meta name="robots" content="noindex,follow">/);
 });
 
-// "Curated" is banned in public copy. The frozen packets keep the status they recorded (data/corpora.mjs is
-// hash-pinned by the portability receipt), and pages show it through reviewStatusLabel.
-test('no page or llms.txt says curated, while the pinned packets keep their recorded status',async()=>{
-  for(const file of [...PAGES.map(page=>page.file),'llms.txt'])assert.doesNotMatch(await readFile(join(dist,file),'utf8'),/\bcurat(?:e|ed|es|ing|ion|or|ors)\b/i,file);
-  for(const corpus of corpora){
-    assert.match(corpus.reviewStatus,/^Curated demonstration · /,`${corpus.id} keeps its recorded status`);
-    assert.equal(reviewStatusLabel(corpus.reviewStatus),corpus.reviewStatus.replace('Curated demonstration','Prepared demonstration'));
+// "Curated" is banned in public copy and in the current downloads; data/archive keeps earlier revisions as published.
+// Pages are read with character references decoded, and again with tags removed, so an encoded or split word is caught.
+test('no page, llms.txt or current packet download says curated',async()=>{
+  const banned=/(?<![a-z])curat/i;
+  const decodeRefs=text=>text.replace(/&#x([0-9a-f]+);/gi,(_,hex)=>String.fromCodePoint(parseInt(hex,16))).replace(/&#(\d+);/g,(_,dec)=>String.fromCodePoint(Number(dec))).replace(/&(amp|lt|gt|quot|apos|nbsp);/g,(_,name)=>({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' '})[name]);
+  for(const file of [...PAGES.map(page=>page.file),'llms.txt']){
+    const html=await readFile(join(dist,file),'utf8');
+    assert.doesNotMatch(decodeRefs(html),banned,file);
+    assert.doesNotMatch(decodeRefs(html.replace(/<[^>]*>/g,'')),banned,`${file}, text across tags`);
   }
-  assert.equal(reviewStatusLabel(stressTest.reviewStatus),stressTest.reviewStatus,'any other status is shown as recorded');
+  for(const name of [...corpora.map(corpus=>`${corpus.id}.json`),'portability-receipt.json','provenance.md','corpora.mjs'])assert.doesNotMatch(await readFile(join(dist,'company-assets/data',name),'utf8'),banned,name);
+  for(const corpus of corpora)assert.match(corpus.reviewStatus,/^Hand-selected demonstration · /,corpus.id);
 });
 
 // Read from the built pages, not the registry, so a page written outside the registry or indexed by mistake still shows up.

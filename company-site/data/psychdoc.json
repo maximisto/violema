@@ -1,14 +1,21 @@
 {
-  "schemaVersion": "1.0.0",
-  "curatedAt": "2026-10-10",
+  "schemaVersion": "2.0.0",
+  "packetVersion": "2026-11-05.1",
+  "selectedAt": "2026-10-10",
+  "revisedAt": "2026-11-05",
+  "revisionNote": "Wording only: the status label and version changed, and the date field is now selectedAt. No source, claim, condition, caveat or number changed.",
+  "previousVersion": {
+    "version": "2026-10-10.1",
+    "url": "https://violema.com/company-assets/data/archive/2026-10-10.1/psychdoc.json"
+  },
   "corpus": {
     "id": "psychdoc",
     "title": "PsychDoc · Depression evidence",
     "domain": "Clinical research",
     "question": "Which parts of a psilocybin depression result survive an assumed bias shift?",
     "summary": "Inspect a saved analysis, its population limits and the assumptions that change its interpretation.",
-    "sourceVersion": "PsychDoc 3001296 · SYPRES 25.1.2 · packet 2026-10-10.1",
-    "reviewStatus": "Curated demonstration · Stage B awaits independent scientific review",
+    "sourceVersion": "PsychDoc 3001296 · SYPRES 25.1.2 · packet 2026-11-05.1",
+    "reviewStatus": "Hand-selected demonstration · Stage B awaits independent scientific review",
     "scopeNote": "A replay of saved results from a mixed-population dataset. Trial-level source-input audit remains incomplete. This is evidence education, not treatment advice; neither the packet nor the slider establishes clinical benefit for an individual.",
     "sources": [
       {

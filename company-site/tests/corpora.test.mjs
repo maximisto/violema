@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { corpora, stressTest } from '../data/corpora.mjs';
+import { corpora, stressTest, packetRevision } from '../data/corpora.mjs';
 import { canonicalSource, validateCorpus, validateCorpora, packetFor, analysisForCorpus, toPsychDocObject } from '../data/contract.mjs';
 import { exportCorpora } from '../scripts/export-corpora.mjs';
 
@@ -96,6 +96,7 @@ test('stress replay preserves the pinned artifact precision and declaration', as
 test('portability receipt is current and makes no field-coverage claim', async () => {
   const receipt = await load('portability-receipt.json');
   const hash = async (name) => createHash('sha256').update(await readFile(new URL(`../data/${name}`, import.meta.url))).digest('hex');
+  assert.equal(receipt.packetVersion, packetRevision.version);
   assert.equal(receipt.packetModuleSha256, await hash('corpora.mjs'));
   assert.equal(receipt.adapterSha256, await hash('contract.mjs'));
   assert.equal(receipt.coreEdits, 0);
@@ -129,5 +130,29 @@ test('the archived 2026-10-10.1 packets still verify against the receipt they we
   for (const corpus of earlier.corpora) {
     const packet = { schemaVersion: '1.0.0', curatedAt: '2026-10-10', corpus, analysis: corpus.id === earlier.stressTest.corpusId ? earlier.stressTest : null };
     assert.equal(await readFile(archived('2026-10-10.1', `${corpus.id}.json`), 'utf8'), `${JSON.stringify(packet, null, 2)}\n`, corpus.id);
+  }
+});
+
+// provenance.md and the packets' revisionNote both say this; it holds only while this test does.
+test('the current revision changes only wording against the one before it', async () => {
+  const earlier = await import(archived(packetRevision.previous, 'corpora.mjs'));
+  const withoutLabels = ({ reviewStatus, sourceVersion, ...rest }) => rest;
+  assert.deepEqual(corpora.map(withoutLabels), earlier.corpora.map(withoutLabels));
+  assert.deepEqual(stressTest, earlier.stressTest);
+  for (const [index, corpus] of corpora.entries()) {
+    const before = earlier.corpora[index];
+    assert.equal(corpus.reviewStatus, before.reviewStatus.replace(/^Curated demonstration · /, 'Hand-selected demonstration · '));
+    assert.equal(corpus.sourceVersion, before.sourceVersion.replace(packetRevision.previous, packetRevision.version));
+  }
+});
+
+test('each packet names its revision and links the archived one before it', async () => {
+  for (const corpus of corpora) {
+    const packet = packetFor(corpus);
+    assert.equal(packet.schemaVersion, '2.0.0');
+    assert.equal(packet.packetVersion, packetRevision.version);
+    assert.ok(corpus.sourceVersion.endsWith(packetRevision.version), corpus.id);
+    assert.deepEqual(packet.previousVersion, { version: packetRevision.previous, url: `https://violema.com/company-assets/data/archive/${packetRevision.previous}/${corpus.id}.json` });
+    assert.equal(JSON.parse(await readFile(archived(packetRevision.previous, `${corpus.id}.json`), 'utf8')).corpus.id, corpus.id);
   }
 });

@@ -1,14 +1,21 @@
 {
-  "schemaVersion": "1.0.0",
-  "curatedAt": "2026-10-10",
+  "schemaVersion": "2.0.0",
+  "packetVersion": "2026-11-05.1",
+  "selectedAt": "2026-10-10",
+  "revisedAt": "2026-11-05",
+  "revisionNote": "Wording only: the status label and version changed, and the date field is now selectedAt. No source, claim, condition, caveat or number changed.",
+  "previousVersion": {
+    "version": "2026-10-10.1",
+    "url": "https://violema.com/company-assets/data/archive/2026-10-10.1/perovskite-stability.json"
+  },
   "corpus": {
     "id": "perovskite-stability",
     "title": "Perovskite · Stability conditions",
     "domain": "Materials research",
     "question": "Can these solar-cell stability results be compared on the same terms?",
     "summary": "Four primary reports and separate ISOS guidance show why time, environment, device identity and endpoint must travel with a claim.",
-    "sourceVersion": "Manual source packet · 2026-10-10.1",
-    "reviewStatus": "Curated demonstration · materials expert review pending",
+    "sourceVersion": "Manual source packet · 2026-11-05.1",
+    "reviewStatus": "Hand-selected demonstration · materials expert review pending",
     "scopeNote": "A purposive sample, not a systematic review. Selected public passages were read manually; no automated full-text extraction ran. Test conditions and endpoints differ, and some metadata remain unextracted. No compatible pooled analysis or clinical bias slider applies.",
     "sources": [
       {
