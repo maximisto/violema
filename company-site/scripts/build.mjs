@@ -1,4 +1,4 @@
-import { mkdir, writeFile, copyFile, rm, access } from 'node:fs/promises';
+import { mkdir, writeFile, copyFile, rm, access, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { corpora, stressTest } from '../data/corpora.mjs';
@@ -90,6 +90,14 @@ for (const corpus of corpora) {
 }
 for (const name of ['provenance.md', 'stage-b-snapshot.json', 'portability-receipt.json', 'sypres-primary-trials.json', 'evidence-map.json']) {
   await copyFile(join(root, 'data', name), join(dist, 'company-assets/data', name));
+}
+// Earlier packet revisions stay downloadable byte for byte, so each one's receipt still verifies (see provenance.md).
+for (const version of await readdir(join(root, 'data/archive'))) {
+  if (version.startsWith('.')) continue;
+  await mkdir(join(dist, 'company-assets/data/archive', version), { recursive: true });
+  for (const name of await readdir(join(root, 'data/archive', version))) {
+    if (!name.startsWith('.')) await copyFile(join(root, 'data/archive', version, name), join(dist, 'company-assets/data/archive', version, name));
+  }
 }
 for (const [source, destination] of fontFiles) await copyFile(join(assets, source), join(dist, 'company-assets', destination));
 for (const [source, destination] of logoFiles) await copyFile(join(root, 'brand', source), join(dist, 'company-assets', destination));

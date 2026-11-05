@@ -156,6 +156,13 @@ test('downloaded packets stay identical to source and do not leak analysis acros
   }
 });
 
+test('earlier packet revisions are served byte for byte from data/archive',async()=>{
+  const kept=(await readdir(join(root,'data/archive'),{recursive:true})).filter(name=>name.includes('/')&&!name.split('/').some(part=>part.startsWith('.'))).sort();
+  assert.ok(kept.includes('2026-10-10.1/portability-receipt.json'));
+  assert.deepEqual((await readdir(join(dist,'company-assets/data/archive'),{recursive:true})).filter(name=>name.includes('/')).sort(),kept);
+  for(const name of kept)assert.ok((await readFile(join(dist,'company-assets/data/archive',name))).equals(await readFile(join(root,'data/archive',name))),name);
+});
+
 test('browser module paths and self-hosted stylesheet assets resolve in the generated namespace',async()=>{
   // Follow static and dynamic imports from the entry module through every module it reaches.
   const seen=new Set(),queue=[join(dist,'company-assets/browser/site.mjs')];

@@ -8,6 +8,8 @@ import { exportCorpora } from '../scripts/export-corpora.mjs';
 
 const load = async (name) => JSON.parse(await readFile(new URL(`../data/${name}`, import.meta.url), 'utf8'));
 const copy = (value) => structuredClone(value);
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const archived = (version, name) => new URL(`../data/archive/${version}/${name}`, import.meta.url);
 
 test('both manually curated packets resolve all local claim and lineage references', () => {
   assert.equal(validateCorpora().length, 2);
@@ -115,5 +117,17 @@ test('adapter preserves claim provenance and does not invent expert review', () 
     assert.equal(adapted.provenance.reviewedBy, undefined);
     assert.equal(adapted.corpus, undefined);
     assert.deepEqual(adapted.assets, []);
+  }
+});
+
+// Revision 2026-10-10.1 was published with its own receipt; its files are kept exactly as served so that receipt still holds.
+test('the archived 2026-10-10.1 packets still verify against the receipt they were published with', async () => {
+  const receipt = JSON.parse(await readFile(archived('2026-10-10.1', 'portability-receipt.json'), 'utf8'));
+  assert.equal(sha256(await readFile(archived('2026-10-10.1', 'corpora.mjs'))), receipt.packetModuleSha256);
+  const earlier = await import(archived('2026-10-10.1', 'corpora.mjs'));
+  assert.deepEqual(receipt.results.map((result) => result.corpusId), earlier.corpora.map((corpus) => corpus.id));
+  for (const corpus of earlier.corpora) {
+    const packet = { schemaVersion: '1.0.0', curatedAt: '2026-10-10', corpus, analysis: corpus.id === earlier.stressTest.corpusId ? earlier.stressTest : null };
+    assert.equal(await readFile(archived('2026-10-10.1', `${corpus.id}.json`), 'utf8'), `${JSON.stringify(packet, null, 2)}\n`, corpus.id);
   }
 });
