@@ -1,0 +1,77 @@
+// Frozen, manually curated demonstration packets. See provenance.md.
+export const corpora = [
+  {
+    id: 'psychdoc',
+    title: 'PsychDoc · Depression evidence',
+    domain: 'Clinical research',
+    question: 'Which parts of a psilocybin depression result survive an assumed bias shift?',
+    summary: 'Inspect a saved analysis, its population limits and the assumptions that change its interpretation.',
+    sourceVersion: 'PsychDoc 3001296 · SYPRES 25.1.2 · packet 2026-10-10.1',
+    reviewStatus: 'Curated demonstration · Stage B awaits independent scientific review',
+    scopeNote: 'A replay of saved results from a mixed-population dataset. Trial-level source-input audit remains incomplete. This is evidence education, not treatment advice; neither the packet nor the slider establishes clinical benefit for an individual.',
+    sources: [
+      { id: 'sypres-paper', title: 'A living systematic review, meta-analysis and open-data resource of randomized controlled trials of psilocybin treatment for symptoms of depression', url: 'https://doi.org/10.1038/s44220-026-00630-8', year: 2026, locator: 'Public abstract; article Methods, Results and Supplement were not re-audited for this packet.', kind: 'Published meta-analysis' },
+      { id: 'sypres-data', title: 'SYPRES depression-psiloctr, version 25.1.2', url: 'https://doi.org/10.5281/zenodo.17657950', year: 2025, locator: 'Pinned data.csv; SHA-256 237b4a5601bd4de1b1c1b0e335e730677c2b09cd7a3ce2c893df623e9feba793. Trial inputs have not all been checked against reports.', kind: 'Versioned dataset' },
+      { id: 'psychdoc-stage-b', title: 'PsychDoc Stage B saved sensitivity analysis', url: 'https://psychdoc.ai/#stress', year: 2026, locator: 'Saved stability.json at PsychDoc commit 3001296325cb95d64fcca6e412eb10b48264144a: primary, mdd-trd and prediction interval; see downloadable provenance.', kind: 'Saved analysis · review pending' },
+      { id: 'sypres-code', title: 'SYPRES analysis release 26.0.0', url: 'https://github.com/PennLINC/sypres-docs/tree/26.0.0', year: 2026, locator: 'psilodep-meta-analysis.Rmd. Existing PsychDoc rerun receipt was inspected; the original R model was not rerun during this website build.', kind: 'Author analysis code' },
+    ],
+    claims: [
+      { id: 'psychdoc-primary', text: 'The saved primary analysis pools 12 trials: Hedges’ g −0.90, with a 95% confidence interval from −1.26 to −0.55.', status: 'Saved result · independent review pending', sourceIds: ['sypres-data', 'psychdoc-stage-b', 'sypres-paper', 'sypres-code'], caveat: 'Negative values favour psilocybin. The dataset combines several clinical populations and controls; this is not an MDD-only effect, a durability estimate or a treatment recommendation.', conditions: [{ label: 'Endpoint', value: 'Standardized depression-score effect (Hedges’ g)' }, { label: 'Population', value: 'Mixed trial populations; not MDD/TRD alone' }, { label: 'Window', value: 'Primary windows: 14–49 days after final dose' }, { label: 'Model', value: 'Saved REML / Hartung–Knapp primary analysis' }] },
+      { id: 'psychdoc-subgroup', text: 'For the five MDD or TRD trials alone, the saved estimate is −0.93; its 95% interval, −1.87 to 0.01, includes no effect.', status: 'Saved subgroup · independent review pending', sourceIds: ['sypres-data', 'psychdoc-stage-b'], caveat: 'Two of the five trials are open-label waitlist comparisons. The subgroup and primary result reuse trials; they are not independent replications.', conditions: [{ label: 'Endpoint', value: 'Hedges’ g; same orientation as primary result' }, { label: 'Population', value: 'MDD or treatment-resistant depression' }, { label: 'Evidence subset', value: '5 trials; 2 open-label waitlist comparisons' }, { label: 'Interpretation', value: 'Uncertainty includes zero' }] },
+      { id: 'psychdoc-prediction', text: 'The saved primary model’s 95% prediction interval is wider: −1.73 to −0.08.', status: 'Saved prediction interval · review pending', sourceIds: ['sypres-data', 'psychdoc-stage-b'], caveat: 'This model-conditional interval for a new comparable trial is not the confidence interval for the pooled mean. It crosses both illustrative benefit thresholds used in this demo.', conditions: [{ label: 'Endpoint', value: 'Hedges’ g in a new comparable trial' }, { label: 'Interval type', value: '95% prediction interval' }, { label: 'Dependence', value: 'Same fitted primary analysis, not new evidence' }, { label: 'Scope', value: 'Model assumptions and comparability still apply' }] },
+    ],
+    lineage: [
+      { id: 'psychdoc-records', label: 'Pinned SYPRES data release', sourceIds: ['sypres-data'], status: 'Dataset identity pinned; source-input audit incomplete' },
+      { id: 'psychdoc-reproduction', label: 'Author code → saved PsychDoc analysis', sourceIds: ['sypres-code', 'psychdoc-stage-b'], status: 'Existing reproduction inspected; no new refit in this demo' },
+      { id: 'psychdoc-shared', label: 'Primary, subgroup and prediction outputs reuse evidence', sourceIds: ['sypres-data', 'psychdoc-stage-b'], status: 'Do not count these outputs as independent studies' },
+    ],
+    capabilities: ['Source-linked claims', 'Explicit population and endpoint limits', 'Saved additive-bias replay'],
+  },
+  {
+    id: 'perovskite-stability',
+    title: 'Perovskite · Stability conditions',
+    domain: 'Materials research',
+    question: 'Can these solar-cell stability results be compared on the same terms?',
+    summary: 'Four primary reports and separate ISOS guidance show why time, environment, device identity and endpoint must travel with a claim.',
+    sourceVersion: 'Manual source packet · 2026-10-10.1',
+    reviewStatus: 'Curated demonstration · materials expert review pending',
+    scopeNote: 'A purposive sample, not a systematic review. Selected public passages were read manually; no automated full-text extraction ran. Test conditions and endpoints differ, and some metadata remain unextracted. No compatible pooled analysis or clinical bias slider applies.',
+    sources: [
+      { id: 'jiang-2023', title: 'Towards linking lab and field lifetimes of perovskite solar cells', url: 'https://doi.org/10.1038/s41586-023-06610-7', year: 2023, locator: 'Public abstract, especially its final three sentences. Subscription article body was not used for this claim.', kind: 'Primary report · abstract inspected' },
+      { id: 'wang-2024', title: 'Water- and heat-activated dynamic passivation for perovskite photovoltaics', url: 'https://doi.org/10.1038/s41586-024-07705-5', year: 2024, locator: 'Abstract; “Device performance and stability”; Fig. 4c caption; “Solar-cell characterization” in Methods.', kind: 'Primary report · selected full-text passages inspected' },
+      { id: 'lian-2025', title: 'A supramolecular approach to improve the performance and operational stability of all-perovskite tandem solar cells', url: 'https://doi.org/10.1038/s41467-025-62391-9', year: 2025, locator: 'Abstract. Claim belongs to the 1.77 eV single-junction cells; the separately reported tandem efficiency is not their stability measurement.', kind: 'Primary report · abstract inspected' },
+      { id: 'zhang-2021', title: 'Multimodal host–guest complexation for efficient and stable perovskite photovoltaics', url: 'https://doi.org/10.1038/s41467-021-23566-2', year: 2021, locator: 'Abstract; Fig. 5c caption for atmosphere, temperature and illumination. Other experiments are not merged into this claim.', kind: 'Primary report · abstract and figure caption inspected' },
+      { id: 'isos-2020', title: 'Consensus statement for stability assessment and reporting for perovskite photovoltaics based on ISOS procedures', url: 'https://doi.org/10.1038/s41560-019-0529-5', year: 2020, locator: '“Checklist for PSC stability studies”, Table 3; discussion of stability figures of merit and Table 5.', kind: 'Reporting guidance · not a device experiment' },
+    ],
+    claims: [
+      { id: 'perovskite-temperature', text: 'Jiang and colleagues report temperature-dependent operational stability, including more than 1,000 hours at 85 °C and nearly 8,200 hours at 50 °C with a projected 20% degradation.', status: 'Author-reported · abstract scope', sourceIds: ['jiang-2023'], caveat: 'The endpoint is projected. These are results from one device study at different temperatures, not interchangeable lifetimes or independent replications. Encapsulation, humidity and stability-sample counts were not extracted from the abstract.', conditions: [{ label: 'Device', value: 'Study-specific p–i–n perovskite stack' }, { label: 'Temperature', value: '85 °C and 50 °C; distinct conditions' }, { label: 'Illumination', value: 'Illuminated operation; spectrum not extracted' }, { label: 'Environment', value: 'Humidity and encapsulation not extracted' }, { label: 'Endpoint', value: 'Projected 20% degradation; not a common measured T80' }] },
+      { id: 'perovskite-humid-heat', text: 'The encapsulated HUBLA device retained 88% of its initial efficiency after 1,000 hours of maximum-power-point tracking at 85 °C and about 30% relative humidity.', status: 'Author-reported · selected passages checked', sourceIds: ['wang-2024'], caveat: 'This is the Fig. 4c experiment in air, not the paper’s separate unencapsulated nitrogen experiment. The stability device’s initial efficiency is 23.0%, not the champion efficiency.', conditions: [{ label: 'Device', value: 'HUBLA p–i–n device; Fig. 4c' }, { label: 'Temperature', value: '85 °C' }, { label: 'Illumination', value: '1 sun; maximum-power-point tracking' }, { label: 'Environment', value: 'Air; about 30% RH; encapsulated' }, { label: 'Endpoint', value: '88% of initial PCE at 1,000 h' }] },
+      { id: 'perovskite-wide-bandgap', text: 'Lian and colleagues report 95% efficiency retention after 1,000 hours of maximum-power-point tracking for their 1.77 eV perovskite cells.', status: 'Author-reported · abstract scope', sourceIds: ['lian-2025'], caveat: 'This stability claim concerns the single-junction wide-bandgap cells. The abstract separately reports tandem efficiency. Temperature, atmosphere, encapsulation and sample counts were not extracted for this packet.', conditions: [{ label: 'Device', value: 'Supramolecular-engineered 1.77 eV cells' }, { label: 'Temperature', value: 'Not extracted from abstract' }, { label: 'Illumination', value: 'Maximum-power-point tracking; spectrum not extracted' }, { label: 'Environment', value: 'Humidity and encapsulation not extracted' }, { label: 'Endpoint', value: '95% of initial efficiency at 1,000 h' }] },
+      { id: 'perovskite-inert-operation', text: 'The host–guest-treated cells retained over 95% of their performance during 500 hours of continuous operation without encapsulation.', status: 'Author-reported · abstract and caption scope', sourceIds: ['zhang-2021'], caveat: 'Fig. 5c specifies nitrogen and 25 °C. An unencapsulated test in nitrogen is not an ambient-air humidity test or an outdoor lifetime demonstration.', conditions: [{ label: 'Device', value: 'Host–guest-treated perovskite device; Fig. 5c' }, { label: 'Temperature', value: '25 °C' }, { label: 'Illumination', value: 'AM1.5G, 100 mW/cm²; maximum-power-point tracking' }, { label: 'Environment', value: 'Nitrogen; unencapsulated' }, { label: 'Endpoint', value: 'Over 95% performance retention at 500 h' }] },
+      { id: 'perovskite-reporting', text: 'ISOS guidance calls for explicit ageing conditions, device information and sample counts so stability reports can be interpreted and compared.', status: 'Reporting guidance · not experimental evidence', sourceIds: ['isos-2020'], caveat: 'A reporting framework does not make these four experiments statistically compatible. Missing metadata, different devices and different endpoints prevent a defensible pooled estimate in this packet.', conditions: [{ label: 'Role', value: 'Reporting framework, separate from primary reports' }, { label: 'Inspect', value: 'Temperature, atmosphere, illumination and encapsulation' }, { label: 'Preserve', value: 'Device/sample identity and normalization baseline' }, { label: 'Do not infer', value: 'Shared conditions from a shared “stable” label' }] },
+    ],
+    lineage: [
+      { id: 'perovskite-reports', label: 'Four primary reports → four experiment-specific claims', sourceIds: ['jiang-2023', 'wang-2024', 'lian-2025', 'zhang-2021'], status: 'Manually selected; study independence not adjudicated' },
+      { id: 'perovskite-guidance', label: 'ISOS reporting framework', sourceIds: ['isos-2020'], status: 'Guidance is not counted as an experiment' },
+      { id: 'perovskite-comparison', label: 'Conditions compared; incompatible endpoints kept separate', sourceIds: ['jiang-2023', 'wang-2024', 'lian-2025', 'zhang-2021', 'isos-2020'], status: 'No pooled estimate; no source extraction automation' },
+    ],
+    capabilities: ['Source-linked claims', 'Condition comparison', 'Explicit missing metadata', 'No compatible pooled analysis'],
+  },
+];
+
+export const stressTest = {
+  corpusId: 'psychdoc',
+  label: 'Replay of a saved analysis · assumed additive bias',
+  sourceUrl: 'https://psychdoc.ai/#stress',
+  sourceVersion: 'PsychDoc 3001296 · stability.json SHA-256 7289ec7d89f6df0061d2aa7508f58c4d46c37a611a5838162470596ff1e1ace1',
+  reviewStatus: 'Stage B awaits independent scientific review',
+  estimate: -0.9030829073153204,
+  lower: -1.256109404142053,
+  upper: -0.5500564104885878,
+  thresholds: [-0.24, -0.5],
+  biasRange: [0, 0.6],
+  unit: 'Hedges’ g',
+  direction: 'Negative values favour psilocybin',
+  intervalLabel: '95% confidence interval',
+  note: 'Add the same assumed positive shift to the saved estimate and both confidence bounds. Interval width stays fixed. The shift is imposed, not estimated; this is a replay, not a refit or a probability of truth. The two thresholds are inherited illustrative choices, not patient-specific cutoffs. It does not apply to the materials packet.',
+};

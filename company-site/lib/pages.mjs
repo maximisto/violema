@@ -4,10 +4,11 @@ import { evidenceMapSection } from './evidence-map.mjs';
 import { homeExperience } from './experience.mjs';
 import { howItWorksSection, crossFieldSection } from './how-it-works.mjs';
 import { howItWorks } from '../data/how-it-works.mjs';
+import { packetRevision } from '../data/corpora.mjs';
 import { analyticsScript } from './analytics.mjs';
 import { legalPolicies, legalUpdatedAt } from './legal.mjs';
 import { founderOrcidLink, profileLinks } from './social.mjs';
-import { FIELD } from './routes.mjs';
+import { FIELD, pageFor } from './routes.mjs';
 import { escapeHTML as e, sourceURL, corpusPanel, intervalFigure, calculateBiasScenario, chartLegend, biasControl, biasExplanation, referenceNote, scenarioSummary, traceSpecimen } from './render.mjs';
 
 const psychdoc = 'https://psychdoc.ai';
@@ -15,7 +16,7 @@ const mapBytes = readFileSync(new URL('../data/evidence-map.json', import.meta.u
 const evidenceMap = JSON.parse(mapBytes);
 const evidenceMapHash = createHash('sha256').update(mapBytes).digest('hex');
 // Records sit under their field, so the field's link stays marked while a record is open.
-const navCurrent = (route, href) => (route === href ? ' aria-current="page"' : href === FIELD.route && route.startsWith('/records/') ? ' aria-current="true"' : '');
+const navCurrent = (route, href) => (route === href ? ' aria-current="page"' : href === pageFor(route).field ? ' aria-current="true"' : '');
 const nav = (route,href,label) => `<a href="${href}"${navCurrent(route, href)}>${label}</a>`;
 const external = '<span class="external-glyph" aria-hidden="true">↗</span>';
 const fontFiles = ['instrument-sans-latin-wght-normal.woff2', 'inter-latin-wght-normal.woff2'];
@@ -24,19 +25,19 @@ const fontFiles = ['instrument-sans-latin-wght-normal.woff2', 'inter-latin-wght-
 // replay enhance without a second round trip.
 const labModules = ['/company-assets/browser/tabs.mjs', '/company-assets/browser/lab.mjs', '/company-assets/browser/render.mjs', '/company-assets/data/corpora.mjs'];
 
-// The share card every page uses unless it brings its own 1200 × 630 JPEG (see docs/social-preview.md).
-export const defaultSocial = {
+// The 1200 × 630 share card every page uses (see docs/social-preview.md).
+const shareCard = {
   image: '/company-assets/violema-social-hero.jpg',
   ogAlt: 'Violema: Know which conclusions hold. And why. A stone handaxe and glass DNA helix above Earth.',
   twitterAlt: 'Violema scientific evidence systems: a stone handaxe and glass DNA helix above Earth.',
 };
 
-// notFound marks the 404 page: nginx serves it at whatever address missed, so it has no canonical URL of its own.
-// A page with its own share card passes social: { image, alt }; records are articles rather than site pages.
-function head(route, title, description, { lab = false, notFound = false, social, ogType = 'website' } = {}) {
-  // The physician walkthrough is reached by a shared link, not by search.
-  const indexable = route !== '/review/' && !notFound;
-  const card = social ? { image: social.image, ogAlt: social.alt, twitterAlt: social.alt } : defaultSocial;
+// Dates in running text read as "31 December 2027".
+export const longDate = iso => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`));
+
+// Indexing and the 404 page's missing canonical come from the page registry; records are articles rather than site pages.
+function head(route, title, description, { lab = false, ogType = 'website' } = {}) {
+  const { indexable, notFound } = pageFor(route);
   return [
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -52,16 +53,16 @@ function head(route, title, description, { lab = false, notFound = false, social
     `<meta property="og:title" content="${e(title)}">`,
     `<meta property="og:description" content="${e(description)}">`,
     ...(notFound ? [] : [`<meta property="og:url" content="https://violema.com${route}">`]),
-    `<meta property="og:image" content="https://violema.com${card.image}">`,
+    `<meta property="og:image" content="https://violema.com${shareCard.image}">`,
     '<meta property="og:image:type" content="image/jpeg">',
     '<meta property="og:image:width" content="1200">',
     '<meta property="og:image:height" content="630">',
-    `<meta property="og:image:alt" content="${e(card.ogAlt)}">`,
+    `<meta property="og:image:alt" content="${e(shareCard.ogAlt)}">`,
     '<meta name="twitter:card" content="summary_large_image">',
     `<meta name="twitter:title" content="${e(title)}">`,
     `<meta name="twitter:description" content="${e(description)}">`,
-    `<meta name="twitter:image" content="https://violema.com${card.image}">`,
-    `<meta name="twitter:image:alt" content="${e(card.twitterAlt)}">`,
+    `<meta name="twitter:image" content="https://violema.com${shareCard.image}">`,
+    `<meta name="twitter:image:alt" content="${e(shareCard.twitterAlt)}">`,
     ...(indexable ? ['<meta name="googlebot" content="max-image-preview:large">'] : []),
     ...(route === '/' ? ['<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","@id":"https://violema.com/#webpage","url":"https://violema.com/","name":"Scientific evidence systems | Violema","primaryImageOfPage":{"@type":"ImageObject","url":"https://violema.com/company-assets/violema-social-hero.jpg","width":1200,"height":630}}</script>'] : []),
     '<link rel="icon" href="/company-assets/violema-icon.png" type="image/png">',
@@ -92,14 +93,14 @@ export function legalPage(slug) {
   const policy = legalPolicies.find(item => item.slug === slug);
   if (!policy) throw new Error(`Unknown website policy: ${slug}`);
   const updatedAt = policy.updatedAt || legalUpdatedAt;
-  const effectiveDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${updatedAt}T00:00:00Z`));
+  const effectiveDate = longDate(updatedAt);
   const sections = policy.sections.map(section => `<section id="${e(section.id)}" class="legal-section" aria-labelledby="${e(section.id)}-title"><h2 id="${e(section.id)}-title">${e(section.title)}</h2>${section.html}</section>`).join('');
   return shell(`/legal/${slug}/`, `${policy.title} | Violema`, policy.description, `<article class="wrap legal-document"><nav class="legal-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span aria-current="page">${e(policy.title)}</span></nav><header class="legal-heading"><p class="label">Violema, Inc. · Delaware corporation</p><h1>${e(policy.title)}</h1><p class="lede">${e(policy.summary)}</p><p class="caption">Effective date: <time datetime="${e(updatedAt)}">${e(effectiveDate)}</time></p></header><nav class="legal-contents" aria-label="On this page"><p>On this page</p><ol>${policy.sections.map(section => `<li><a href="#${e(section.id)}">${e(section.title)}</a></li>`).join('')}</ol></nav><div class="legal-body">${sections}</div></article>`);
 }
 
 // Served by nginx (error_page 404) at any address that matches no page, so every link and asset is root-absolute.
 export function notFoundPage() {
-  return shell('/404', 'Page not found | Violema', 'This address does not match a page on the Violema scientific website. It may be mistyped, or the page may have moved.', `<article class="wrap legal-document"><header class="legal-heading"><p class="label">Error 404</p><h1>Page not found</h1><p class="lede">This address does not match a page on the Violema website. It may be mistyped, or the page may have moved.</p></header><div class="actions"><a class="button button-primary" href="/">Go to the homepage</a><a class="button button-secondary" href="/method/">Read the method</a></div></article>`, { notFound: true });
+  return shell('/404', 'Page not found | Violema', 'This address does not match a page on the Violema scientific website. It may be mistyped, or the page may have moved.', `<article class="wrap legal-document"><header class="legal-heading"><p class="label">Error 404</p><h1>Page not found</h1><p class="lede">This address does not match a page on the Violema website. It may be mistyped, or the page may have moved.</p></header><div class="actions"><a class="button button-primary" href="/">Go to the homepage</a><a class="button button-secondary" href="/method/">Read the method</a></div></article>`);
 }
 
 // The six records of the method. Interactive on /method/ so each station inspects its concrete schema and jumps to the section below.
@@ -164,14 +165,14 @@ export function methodPage(corpora,stress) {
   const facts = corpus => `<dl class="facts facts-compact"><div><dt>Claims</dt><dd>${corpus.claims.length}</dd></div><div><dt>Sources</dt><dd>${corpus.sources.length}</dd></div></dl>`;
   return shell('/method/','Scientific evidence method | Violema','See how a scientific evidence system links claims to source records, study conditions, assumptions, review status, and versioned packets.',[
     `<section class="page-head"><div class="wrap split"><div><p class="label">The method</p><h1>A conclusion should<br>show its working.</h1></div><p class="lede page-lede">Sources, studies, claims, and assumptions have different jobs. Keeping them distinct makes it possible to see where evidence ends and interpretation begins.</p></div></section>`,
-    `<section class="protocol-band"><div class="wrap">${protocol()}<p class="small protocol-note">This is the organizing workflow. The prepared demonstration uses curated source records; it does not automate every step.</p></div></section>`,
-    `<section class="section" id="scientific-evidence-system" aria-labelledby="scientific-evidence-system-title"><div class="wrap split"><div><p class="label">Scientific evidence systems</p><h2 id="scientific-evidence-system-title">What is a scientific evidence system?</h2></div><div><p class="lede">It is a versioned record of how a scientific claim was assembled and what that claim can support.</p><p>For each conclusion, the record keeps its source material, study context, analytical choices, stated limits, and review status close enough to inspect. A reviewer can follow a claim back to its sources and see when an interpretation extends beyond them.</p><p>Violema’s prepared PsychDoc and materials packets demonstrate parts of this approach with curated inputs. They do not establish that every input has received independent scientific review or that the same analysis works across fields.</p><a class="text-link" href="/demo/">Inspect the two prepared examples <span aria-hidden="true">→</span></a></div></div></section>`,
+    `<section class="protocol-band"><div class="wrap">${protocol()}<p class="small protocol-note">This is the organizing workflow. The prepared demonstration uses source records selected by hand; it does not automate every step.</p></div></section>`,
+    `<section class="section" id="scientific-evidence-system" aria-labelledby="scientific-evidence-system-title"><div class="wrap split"><div><p class="label">Scientific evidence systems</p><h2 id="scientific-evidence-system-title">What is a scientific evidence system?</h2></div><div><p class="lede">It is a versioned record of how a scientific claim was assembled and what that claim can support.</p><p>For each conclusion, the record keeps its source material, study context, analytical choices, stated limits, and review status close enough to inspect. A reviewer can follow a claim back to its sources and see when an interpretation extends beyond them.</p><p>Violema’s prepared PsychDoc and materials packets demonstrate parts of this approach with inputs selected by hand. They do not establish that every input has received independent scientific review or that the same analysis works across fields.</p><a class="text-link" href="/demo/">Inspect the two prepared examples <span aria-hidden="true">→</span></a></div></div></section>`,
     howItWorksSection(howItWorks),
     crossFieldSection(howItWorks),
     `<section class="method-row" id="trace" aria-labelledby="trace-title"><div class="wrap method-grid"><div class="method-copy"><p class="label">Trace</p><h2 id="trace-title">Count studies carefully.<br>Keep reports connected.</h2><p>A new publication may describe a new experiment, a follow-up, or an existing sample. These are different kinds of evidence.</p><p>The current packet preserves explicit source-to-claim links. Reviewed study and sample relationships are a development priority. Shared authors alone do not establish shared participants or independence.</p><a class="text-link" href="/demo/">Follow a source-linked claim</a></div><div class="instrument method-specimen"><div class="instrument-head"><p class="instrument-title">Example from the prepared packet</p><span class="pill">${e(c.claims[0].status)}</span></div>${traceSpecimen(c, c.claims[0], { limitLabel: 'Limit recorded beside the claim' })}</div></div></section>`,
     `<section class="method-row" id="assumptions" aria-labelledby="assumptions-title"><div class="wrap method-grid"><div class="method-copy"><p class="label">Challenge</p><h2 id="assumptions-title">Make the assumption<br>part of the result.</h2><p>A result can be precise under one set of choices and fragile under another. The interface should show which choice changed and which conclusion it affects.</p><p>In this preview, the PsychDoc control replays an assumed additive bias shift against a saved result. It does not estimate actual bias, refit a model, or assign a probability that a claim is true.</p><a class="text-link" href="/demo/#corpus-psychdoc">Replay the saved analysis</a></div><div class="instrument method-specimen"><div class="instrument-head"><p class="instrument-title">A bounded demonstration</p><span class="caption">${e(stress.unit || 'Hedges’ g')}</span></div><div class="replay" data-bias-root>${chartLegend(stress, { withUnit: false })}<div data-interval-chart>${intervalFigure(stress)}</div><p class="caption">${e(stress.direction)}. The original interval is retained and translated with the assumed shift.</p>${biasControl(stress, 'method-')}<p class="scenario-result" data-scenario-result aria-live="polite" aria-atomic="true">${scenarioSummary(stress, calculateBiasScenario(stress, 0))}</p>${biasExplanation('method-')}${referenceNote}</div><div class="instrument-foot"><span class="pill">${e(stress.reviewStatus)}</span></div></div></div></section>`,
     `<section class="method-row" id="transfer" aria-labelledby="transfer-title"><div class="wrap method-grid"><div class="method-copy"><p class="label">Transfer</p><h2 id="transfer-title">The same record.<br>Different scientific constraints.</h2><p>Source identity, claim links, preparation history, and review status can travel across domains. Statistical compatibility has to be established for each question.</p><p>The materials packet retains conditions such as illumination, temperature, and the stability endpoint. No pooled result is presented when the recorded inputs do not justify one.</p><a class="text-link" href="/demo/#corpus-perovskite-stability">Compare the materials conditions</a></div><div class="instrument method-specimen"><div class="transfer-grid"><div class="transfer-cell"><p class="label">PsychDoc</p><h3>Saved statistical replay</h3><p>One pinned psilocybin analysis; assumption control with declared limits.</p>${facts(c)}</div><div class="transfer-cell"><p class="label">Perovskite stability</p><h3>Condition comparison</h3><p>Different test contexts remain visible; no pooled statistical endpoint.</p>${facts(materials)}</div></div><div class="instrument-foot transfer-foot"><p class="caption">A shared presentation contract and existing source-reference checks have been exercised with both packets. This does not demonstrate general extraction or quantitative portability. <a href="/company-assets/data/portability-receipt.json" download>Download the check receipt.</a></p></div></div></div></section>`,
-    `<section class="section" aria-labelledby="capability-title"><div class="wrap split"><div><h2 id="capability-title">What exists.<br>What comes next.</h2><p class="lede">The interface is only useful if its status is as inspectable as its sources.</p></div><div class="capabilities"><div class="capability"><span class="pill pill-filled">In this preview</span><p>Two curated source packets, claim-source links, condition comparison, versioned downloads, and a bounded saved-analysis replay.</p></div><div class="capability"><span class="pill">Review pending</span><p>Independent verification of scientific inputs and methods. A clear presentation is not evidence that this review has happened.</p></div><div class="capability"><span class="pill">Development</span><p>Reviewed study/sample relationships, source-linked assumption boundaries, and evidence-change impact. These are directions, not shipped guarantees.</p></div></div></div></section>`,
+    `<section class="section" aria-labelledby="capability-title"><div class="wrap split"><div><h2 id="capability-title">What exists.<br>What comes next.</h2><p class="lede">The interface is only useful if its status is as inspectable as its sources.</p></div><div class="capabilities"><div class="capability"><span class="pill pill-filled">In this preview</span><p>Two manually prepared source packets, claim-source links, condition comparison, versioned downloads, and a bounded saved-analysis replay.</p></div><div class="capability"><span class="pill">Review pending</span><p>Independent verification of scientific inputs and methods. A clear presentation is not evidence that this review has happened.</p></div><div class="capability"><span class="pill">Development</span><p>Reviewed study/sample relationships, source-linked assumption boundaries, and evidence-change impact. These are directions, not shipped guarantees.</p></div></div></div></section>`,
     `<section class="section closing" aria-labelledby="closing-title"><div class="wrap split"><h2 id="closing-title">Inspect the record.</h2><div class="split-body"><p class="lede">Use the two packets to see what stays consistent and where the science needs different treatment.</p><div class="actions"><a class="button button-primary" href="/demo/">Open the evidence lab</a></div></div></div></section>`,
   ].join(''), { lab: true });
 }
@@ -179,11 +180,11 @@ export function methodPage(corpora,stress) {
 export function demoPage(corpora,stress) {
   const segments = corpora.map(c => `<a class="segment" href="#corpus-${e(c.id)}" data-corpus-choice="${e(c.id)}"><span class="segment-indicator" aria-hidden="true"></span><span class="segment-text"><span class="segment-domain">${e(c.domain)}</span><strong>${e(c.title)}</strong></span></a>`).join('');
   return shell('/demo/','Scientific evidence examples | Violema','Inspect two prepared scientific evidence packets: a source-linked PsychDoc analysis and a materials condition comparison, each with visible limits and review status.',[
-    `<section class="page-head demo-head"><div class="wrap split"><div><p class="label">Evidence lab</p><h1>Open the record.</h1><p class="lede">Two research questions. One way to inspect sources, claims, and the limits between them.</p></div><div class="prepared-note"><p class="status-line"><span><strong>Prepared source packets</strong> Manual curation. No live ingestion.<br>Scientific review remains pending.</span></p></div></div></section>`,
+    `<section class="page-head demo-head"><div class="wrap split"><div><p class="label">Evidence lab</p><h1>Open the record.</h1><p class="lede">Two research questions. One way to inspect sources, claims, and the limits between them.</p></div><div class="prepared-note"><p class="status-line"><span><strong>Prepared source packets</strong> Sources and claims selected by hand. No live ingestion.<br>Scientific review remains pending.</span></p></div></div></section>`,
     `<div class="wrap lab-toolbar"><nav class="segmented corpus-switch" data-corpus-switch aria-label="Choose a research corpus">${segments}</nav><button class="button button-secondary reset-button" type="button" data-reset hidden>Reset demo <span aria-hidden="true">↺</span></button></div>`,
     '<div class="visually-hidden" data-announcement role="status" aria-live="polite"></div>',
     '<noscript><p class="wrap no-js-note">JavaScript is off. Both prepared packets and all claims are shown below; source links and packet downloads remain available. The bias control requires JavaScript.</p></noscript>',
-    `<div class="wrap lab-content">${corpora.map(c=>corpusPanel(c,stress)).join('')}</div>`,
+    `<div class="wrap lab-content">${corpora.map(c=>corpusPanel(c,stress,packetRevision)).join('')}</div>`,
     `<section class="wrap demo-closing" aria-label="Scope of this demonstration"><p>This demonstration supports inspection and expert criticism. It is not clinical guidance, a comprehensive literature review, or a claim of validated analysis across arbitrary corpora.</p><div class="demo-closing-links"><a class="text-link" href="/method/">Understand the method</a><a class="text-link" href="${FIELD.route}">See the committed-test records</a></div></section>`,
   ].join(''), { lab: true });
 }
@@ -279,7 +280,7 @@ export function aboutPage() {
       <section id="charter-firewall" aria-labelledby="charter-firewall-heading">
         <p class="label">How Violema makes money without compromising conclusions</p>
         <h3 id="charter-firewall-heading">Free to read. Paid to commission.</h3>
-        <p class="guide-claim">Public living syntheses are free for researchers, clinicians, and the press. Drug developers, R&amp;D teams, and university trial groups pay to commission a synthesis on their own question.</p>
+        <p class="guide-claim">Public living syntheses are free for researchers, clinicians, and the press. Drug developers, R&amp;D teams, and university trial groups can commission a synthesis on their own question.</p>
         <div class="guide-boundary">
           <strong>Three firewall rules</strong>
           <p>1. Sponsors choose the research question, never the tier or the conclusion. 2. A sponsor never edits, approves or previews conclusions before the scientific editor signs them off. 3. Every commissioned review is published within six months of delivery, with its funder named.</p>

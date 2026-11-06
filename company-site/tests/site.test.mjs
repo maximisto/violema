@@ -4,16 +4,18 @@ import { readFile, stat, readdir } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { corpora, stressTest } from '../data/corpora.mjs';
-import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen } from '../lib/render.mjs';
+import { corpora, stressTest, packetRevision } from '../data/corpora.mjs';
+import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen, archivedPacketURL } from '../lib/render.mjs';
 import { homePage } from '../lib/pages.mjs';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
 import { profiles, profileIcon } from '../lib/social.mjs';
+import { PAGES } from '../lib/routes.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
 const founderArchive=join(root,'archive/about-founder-20261102');
-const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html'],['/review/','review/index.html'],['/about/','about/index.html'],['/legal/terms/','legal/terms/index.html'],['/legal/privacy/','legal/privacy/index.html'],['/fields/quantum-advantage/','fields/quantum-advantage/index.html']];
+// Every registered page with a canonical address; the 404 page has its own test.
+const pages=PAGES.filter(page=>!page.notFound).map(page=>[page.route,page.file]);
 const decode = value => value.replaceAll('&amp;','&');
 
 test('additive replay preserves original result and interval width throughout declared domain',()=>{
@@ -154,6 +156,22 @@ test('downloaded packets stay identical to source and do not leak analysis acros
   }
 });
 
+test('the evidence lab names each packet revision and links the archived one before it',async()=>{
+  const demo=await readFile(join(dist,'demo/index.html'),'utf8');
+  for(const corpus of corpora){
+    const href=archivedPacketURL(corpus,packetRevision.previous);
+    assert.ok(demo.includes(`<p>Revision <code>${packetRevision.version}</code>. ${escapeHTML(packetRevision.summary)} <a href="${href}" download>Download revision ${packetRevision.previous}</a></p>`),corpus.id);
+    await stat(join(dist,href));
+  }
+});
+
+test('earlier packet revisions are served byte for byte from data/archive',async()=>{
+  const kept=(await readdir(join(root,'data/archive'),{recursive:true})).filter(name=>name.includes('/')&&!name.split('/').some(part=>part.startsWith('.'))).sort();
+  assert.ok(kept.includes('2026-10-10.1/portability-receipt.json'));
+  assert.deepEqual((await readdir(join(dist,'company-assets/data/archive'),{recursive:true})).filter(name=>name.includes('/')).sort(),kept);
+  for(const name of kept)assert.ok((await readFile(join(dist,'company-assets/data/archive',name))).equals(await readFile(join(root,'data/archive',name))),name);
+});
+
 test('browser module paths and self-hosted stylesheet assets resolve in the generated namespace',async()=>{
   // Follow static and dynamic imports from the entry module through every module it reaches.
   const seen=new Set(),queue=[join(dist,'company-assets/browser/site.mjs')];
@@ -219,6 +237,9 @@ test('/about/ leads with the company and charter while the founder section stays
   assert.doesNotMatch(main,/founder|Max Markovtsev|max-markovtsev\.jpg|\/company-assets\/clients\/|linkedin\.com\/in\/maximisto/);
   for(const id of ['charter-problem','charter-divisions','charter-firewall','about-applications','about-connect'])assert.ok(main.includes(`id="${id}"`),id);
   assert.ok(main.includes('href="/#briefing"'));
+  // Max, 2026-11-05: "can commission", so the line describes an offer rather than implying existing buyers.
+  assert.match(main,/university trial groups can commission a synthesis on their own question\./);
+  assert.doesNotMatch(main,/pay to commission/);
   const head=html.match(/<head>([\s\S]*?)<\/head>/)?.[1]??'';
   assert.doesNotMatch(head,/founder|Max Markovtsev/);
   assert.doesNotMatch(await readFile(join(dist,'llms.txt'),'utf8'),/founder Max Markovtsev/);
@@ -228,7 +249,7 @@ test('/about/ leads with the company and charter while the founder section stays
 });
 
 test('every footer preserves the founder ORCID separately from company social accounts',async()=>{
-  const files=[...pages.map(([,file])=>file),'404.html','records/fe4s4-benchmark/index.html','records/fe4s4-benchmark/record/index.html'];
+  const files=[...pages.map(([,file])=>file),'404.html'];
   for(const file of files){
     const html=await readFile(join(dist,file),'utf8');
     const footer=html.match(/<footer class="site-footer">[\s\S]*?<\/footer>/)?.[0]??'';
@@ -363,7 +384,7 @@ test('approved copy: the copyright line and the materials example replace the Or
   }
   const home=await readFile(join(dist,'index.html'),'utf8');
   assert.doesNotMatch(home,/Oryx/);
-  for(const text of ['Second example','Materials research','Curated demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
+  for(const text of ['Second example','Materials research','Hand-selected demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
 });
 
 test('the 12 trial records match primary.studies, primary.k and, when given, the pinned CSV',async()=>{
@@ -474,4 +495,39 @@ test('the release is discoverable while the physician walkthrough remains noinde
   for(const route of ['/','/method/','/demo/'])assert.ok(sitemap.includes(`<loc>https://violema.com${route}</loc>`));
   assert.doesNotMatch(sitemap,/\/review\//);
   assert.match(await readFile(join(dist,'review/index.html'),'utf8'),/<meta name="robots" content="noindex,follow">/);
+});
+
+// "Curated" is banned in public copy and in the current downloads; data/archive keeps earlier revisions as published.
+// Pages are read with character references decoded, and again with tags removed, so an encoded or split word is caught.
+test('no page, llms.txt or current packet download says curated',async()=>{
+  const banned=/(?<![a-z])curat/i;
+  const decodeRefs=text=>text.replace(/&#x([0-9a-f]+);/gi,(_,hex)=>String.fromCodePoint(parseInt(hex,16))).replace(/&#(\d+);/g,(_,dec)=>String.fromCodePoint(Number(dec))).replace(/&(amp|lt|gt|quot|apos|nbsp);/g,(_,name)=>({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' '})[name]);
+  for(const file of [...PAGES.map(page=>page.file),'llms.txt']){
+    const html=await readFile(join(dist,file),'utf8');
+    assert.doesNotMatch(decodeRefs(html),banned,file);
+    assert.doesNotMatch(decodeRefs(html.replace(/<[^>]*>/g,'')),banned,`${file}, text across tags`);
+  }
+  for(const name of [...corpora.map(corpus=>`${corpus.id}.json`),'portability-receipt.json','provenance.md','corpora.mjs'])assert.doesNotMatch(await readFile(join(dist,'company-assets/data',name),'utf8'),banned,name);
+  for(const corpus of corpora)assert.match(corpus.reviewStatus,/^Hand-selected demonstration · /,corpus.id);
+});
+
+// Read from the built pages, not the registry, so a page written outside the registry or indexed by mistake still shows up.
+test('every built page is registered, the sitemap lists exactly the indexable pages, and llms.txt links each but the home page',async()=>{
+  const built=(await readdir(dist,{recursive:true})).filter(name=>name.endsWith('.html')).sort();
+  assert.deepEqual(built,PAGES.map(page=>page.file).sort(),'every HTML file in dist is a registered page');
+  const sitemap=await readFile(join(dist,'sitemap.xml'),'utf8');
+  const listed=[...sitemap.matchAll(/<loc>https:\/\/violema\.com([^<]+)<\/loc>/g)].map(match=>match[1]);
+  const llms=await readFile(join(dist,'llms.txt'),'utf8');
+  const indexed=[];
+  for(const file of built){
+    const html=await readFile(join(dist,file),'utf8');
+    if(!html.includes('<meta name="robots" content="index,follow">'))continue;
+    const route=html.match(/<link rel="canonical" href="https:\/\/violema\.com([^"]+)">/)?.[1];
+    assert.ok(route,`${file} is indexable, so it has a canonical address`);
+    indexed.push(route);
+    if(route!=='/')assert.ok(llms.includes(`(https://violema.com${route})`),`${route} is linked from llms.txt`);
+  }
+  assert.ok(indexed.includes('/'),'the indexable pages were found');
+  assert.equal(new Set(listed).size,listed.length,'no page is listed twice');
+  assert.deepEqual([...listed].sort(),indexed.sort(),'the sitemap lists every indexable built page and nothing else');
 });

@@ -7,6 +7,8 @@ export const backend = 'http://127.0.0.1:3001';
 export const protectedPath = '(?:^/(?:backend|frontend|deploy|company-site|docs|node_modules)(?:/|$)|(?:^|/)\\.[^/]*(?:/|$)|(?:\\.(?:bak|map|env|rtf)$)|^/(?:AGENTS|CLAUDE)\\.md$)';
 export const notFoundPage = '/404.html';
 
+// Kept by hand in the order the committed templates were rendered: each route also needs a location on the live
+// vhost. tests/routing.test.mjs checks the list against the company site's page registry (company-site/lib/routes.mjs).
 const companyDirectories = ['/method', '/demo', '/review', '/about', '/legal/terms', '/legal/privacy', '/fields/quantum-advantage', '/records/fe4s4-benchmark', '/records/fe4s4-benchmark/record'];
 // Exact company routes and the built file each serves, mirroring the live overlay.
 export const companyPages = [

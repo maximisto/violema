@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { classify, backend, companyPages } from '../routing.mjs';
 import { render } from '../render.mjs';
+import { PAGES } from '../../../company-site/lib/routes.mjs';
 
 const packet = fileURLToPath(new URL('../', import.meta.url));
 const repo = resolve(packet, '../..');
@@ -97,6 +98,13 @@ test('fresh source inventory: app routes, callbacks, cookie and one-process assu
 test('prepared runtime patch remains applicable without modifying its target files', () => {
   const result = spawnSync('git', ['apply', '--check', 'deploy/scientific-site/runtime-origin-changes.patch'], { cwd: repo, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
+});
+
+// routing.mjs keeps its own list in the order the committed templates were rendered, and each route also needs a
+// location on the live vhost, so it is checked against the company site's page registry rather than derived from it.
+test('the modelled company pages are exactly the pages the company site builds', () => {
+  const modelled = [...new Set(companyPages.map(([, file]) => file).filter(file => file.endsWith('.html')))].sort();
+  assert.deepEqual(modelled, PAGES.filter(page => !page.notFound).map(page => `/${page.file}`).sort());
 });
 
 test('the live-vhost fields snippet holds exactly the modelled field routes', () => {

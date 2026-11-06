@@ -1,8 +1,15 @@
 # Scientific demo packet provenance
 
-Packet version: `2026-10-10.1`. Curated on 10 October 2026.
+Packet version: `2026-11-05.1`, revised on 5 November 2026. Sources and claims were selected by hand on 10 October 2026.
 
 These two frozen packets share one source/claim/condition contract and one presentation adapter. Claims were selected and paraphrased manually from the passages identified below. No live ingestion, automated full-text extraction, complete literature search, new statistical model fit or qualified human scientific review was performed for this website build.
+
+## Revisions
+
+The download links always serve the newest revision. Each earlier revision stays available, unchanged, so its check receipt still verifies against the packet module it pinned.
+
+- `2026-11-05.1`, 5 November 2026: status wording and revision details. The status label now begins "Hand-selected demonstration", the version label names this revision, and the packets' date field is now `selectedAt` (packet schema `2.0.0`, which also adds `packetVersion`, `revisedAt`, `revisionNote` and `previousVersion`). No source, claim, condition, caveat or number changed; `tests/corpora.test.mjs` compares the two revisions field by field. The source-reference check was re-run on 5 November 2026 at the same PsychDoc commit and returned the same results; its receipt (schema `1.1.0`) names the packet revision it checked.
+- `2026-10-10.1`, 10 October 2026: first release. Its files as published are at `https://violema.com/company-assets/data/archive/2026-10-10.1/`: `psychdoc.json`, `perovskite-stability.json`, `portability-receipt.json`, `corpora.mjs` (the packet module its receipt pins) and `provenance.md`.
 
 ## PsychDoc: saved results, exact inputs
 
@@ -43,7 +50,7 @@ The thresholds `-0.24` and `-0.50`, and the range `0` to `0.60`, are inherited f
 
 ## Materials: four reports, separate guidance
 
-The packet is a purposive comparability demonstration. Sources were chosen to show differing temperatures, atmospheres, encapsulation and stability endpoints. Publication independence, device batches and sample sizes were not adjudicated. “Not extracted” means not present in this curated packet, not necessarily unreported by the authors. No paper figures or full article text are redistributed.
+The packet is a purposive comparability demonstration. Sources were chosen to show differing temperatures, atmospheres, encapsulation and stability endpoints. Publication independence, device batches and sample sizes were not adjudicated. “Not extracted” means not present in this hand-selected packet, not necessarily unreported by the authors. No paper figures or full article text are redistributed.
 
 | Source | Passage actually used | Scope boundary |
 | --- | --- | --- |
@@ -53,7 +60,7 @@ The packet is a purposive comparability demonstration. Sources were chosen to sh
 | [Zhang et al., 2021](https://doi.org/10.1038/s41467-021-23566-2) | Abstract; Fig. 5c caption | Continuous operation in nitrogen at 25 °C is distinct from ambient shelf ageing and the separate 85 °C experiment. |
 | [Khenkin et al., 2020](https://doi.org/10.1038/s41560-019-0529-5) | Checklist for PSC stability studies; Table 3; stability figures of merit discussion / Table 5 | Reporting guidance, not another measured device result. |
 
-All five source records carry HTTPS DOI links and exact human-readable locators. Those cited passages were retrieved on the curation date using public publisher pages/search results. A future reader's access can differ. No inference is made from a download icon or open-access label alone.
+All five source records carry HTTPS DOI links and exact human-readable locators. Those cited passages were retrieved on the selection date, 10 October 2026, using public publisher pages/search results. A future reader's access can differ. No inference is made from a download icon or open-access label alone.
 
 There is no harmonized outcome table, uncertainty model or reviewed dependence structure for this packet. It has `analysis: null`. The same claim renderer does not imply portable numerical validity.
 

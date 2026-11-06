@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { corpora, stressTest } from './corpora.mjs';
+import { corpora, stressTest, packetRevision } from './corpora.mjs';
 import { toPsychDocObject, validateCorpora } from './contract.mjs';
 
 const root = process.argv[2];
@@ -51,7 +51,8 @@ assert.deepEqual(primary.ci, [stressTest.lower, stressTest.upper]);
 assert.deepEqual([saved.delta_g, saved.secondary_delta_g], stressTest.thresholds);
 assert.equal(Math.max(...saved.scenarios.filter((s) => s.kind === 'bias').map((s) => s.shift)), stressTest.biasRange[1]);
 const receipt = {
-  schemaVersion: '1.0.0', checkedAt: '2026-10-10', psychdocCommit: commit,
+  // 1.1.0 names the packet revision checked; checkedAt is the day this check ran (UTC).
+  schemaVersion: '1.1.0', packetVersion: packetRevision.version, checkedAt: new Date().toISOString().slice(0, 10), psychdocCommit: commit,
   sourceHashes: hashes,
   packetModuleSha256: sha256(await readFile(new URL('./corpora.mjs', import.meta.url))),
   adapterSha256: sha256(await readFile(new URL('./contract.mjs', import.meta.url))),

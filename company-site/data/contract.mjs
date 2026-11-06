@@ -1,5 +1,5 @@
 // This is a new presentation adapter, not PsychDoc's statistical loader.
-import { corpora, stressTest } from './corpora.mjs';
+import { corpora, stressTest, packetRevision } from './corpora.mjs';
 
 function nonempty(value, label) {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} must be nonempty text`);
@@ -68,7 +68,13 @@ export function analysisForCorpus(id) {
 
 export function packetFor(corpus) {
   validateCorpus(corpus);
-  return { schemaVersion: '1.0.0', curatedAt: '2026-10-10', corpus: structuredClone(corpus), analysis: analysisForCorpus(corpus.id) };
+  // Schema 2.0.0 renamed the 1.0.0 date field; the packet links its own earlier revision, kept in data/archive.
+  const { version, selectedAt, revisedAt, note, previous } = packetRevision;
+  return {
+    schemaVersion: '2.0.0', packetVersion: version, selectedAt, revisedAt, revisionNote: note,
+    previousVersion: { version: previous, url: `https://violema.com/company-assets/data/archive/${previous}/${encodeURIComponent(corpus.id)}.json` },
+    corpus: structuredClone(corpus), analysis: analysisForCorpus(corpus.id),
+  };
 }
 
 export function toPsychDocObject(corpus) {
