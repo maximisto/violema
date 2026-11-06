@@ -56,7 +56,8 @@ test('both record pages lead back through the field in their breadcrumb', async 
 
 test('the benchmark page shows the latest dated amendment line and links the record\'s history', async () => {
   const html = await read(recordFiles[0]);
-  assert.match(AMENDMENT_NOTE, /^2026-11-05 · Amendment 2, before registration: /);
+  assert.match(AMENDMENT_NOTE, /^2026-11-05 · Amendment 2: /);
+  assert.doesNotMatch(AMENDMENT_NOTE, /before registration/, 'Amendment 2 does not settle whether the earlier timestamp registered the draft');
   assert.ok(text(html).includes(AMENDMENT_NOTE), 'the note is on the page as written');
   assert.ok(html.includes(`href="${FE4S4_RECORD_ROUTE}#map-h"`));
   assert.match(await read(recordFiles[1]), /id="map-h"/, 'the anchor exists on the full record');

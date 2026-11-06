@@ -14,7 +14,7 @@ export const FE4S4_TITLE = 'Can quantum assistance halve the time to a verified 
 export const FE4S4_JUDGED_ON = longDate(CLOCK.judged);
 
 // The amendment the record's history dates, repeated where the record is first read.
-export const AMENDMENT_NOTE = '2026-11-05 · Amendment 2, before registration: qualified classical contenders that all miss the target within the ceilings can decide the test, prices are frozen at registration, a failed test reads Not met, and the singlet check is stated.';
+export const AMENDMENT_NOTE = '2026-11-05 · Amendment 2: qualified classical contenders that all miss the target within the ceilings can decide the test, prices are frozen at registration, a failed test reads Not met, and the singlet check is stated.';
 
 // The outside timestamp on the release that first published this record. Its SHA-256 manifest lists every file the
 // release served, and the manifest's own hash went to OpenTimestamps. data/anchors keeps the manifest, its proof and
@@ -126,6 +126,6 @@ function anchorNote() {
 }
 
 export function fe4s4RecordPage() {
-  const head = `${breadcrumb(['Fe₄S₄ benchmark', FE4S4_ROUTE], ['Full record', FE4S4_RECORD_ROUTE])}<p class="caption record-status">${keepDates('Demo record. Built 2026-10-23, load-bearing facts checked against primary sources 2026-10-24, amended before registration on 2026-10-31 and 2026-11-05. The record’s history lists every review and change. Draft protocol, not yet registered.')}</p><p class="caption record-status record-review"><strong>Reviewer sought.</strong> No domain expert has reviewed this record yet. We are looking for a reviewer who has run DMRG or SQD on iron-sulfur clusters, and anyone can challenge a rule. <a href="/#briefing">Offer a review or challenge a rule</a>: choose “To review the science” and name the rule.</p>${anchorNote()}`;
+  const head = `${breadcrumb(['Fe₄S₄ benchmark', FE4S4_ROUTE], ['Full record', FE4S4_RECORD_ROUTE])}<p class="caption record-status">${keepDates('Demo record. Built 2026-10-23, load-bearing facts checked against primary sources 2026-10-24, amended 2026-10-31 and 2026-11-05. The record’s history lists every review and change. Draft protocol, not yet registered.')}</p><p class="caption record-status record-review"><strong>Reviewer sought.</strong> No domain expert has reviewed this record yet. We are looking for a reviewer who has run DMRG or SQD on iron-sulfur clusters, and anyone can challenge a rule. <a href="/#briefing">Offer a review or challenge a rule</a>: choose “To review the science” and name the rule.</p>${anchorNote()}`;
   return shell(FE4S4_RECORD_ROUTE, 'Fe₄S₄ benchmark: full record | Violema', 'The full hypothesis record for one narrow quantum-advantage test on an iron-sulfur benchmark: the claim, the draft test and its outcome rule, the decision it serves, and the evidence in the order it became public.', `<div class="wrap record-doc-wrap">${head}<article class="record-doc">${recordMarkup}</article></div>`, recordHead);
 }

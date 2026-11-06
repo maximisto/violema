@@ -205,7 +205,8 @@ test('Amendment 2 is on the record: ceiling rule, frozen prices, a Not met tier 
   assert.ok(html.includes('a determinant expansion with zero spin projection or time-reversal symmetry does not qualify by construction'));
   assert.doesNotMatch(html, /normalized singlet/, 'the endpoint no longer says normalized; the Rayleigh quotient handles it');
   assert.ok(html.includes('whether it failed on speed or on the ten-run requirement'), 'B3');
-  assert.ok(html.includes('Amendment 2, before registration.'), 'a dated history row');
+  assert.match(html, /2026-11-05<\/span>(?:<\/span>)?<span>Amendment 2\. When every required classical family/, 'a dated history row');
+  assert.ok(!html.includes('Amendment 2, before registration'), 'Amendment 2 does not settle whether the earlier timestamp registered the draft');
 });
 
 test('the full record header leads with its status and a reviewer call; AI reviews live in the history', async () => {
