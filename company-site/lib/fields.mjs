@@ -9,14 +9,14 @@ import { fe4s4Facts, keepDates, AMENDMENT_NOTE, FE4S4_TITLE, FE4S4_JUDGED_ON, br
 const fixedTerms = [
   ['Problem', 'One public input file, pinned, so every team computes the same thing.'],
   ['Pass line', 'The threshold every run has to meet, and how a result is verified.'],
-  ['Comparison', 'Quantum is judged on its slowest run against the fastest classical run that reaches the same line. Every quantum dossier also reruns its own workflow with each quantum output replaced by a classical source declared in advance, and its successful runs compete as classical entries.'],
+  ['Comparison', 'Quantum is judged on its slowest run against the fastest classical run that reaches the same line. That pairing already takes the hardest case for the claim among the observed runs, so no statistical interval is taken over runs; only the timing uncertainty in the published logs is counted, against the claim. Every quantum dossier also reruns its own workflow with each quantum output replaced by a classical source declared in advance, and its successful runs compete as classical entries.'],
   ['Budget and clock', 'A ceiling on compute charges, valued at published prices, and on elapsed time for every run; deadlines for evidence; and one judgment date.'],
   ['Outcome rule', 'Every possible outcome is mapped to a tier in advance. A tier moves only on results under the test.'],
 ];
 
 const limits = [
   'It does not say whether quantum advantage exists, or when it will. It records the rule before the result.',
-  'No probabilities. The tier for each outcome is written in advance; a tier is not a prediction.',
+  'No probabilities yet. The tier for each outcome is written in advance; a tier is not a prediction.',
   'Violema chose the thresholds, budgets and deadlines. They are policy choices, not field consensus.',
   'Naming a company or lab cites its published work. It is not a claim that anyone there has joined a test.',
   'No domain expert has reviewed these records yet. Violema builds them and has a commercial interest in their being read.',
