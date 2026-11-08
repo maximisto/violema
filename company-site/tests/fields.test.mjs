@@ -86,14 +86,21 @@ test('home and About list the field beside the other applications', async () => 
 test('the home hero lists the field after PsychDoc, and the applications card opens the record', async () => {
   const home = await read('index.html');
   const family = home.match(/<div class="hero-family">[\s\S]*?<\/div>/)[0];
-  assert.deepEqual([...family.matchAll(/<a class="hero-product-link[^"]*" href="([^"]+)"/g)].map(match => match[1]), ['https://psychdoc.ai', FIELD.route]);
-  const entry = text(family.match(new RegExp(`<a [^>]*href="${FIELD.route}"[\\s\\S]*?</a>`))[0]);
+  assert.deepEqual([...family.matchAll(/<a [^>]*href="([^"]+)"/g)].map(match => match[1]), ['https://psychdoc.ai', FIELD.route]);
+  const linkText = (html, href) => text(html.match(new RegExp(`<a [^>]*href="${href}"[^>]*>([\\s\\S]*?)</a>`))?.[1] ?? '');
+  const entry = linkText(family, FIELD.route);
   assert.ok(entry.includes(`${FIELD.name} records`), 'names the field as records, not as a result');
-  assert.ok(entry.includes('Fe₄S₄ benchmark. Draft protocol, not yet registered.'), 'names the record with the status it carries');
-  assert.doesNotMatch(text(family).replaceAll('not yet registered', ''), /—|registered|validated|reviewed/i);
+  assert.ok(entry.includes('Draft protocol, not yet registered. Fe₄S₄ benchmark.'), 'the status comes first, so it shows on the first screen');
   const applications = home.match(/<section class="experience-chapter chapter-applications"[\s\S]*?<\/section>/)[0];
-  const card = applications.match(/<article class="materials-feature" aria-labelledby="quantum-title">[\s\S]*?<\/article>/)[0];
-  for (const href of [FIELD.route, FE4S4_ROUTE]) assert.ok(card.includes(`href="${href}"`), href);
+  const card = applications.match(/<article [^>]*aria-labelledby="quantum-title"[\s\S]*?<\/article>/)[0];
+  assert.ok(linkText(card, FIELD.route).includes('Explore the quantum advantage records'));
+  assert.ok(linkText(card, FE4S4_ROUTE).includes('Open the Fe₄S₄ record'));
+  // Only the record's own status wording may mention registration or review.
+  const permitted = ['not yet registered', 'No domain expert has reviewed it yet'];
+  for (const region of [family, card]) {
+    const copy = permitted.reduce((rest, phrase) => rest.replaceAll(phrase, ''), text(region));
+    assert.doesNotMatch(copy, /—|\b(registered|validated|reviewed|curated|thought leaders|disrupt|game-changing|reimagining|seamless|delve|elevate|actionable insights|like-minded)\b/i);
+  }
 });
 
 test('the field page gives the reason for judging the slowest quantum run against the fastest classical one', async () => {
