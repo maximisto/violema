@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { escapeHTML } from '../lib/render.mjs';
-import { evidenceMapSection, filterEvidenceMap, renderMapDetail, renderMapField } from '../lib/evidence-map.mjs';
+import { evidenceMapSection, filterEvidenceMap, renderedMapData, renderedMapFields, renderMapDetail, renderMapField } from '../lib/evidence-map.mjs';
 
 const bytes = await readFile(new URL('../data/evidence-map.json', import.meta.url));
 const data = JSON.parse(bytes);
@@ -19,7 +19,17 @@ test('the homepage includes the exact versioned map and keeps the 12-trial hero 
   assert.equal((home.match(/data-trial="/g) || []).length, 12);
   assert.ok(home.indexOf('id="evidence-map"') > home.indexOf('class="evidence-hero instrument"'));
   const embedded = JSON.parse(home.match(/<script type="application\/json" data-map-data>([\s\S]*?)<\/script>/)[1]);
-  assert.deepEqual(embedded, data);
+  assert.deepEqual(embedded, renderedMapData(data));
+});
+
+test('the page inlines only the fields it renders; the download keeps the whole export', () => {
+  const embedded = renderedMapData(data);
+  assert.deepEqual(Object.keys(embedded), renderedMapFields.filter(key => key in data));
+  for (const key of renderedMapFields) assert.ok(key in data, `the export has ${key}`);
+  for (const key of Object.keys(data).filter(key => !renderedMapFields.includes(key))) assert.equal(embedded[key], undefined, key);
+  const section = evidenceMapSection(data, hash);
+  assert.ok(section.includes(`data-map-sha256="${hash}"`), 'the hash names the downloaded bytes, not the inlined subset');
+  assert.doesNotMatch(section, /"events":|"revisions":/);
 });
 
 test('study and method filters keep only matching claims and their declared edges', () => {

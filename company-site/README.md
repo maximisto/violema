@@ -152,8 +152,10 @@ The October 10 circuit-hair and glasses concept replaces the operator lockup onl
 
 The homepage map uses the canonical PsychDoc export copied unchanged to `data/evidence-map.json`.
 Its SHA-256 is embedded in `data-map-sha256`; the exact JSON is also served as a download.
-The source synthesis was updated on 2026-10-11 (version 2.2). The current copy is the export at PsychDoc
-commit `ec08ae5` (pull request 15), SHA-256 `fd8199f1b36fccfb27d3a2928d4b0190c6413e3618b1a32177a552d33571252d`.
+The source synthesis was updated on 2026-10-24 (version 2.2, with the Jiang 2026 correction from pull request 66).
+The current copy is the export at PsychDoc commit `fa12129` (the pull request 78 merge on main),
+SHA-256 `6f1e647ed491c63451db1a6a2cc50eb31f2f32342b525c113cd6eccbd0c2b05f`.
+The page inlines only the fields it renders; the ledger fields (events, revisions, tests and the rest) are in the download.
 From the PsychDoc checkout, run
 `npx tsx scripts/export-evidence-map.ts`, verify the export there, then copy
 that file here before building. The company-site build intentionally fails if this input is absent.

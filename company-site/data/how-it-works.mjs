@@ -1,15 +1,17 @@
 // Figures printed by the method page's "How it works" section: a dated snapshot of PsychDoc's psilocybin
-// synthesis, version 2.2 of 2026-10-11, copied from maximisto/psychdoc-ai pull request 15 at the commit named in
-// `synthesis.commit`, before that pull request merged. The page says which version and date they describe; PsychDoc
-// shows the current state. The comment above each group names the PsychDoc file it was read from; provenance.md
-// lists them too. Nothing here is estimated or rounded.
+// synthesis, version 2.2 as updated 2026-10-24, at the maximisto/psychdoc-ai commit named in `synthesis.commit`.
+// They were first read on 2026-10-11 at ec08ae5 (pull request 15). On 2026-11-08 every source below was re-read at
+// that commit and no figure had changed; only the date moved, with the Jiang 2026 correction from the pull request
+// named in `synthesis.pullRequest`. The page says which version and date they describe; PsychDoc shows the current
+// state. The comment above each group names the PsychDoc file it was read from; provenance.md lists them too.
+// Nothing here is estimated or rounded.
 export const howItWorks = Object.freeze({
   synthesis: Object.freeze({
     slug: 'psilocybin-rewiring',
     version: '2.2',
-    updatedAt: '2026-10-11',
-    commit: 'ec08ae5d41689b7275477184157f88d086e2b74b',
-    pullRequest: 'https://github.com/maximisto/psychdoc-ai/pull/15',
+    updatedAt: '2026-10-24',
+    commit: 'fa12129f891de9d883c28e2fedbb8eba7b0b3849',
+    pullRequest: 'https://github.com/maximisto/psychdoc-ai/pull/66',
     walkthrough: 'https://psychdoc.ai/how-it-works',
   }),
   // .github/workflows/corpus-refresh.yml (cron "0 6 * * 1"); lib/synthesis/discover.ts citingWorks (cap 100,
