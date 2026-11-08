@@ -5,7 +5,7 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { corpora, stressTest, packetRevision } from '../data/corpora.mjs';
-import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen, archivedPacketURL } from '../lib/render.mjs';
+import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen, archivedPacketURL, stressNote } from '../lib/render.mjs';
 import { homePage, presentedCorpora } from '../lib/pages.mjs';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
 import { profiles, profileIcon } from '../lib/social.mjs';
@@ -45,6 +45,12 @@ test('untrusted source protocol and markup cannot become executable HTML',()=>{
   assert.equal(sourceURL('//example.org'),'#');
   assert.equal(sourceURL('https://example.org/?a=1&b=2'),'https://example.org/?a=1&amp;b=2');
   assert.equal(escapeHTML('<script>"\'&'),'&lt;script&gt;&quot;&#39;&amp;');
+});
+
+test('the replay note drops only its sentence about the unpresented materials packet',async()=>{
+  assert.match(stressTest.note,/ It does not apply to the materials packet\.$/,'the pinned packet keeps the sentence');
+  assert.equal(stressNote(stressTest),stressTest.note.replace(/ It does not apply to the materials packet\.$/,''));
+  for(const file of ['index.html','demo/index.html','review/index.html','method/index.html'])assert.doesNotMatch(await readFile(join(dist,file),'utf8'),/materials packet/,file);
 });
 
 test('materials renderer never carries a clinical numerical control',()=>{

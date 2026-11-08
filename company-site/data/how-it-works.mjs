@@ -15,8 +15,9 @@ export const howItWorks = Object.freeze({
     walkthrough: 'https://psychdoc.ai/how-it-works',
   }),
   // .github/workflows/corpus-refresh.yml (cron "0 6 * * 1"); lib/synthesis/discover.ts citingWorks (cap 100,
-  // sorted by cited_by_count descending); content/corpus/psilocybin-rewiring/2026-09-28.json, the last accepted
-  // scan. multiSeed counts candidates whose seedLinks is 2 or more (29 + 3 + 2).
+  // sorted by cited_by_count descending); content/corpus/psilocybin-rewiring/2026-09-28.json, the scan behind version
+  // 2.2 and the one the map export carries. The scans from 2026-10-12 to 2026-11-04 start from all 24 seeds.
+  // multiSeed counts candidates whose seedLinks is 2 or more (29 + 3 + 2).
   scan: Object.freeze({ schedule: 'Every Monday at 06:00 UTC', date: '2026-09-28', seeds: 5, candidates: 521, multiSeed: 34, citingKept: 100 }),
   // content/corpus/psilocybin-rewiring/2026-10-10.screening.json. fromScan: snapshotDecisions, the scan's
   // candidates from 2024 to 2026 (161: 3 include, 153 exclude, 5 pending); fromSearch: searchDecisions (174: 17,
@@ -62,10 +63,9 @@ export const howItWorks = Object.freeze({
     Object.freeze({ claimId: 'c-mouse-spines-persist', source: 'Shao 2021', venue: 'Neuron', lab: 'Kwan' }),
     Object.freeze({ claimId: 'c-healthy-sv2a', source: 'Johansen 2026', venue: 'Translational Psychiatry', lab: 'Knudsen' }),
   ]),
-  // lib/policies/content.ts aiUsePolicy at commit cd43890 of the same pull request (updated 2026-10-11): the
-  // "Where AI helps" list and the editorial-judgment line of "Where AI does not decide", verbatim except that
-  // "this site" in the last list line names PsychDoc. The searching and screening lines reach psychdoc.ai only
-  // when that pull request merges.
+  // lib/policies/content.ts aiUsePolicy at commit cd43890 of pull request 15 (updated 2026-10-11), identical at the
+  // commit in `synthesis.commit`: the "Where AI helps" list and the editorial-judgment line of "Where AI does not
+  // decide", verbatim except that "this site" in the last list line names PsychDoc. Pull request 15 has since merged.
   aiPolicy: Object.freeze({
     url: 'https://psychdoc.ai/policies/ai-use',
     updatedAt: '2026-10-11',
