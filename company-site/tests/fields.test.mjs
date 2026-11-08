@@ -91,12 +91,12 @@ test('the home hero lists the field after PsychDoc, and the applications card op
   const entry = linkText(family, FIELD.route);
   assert.ok(entry.includes(`${FIELD.name} records`), 'names the field as records, not as a result');
   assert.ok(entry.includes('Draft protocol, not yet registered. Fe₄S₄ benchmark.'), 'the status comes first, so it shows on the first screen');
-  const applications = home.match(/<section class="experience-chapter chapter-applications"[\s\S]*?<\/section>/)[0];
+  const applications = home.match(/<section [^>]*id="applications"[\s\S]*?<\/section>/)[0];
   const card = applications.match(/<article [^>]*aria-labelledby="quantum-title"[\s\S]*?<\/article>/)[0];
   assert.ok(linkText(card, FIELD.route).includes('Explore the quantum advantage records'));
   assert.ok(linkText(card, FE4S4_ROUTE).includes('Open the Fe₄S₄ record'));
   // Only the record's own status wording may mention registration or review.
-  const permitted = ['not yet registered', 'No domain expert has reviewed it yet'];
+  const permitted = ['Draft protocol, not yet registered', 'No domain expert has reviewed it yet'];
   for (const region of [family, card]) {
     const copy = permitted.reduce((rest, phrase) => rest.replaceAll(phrase, ''), text(region));
     assert.doesNotMatch(copy, /—|\b(registered|validated|reviewed|curated|thought leaders|disrupt|game-changing|reimagining|seamless|delve|elevate|actionable insights|like-minded)\b/i);
