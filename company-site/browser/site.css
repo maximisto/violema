@@ -1413,6 +1413,7 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
 .segment-domain { font-family: var(--font-body); font-size: var(--text-caption); font-weight: 400; color: var(--ink-3); }
 .segment-text strong { font-weight: 600; }
 .reset-button span { font-family: var(--font-body); }
+.lab-toolbar .reset-button { margin-left: auto; }
 
 .no-js-note { margin-top: 20px; font-size: var(--text-small); color: var(--ink-2); }
 
