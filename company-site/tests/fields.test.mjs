@@ -77,7 +77,7 @@ test('home and About list the field beside the other applications', async () => 
   const about = await read('about/index.html');
   const divisions = about.match(/<section id="charter-divisions"[\s\S]*?<\/section>/)[0];
   assert.ok(divisions.includes(`<a href="${FIELD.route}">Open the quantum advantage field</a>`), 'the division list names the field');
-  assert.ok(about.includes(`<dt>Third field</dt><dd><a href="${FIELD.route}">${FIELD.name} records</a></dd>`));
+  assert.ok(about.includes(`<dt>Second field</dt><dd><a href="${FIELD.route}">${FIELD.name} records</a></dd>`));
   assert.ok(about.includes('<h3 id="about-quantum-title">'));
   assert.doesNotMatch(about, /Interactive architecture|Active architecture|until claims break|stays clean/, 'About in a plainer register');
 });

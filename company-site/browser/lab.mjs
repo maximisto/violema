@@ -1,5 +1,6 @@
 // Evidence interactions: the bounded assumed-bias replay (home hero and demo) and the demo bench
-// (corpus switch, claim selection, reset, hash links). Loaded by site.mjs only where needed.
+// (corpus switch, claim selection, reset, hash links). Loaded by site.mjs only where needed. The bench works on the
+// packets the page presents; the switch exists only when it presents more than one.
 import { corpora, stressTest } from '../data/corpora.mjs';
 import { calculateBiasScenario, intervalFigure } from './render.mjs';
 import { enhanceTabs } from './tabs.mjs';
@@ -39,18 +40,19 @@ const biasControls = [...document.querySelectorAll('[data-bias-root]')].map(enha
 const panels = [...document.querySelectorAll('[data-corpus-panel]')];
 const switcher = document.querySelector('[data-corpus-switch]');
 
-if (panels.length && switcher) {
+if (panels.length) {
+  const shown = corpora.filter(corpus => panels.some(panel => panel.dataset.corpusPanel === corpus.id));
   const benchBias = biasControls.find(control => control.root.closest('[data-corpus-panel]'));
   const reset = document.querySelector('[data-reset]');
   const announcement = document.querySelector('[data-announcement]');
-  const initial = corpora[0].id;
-  const chosenClaims = new Map(corpora.map(corpus => [corpus.id, corpus.claims[0].id]));
-  const titleOf = id => corpora.find(corpus => corpus.id === id).title;
+  const initial = shown[0].id;
+  const chosenClaims = new Map(shown.map(corpus => [corpus.id, corpus.claims[0].id]));
+  const titleOf = id => shown.find(corpus => corpus.id === id).title;
 
   document.documentElement.classList.add('enhanced');
 
   function selectClaim(corpusId, claimId) {
-    const corpus = corpora.find(item => item.id === corpusId);
+    const corpus = shown.find(item => item.id === corpusId);
     if (!corpus?.claims.some(claim => claim.id === claimId)) return;
     chosenClaims.set(corpusId, claimId);
     const panel = panels.find(item => item.dataset.corpusPanel === corpusId);
@@ -68,7 +70,7 @@ if (panels.length && switcher) {
     if (announce) announcement.textContent = `${titleOf(id)} selected.`;
   }
 
-  const tabs = enhanceTabs(switcher, {
+  const tabs = switcher && enhanceTabs(switcher, {
     onSelect(panelId) {
       const id = panelId.replace(/^corpus-/, '');
       showCorpus(id, true);
@@ -78,8 +80,8 @@ if (panels.length && switcher) {
   });
 
   function selectCorpus(id, announce = false) {
-    if (!corpora.some(corpus => corpus.id === id)) return;
-    tabs.select(`corpus-${id}`, { notify: false });
+    if (!shown.some(corpus => corpus.id === id)) return;
+    tabs?.select(`corpus-${id}`, { notify: false });
     showCorpus(id, announce);
   }
 
@@ -99,7 +101,7 @@ if (panels.length && switcher) {
   if (reset) {
     reset.hidden = false;
     reset.addEventListener('click', () => {
-      corpora.forEach(corpus => chosenClaims.set(corpus.id, corpus.claims[0].id));
+      shown.forEach(corpus => chosenClaims.set(corpus.id, corpus.claims[0].id));
       benchBias?.update(0);
       selectCorpus(initial);
       history.replaceState(null, '', `#corpus-${initial}`);
@@ -110,11 +112,11 @@ if (panels.length && switcher) {
   function followHash() {
     const corpusId = location.hash.replace('#corpus-', '');
     const claimId = location.hash.replace('#claim-', '');
-    const containing = corpora.find(corpus => corpus.claims.some(claim => claim.id === claimId));
+    const containing = shown.find(corpus => corpus.claims.some(claim => claim.id === claimId));
     if (containing) {
       selectCorpus(containing.id);
       selectClaim(containing.id, claimId);
-    } else selectCorpus(corpora.some(corpus => corpus.id === corpusId) ? corpusId : initial);
+    } else selectCorpus(shown.some(corpus => corpus.id === corpusId) ? corpusId : initial);
   }
   followHash();
   window.addEventListener('hashchange', followHash);

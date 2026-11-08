@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { corpora, stressTest, packetRevision } from '../data/corpora.mjs';
 import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen, archivedPacketURL } from '../lib/render.mjs';
-import { homePage } from '../lib/pages.mjs';
+import { homePage, presentedCorpora } from '../lib/pages.mjs';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
 import { profiles, profileIcon } from '../lib/social.mjs';
 import { PAGES } from '../lib/routes.mjs';
@@ -132,7 +132,7 @@ test('the 404 page works at any address and is never indexed',async()=>{
 
 test('all claims, cited sources and condition tables exist before JavaScript',async()=>{
   const html=await readFile(join(dist,'demo/index.html'),'utf8');
-  for(const corpus of corpora){
+  for(const corpus of presentedCorpora(corpora)){
     assert.ok(html.includes(`id="corpus-${corpus.id}"`));
     for(const claim of corpus.claims){
       assert.ok(html.includes(escapeHTML(claim.text)));
@@ -140,7 +140,7 @@ test('all claims, cited sources and condition tables exist before JavaScript',as
       for(const sourceId of claim.sourceIds){const source=corpus.sources.find(s=>s.id===sourceId);assert.ok(html.includes(sourceURL(source.url)));assert.ok(html.includes(escapeHTML(source.locator)));}
     }
   }
-  assert.equal((html.match(/<table>/g)||[]).length,corpora.length);
+  assert.equal((html.match(/<table>/g)||[]).length,presentedCorpora(corpora).length);
   assert.match(html,/<noscript>/);
   assert.doesNotMatch(html,/data-corpus-panel="[^\"]+" hidden/);
 });
@@ -160,7 +160,7 @@ test('the evidence lab names each packet revision and links the archived one bef
   const demo=await readFile(join(dist,'demo/index.html'),'utf8');
   for(const corpus of corpora){
     const href=archivedPacketURL(corpus,packetRevision.previous);
-    assert.ok(demo.includes(`<p>Revision <code>${packetRevision.version}</code>. ${escapeHTML(packetRevision.summary)} <a href="${href}" download>Download revision ${packetRevision.previous}</a></p>`),corpus.id);
+    if(presentedCorpora(corpora).includes(corpus))assert.ok(demo.includes(`<p>Revision <code>${packetRevision.version}</code>. ${escapeHTML(packetRevision.summary)} <a href="${href}" download>Download revision ${packetRevision.previous}</a></p>`),corpus.id);
     await stat(join(dist,href));
   }
 });
@@ -343,19 +343,21 @@ test('the physician review has the actual claim, sources and bounded replay',asy
   assert.doesNotMatch(await readFile(join(dist,'index.html'),'utf8'),/data-bias-root|data-bias-control/,'dense review controls live on the review page');
 });
 
-test('method page keeps its three sections, six stations and packet-derived examples',async()=>{
+test('method page keeps its two sections, six stations and packet-derived examples',async()=>{
   const html=await readFile(join(dist,'method/index.html'),'utf8');
-  for(const id of ['trace','assumptions','transfer'])assert.ok(html.includes(`id="${id}"`));
+  for(const id of ['trace','assumptions'])assert.ok(html.includes(`id="${id}"`));
+  assert.doesNotMatch(html,/id="transfer"|perovskite|[Mm]aterials packet/,'the materials comparison is no longer presented');
   assert.equal((html.match(/class="station"/g)||[]).length,6);
   const claim=corpora.find(c=>c.id==='psychdoc').claims[0];
   assert.ok(html.includes(escapeHTML(claim.text))&&html.includes(escapeHTML(claim.caveat))&&html.includes('Limit recorded beside the claim'));
   assert.ok(html.includes(escapeHTML(stressTest.reviewStatus)));
-  assert.match(html,/href="\/company-assets\/data\/portability-receipt\.json" download/);
+  assert.ok((await readFile(join(dist,'company-assets/data/portability-receipt.json'))).equals(await readFile(join(root,'data/portability-receipt.json'))),'the check receipt is still served unchanged');
 });
 
 test('demo bench keeps one rail, one dark instrument and one evidence column per corpus',async()=>{
   const html=await readFile(join(dist,'demo/index.html'),'utf8');
-  assert.match(html,/<nav class="segmented corpus-switch" data-corpus-switch aria-label="Choose a research corpus">/);
+  assert.equal(presentedCorpora(corpora).length,1);
+  assert.doesNotMatch(html,/data-corpus-switch/,'one presented packet needs no switch');
   assert.match(html,/<button class="button button-secondary reset-button" type="button" data-reset hidden>/);
   for(const corpus of corpora){
     const panel=corpusPanel(corpus,stressTest);
@@ -377,14 +379,19 @@ test('the header logo and icon are the owner-approved brand files, served unchan
   }
 });
 
-test('approved copy: the copyright line and the materials example replace the Oryx card',async()=>{
+test('approved copy: the copyright line; the materials example is no longer presented',async()=>{
   for(const [,file] of pages){
     const html=await readFile(join(dist,file),'utf8');
     assert.equal((html.match(/<p class="footer-copyright">Copyright 2026 Violema, Inc\.<\/p>/g)||[]).length,1);
+    assert.doesNotMatch(html,/corpus-perovskite-stability|[Pp]erovskite|Materials (research|science|specimen)/,file);
   }
   const home=await readFile(join(dist,'index.html'),'utf8');
-  assert.doesNotMatch(home,/Oryx/);
-  for(const text of ['Second example','Materials research','Hand-selected demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
+  assert.doesNotMatch(home,/Oryx|Third example/);
+  assert.match(home,/<p class="label">Second example<\/p><h3 id="quantum-title">/);
+  // Dated history: the packet and its archived revision stay downloadable, unchanged, though no page links them.
+  const materials=corpora.find(c=>c.id==='perovskite-stability');
+  assert.ok((await readFile(join(dist,'company-assets/data/perovskite-stability.json'))).equals(await readFile(join(root,'data/perovskite-stability.json'))));
+  await stat(join(dist,archivedPacketURL(materials,packetRevision.previous)));
 });
 
 test('the 12 trial records match primary.studies, primary.k and, when given, the pinned CSV',async()=>{
