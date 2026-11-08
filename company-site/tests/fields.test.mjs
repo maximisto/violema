@@ -82,6 +82,20 @@ test('home and About list the field beside the other applications', async () => 
   assert.doesNotMatch(about, /Interactive architecture|Active architecture|until claims break|stays clean/, 'About in a plainer register');
 });
 
+// Someone who types violema.com after seeing the Fe4S4 record elsewhere finds the field in the hero, not 7 screens down.
+test('the home hero lists the field after PsychDoc, and the applications card opens the record', async () => {
+  const home = await read('index.html');
+  const family = home.match(/<div class="hero-family">[\s\S]*?<\/div>/)[0];
+  assert.deepEqual([...family.matchAll(/<a class="hero-product-link[^"]*" href="([^"]+)"/g)].map(match => match[1]), ['https://psychdoc.ai', FIELD.route]);
+  const entry = text(family.match(new RegExp(`<a [^>]*href="${FIELD.route}"[\\s\\S]*?</a>`))[0]);
+  assert.ok(entry.includes(`${FIELD.name} records`), 'names the field as records, not as a result');
+  assert.ok(entry.includes('Fe₄S₄ benchmark. Draft protocol, not yet registered.'), 'names the record with the status it carries');
+  assert.doesNotMatch(text(family).replaceAll('not yet registered', ''), /—|registered|validated|reviewed/i);
+  const applications = home.match(/<section class="experience-chapter chapter-applications"[\s\S]*?<\/section>/)[0];
+  const card = applications.match(/<article class="materials-feature" aria-labelledby="quantum-title">[\s\S]*?<\/article>/)[0];
+  for (const href of [FIELD.route, FE4S4_ROUTE]) assert.ok(card.includes(`href="${href}"`), href);
+});
+
 test('the field page gives the reason for judging the slowest quantum run against the fastest classical one', async () => {
   const field = text(await read(fieldFile));
   assert.ok(field.includes('That pairing already takes the hardest case for the claim among the observed runs, so no statistical interval is taken over runs'));
