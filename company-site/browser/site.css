@@ -324,7 +324,12 @@ code {
   transition: color var(--duration-fast) var(--ease), background-color var(--duration-fast) var(--ease);
 }
 .primary-nav a:hover { color: var(--ink); background: var(--surface-2); }
-.primary-nav a[aria-current='page'] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
+.primary-nav a[aria-current='page'], .primary-nav a[aria-current='true'] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
+/* Seven links: between the phone menu and wide screens they tighten (appearance.css sets the gap and padding) so each label stays on one line. */
+.primary-nav a { white-space: nowrap; }
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .primary-nav { gap: 0; }
+}
 
 /* Narrow headers: the approved logo, unchanged, takes the widest space the header allows while
    the navigation stays on one line. A legible phone lockup needs a new asset (see design plan). */
@@ -397,6 +402,7 @@ code {
 .footer-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: 12px 32px;
   padding-top: 20px;
@@ -409,6 +415,14 @@ code {
 .footer-legal { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .footer-legal a { display: inline-flex; align-items: center; min-height: 44px; font-size: var(--text-caption); color: var(--ink); text-underline-offset: 4px; }
 .footer-meta > a { color: var(--ink-2); }
+.footer-orcid { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; text-underline-offset: 4px; }
+.footer-orcid svg { flex: none; }
+/* Profile links: brand glyphs in the page's ink, 44px targets, as the theme control. */
+.social-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.social-link { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: var(--ink-2); }
+.social-link:hover { color: var(--accent); background: var(--surface-2); }
+.social-link svg { width: 20px; height: 20px; }
+.footer-social { margin-inline: -12px; }
 
 @media (max-width: 767px) {
   .footer-main { grid-template-columns: 1fr; gap: 20px; }
@@ -1399,6 +1413,7 @@ h1 + .lede, h2 + .lede { margin-top: 20px; }
 .segment-domain { font-family: var(--font-body); font-size: var(--text-caption); font-weight: 400; color: var(--ink-3); }
 .segment-text strong { font-weight: 600; }
 .reset-button span { font-family: var(--font-body); }
+.lab-toolbar .reset-button { margin-left: auto; }
 
 .no-js-note { margin-top: 20px; font-size: var(--text-small); color: var(--ink-2); }
 
@@ -1607,6 +1622,7 @@ tr > *:last-child { border-right: 0; }
   border-top: 1px solid var(--line);
 }
 .demo-closing p { margin: 0; font-size: var(--text-small); color: var(--ink-2); }
+.demo-closing-links { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .demo-closing + .site-footer { margin-top: 48px; }
 
 @media (max-width: 1199px) {
@@ -1803,6 +1819,10 @@ tr > *:last-child { border-right: 0; }
 .about-company-left {
   grid-column: 1 / span 6;
 }
+.about-company-left > h1 {
+  font-size: var(--text-title);
+  line-height: 1.12;
+}
 .about-company-left > .lede {
   margin-top: 18px;
   margin-bottom: 28px;
@@ -1874,8 +1894,46 @@ tr > *:last-child { border-right: 0; }
   gap: 40px 48px;
   align-items: start;
 }
-.founder-instrument {
+.founder-aside {
   grid-column: 1 / span 5;
+  display: grid;
+  gap: 16px;
+}
+/* Profile cards under the founder card: each network's mark in its brand colour, its name,
+   and the public handle in mono, so the ORCID iD reads as a credential rather than an icon. */
+.founder-profiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* Side by side while each card fits the full ORCID iD on one line; stacked below that. */
+  grid-template-columns: repeat(auto-fit, minmax(236px, 1fr));
+  gap: 12px;
+}
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: var(--shadow-control);
+  transition: border-color 160ms ease-out, background-color 160ms ease-out;
+}
+.profile-card:hover { border-color: var(--accent); }
+.profile-card svg { flex: none; width: 28px; height: 28px; }
+.profile-card--linkedin svg { color: #0A66C2; }
+[data-theme='dark'] .profile-card--linkedin svg { color: #FFFFFF; }
+/* ORCID's iD mark keeps its brand green; a white disc keeps the iD letters white on either theme. */
+.profile-card--orcid svg { color: #A6CE39; background: radial-gradient(circle closest-side, #fff 92%, transparent 93%); }
+.profile-card-text { display: grid; gap: 2px; min-width: 0; }
+.profile-card-name { font: 600 0.9375rem/1.25 var(--font-display); }
+.profile-card-handle { font: 400 0.8125rem/1.35 var(--font-mono); color: var(--ink-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.founder-instrument {
   margin: 0;
   overflow: hidden;
   border-radius: 16px;
@@ -1914,38 +1972,10 @@ tr > *:last-child { border-right: 0; }
   font-size: var(--text-caption);
   color: var(--inst-ink-2);
 }
-.founder-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--inst-line);
-}
-.founder-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 12px;
-  background: var(--inst-surface);
-  border: 1px solid var(--inst-line-strong);
-  border-radius: var(--radius-control);
-  color: var(--inst-ink);
-  font-size: 0.9375rem;
-  font-weight: 500;
-  text-decoration: none;
-  transition: border-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
-}
-.founder-badge:hover {
-  border-color: var(--inst-accent);
-  color: var(--inst-accent);
-}
-.founder-badge code {
-  font-size: 0.875rem;
-}
 .founder-ledger {
-  margin: 18px 0 0;
+  margin: 20px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--inst-line);
   display: grid;
   gap: 14px;
 }
@@ -2016,14 +2046,52 @@ tr > *:last-child { border-right: 0; }
   border: 1px solid var(--line);
   border-radius: var(--radius-nested);
   display: grid;
-  gap: 4px;
+  gap: 10px;
 }
-.founder-client-grid strong {
-  font-family: var(--font-display);
-  font-size: 1rem;
+/* Former-client marks follow purpleorange.ai's founder strip: every mark in one ink,
+   set type where no clean vector mark is held. A fixed row height keeps roles aligned. */
+.founder-client-mark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
   color: var(--ink);
+  opacity: 0.72;
 }
-.founder-client-grid span {
+.founder-client-logo {
+  display: block;
+  height: 24px;
+  width: auto;
+  max-width: 100%;
+  filter: brightness(0);
+}
+[data-theme='dark'] .founder-client-logo { filter: brightness(0) invert(1); }
+.founder-client-logo--unilever { height: 30px; }
+.founder-client-logo--wrigley { height: 20px; }
+.founder-client-logo--nestle { height: 26px; }
+.founder-client-wordmark {
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  /* Narrow three-column cards (about 1024 to 1440px) fold long names onto two lines inside the mark row. */
+  text-wrap: balance;
+}
+.founder-client-wordmark--serif {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.founder-client-wordmark--pg {
+  font-size: 1.875rem;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+.founder-client-role {
   font-size: 0.875rem;
   color: var(--ink-2);
   line-height: 1.45;
@@ -2178,8 +2246,31 @@ tr > *:last-child { border-right: 0; }
 .founder-explorer {
   margin-top: 28px;
 }
+/* Five eras: a mono meta line (number and years) above a short title, so labels never wrap
+   mid-phrase and the tabs echo the ledger's dates in the founder card. */
 .founder-explorer .guide-tabs {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.founder-explorer .guide-tabs > a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "num years" "title title";
+  align-content: center;
+  justify-content: stretch;
+  gap: 4px 8px;
+  min-height: 68px;
+  padding: 12px 10px;
+  text-align: left;
+}
+.founder-explorer .era-text { display: contents; }
+.founder-explorer .guide-tabs > a > .era-num { grid-area: num; font: 500 0.75rem/1.4 var(--font-mono); color: var(--ink-3); }
+.founder-explorer .era-years { grid-area: years; font: 400 0.75rem/1.4 var(--font-mono); color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.founder-explorer .era-title { grid-area: title; font: 500 0.9375rem/1.25 var(--font-display); color: inherit; }
+.founder-explorer .guide-tabs > a[aria-selected='true'] > .era-num { color: var(--accent); }
+.founder-clients-label {
+  margin: 28px 0 0;
+  font-size: var(--text-caption);
+  color: var(--ink-2);
 }
 .about-directory-section > .wrap {
   display: block;
@@ -2242,6 +2333,7 @@ tr > *:last-child { border-right: 0; }
   color: var(--ink);
   font-weight: 500;
 }
+.about-corp-facts a[href^="mailto:"] { overflow-wrap: anywhere; }
 @media (max-width: 1023px) {
   .about-page-header,
   .about-company-layout,
@@ -2253,11 +2345,11 @@ tr > *:last-child { border-right: 0; }
   .about-page-header > .lede,
   .about-company-left,
   .about-company-right,
-  .founder-instrument,
+  .founder-aside,
   .founder-narrative {
     grid-column: 1 / -1;
   }
-  .founder-instrument {
+  .founder-aside {
     max-width: 560px;
   }
   .founder-client-grid {
@@ -2271,9 +2363,6 @@ tr > *:last-child { border-right: 0; }
   .about-layer-tabs {
     grid-template-columns: minmax(0, 1fr);
   }
-  .founder-explorer .guide-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .about-directory-card {
     padding: 22px 18px;
   }
@@ -2282,6 +2371,24 @@ tr > *:last-child { border-right: 0; }
   .about-telemetry-grid,
   .founder-client-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* On phones the eras become a compact list: number, title, years on one row. */
+  .founder-explorer .guide-tabs {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: 0;
+  }
+  .founder-explorer .guide-tabs > a {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-areas: "num title years";
+    align-items: center;
+    min-height: 48px;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .founder-explorer .guide-tabs > a:last-child { border-bottom: 0; }
+  .founder-explorer .guide-tabs > a[aria-selected='true'] {
+    border-bottom-color: var(--line);
+    box-shadow: inset 2px 0 0 var(--accent);
   }
   .founder-ledger > div {
     grid-template-columns: minmax(0, 1fr);

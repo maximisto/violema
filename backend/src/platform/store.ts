@@ -1,5 +1,12 @@
 import path from 'path';
-import { calculateAvailableCredits, createCreditLedgerEntry, normalizeCreditDelta, summarizeCreditLedger } from './ledger';
+import {
+  calculateAvailableCredits,
+  compareCreditLedgerEntries,
+  createCreditLedgerEntry,
+  nextCreditLedgerSequence,
+  normalizeCreditDelta,
+  summarizeCreditLedger,
+} from './ledger';
 import { readJsonFile, updateJsonFile, writeJsonFile } from './jsonStore';
 import type {
   AgentRole,
@@ -370,6 +377,7 @@ export function addLedgerEntry(input: {
     const balanceAfterCredits = summary.balanceCredits + Math.trunc(input.deltaCredits);
     createdEntryRef.value = createCreditLedgerEntry({
       workspaceId: input.workspaceId,
+      sequence: nextCreditLedgerSequence(workspaceEntries),
       direction: input.deltaCredits >= 0 ? 'grant' : 'debit',
       source: input.source,
       deltaCredits: input.deltaCredits,
@@ -439,6 +447,7 @@ export function acquireCreditHold(input: {
 
     const entry = createCreditLedgerEntry({
       workspaceId: input.workspaceId,
+      sequence: nextCreditLedgerSequence(workspaceEntries),
       direction: 'debit',
       source: 'credit_hold',
       deltaCredits: 0,
@@ -494,6 +503,7 @@ export function releaseCreditHold(
 
     releasedEntryRef.value = createCreditLedgerEntry({
       workspaceId: input.workspaceId,
+      sequence: nextCreditLedgerSequence(workspaceEntries),
       direction: 'grant',
       source: 'credit_hold',
       deltaCredits: 0,
@@ -650,6 +660,7 @@ export function settleCreditHold(
 
     settledEntryRef.value = createCreditLedgerEntry({
       workspaceId: input.workspaceId,
+      sequence: nextCreditLedgerSequence(workspaceEntries),
       direction: actualCredits > 0 ? 'debit' : 'grant',
       source: input.source,
       deltaCredits: -actualCredits,
@@ -739,6 +750,7 @@ export function settleCreditHoldWithOverrun(
 
     const entry = createCreditLedgerEntry({
       workspaceId: input.workspaceId,
+      sequence: nextCreditLedgerSequence(workspaceEntries),
       direction: settledCredits > 0 ? 'debit' : 'grant',
       source: input.source,
       deltaCredits: -settledCredits,
@@ -792,10 +804,11 @@ export function listTaskRuns(workspaceId: string) {
   return getPlatformState().taskRuns.filter((run) => run.workspaceId === workspaceId);
 }
 
+/** Newest first: the reverse of `compareCreditLedgerEntries`. */
 export function listLedgerEntries(workspaceId: string) {
   return getPlatformState().ledger
     .filter((entry) => entry.workspaceId === workspaceId)
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+    .sort((left, right) => compareCreditLedgerEntries(right, left));
 }
 
 export function mapTaskRunToStatus(status: TaskRunStatus): TaskStatus {

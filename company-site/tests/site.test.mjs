@@ -4,14 +4,18 @@ import { readFile, stat, readdir } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { corpora, stressTest } from '../data/corpora.mjs';
-import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen } from '../lib/render.mjs';
-import { homePage } from '../lib/pages.mjs';
+import { corpora, stressTest, packetRevision } from '../data/corpora.mjs';
+import { calculateBiasScenario, escapeHTML, sourceURL, corpusPanel, intervalFigure, traceSpecimen, archivedPacketURL, stressNote } from '../lib/render.mjs';
+import { homePage, presentedCorpora } from '../lib/pages.mjs';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
+import { profiles, profileIcon } from '../lib/social.mjs';
+import { PAGES } from '../lib/routes.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
-const pages=[['/','index.html'],['/method/','method/index.html'],['/demo/','demo/index.html'],['/review/','review/index.html'],['/about/','about/index.html'],['/legal/terms/','legal/terms/index.html'],['/legal/privacy/','legal/privacy/index.html']];
+const founderArchive=join(root,'archive/about-founder-20261102');
+// Every registered page with a canonical address; the 404 page has its own test.
+const pages=PAGES.filter(page=>!page.notFound).map(page=>[page.route,page.file]);
 const decode = value => value.replaceAll('&amp;','&');
 
 test('additive replay preserves original result and interval width throughout declared domain',()=>{
@@ -41,6 +45,12 @@ test('untrusted source protocol and markup cannot become executable HTML',()=>{
   assert.equal(sourceURL('//example.org'),'#');
   assert.equal(sourceURL('https://example.org/?a=1&b=2'),'https://example.org/?a=1&amp;b=2');
   assert.equal(escapeHTML('<script>"\'&'),'&lt;script&gt;&quot;&#39;&amp;');
+});
+
+test('the replay note drops only its sentence about the unpresented materials packet',async()=>{
+  assert.match(stressTest.note,/ It does not apply to the materials packet\.$/,'the pinned packet keeps the sentence');
+  assert.equal(stressNote(stressTest),stressTest.note.replace(/ It does not apply to the materials packet\.$/,''));
+  for(const file of ['index.html','demo/index.html','review/index.html','method/index.html'])assert.doesNotMatch(await readFile(join(dist,file),'utf8'),/materials packet/,file);
 });
 
 test('materials renderer never carries a clinical numerical control',()=>{
@@ -107,9 +117,9 @@ test('website policies are reachable from every company footer without replacing
 
 test('titles use the house separators',async()=>{
   const title=async file=>(await readFile(join(dist,file),'utf8')).match(/<title>([^<]+)<\/title>/)[1];
-  assert.equal(await title('index.html'),'Violema: scientific conclusions, with their evidence attached');
-  assert.equal(await title('method/index.html'),'The method | Violema');
-  assert.equal(await title('demo/index.html'),'Evidence lab | Violema');
+  assert.equal(await title('index.html'),'Scientific evidence systems | Violema');
+  assert.equal(await title('method/index.html'),'Scientific evidence method | Violema');
+  assert.equal(await title('demo/index.html'),'Scientific evidence examples | Violema');
 });
 
 test('the 404 page works at any address and is never indexed',async()=>{
@@ -128,7 +138,7 @@ test('the 404 page works at any address and is never indexed',async()=>{
 
 test('all claims, cited sources and condition tables exist before JavaScript',async()=>{
   const html=await readFile(join(dist,'demo/index.html'),'utf8');
-  for(const corpus of corpora){
+  for(const corpus of presentedCorpora(corpora)){
     assert.ok(html.includes(`id="corpus-${corpus.id}"`));
     for(const claim of corpus.claims){
       assert.ok(html.includes(escapeHTML(claim.text)));
@@ -136,7 +146,7 @@ test('all claims, cited sources and condition tables exist before JavaScript',as
       for(const sourceId of claim.sourceIds){const source=corpus.sources.find(s=>s.id===sourceId);assert.ok(html.includes(sourceURL(source.url)));assert.ok(html.includes(escapeHTML(source.locator)));}
     }
   }
-  assert.equal((html.match(/<table>/g)||[]).length,corpora.length);
+  assert.equal((html.match(/<table>/g)||[]).length,presentedCorpora(corpora).length);
   assert.match(html,/<noscript>/);
   assert.doesNotMatch(html,/data-corpus-panel="[^\"]+" hidden/);
 });
@@ -150,6 +160,22 @@ test('downloaded packets stay identical to source and do not leak analysis acros
     assert.equal(packet.corpus.id,corpus.id);
     if(corpus.id!==stressTest.corpusId)assert.equal(packet.analysis,null);
   }
+});
+
+test('the evidence lab names each packet revision and links the archived one before it',async()=>{
+  const demo=await readFile(join(dist,'demo/index.html'),'utf8');
+  for(const corpus of corpora){
+    const href=archivedPacketURL(corpus,packetRevision.previous);
+    if(presentedCorpora(corpora).includes(corpus))assert.ok(demo.includes(`<p>Revision <code>${packetRevision.version}</code>. ${escapeHTML(packetRevision.summary)} <a href="${href}" download>Download revision ${packetRevision.previous}</a></p>`),corpus.id);
+    await stat(join(dist,href));
+  }
+});
+
+test('earlier packet revisions are served byte for byte from data/archive',async()=>{
+  const kept=(await readdir(join(root,'data/archive'),{recursive:true})).filter(name=>name.includes('/')&&!name.split('/').some(part=>part.startsWith('.'))).sort();
+  assert.ok(kept.includes('2026-10-10.1/portability-receipt.json'));
+  assert.deepEqual((await readdir(join(dist,'company-assets/data/archive'),{recursive:true})).filter(name=>name.includes('/')).sort(),kept);
+  for(const name of kept)assert.ok((await readFile(join(dist,'company-assets/data/archive',name))).equals(await readFile(join(root,'data/archive',name))),name);
 });
 
 test('browser module paths and self-hosted stylesheet assets resolve in the generated namespace',async()=>{
@@ -171,6 +197,97 @@ test('browser module paths and self-hosted stylesheet assets resolve in the gene
   assert.doesNotMatch(css,/prefers-color-scheme/,'Theme is reader-selected, not forced by the operating system');
   assert.match(css,/:root \{\n  color-scheme: light;/);
   assert.ok(!(await readdir(dist)).includes('assets'),'Legacy app asset namespace is preserved');
+});
+
+test('the founder archive retains six former-client marks and their original assets for restoration',async()=>{
+  const html=await readFile(join(founderArchive,'founder-section.html'),'utf8');
+  const grid=html.match(/<ul class="founder-client-grid"[\s\S]*?<\/ul>/)?.[0]??'';
+  assert.equal((grid.match(/<li>/g)||[]).length,6);
+  assert.match(grid,/<img class="founder-client-logo founder-client-logo--wrigley" src="\/company-assets\/clients\/wrigley\.svg"[^>]* alt="Wrigley"/);
+  assert.match(grid,/<img class="founder-client-logo founder-client-logo--nestle" src="\/company-assets\/clients\/nestle\.svg"[^>]* alt="Nestlé"/);
+  // The Unilever icon is decorative; the visible word carries the name.
+  assert.match(grid,/unilever\.svg"[^>]* alt=""[^>]*>Unilever<\/span>/);
+  for(const name of ['P&amp;G','Northwestern Mutual','U.S. Marine Corps'])assert.ok(grid.includes(`>${name}</span>`),`${name} wordmark`);
+  for(const name of ['unilever.svg','wrigley.svg','nestle.svg'])assert.deepEqual(await readFile(join(dist,'company-assets/clients',name)),await readFile(join(root,'assets/clients',name)));
+  const css=await readFile(join(dist,'company-assets/site.css'),'utf8');
+  assert.match(css,/\.founder-client-logo \{[^}]*filter: brightness\(0\);/);
+  assert.match(css,/\[data-theme='dark'\] \.founder-client-logo \{ filter: brightness\(0\) invert\(1\); \}/);
+});
+
+test('every footer links the company profiles as icon links; a row without a confirmed URL stays in place and says so',async()=>{
+  assert.deepEqual(profiles.map(profile=>profile.id),['linkedin','instagram','x','youtube','reddit','facebook','github']);
+  for(const profile of profiles){
+    assert.equal(profile.owner,'Violema',`${profile.id} is the company account, not a personal one`);
+    if(profile.href!==null)assert.match(profile.href,/^https:\/\//);
+    assert.match(profileIcon(profile.id),/^<svg viewBox="0 0 24 24"[^>]* aria-hidden="true"[^>]*><path d="[^"]+"\/><\/svg>$/);
+  }
+  assert.equal(profiles.find(profile=>profile.id==='linkedin').href,'https://www.linkedin.com/company/violema/','the company page, not the founder\'s');
+  assert.equal(profiles.find(profile=>profile.id==='instagram').href,'https://www.instagram.com/violemaai/');
+  for(const [,file] of pages){
+    const html=await readFile(join(dist,file),'utf8');
+    const list=html.match(/<ul class="social-list footer-social" aria-label="Social profiles">([\s\S]*?)<\/ul>/)?.[1]??'';
+    const links=[...list.matchAll(/<a class="social-link social-link--([a-z]+)( social-link--pending)?" href="([^"]+)"( target="_blank" rel="noopener noreferrer")? aria-label="([^"]+)" title="([^"]+)"><svg/g)].map(match=>match.slice(1));
+    assert.deepEqual(links,profiles.map(profile=>profile.href
+      ?[profile.id,undefined,profile.href,' target="_blank" rel="noopener noreferrer"',`Violema on ${profile.name}`,profile.name]
+      :[profile.id,' social-link--pending','/',undefined,`Violema on ${profile.name}, page to come`,`${profile.name}: page to come`]),`${file} footer profiles`);
+    assert.ok(!list.includes('maximisto')&&!list.includes('orcid.org'),`${file} footer carries no personal profile`);
+  }
+});
+
+test('/about/ leads with the company and charter while the founder section stays outside the public build',async()=>{
+  const html=await readFile(join(dist,'about/index.html'),'utf8');
+  const main=html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/)?.[1]??'';
+  assert.match(main,/^\s*<section\b[^>]* id="company"/);
+  assert.match(main,/<h1 id="company-title">One evidence engine\.<br>Built for contested science\.<\/h1>/);
+  assert.equal((main.match(/<h1[ >]/g)||[]).length,1);
+  assert.doesNotMatch(main,/founder|Max Markovtsev|max-markovtsev\.jpg|\/company-assets\/clients\/|linkedin\.com\/in\/maximisto/);
+  for(const id of ['charter-problem','charter-divisions','charter-firewall','about-applications','about-connect'])assert.ok(main.includes(`id="${id}"`),id);
+  assert.ok(main.includes('href="/#briefing"'));
+  // Max, 2026-11-05: "can commission", so the line describes an offer rather than implying existing buyers.
+  assert.match(main,/university trial groups can commission a synthesis on their own question\./);
+  assert.doesNotMatch(main,/pay to commission/);
+  const head=html.match(/<head>([\s\S]*?)<\/head>/)?.[1]??'';
+  assert.doesNotMatch(head,/founder|Max Markovtsev/);
+  assert.doesNotMatch(await readFile(join(dist,'llms.txt'),'utf8'),/founder Max Markovtsev/);
+  assert.ok(!(await readdir(dist)).includes('archive'),'Founder backup is not a public route');
+  assert.ok(!(await readdir(join(dist,'company-assets'))).some(name=>name.includes('founder-section')||name==='archive'),'Founder backup is not a public asset');
+  assert.deepEqual(await readFile(join(dist,'company-assets/max-markovtsev.jpg')),await readFile(join(root,'assets/max-markovtsev.jpg')),'Original portrait remains available for restoration');
+});
+
+test('every footer preserves the founder ORCID separately from company social accounts',async()=>{
+  const files=[...pages.map(([,file])=>file),'404.html'];
+  for(const file of files){
+    const html=await readFile(join(dist,file),'utf8');
+    const footer=html.match(/<footer class="site-footer">[\s\S]*?<\/footer>/)?.[0]??'';
+    const link=footer.match(/<a class="footer-orcid"[^>]*>[\s\S]*?<\/a>/)?.[0]??'';
+    assert.match(link,/href="https:\/\/orcid\.org\/0009-0009-9354-2207"/,file);
+    assert.match(link,/target="_blank" rel="noopener noreferrer"/,file);
+    assert.match(link,/aria-label="Max Markovtsev on ORCID: 0009-0009-9354-2207"/,file);
+    assert.match(link,/<svg\b[^>]* aria-hidden="true"/,file);
+    assert.match(link,/<span>ORCID<\/span>/,file);
+    assert.equal((footer.match(/href="https:\/\/orcid\.org\/0009-0009-9354-2207"/g)||[]).length,1,file);
+    const companyProfiles=footer.match(/<ul class="social-list footer-social"[\s\S]*?<\/ul>/)?.[0]??'';
+    assert.doesNotMatch(companyProfiles,/orcid\.org/,`${file} ORCID is a personal identity, not a company account`);
+  }
+});
+
+test('the founder archive retains the biography, profile cards and five career eras for restoration',async()=>{
+  const html=await readFile(join(founderArchive,'founder-section.html'),'utf8');
+  assert.match(html,/<img class="founder-portrait" src="\/company-assets\/max-markovtsev\.jpg"/);
+  assert.match(html,/Max Markovtsev is a Chicago-based founder and systems architect/);
+  assert.match(html,/href="https:\/\/www\.linkedin\.com\/in\/maximisto\/"/);
+  assert.match(html,/href="https:\/\/orcid\.org\/0009-0009-9354-2207"/);
+  const nav=html.match(/<nav class="guide-tabs" data-tablist aria-label="Explore Max Markovtsev career eras">([\s\S]*?)<\/nav>/)?.[1]??'';
+  const tabs=[...nav.matchAll(/<a href="#(founder-era-[a-z]+)"><span class="era-num">(\d+)<\/span><span class="era-text"><span class="era-title">([^<]+)<\/span><span class="era-years">([^<]*)<\/span><\/span><\/a>/g)].map(match=>match.slice(1));
+  assert.deepEqual(tabs.map(([id])=>id),['founder-era-agencies','founder-era-independent','founder-era-ai','founder-era-violema','founder-era-disclosure']);
+  assert.deepEqual(tabs.slice(0,3).map(([,,,years])=>years),['1994–2009','2010–2017','2017–now']);
+  for(const [id] of tabs)assert.match(html,new RegExp(`<section id="${id}" aria-labelledby="${id}-heading">`));
+  // Every ledger row in the founder card opens an existing era.
+  for(const [,target] of html.matchAll(/data-epoch-target="([^"]+)"/g))assert.ok(tabs.some(([id])=>id===target),target);
+  assert.doesNotMatch(html,/Enterprise BI/);
+  const source=await readFile(join(founderArchive,'founder-section.mjs.txt'),'utf8');
+  assert.match(source,/const founderExplorer = `/);
+  assert.match(source,/const founderLeadSection = `/);
 });
 
 test('self-hosted fonts match their recorded checksums and ship with their licences',async()=>{
@@ -232,19 +349,21 @@ test('the physician review has the actual claim, sources and bounded replay',asy
   assert.doesNotMatch(await readFile(join(dist,'index.html'),'utf8'),/data-bias-root|data-bias-control/,'dense review controls live on the review page');
 });
 
-test('method page keeps its three sections, six stations and packet-derived examples',async()=>{
+test('method page keeps its two sections, six stations and packet-derived examples',async()=>{
   const html=await readFile(join(dist,'method/index.html'),'utf8');
-  for(const id of ['trace','assumptions','transfer'])assert.ok(html.includes(`id="${id}"`));
+  for(const id of ['trace','assumptions'])assert.ok(html.includes(`id="${id}"`));
+  assert.doesNotMatch(html,/id="transfer"|perovskite|[Mm]aterials packet/,'the materials comparison is no longer presented');
   assert.equal((html.match(/class="station"/g)||[]).length,6);
   const claim=corpora.find(c=>c.id==='psychdoc').claims[0];
   assert.ok(html.includes(escapeHTML(claim.text))&&html.includes(escapeHTML(claim.caveat))&&html.includes('Limit recorded beside the claim'));
   assert.ok(html.includes(escapeHTML(stressTest.reviewStatus)));
-  assert.match(html,/href="\/company-assets\/data\/portability-receipt\.json" download/);
+  assert.ok((await readFile(join(dist,'company-assets/data/portability-receipt.json'))).equals(await readFile(join(root,'data/portability-receipt.json'))),'the check receipt is still served unchanged');
 });
 
 test('demo bench keeps one rail, one dark instrument and one evidence column per corpus',async()=>{
   const html=await readFile(join(dist,'demo/index.html'),'utf8');
-  assert.match(html,/<nav class="segmented corpus-switch" data-corpus-switch aria-label="Choose a research corpus">/);
+  assert.equal(presentedCorpora(corpora).length,1);
+  assert.doesNotMatch(html,/data-corpus-switch/,'one presented packet needs no switch');
   assert.match(html,/<button class="button button-secondary reset-button" type="button" data-reset hidden>/);
   for(const corpus of corpora){
     const panel=corpusPanel(corpus,stressTest);
@@ -266,14 +385,19 @@ test('the header logo and icon are the owner-approved brand files, served unchan
   }
 });
 
-test('approved copy: the copyright line and the materials example replace the Oryx card',async()=>{
+test('approved copy: the copyright line; the materials example is no longer presented',async()=>{
   for(const [,file] of pages){
     const html=await readFile(join(dist,file),'utf8');
     assert.equal((html.match(/<p class="footer-copyright">Copyright 2026 Violema, Inc\.<\/p>/g)||[]).length,1);
+    assert.doesNotMatch(html,/corpus-perovskite-stability|[Pp]erovskite|Materials (research|science|specimen)/,file);
   }
   const home=await readFile(join(dist,'index.html'),'utf8');
-  assert.doesNotMatch(home,/Oryx/);
-  for(const text of ['Second example','Materials research','Curated demonstration','Can solar-cell stability results be compared on the same terms?','Explore four perovskite solar-cell reports alongside stability-reporting guidance. Trace each claim to its source, compare recorded test conditions, and see where information is missing.','Materials expert review pending. No pooled estimate is presented.','Explore the materials example'])assert.ok(home.includes(text),text);
+  assert.doesNotMatch(home,/Oryx|Third example/);
+  assert.match(home,/<p class="label">Second example<\/p><h3 id="quantum-title">/);
+  // Dated history: the packet and its archived revision stay downloadable, unchanged, though no page links them.
+  const materials=corpora.find(c=>c.id==='perovskite-stability');
+  assert.ok((await readFile(join(dist,'company-assets/data/perovskite-stability.json'))).equals(await readFile(join(root,'data/perovskite-stability.json'))));
+  await stat(join(dist,archivedPacketURL(materials,packetRevision.previous)));
 });
 
 test('the 12 trial records match primary.studies, primary.k and, when given, the pinned CSV',async()=>{
@@ -323,16 +447,45 @@ test('the home page build is deterministic',async()=>{
   assert.equal(await readFile(join(dist,'index.html'),'utf8'),first,'a separate build process produced the same bytes');
 });
 
-test('the home hero offers two actions, and its briefing link is the one the closing chapter uses',async()=>{
+test('the home hero offers two actions, and its briefing button lands on the form in the closing chapter',async()=>{
   const html=await readFile(join(dist,'index.html'),'utf8');
   const hero=html.match(/<section class="hero experience-hero"[\s\S]*?<\/section>/)[0];
   const actions=hero.match(/<div class="actions">[\s\S]*?<\/div>/)[0];
   assert.match(actions,/^<div class="actions"><a class="button button-primary" href="#evidence">Follow the evidence /,'the primary action still leads');
   assert.equal((actions.match(/class="button /g)||[]).length,2,'exactly two buttons in the hero');
-  const secondary=actions.match(/<a class="button button-secondary" href="([^"]+)">Request a briefing /);
-  assert.ok(secondary,'the second button asks for a scientific briefing');
+  assert.match(actions,/<a class="button button-secondary" href="#briefing">Request a briefing <span aria-hidden="true">↓<\/span><\/a>/,'the second button stays on this site');
   const closing=html.match(/<section class="experience-chapter chapter-connect"[\s\S]*?<\/section>/)[0];
-  assert.ok(closing.includes(`<a class="button button-primary" href="${secondary[1]}">Request a briefing `),'top and bottom of the page send the reader to the same briefing form');
+  assert.match(closing,/<form class="briefing-form" id="briefing" action="\/api\/briefing" method="post" novalidate aria-labelledby="briefing-title" data-briefing-form data-briefing-intents="[^"]+">/,'the form is the closing chapter\'s action and the address every briefing link uses');
+  assert.ok(closing.includes('<a class="text-link" href="/review/">Here to review the science? '),'the reviewer path stays beside the form');
+});
+
+test('the briefing form is complete without JavaScript and uses the lead handler\'s field contract',async()=>{
+  const html=await readFile(join(dist,'index.html'),'utf8');
+  const form=html.match(/<form class="briefing-form"[\s\S]*?<\/form>/)[0];
+  assert.equal((html.match(/<form class="briefing-form"/g)||[]).length,1,'one briefing form on the homepage');
+  for(const name of ['intent','role','name','email','organization','topic','message'])assert.match(form,new RegExp(`<(?:input|select|textarea) class="briefing-control" id="briefing-${name}" name="${name}"`),`${name} control`);
+  assert.deepEqual([...form.matchAll(/<option value="([a-z-]+)"/g)].map(m=>m[1]),['briefing','pilot','expert-review','correction','privacy','biotech','fund','clinic','research','other'],'option values are the handler\'s, labels may differ');
+  assert.match(form,/<div class="briefing-trap" aria-hidden="true"><label for="briefing-website">Website<\/label><input id="briefing-website" name="website" type="text" tabindex="-1" autocomplete="off"><\/div>/,'the honeypot the handler discards is hidden from people');
+  assert.match(form,/<button class="button button-primary" type="submit" data-briefing-submit disabled>Request a briefing<\/button>/,'the button waits for the module: a plain post cannot reach the JSON-only handler');
+  assert.match(form,/<noscript><p class="briefing-note">Sending needs JavaScript\. The same form is on <a href="https:\/\/psychdoc\.ai\/#briefing">PsychDoc\.AI<\/a>\.<\/p><\/noscript>/);
+  assert.match(form,/<a href="\/legal\/privacy\/">Privacy Policy<\/a>/);
+  assert.ok(html.includes("import('./briefing.mjs')")===false&&(await readFile(join(dist,'company-assets/browser/site.mjs'),'utf8')).includes("import('./briefing.mjs')"),'the page loads the module only through site.mjs');
+  await stat(join(dist,'company-assets/browser/briefing.mjs'));
+  assert.ok(!/[—]/.test(form),'no em-dashes in public copy');
+});
+
+test('every "Request a briefing" link on the site points at the form; nothing links the PsychDoc form except the noscript fallback',async()=>{
+  for(const [route,file] of pages){
+    const html=await readFile(join(dist,file),'utf8');
+    const external=html.split('<noscript>')[0]+(html.split('</noscript>')[1]??'');
+    assert.ok(!external.includes('psychdoc.ai/#briefing'),`${route} sends briefing requests to this site`);
+    for(const [,href] of html.matchAll(/<a[^>]*href="([^"]+)"[^>]*>Request a briefing/g))assert.ok(href==='#briefing'||href==='/#briefing',`${route}: ${href}`);
+  }
+  const privacy=await readFile(join(dist,'legal/privacy/index.html'),'utf8');
+  assert.ok(privacy.includes('<strong>Briefing form.</strong>'),'the privacy policy describes the form');
+  assert.ok(!privacy.includes('submission forms'),'the policy no longer claims the site has no forms');
+  const terms=await readFile(join(dist,'legal/terms/index.html'),'utf8');
+  assert.ok(terms.includes('accept one submission: the briefing form'));
 });
 
 test('the demo replay states that it always uses Claim 1, beside the control, clinical corpus only',async()=>{
@@ -355,4 +508,40 @@ test('the release is discoverable while the physician walkthrough remains noinde
   for(const route of ['/','/method/','/demo/'])assert.ok(sitemap.includes(`<loc>https://violema.com${route}</loc>`));
   assert.doesNotMatch(sitemap,/\/review\//);
   assert.match(await readFile(join(dist,'review/index.html'),'utf8'),/<meta name="robots" content="noindex,follow">/);
+});
+
+// "Curated" is banned in public copy and in the current downloads; data/archive keeps earlier revisions as published.
+// Pages are read with character references decoded, and again with tags removed, so an encoded or split word is caught.
+test('no page, llms.txt or current packet download says curated',async()=>{
+  const banned=/(?<![a-z])curat/i;
+  const decodeRefs=text=>text.replace(/&#x([0-9a-f]+);/gi,(_,hex)=>String.fromCodePoint(parseInt(hex,16))).replace(/&#(\d+);/g,(_,dec)=>String.fromCodePoint(Number(dec))).replace(/&(amp|lt|gt|quot|apos|nbsp);/g,(_,name)=>({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' '})[name]);
+  for(const file of [...PAGES.map(page=>page.file),'llms.txt']){
+    const html=await readFile(join(dist,file),'utf8');
+    assert.doesNotMatch(decodeRefs(html),banned,file);
+    assert.doesNotMatch(decodeRefs(html.replace(/<[^>]*>/g,'')),banned,`${file}, text across tags`);
+  }
+  for(const name of [...corpora.map(corpus=>`${corpus.id}.json`),'portability-receipt.json','provenance.md','corpora.mjs'])assert.doesNotMatch(await readFile(join(dist,'company-assets/data',name),'utf8'),banned,name);
+  for(const corpus of corpora)assert.match(corpus.reviewStatus,/^Hand-selected demonstration · /,corpus.id);
+});
+
+// Read from the built pages, not the registry, so a page written outside the registry or indexed by mistake still shows up.
+test('every built page is registered, the sitemap lists exactly the indexable pages, and llms.txt links each but the home page',async()=>{
+  // Timestamp anchors keep byte copies of pages as an earlier release served them; they are evidence, not pages.
+  const built=(await readdir(dist,{recursive:true})).filter(name=>name.endsWith('.html')&&!name.startsWith('company-assets/data/anchors/')).sort();
+  assert.deepEqual(built,PAGES.map(page=>page.file).sort(),'every HTML file in dist is a registered page');
+  const sitemap=await readFile(join(dist,'sitemap.xml'),'utf8');
+  const listed=[...sitemap.matchAll(/<loc>https:\/\/violema\.com([^<]+)<\/loc>/g)].map(match=>match[1]);
+  const llms=await readFile(join(dist,'llms.txt'),'utf8');
+  const indexed=[];
+  for(const file of built){
+    const html=await readFile(join(dist,file),'utf8');
+    if(!html.includes('<meta name="robots" content="index,follow">'))continue;
+    const route=html.match(/<link rel="canonical" href="https:\/\/violema\.com([^"]+)">/)?.[1];
+    assert.ok(route,`${file} is indexable, so it has a canonical address`);
+    indexed.push(route);
+    if(route!=='/')assert.ok(llms.includes(`(https://violema.com${route})`),`${route} is linked from llms.txt`);
+  }
+  assert.ok(indexed.includes('/'),'the indexable pages were found');
+  assert.equal(new Set(listed).size,listed.length,'no page is listed twice');
+  assert.deepEqual([...listed].sort(),indexed.sort(),'the sitemap lists every indexable built page and nothing else');
 });

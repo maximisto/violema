@@ -62,6 +62,9 @@ if (header) {
   }
 }
 
+const briefing = document.querySelector('[data-briefing-form]');
+if (briefing) import('./briefing.mjs').then(({ enhanceBriefingForm }) => enhanceBriefingForm(briefing));
+
 // The hero trace draws once in CSS; pin the drawn state afterwards so a later layout change
 // (rotation, resize across the phone breakpoint) cannot replay it.
 for (const trace of document.querySelectorAll('.trace-animate')) {
@@ -87,7 +90,7 @@ if (epochLinks.length) {
   const syncEpochs = activeId => {
     for (const link of epochLinks) link.classList.toggle('is-active', link.dataset.epochTarget === activeId);
   };
-  syncEpochs('founder-era-enterprise');
+  syncEpochs('founder-era-agencies');
   for (const link of epochLinks) {
     link.addEventListener('click', event => {
       const targetId = link.dataset.epochTarget;
@@ -168,6 +171,7 @@ if (map) {
 if (document.querySelector('.home-experience')) import('./experience.mjs');
 
 if (document.querySelector('[data-diagram]')) import('./diagrams.mjs');
+if (document.querySelector('[data-fe4s4]')) import('./fe4s4.mjs');
 
 // A short entrance orients both six-step overviews. Selection stays with the reader;
 // there is no Replay control for a purely presentational fade.

@@ -1,0 +1,57 @@
+    # BEGIN VIOLEMA HYPOTHESIS RECORDS
+    # Unlisted record pages: noindex in the page, absent from the sitemap and llms.txt. Exact routes, like every page above.
+    location = /records/fe4s4-benchmark {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /records/fe4s4-benchmark/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    location = /records/fe4s4-benchmark/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /records/fe4s4-benchmark/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    location = /records/fe4s4-benchmark/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /records/fe4s4-benchmark/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    location = /records/fe4s4-benchmark/record {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /records/fe4s4-benchmark/record/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    location = /records/fe4s4-benchmark/record/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /records/fe4s4-benchmark/record/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    location = /records/fe4s4-benchmark/record/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /records/fe4s4-benchmark/record/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    # END VIOLEMA HYPOTHESIS RECORDS

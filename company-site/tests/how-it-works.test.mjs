@@ -29,7 +29,7 @@ test('the method page explains the system after the six stations and before the 
   assert.ok(order.every(index => index > 0));
   assert.deepEqual([...order].sort((a, b) => a - b), order);
   const how = section('how-it-works');
-  assert.match(how, /a snapshot of PsychDoc’s psilocybin synthesis, version 2\.2 of 11 October 2026: a provisional synthesis that has not had signed expert review/);
+  assert.match(how, /a snapshot of PsychDoc’s psilocybin synthesis, version 2\.2 of 24 October 2026: a provisional synthesis that has not had signed expert review/);
   // Release order publishes PsychDoc first, so the page must not call the version unpublished or in review.
   assert.doesNotMatch(how, /not yet published|in review/);
   assert.match(how, /the first application of this method/);

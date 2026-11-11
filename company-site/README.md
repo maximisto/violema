@@ -11,13 +11,18 @@ npm test
 npm run preview
 ```
 
-Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/legal/terms/` and `/legal/privacy/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method, demo, about and website policy HTML is indexable for the owner-authorized release; robots.txt allows crawling and the sitemap lists those six routes. The physician review page uses `noindex,follow` and is excluded from the sitemap. This is discoverability control, not authentication. Missing static paths return 404 locally. The links `/login`, `/terms` and `/privacy` belong to the preserved production application and are not part of this bundle.
+Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/fields/quantum-advantage/`, `/records/fe4s4-benchmark/`, `/legal/terms/` and `/legal/privacy/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method, demo, about, field, record and website policy HTML is indexable; robots.txt allows crawling and the sitemap lists those nine routes. The physician review page uses `noindex,follow` and is excluded from the sitemap. This is discoverability control, not authentication. Missing static paths return 404 locally. The links `/login`, `/terms` and `/privacy` belong to the preserved production application and are not part of this bundle.
 
 ## Layout
 
 - `lib/pages.mjs`: page shell (logo header, appearance control, footer, metadata), the protocol stations, and the six routes.
 - `lib/experience.mjs`: the five homepage chapters, guided claim/source/limits interaction and six-part method explorer.
 - `lib/legal.mjs`: public website terms and privacy copy; separate from legacy workspace policies. The privacy wording follows the visit-statistics switch.
+- `lib/social.mjs`: the company's profiles (`profiles`: LinkedIn, Instagram, X, YouTube, Reddit, Facebook, GitHub, all Violema's own accounts) rendered as icon links in every footer. Max Markovtsev's existing ORCID is a separate, labelled footer link with his name and identifier in its accessible label. The founder profile data and card renderer remain available for restoring the archived biography. Brand glyphs are Simple Icons 13.21.0 (CC0; LinkedIn from purpleorange.ai). A company row whose URL is not yet confirmed has `href: null`: it keeps its place, links to `/` and its label says the page is to come. Never guess a handle.
+- `lib/briefing.mjs` and `browser/briefing.mjs`: the briefing form (see "Briefing form" below).
+- `lib/routes.mjs`: the field and record routes, and `PAGES`, the registry of every page the build writes: its route, its file, whether it is indexed, and for a record the field it sits under. The shell reads indexing, the 404 page's missing canonical and the header's Records link from it, and refuses an unregistered route; the build writes each page to its file and derives the sitemap from it. A new page needs an entry here, a renderer in `scripts/build.mjs`, a line in `llms.txt` if it is indexed, and its routes in `deploy/scientific-site/routing.mjs` and on the server. The build and tests catch a missing entry, renderer, `llms.txt` line or `routing.mjs` route; nothing offline checks the server, so its locations are verified at release.
+- `lib/fields.mjs`: the Quantum advantage field page, which lists the field's records (see "Fields and hypothesis records" below).
+- `lib/records.mjs`, `lib/fe4s4-figures.mjs`, `browser/fe4s4.mjs` and `browser/records.css`: the hypothesis records and the field page's styles (see "Fields and hypothesis records" below). `data/fe4s4-record.html` holds the Fe₄S₄ record's checked text.
 - `lib/analytics.mjs`: the visit-statistics switch (Umami website ID and policy date) and the tracker tag. See "Visit statistics" below.
 - `lib/how-it-works.mjs`: the method page's "How it works" and "Where this is going" sections: two inline SVG diagrams of PsychDoc's evidence system, coloured only through tokens, with their figures read from `data/how-it-works.mjs`.
 - `lib/render.mjs`: shared evidence renderer: escaped text, safe source links, bounded additive-shift arithmetic, the interval scale, the trace specimen (a claim joined to its cited source records), the bias control and the demo bench.
@@ -28,7 +33,8 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/le
 - `browser/site.css`: base colour tokens, type scale and existing page layouts.
 - `browser/appearance.css`: manual light/dark themes, theme-specific logos, shared header and focus treatment.
 - `browser/experience.css` and `browser/experience.mjs`: homepage chapter layouts and bounded playback.
-- `assets/`: self-hosted fonts with their licences (see below).
+- `assets/`: self-hosted fonts with their licences (see below). The founder portrait and `assets/clients/` marks are retained for restoring the archived About section. The Unilever, Wrigley and Nestlé marks were copied unchanged from purpleorange.ai's founder strip (`assets/brand/founder/`, 2026-07-14); `site.css` retains their one-ink theme treatment, and P&G, Northwestern Mutual and the U.S. Marine Corps are set in type, as on purpleorange.ai.
+- `archive/about-founder-20261102/`: the original founder section as rendered HTML and source declarations, with the source revision and restoration instructions. It is excluded from the public build. The current About page starts with the company and charter, followed by divisions and ways to work with Violema; the biography, portrait and former-client row are temporarily omitted.
 - `brand/`: only the five current approved assets, listed in [the brand README](brand/README.md). Earlier concepts and prompts are in `archive/brand-concepts-20261010/`. The homepage product signature also serves the unchanged PsychDoc.AI two-leaf wordmark in light/dark SVG variants, verified against the current PsychDoc header on 2026-10-15.
 - `docs/design-plan.md`: the design plan: tokens, type, layouts and the instrument's anatomy.
 - `data/`: source packet contract, evidence records, provenance and execution receipts. See `data/provenance.md` for scope and scientific limitations.
@@ -48,6 +54,43 @@ The home hero assembles the 12 named trial records from the pinned primary-analy
 The homepage follows five chapters: overview, guided evidence, method, applications and a briefing invitation. The complete evidence map sits in a native disclosure, retaining its filters, text alternative, export and direct `#evidence-map` link. Without JavaScript, guided panels and method explanations are all present in reading order.
 
 `/review/` is a generic physician/researcher walkthrough: one primary claim, the four linked sources, an assumed-shift replay, the animal/human scope boundary and five focused questions. It makes no advisor appointment or affiliation claim, collects no submissions and asks for published sources without patient information. `/demo/` continues to hold both full packets and the fixed Claim 1 replay scope.
+
+## Fields and hypothesis records
+
+A field is a front door for committed-test records that share one kind of claim. `/fields/quantum-advantage/` holds claims that a quantum computer beats the best classical methods on a defined problem, chemistry first: what every record there fixes before any result counts, the records in the order they were opened (one so far), and what the field does not claim. Max chose the name and scope on 2026-11-04. The header's Records link, the footer, the evidence lab's closing row, the sitemap and `llms.txt` all point at it, and the header marks Records while a record is open. Both record pages carry a breadcrumb through the field.
+
+`/records/fe4s4-benchmark/` shows one hypothesis record as four instruments, each a dark `.instrument` under a light section heading:
+- the Fe₄S₄ cluster and the size of its determinant space;
+- every energy posted on the benchmark's Hamiltonian, on three vertical scales down to the one-sided pass line;
+- the evidence in the order it became public;
+- the draft outcome rule, which the reader can apply to any outcome.
+
+A strip at the end shows the event ledger on PsychDoc's map. `/records/fe4s4-benchmark/record/` is the full record: the v3 text in `data/fe4s4-record.html`, checked against primary sources on 2026-10-24, set at the site's type scale. Edit it only as a dated revision.
+
+The figures are pure functions in `lib/fe4s4-figures.mjs`. The build renders every figure as SVG, so each page is complete without JavaScript. `browser/fe4s4.mjs`, which `site.mjs` loads only where `[data-fe4s4]` exists, re-renders through the same module (copied to `company-assets/browser/fe4s4-figures.mjs`). It adds the turning cluster, the random configurations, the scale control, the timeline selection and the outcome builder. Motion stops under reduced motion, in a hidden tab, off screen, and on Pause.
+
+Every number on the page is a value from the record or is derived from one in the figures module, and `tests/records.test.mjs` pins the derivations. Its opening section repeats the record history's dated Amendment 1 line (`AMENDMENT_NOTE`) and links that history. The field and record pages are public: `index,follow`, in the sitemap and `llms.txt`, typed as articles (records) for link previews. `tests/fields.test.mjs` pins the field page, the links to it and the breadcrumbs. The violema.com vhost serves an allowlist of exact routes, so each new field or record route also needs its entry in `lib/routes.mjs`, its locations in `deploy/scientific-site/routing.mjs` and its locations on the server. Release `fe4s4-record-20261024` shows the record block and the guarded script that adds it; `deploy/scientific-site/fields.nginx.conf.snippet` is the field block, and a routing test keeps it equal to the model.
+
+## Timestamp anchors
+
+An anchor fixes what a release served without registering anything. `data/anchors/<release>/` holds the release's SHA-256 manifest (one `<sha256>  <path>` line per published file), the OpenTimestamps proof of the manifest's own hash, and `release/<path>` byte copies of the record pages it names, so their hashes stay checkable after the live pages change. The build copies the directory to `/company-assets/data/anchors/`, and `ANCHOR` in `lib/records.mjs` drives the full record's "Timestamped, not registered" line. The site test's page walk skips these copies: they are evidence, not pages.
+
+The first anchor is release `20261104-df24c20` (65 files, manifest hash `6fb0ba55…aaf266b`), stamped on 2026-11-05. Building commit `df24c20` reproduces all 65 hashes: its `company-site` tree is identical to `4c3120f`, whose build matched the manifest on 2026-11-05. Its proof upgraded at 11:53 UTC the same day with one Bitcoin attestation, block 974,660, mined at 11:10:25 UTC. The proof's commitment at that block, `d3fbe88f…b5619` in display order, matched the block's Merkle root on both blockstream.info and mempool.space at six confirmations; no local Bitcoin node was available for `ots verify`.
+
+A proof is pending until a calendar's Bitcoin transaction confirms, usually a few hours. Before publishing a new anchor:
+1. `ots upgrade <manifest>.ots`, repeated until it reports success, then `ots verify <manifest>.ots` from the directory that holds the manifest. `ots verify` reads block headers from a local Bitcoin node. Without one, it stops at "Could not connect to Bitcoin node" and prints the attested height: then load the proof with the `opentimestamps` Python library, take the commitment at each `BitcoinBlockHeaderAttestation` (byte-reversed for display order), and check it against that block's Merkle root on two independent block explorers.
+2. Set `bitcoinBlock` in `ANCHOR` to the earliest attested block, `{ height, date }` with the block's UTC date.
+3. `npm run build && npm test`. `tests/anchors.test.mjs` fails while the proof is pending, reads the block heights out of the proof itself, and checks the manifest, the kept pages and the served copies byte for byte.
+
+A reader checks a kept page with `shasum -a 256 --ignore-missing -c <manifest>` from a folder that holds `release/`'s paths.
+
+## Briefing form
+
+The homepage's closing chapter holds the site's one form, `id="briefing"`, and every "Request a briefing" link on the site (hero, footer, About) points at it. The markup is rendered at build time; `browser/briefing.mjs`, loaded by `site.mjs` only where the form exists, enables the button and posts the fields as JSON to `/api/briefing` on this host. Without JavaScript the button stays disabled and a `noscript` line names the same form on PsychDoc.AI, because a plain form post cannot reach the handler.
+
+The handler is the one PsychDoc.AI already runs (`app/api/briefing/route.ts` in `maximisto/psychdoc-ai`): JSON only, rate limited, honeypot field `website`, the lead appended to its store and emailed to the owner. Its field contract is fixed in `lib/briefing.mjs` (`briefingIntents`, `briefingRoles`): labels are Violema's, values are the handler's. nginx hands the path over with `deploy/scientific-site/briefing-api.nginx.conf.snippet`, an exact-match location inside the company server block, placed before the legacy `/api/` prefix. That is a vhost change, so the release packet that ships the form must pin the new vhost hash and the form does not work until the location is live: check `curl -fsS -X POST https://violema.com/api/briefing -H 'content-type: application/json' -d '{}'` answers 400 with `"Check the highlighted fields."`, not 404.
+
+The Website Privacy Policy describes the form (section 2, "Briefing form") and the Terms name it as the one submission the site accepts.
 
 ## Visit statistics
 
@@ -82,11 +125,20 @@ The header shows the owner-approved scientific logos and the favicon uses the ma
 
 Edit the owned source records, preserve source identities and review status, then run `node scripts/export-corpora.mjs`. Review the JSON packet diff. Build fails if a packet is stale or its contract fails. The optional source-engine portability check is documented in `data/provenance.md`; the normal build does not import or require the other application.
 
-The JavaScript renderer reads the same frozen data module as the static build. Without JavaScript, both corpus packets, all claims, condition tables, source links and downloads remain available. The slider is hidden until enhancement initializes. Selecting the materials corpus clears the clinical shift; reset returns to the first corpus, first claim and zero shift. Numbers shown in prose are rounded for reading; packet and calculation values retain full precision.
+Once a packet is published, any change to it, wording included, is a new dated revision:
+
+1. Copy the served `corpora.mjs`, both packet JSONs, `portability-receipt.json` and `provenance.md` unchanged into `data/archive/<current version>/`. The build serves them at `/company-assets/data/archive/<version>/`, and `tests/corpora.test.mjs` checks the archived module still matches its own receipt.
+2. Set `packetRevision` in `data/corpora.mjs`: the new `version` and `revisedAt`, a `note` for the packet download saying exactly what changed and what did not, a shorter plain `summary` for the evidence lab page, and `previous`.
+3. Make the change, run `node scripts/export-corpora.mjs`, and re-run the portability check (see `data/provenance.md`), which writes a new receipt naming the revision. Never edit the receipt by hand.
+4. Add the revision to "Revisions" in `data/provenance.md`, and update the test that compares the current revision with the previous one.
+
+The stable download URLs always serve the newest revision.
+
+The JavaScript renderer reads the same frozen data module as the static build. Without JavaScript, the presented packet, all its claims, condition tables, source links and downloads remain available. The slider is hidden until enhancement initializes. Reset returns to the first claim and zero shift. Since 2026-11-08 the evidence lab presents the PsychDoc packet only: the materials packet (`perovskite-stability`) is still built, downloadable and covered by the check receipt, unchanged, but no page links it (`presentedCorpora` in `lib/pages.mjs`). With more than one presented packet the corpus switch returns, and selecting a non-clinical packet clears the clinical shift. Numbers shown in prose are rounded for reading; packet and calculation values retain full precision.
 
 ## Browser acceptance
 
-Run against the built preview. Check all six routes by direct load and refresh at 1440, 1024, 768, 390 and 320 px widths in both light and selected dark themes. Confirm a first visit remains light, an explicit selection survives navigation/refresh, and blocked storage leaves the current-page toggle usable. Verify corpus and claim links with mouse and keyboard, the segmented controls' arrow keys, range changes including endpoints on the physician review page and the demo, materials isolation, reset, packet downloads, Skip/Replay, reduced motion (the complete source illustration stays visible), full-map disclosure and direct fragment links, a no-JavaScript load (drawn trace, static interval, every claim and table), focus rings on every control, 44 px targets on phones and text contrast of at least 4.5:1. Table overflow is intentionally contained inside the keyboard-focusable comparison region; the page itself must not overflow horizontally. Inspect console and network failures.
+Run against the built preview. Check all six routes by direct load and refresh at 1440, 1024, 768, 390 and 320 px widths in both light and selected dark themes. Confirm a first visit remains light, an explicit selection survives navigation/refresh, and blocked storage leaves the current-page toggle usable. Verify corpus and claim links with mouse and keyboard, the segmented controls' arrow keys, range changes including endpoints on the physician review page and the demo, reset, packet downloads, Skip/Replay, reduced motion (the complete source illustration stays visible), full-map disclosure and direct fragment links, a no-JavaScript load (drawn trace, static interval, every claim and table), focus rings on every control, 44 px targets on phones and text contrast of at least 4.5:1. Table overflow is intentionally contained inside the keyboard-focusable comparison region; the page itself must not overflow horizontally. Inspect console and network failures.
 
 Automated Node checks cover arithmetic boundaries, packet identity, document IDs/anchors, local links, assets, source protocols, corpus isolation, static markup, appearance storage failure, theme contrast, visibility thresholds, playback interruption and reduced-motion behavior. Browser checks are separate because the package deliberately has no browser automation dependency.
 
@@ -100,8 +152,10 @@ The October 10 circuit-hair and glasses concept replaces the operator lockup onl
 
 The homepage map uses the canonical PsychDoc export copied unchanged to `data/evidence-map.json`.
 Its SHA-256 is embedded in `data-map-sha256`; the exact JSON is also served as a download.
-The source synthesis was updated on 2026-10-11 (version 2.2). The current copy is the export at PsychDoc
-commit `ec08ae5` (pull request 15), SHA-256 `fd8199f1b36fccfb27d3a2928d4b0190c6413e3618b1a32177a552d33571252d`.
+The source synthesis was updated on 2026-10-24 (version 2.2, with the Jiang 2026 correction from pull request 66).
+The current copy is the export at PsychDoc commit `fa12129` (the pull request 78 merge on main),
+SHA-256 `6f1e647ed491c63451db1a6a2cc50eb31f2f32342b525c113cd6eccbd0c2b05f`.
+The page inlines only the fields it renders; the ledger fields (events, revisions, tests and the rest) are in the download.
 From the PsychDoc checkout, run
 `npx tsx scripts/export-evidence-map.ts`, verify the export there, then copy
 that file here before building. The company-site build intentionally fails if this input is absent.
@@ -116,7 +170,7 @@ HTML text alternative without JavaScript. The existing 12-trial saved-analysis h
 
 ### How it works (method page)
 
-`/method/#how-it-works` shows the evidence system as PsychDoc, the first application, runs it: eight steps and the seed loop, then the planned cross-field question with its contribution record (`/method/#cross-field`). Every number comes from `data/how-it-works.mjs`, which copies PsychDoc's psilocybin synthesis version 2.2 of 2026-10-11 (pull request 15, commit `ec08ae5`, read before that pull request merged) and names the PsychDoc file behind each value; `data/provenance.md` lists them. The page calls the figures a dated snapshot of a provisional synthesis without signed expert review, which stays true after PsychDoc publishes the version. Planned parts are dashed and labelled. No expert review is claimed; the section refuses to build if the facts record one, so the copy has to change first. The "See each step in detail" link goes to `https://psychdoc.ai/how-it-works`, which exists once PsychDoc pull request 15 merges.
+`/method/#how-it-works` shows the evidence system as PsychDoc, the first application, runs it: eight steps and the seed loop, then the planned cross-field question with its contribution record (`/method/#cross-field`). Every number comes from `data/how-it-works.mjs`, a dated snapshot of PsychDoc's psilocybin synthesis version 2.2 as updated 2026-10-24 (commit `fa12129`; the date moved with the Jiang 2026 correction of pull request 66). The figures were first read on 2026-10-11 at `ec08ae5` (pull request 15, since merged) and re-read unchanged on 2026-11-08. The file names the PsychDoc file behind each value; `data/provenance.md` lists them. The page calls the figures a dated snapshot of a provisional synthesis without signed expert review, which stays true after PsychDoc publishes the version. Planned parts are dashed and labelled. No expert review is claimed; the section refuses to build if the facts record one, so the copy has to change first. The "See each step in detail" link goes to `https://psychdoc.ai/how-it-works`, added by PsychDoc pull request 15.
 
 Each diagram keeps a minimum width at which its smallest text renders at 12 px or more. Narrower than that, it scrolls inside its own focusable region; the page itself does not scroll sideways. `tests/how-it-works.test.mjs` checks the figures add up, the accessible figure markup, the house voice, token-only colours and the 12 px floor.
 

@@ -1,0 +1,30 @@
+    # BEGIN VIOLEMA FIELDS
+    # Field pages: public and in the sitemap. Exact routes, like every page above, with the record block's method guard, root and headers.
+    location = /fields/quantum-advantage {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /fields/quantum-advantage/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    location = /fields/quantum-advantage/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /fields/quantum-advantage/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    location = /fields/quantum-advantage/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /fields/quantum-advantage/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    # END VIOLEMA FIELDS

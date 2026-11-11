@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { corpora } from '../data/corpora.mjs';
 import { escapeHTML } from '../lib/render.mjs';
 import { analytics } from '../lib/analytics.mjs';
+import { privacyRevisedAt } from '../lib/legal.mjs';
 
 const html = await readFile(new URL('../dist/index.html', import.meta.url), 'utf8');
 // The sandbox has no modules: imports are stripped and analytics.mjs's track() is a stub that records into `tracked`
@@ -68,7 +69,8 @@ test('the privacy page describes the saved theme preference without changing the
   assert.match(privacy, /<code>violema-theme<\/code>/);
   assert.match(privacy, /This preference is not sent to Violema or an AI provider/);
   // The privacy date moves to the visit-statistics policy date once that switch is on (lib/analytics.mjs).
-  assert.ok(privacy.includes(`datetime="${analytics.policyDate ?? '2026-10-15'}"`));
+  const policyDate = analytics.policyDate ?? '2026-10-15';
+  assert.ok(privacy.includes(`datetime="${policyDate > privacyRevisedAt ? policyDate : privacyRevisedAt}"`));
   assert.match(terms, /datetime="2026-10-12"/);
   assert.doesNotMatch(privacy, /do not set cookies or use localStorage/);
 });

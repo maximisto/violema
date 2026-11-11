@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { analytics, analyticsEnabled, analyticsScript, ANALYTICS_RETENTION_MONTHS, TRACKER_SRC } from '../lib/analytics.mjs';
-import { buildLegalPolicies, legalPolicies } from '../lib/legal.mjs';
+import { buildLegalPolicies, legalPolicies, privacyRevisedAt } from '../lib/legal.mjs';
 import { shell } from '../lib/pages.mjs';
 
 const ON = Object.freeze({ websiteId: '3f0c4e5a-9b1d-4c2e-8a7f-1d2e3f4a5b6c', policyDate: '2026-10-20' });
@@ -40,13 +40,15 @@ test('privacy keeps its live no-analytics wording while the switch is off', () =
   assert.ok(text.includes('advertising trackers, or analytics scripts'));
   assert.ok(text.includes("Do Not Track signal does not change their behavior"));
   assert.ok(!text.includes('Umami'));
-  assert.equal(buildLegalPolicies(OFF)[1].updatedAt, '2026-10-15');
+  // The People we contact revision (2026-10-26) is later than the pre-analytics date, so it is the effective date.
+  assert.equal(buildLegalPolicies(OFF)[1].updatedAt, privacyRevisedAt);
 });
 
 test('privacy describes the statistics, the four counted actions, Do Not Track and retention once it is on', () => {
   const policies = buildLegalPolicies(ON);
   const text = privacyText(policies);
-  assert.equal(policies[1].updatedAt, ON.policyDate);
+  assert.equal(policies[1].updatedAt, ON.policyDate > privacyRevisedAt ? ON.policyDate : privacyRevisedAt);
+  assert.equal(buildLegalPolicies({ ...ON, policyDate: '2026-12-01' })[1].updatedAt, '2026-12-01', 'a later analytics policy date still wins');
   for (const phrase of ['Umami', 'stores nothing on your device', 'Neither the IP address nor the full browser description is stored', 'changes every month', 'four actions', 'never anything you type or the value you choose', 'no visit statistics are recorded', `${ANALYTICS_RETENTION_MONTHS} months`, 'Turning on Do Not Track stops visit statistics']) {
     assert.ok(text.includes(phrase), phrase);
   }
@@ -67,4 +69,22 @@ test('the browser counts only the four listed events, and only through window.um
 
 test('the live legal policies are the switch-off set while websiteId is null', () => {
   if (analytics.websiteId === null) assert.deepEqual(legalPolicies, buildLegalPolicies(OFF));
+});
+
+test('privacy section 3 tells researchers we write to where their details come from, why, and how to stop', () => {
+  for (const config of [OFF, ON]) {
+    const privacy = buildLegalPolicies(config).find(policy => policy.slug === 'privacy');
+    assert.deepEqual(privacy.sections.map(section => Number.parseInt(section.title, 10)), [1, 2, 3, 4, 5, 6, 7, 8], 'sections stay numbered in order');
+    const contact = privacy.sections.find(section => section.id === 'people-we-contact');
+    assert.equal(contact.title, '3. People we contact');
+    for (const phrase of ['public sources', 'Proofpoint Essentials', 'institutional websites', 'legitimate interest', 'do not use it for marketing', 'AI services', 'within 12 months', 'Your right to object', 'One reply asking us to stop is enough', 'mailto:privacy@violema.com', 'data protection authority', 'Microsoft 365']) {
+      assert.ok(contact.html.includes(phrase), phrase);
+    }
+    assert.ok(contact.html.includes('as section 7 describes'));
+    assert.ok(privacy.sections.find(section => section.id === 'choices-rights').title.startsWith('7. '), 'section 7 is the rights section it points to');
+    assert.ok(privacy.sections.find(section => section.id === 'scope').html.includes('(section 3)'));
+    assert.ok(!/—/.test(privacyText([privacy])), 'no em-dashes in public copy');
+  }
+  const on = privacyText(buildLegalPolicies(ON));
+  assert.ok(on.includes('never the values chosen (section 4)'), 'the visit-statistics cross-reference follows the renumbering');
 });
