@@ -10,6 +10,8 @@
 
 The check fails closed. It inspects `sites-available/$DOMAIN`, its `sites-enabled` link, and every config in `sites-enabled/` and `conf.d/*.conf` (links resolved). It refuses on a company marker in any of them (whatever `DOMAIN` is set to), on another file already serving `$DOMAIN` or `www.$DOMAIN`, and on a dangling symlink or an unreadable file. Configs included from elsewhere are not scanned.
 
+Markers only catch a company config that carries them, so the check also works the other way round. Every vhost this script writes starts with the line `# Written by deploy/deploy.sh: legacy app vhost, rewritten on each full deploy.`, and an existing `sites-available/$DOMAIN` or `sites-enabled/$DOMAIN` is rewritten only if it carries that line. Anything else is refused, markers or not: the scientific-site cutover config (`deploy/scientific-site/cutover.nginx.conf.template`) has no marker and is refused this way. An old-app vhost written by an older `deploy.sh` lacks the line too; move it aside before a full deploy.
+
 ### Backend-only redeploy
 
 Use this to ship backend code or dependency fixes (for example a Dependabot lockfile bump). It runs: git sync of `/var/www/nexus` to `origin/$BRANCH` (default `main`), backend `npm ci` and Playwright Chromium (no apt), `npm run build`, `pm2 describe violema-backend` (fails if PM2 has no such process), `pm2 startOrReload deploy/ecosystem.config.cjs --only violema-backend --update-env`, `pm2 save`, then polls `http://127.0.0.1:3001/api/health` (15 tries, 2 seconds apart) and fails if it never answers. It never touches system packages, the frontend, nginx, certificates or the company site.
@@ -50,7 +52,7 @@ Notes:
 
 ## Fresh box provisioning (full deploy)
 
-The full deploy below (apt, Node, nginx bootstrap, Certbot, frontend build, PM2) applies only to a box where `violema.com` does not yet carry the company vhost. On the current VPS it refuses, by design.
+The full deploy below (apt, Node, nginx bootstrap, Certbot, frontend build, PM2) applies only to a box where `violema.com` has no vhost yet, or only one this script wrote. On the current VPS it refuses, by design.
 
 1. Point `violema.com` and `www.violema.com` at the VPS public IP.
 2. SSH into the VPS as `root` or a sudo user.
@@ -147,7 +149,7 @@ curl https://violema.com/api/health
 ```
 
 Notes:
-- On a fresh box, the full deploy bootstraps nginx over HTTP first, then switches to the full HTTPS config after Certbot succeeds. Both steps refuse if the target vhost is the company site.
+- On a fresh box, the full deploy bootstraps nginx over HTTP first, then switches to the full HTTPS config after Certbot succeeds. Both steps refuse unless the target vhost is absent or carries the line this script writes.
 - On the current VPS, `violema.com` serves the company site and proxies only `/api/*` to the Express backend on port `3001`. `frontend/dist` is served on agent.purpleorange.ai.
 - `/api/health` is a public liveness probe and returns only `{ status, service, timestamp }`. Model ids, provider routing, and integration status are operator diagnostics and now live behind `GET /api/admin/health`, which requires an admin session.
 - With `NODE_ENV=production`, checkout endpoints return an honest 503 (`billing_not_configured`) instead of mock sessions when Stripe env vars are missing, and `/api/billing/stripe/mock-checkout/*` returns 404. Mock checkout exists for local development only.
