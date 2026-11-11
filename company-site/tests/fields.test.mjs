@@ -63,8 +63,13 @@ test('the benchmark page shows the latest dated amendment line and links the rec
   assert.match(await read(recordFiles[1]), /id="map-h"/, 'the anchor exists on the full record');
 });
 
-test('Records in the header marks the field page, and the field while a record is open', async () => {
-  const link = html => html.match(new RegExp(`<nav class="primary-nav"[\\s\\S]*?<a href="${FIELD.route}"([^>]*)>Records</a>`))?.[1];
+// The label names the field, so a visitor who has seen the Fe4S4 record knows where it lives.
+test('Quantum records in the header marks the field page, and the field while a record is open', async () => {
+  const link = html => {
+    const [, attributes, label] = html.match(new RegExp(`<nav class="primary-nav"[\\s\\S]*?<a href="${FIELD.route}"([^>]*)>([\\s\\S]*?)</a>`)) ?? [];
+    assert.equal(text(label ?? '').trim(), 'Quantum records', 'the full label stays in the link, even where the narrow desktop header hides "records" on screen');
+    return attributes;
+  };
   assert.equal(link(await read(fieldFile)), ' aria-current="page"');
   for (const file of recordFiles) assert.equal(link(await read(file)), ' aria-current="true"', file);
   for (const file of ['index.html', 'demo/index.html', 'about/index.html']) assert.equal(link(await read(file)), '', file);
@@ -80,6 +85,27 @@ test('home and About list the field beside the other applications', async () => 
   assert.ok(about.includes(`<dt>Second field</dt><dd><a href="${FIELD.route}">${FIELD.name} records</a></dd>`));
   assert.ok(about.includes('<h3 id="about-quantum-title">'));
   assert.doesNotMatch(about, /Interactive architecture|Active architecture|until claims break|stays clean/, 'About in a plainer register');
+});
+
+// Someone who types violema.com after seeing the Fe4S4 record elsewhere finds the field in the hero, not 7 screens down.
+test('the home hero lists the field after PsychDoc, and the applications card opens the record', async () => {
+  const home = await read('index.html');
+  const family = home.match(/<div class="hero-family">[\s\S]*?<\/div>/)[0];
+  assert.deepEqual([...family.matchAll(/<a [^>]*href="([^"]+)"/g)].map(match => match[1]), ['https://psychdoc.ai', FIELD.route]);
+  const linkText = (html, href) => text(html.match(new RegExp(`<a [^>]*href="${href}"[^>]*>([\\s\\S]*?)</a>`))?.[1] ?? '');
+  const entry = linkText(family, FIELD.route);
+  assert.ok(entry.includes(`${FIELD.name} records`), 'names the field as records, not as a result');
+  assert.ok(entry.includes('Draft protocol, not yet registered. Fe₄S₄ benchmark.'), 'the status comes first, so it shows on the first screen');
+  const applications = home.match(/<section [^>]*id="applications"[\s\S]*?<\/section>/)[0];
+  const card = applications.match(/<article [^>]*aria-labelledby="quantum-title"[\s\S]*?<\/article>/)[0];
+  assert.ok(linkText(card, FIELD.route).includes('Explore the quantum advantage records'));
+  assert.ok(linkText(card, FE4S4_ROUTE).includes('Open the Fe₄S₄ record'));
+  // Only the record's own status wording may mention registration or review.
+  const permitted = ['Draft protocol, not yet registered', 'No domain expert has reviewed it yet'];
+  for (const region of [family, card]) {
+    const copy = permitted.reduce((rest, phrase) => rest.replaceAll(phrase, ''), text(region));
+    assert.doesNotMatch(copy, /—|\b(registered|validated|reviewed|curated|thought leaders|disrupt|game-changing|reimagining|seamless|delve|elevate|actionable insights|like-minded)\b/i);
+  }
 });
 
 test('the field page gives the reason for judging the slowest quantum run against the fastest classical one', async () => {
