@@ -31,6 +31,7 @@ import { listCurrentBetaConsentEmails } from './betaConsentStore';
 import { listAccountStageRecords, type AccountStageRecord } from './accountStageDirectory';
 import { listAutomations, type AutomationRecord } from './scheduler';
 import { listBillingConfigs, listTopUpOffers } from './platform/billing';
+import { compareCreditLedgerEntries } from './platform/ledger';
 import { getPlatformState } from './platform/store';
 import { DEFAULT_WORKSPACE_ID, listWorkspaces } from './platform/workspace';
 import { createInternalDemoRoutingResolver, usesInternalDemoRouting } from './platform/tenancy';
@@ -173,7 +174,7 @@ export function loadAdminDataset(): AdminDataset {
   // `listLedgerEntries` returns newest-first; preserve that so callers that used
   // to go through the store see the same order.
   for (const entries of ledgerByWorkspace.values()) {
-    entries.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+    entries.sort((left, right) => compareCreditLedgerEntries(right, left));
   }
 
   return {

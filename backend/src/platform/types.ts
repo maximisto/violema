@@ -64,6 +64,12 @@ export interface CreditLedgerEntry {
   referenceId?: string;
   note?: string;
   metadata?: Record<string, unknown>;
+  /**
+   * Per-workspace write order, assigned by the store when it appends the entry.
+   * Breaks ties between entries with the same `createdAt`. Absent on entries
+   * written before it existed.
+   */
+  sequence?: number;
   createdAt: string;
 }
 
