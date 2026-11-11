@@ -90,9 +90,9 @@ function HeroCopy() {
       </div>
 
       <h1 className="mt-6 font-display text-[3.2rem] font-semibold leading-[1.02] tracking-[-0.012em] text-white min-[420px]:text-[3.55rem] sm:text-[4.1rem] sm:leading-[0.98] sm:tracking-[-0.016em] xl:text-[4.5rem] xl:tracking-[-0.018em]">
-        <span className="block">AI agents for</span>
+        <span className="block">Your weekly founder brief,</span>
         <span className="block bg-gradient-to-br from-white via-[#e7e0ff] to-violet-300 bg-clip-text text-transparent">
-          founder work.
+          ready for review.
         </span>
       </h1>
 
@@ -111,6 +111,7 @@ function HeroCopy() {
 
       <div className="mt-8 max-w-[34rem]">
         <HeroActions />
+        <a href="/runs/pricing-proof-founder-brief" className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-semibold text-violet-200 underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">Read a complete example brief <ArrowRight className="h-4 w-4" /></a>
       </div>
 
       <p className="mt-5 hidden items-center gap-2 text-sm text-copy-soft sm:flex">
@@ -168,7 +169,7 @@ function DeviceCluster() {
                 <span className="live-dot absolute inset-0 rounded-full" />
                 <span className="relative h-1.5 w-1.5 rounded-full bg-signal-400" />
               </span>
-              <span className="text-telemetry text-[0.52rem] text-signal-300">Live</span>
+              <span className="text-telemetry text-[0.52rem] text-signal-300">Example</span>
             </span>
             <span
               key={index}
@@ -220,7 +221,7 @@ function ProofRail() {
 function LogoRail() {
   return (
     <div>
-      <p className="text-telemetry text-[0.6rem] text-copy-faint">Built to work across the founder stack</p>
+      <p className="text-telemetry text-[0.6rem] text-copy-faint">Available integrations · connect your own accounts</p>
       <div className="relative left-1/2 mt-6 w-screen -translate-x-1/2">
         <BrandMarquee />
       </div>

@@ -57,7 +57,7 @@ function Lane({ hint, title, systems }: { hint: string; title: string; systems: 
         <h3 className="mt-2 font-display text-2xl font-semibold tracking-[-0.02em] text-white">{title}</h3>
       </div>
       <div className="grid gap-2.5">
-        {systems.slice(0, 5).map((system, index) => (
+        {systems.map((system, index) => (
           <Reveal key={system.name} delay={index * 70}>
             <SystemNode system={system} />
           </Reveal>

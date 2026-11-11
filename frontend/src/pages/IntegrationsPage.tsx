@@ -533,7 +533,7 @@ export default function IntegrationsPage() {
                   },
                   {
                     title: 'Delivery',
-                    body: 'Slack is the primary reviewed delivery surface, with Postmark email available as fallback.',
+                    body: 'Review and deliver updates in Slack, with email as an alternative destination.',
                   },
                   {
                     title: 'Identity',
@@ -554,7 +554,7 @@ export default function IntegrationsPage() {
                   <Bot className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Production boundary</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">What Violema can access</p>
                   <p className="mt-2 text-sm leading-relaxed text-slate-400">
                     Violema reads bounded data from the tools you connect. Gmail workflows use message metadata; library workflows can read approved Drive content. Review and delivery follow each mission’s policy.
                   </p>
@@ -675,10 +675,10 @@ export default function IntegrationsPage() {
         </section>
 
         <section className="mt-8 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">What this means commercially</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Getting started</p>
           <div className="mt-3 grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_20rem] lg:items-start">
             <div>
-              <h3 className="text-2xl font-semibold text-white">The honest product line</h3>
+              <h3 className="text-2xl font-semibold text-white">What is included</h3>
               <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-400">
                 The integrations above support bounded data access and reviewed delivery. Each workspace needs its own connections and permissions.
               </p>

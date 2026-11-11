@@ -1,4 +1,7 @@
 import { brandMarks } from '../content/brandMarks';
+import { DEMO_INTEGRATIONS } from '../content/demoIntegrations';
+
+const availableMarks = brandMarks.filter((mark) => DEMO_INTEGRATIONS.some((item) => item.name === mark.name));
 
 function Mark({ name, path, dup = false }: { name: string; path: string; dup?: boolean }) {
   return (
@@ -18,10 +21,10 @@ export default function BrandMarquee() {
   return (
     <div className="systems-rail relative overflow-hidden py-1">
       <div className="systems-track flex w-max items-center gap-11 pr-11">
-        {brandMarks.map((mark) => (
+        {availableMarks.map((mark) => (
           <Mark key={mark.name} name={mark.name} path={mark.path} />
         ))}
-        {brandMarks.map((mark) => (
+        {availableMarks.map((mark) => (
           <Mark key={`dup-${mark.name}`} name={mark.name} path={mark.path} dup />
         ))}
       </div>

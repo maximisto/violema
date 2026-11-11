@@ -1,3 +1,4 @@
+import { foundingOffer } from '../content/betaOffer';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right.js';
@@ -33,7 +34,7 @@ const PLANS = [
     credits: 2000,
     automations: 20,
     missions: 'Best for 1–3 active missions',
-    features: ['First hero integration', 'Run review pages', 'Slack/email delivery', 'Budget caps', 'Analytics dashboard'],
+    features: ['First connected workflow', 'Draft review and run history', 'Slack/email delivery', 'Budget caps', 'Usage dashboard'],
     proofRunId: 'pricing-proof-founder-brief',
     featured: true,
   },
@@ -41,11 +42,11 @@ const PLANS = [
     id: 'team' as const,
     name: 'Pro',
     priceUsd: 249,
-    description: 'The production tier for recurring missions, approvals, and real operating cadence.',
+    description: 'More capacity for recurring workflows, review and delivery.',
     credits: 7500,
     automations: 100,
     missions: 'Best for 5–10 active missions',
-    features: ['Approval gates', 'More integrations', 'Slack operating surface', 'Admin visibility', 'Priority setup support'],
+    features: ['Recurring workflows with review', 'More monthly credits', 'Slack operating surface', 'Run history and cost visibility', 'Priority setup support'],
     proofRunId: 'pricing-proof-operating-cadence',
   },
 ];
@@ -234,15 +235,15 @@ export default function Billing() {
               Billing and access
               </div>
               <h1 className="mt-5 max-w-5xl text-4xl font-extrabold leading-[0.95] text-white sm:text-5xl lg:text-[4rem]">
-                Pick the right runway
-                <span className="gradient-text"> before Violema starts executing.</span>
+                Start with one workflow.
+                <span className="gradient-text"> Grow at your pace.</span>
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg">
                 Start with a workflow audit, then choose the monthly tier that matches the first real mission. Top-ups are one-time add-ons for extra work without changing your plan.
               </p>
               <div className="mt-5 space-y-1.5">
                 <p className="text-sm text-slate-300">
-                  Credits map to actual agent work. The public ladder starts at $79 because Violema is selling reviewed operating loops, not cheap task volume.
+                  Both plans support recurring work, draft review and delivery. Choose based on workload and included credits.
                 </p>
               </div>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -264,10 +265,11 @@ export default function Billing() {
               </div>
             </div>
 
+            {hasAccess ? (
             <div className="ui-panel rounded-[1.7rem] px-5 py-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Account</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Account</p>
                   <p className="mt-2 text-base font-semibold text-white">{session?.name || 'Guest access'}</p>
                   <p className="mt-1 text-sm text-slate-500">{session?.email || 'Finish access setup to unlock checkout'}</p>
                 </div>
@@ -278,7 +280,7 @@ export default function Billing() {
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                 <div className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Current path</p>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Current path</p>
                   <p className="mt-2 text-sm font-semibold text-white">
                     {section === 'topups' ? 'One-time credits' : requestedPlan ? `Plan: ${requestedPlan}` : 'Plan selection'}
                   </p>
@@ -289,7 +291,7 @@ export default function Billing() {
                   </p>
                 </div>
                 <div className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">What happens next</p>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">What happens next</p>
                   <p className="mt-2 text-sm text-slate-400">
                     You’ll review the selected package in Stripe, complete checkout, and return with billing attached to this workspace.
                   </p>
@@ -297,11 +299,11 @@ export default function Billing() {
                 <div className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Slack setup</p>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Slack setup</p>
                       <p className="mt-2 text-sm text-slate-400">
                         {slackReady
                           ? 'Slack destination saved for this workspace.'
-                          : 'Save one Slack channel ID before you turn on automations.'}
+                          : 'Choose a Slack destination in workspace setup.'}
                       </p>
                     </div>
                     <button
@@ -315,6 +317,13 @@ export default function Billing() {
                 </div>
               </div>
           </div>
+            ) : (
+              <aside className="ui-panel rounded-[1.7rem] p-5">
+                <h2 className="text-lg font-semibold text-white">Founding tester offer</h2>
+                <p className="mt-3 text-sm leading-6 text-slate-300">{foundingOffer}</p>
+                <p className="mt-3 text-sm leading-6 text-slate-400">Verified identity, accepted beta terms and manual approval are required. We scope the first workflow with you before billing.</p>
+              </aside>
+            )}
         </div>
 
         {checkoutIssue ? (
@@ -423,11 +432,11 @@ export default function Billing() {
                 },
                 {
                   title: 'Pro at $249',
-                  body: 'Pro is the production tier for recurring missions, approval gates, Slack operations, and team visibility.',
+                  body: 'Pro adds capacity for more recurring work and priority setup support.',
                 },
               ].map((item) => (
                 <div key={item.title} className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">{item.title}</p>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">{item.title}</p>
                   <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.body}</p>
                 </div>
               ))}
@@ -449,98 +458,6 @@ export default function Billing() {
 
         {section === 'plans' ? (
           <>
-            <section id="sample-runs" className="mt-7 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-5 sm:p-6">
-              <div className="grid gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-start">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Pricing proof</p>
-                  <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-white">Every plan needs a visible run ledger.</h2>
-                  <p className="mt-3 text-sm leading-6 text-slate-400">
-                    These are sample estimates for the buying conversation: what Violema reads, where approval happens, how many credits a run uses, and what that means monthly.
-                  </p>
-                  <div className="mt-5 rounded-2xl border border-violet-500/20 bg-violet-500/8 px-4 py-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-200/80">Cost visibility</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-300">
-                      A $79 Start workspace can support a focused weekly mission. Pro is where recurring cadence, review gates, and multi-source operating work start to compound.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid gap-3">
-                  {SAMPLE_RUNS.map((run) => (
-                    <article
-                      id={run.id}
-                      key={run.id}
-                      className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4 scroll-mt-24"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">{run.planLabel}</p>
-                          <h3 className="mt-1 text-lg font-semibold text-white">{run.title}</h3>
-                          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">{run.summary}</p>
-                        </div>
-                        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-100">
-                          {run.approvalState}
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid gap-2 sm:grid-cols-4">
-                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-600">Per run</p>
-                          <p className="mt-1 text-sm font-semibold text-white">{formatCredits(run.runCredits)} cr</p>
-                        </div>
-                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-600">Monthly</p>
-                          <p className="mt-1 text-sm font-semibold text-white">{formatCredits(getMonthlyCredits(run))} cr</p>
-                        </div>
-                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-600">Cadence</p>
-                          <p className="mt-1 text-sm font-semibold text-white">{run.cadence}</p>
-                        </div>
-                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-600">Provider cost</p>
-                          <p className="mt-1 text-sm font-semibold text-white">{formatSampleUsd(run.providerCostUsd)}</p>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">Source trail</p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {run.sources.map((source) => (
-                              <span key={source} className="rounded-full border border-cyan-500/20 bg-cyan-500/8 px-3 py-1 text-xs font-medium text-cyan-100">
-                                {source}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">Run ledger</p>
-                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                            {run.ledger.map((event) => (
-                              <div key={event} className="flex items-start gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-                                <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-300" />
-                                <span className="text-xs leading-5 text-slate-300">{event}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-xs leading-5 text-amber-100">
-                        Sample value check: {formatCredits(run.runCredits)} credits equals about {formatSampleUsd(getCreditValueUsd(run))} in Start-plan credit value before top-ups.
-                      </div>
-                      <Link
-                        to={getSampleRunPath(run.id)}
-                        className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:border-violet-500/35 hover:bg-violet-500/10"
-                      >
-                        Open run page
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </article>
-                  ))}
-                </div>
-              </div>
-            </section>
 
             <div className="mt-7 grid gap-5 xl:grid-cols-2 items-stretch">
               {PLANS.map((plan) => {
@@ -569,7 +486,7 @@ export default function Billing() {
                         ? 'border-violet-400/30 bg-violet-500/12 text-violet-100'
                         : 'border-violet-400/20 bg-violet-500/8 text-violet-200/80'
                     }`}>
-                      Most popular
+                      Start here
                     </div>
                   )}
                   <div className="flex min-h-[8.5rem] items-start justify-between gap-4">
@@ -595,17 +512,17 @@ export default function Billing() {
 
                   <div className="mt-5 grid gap-2 sm:grid-cols-2">
                     <div className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Mission range</p>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Mission range</p>
                       <p className="mt-2 text-lg font-semibold text-white">{plan.missions}</p>
                     </div>
                     <div className="rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Credits</p>
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Credits</p>
                       <p className="mt-2 text-lg font-semibold text-white">{formatCredits(plan.credits)}</p>
                     </div>
                   </div>
 
                   <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Active automations</p>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Active automations</p>
                     <p className="mt-2 text-lg font-semibold text-white">{plan.automations}</p>
                   </div>
 
@@ -614,7 +531,7 @@ export default function Billing() {
                   </p>
 
                   <div className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/8 px-4 py-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/80">Sample monthly pressure</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/80">Illustrative monthly usage</p>
                     <p className="mt-2 text-sm font-semibold text-white">{proofRun.title}</p>
                     <p className="mt-1 text-sm text-slate-300">
                       {formatCredits(proofRun.runCredits)} cr/run, {formatCredits(getMonthlyCredits(proofRun))} cr/month at {proofRun.cadence.toLowerCase()} cadence.
@@ -655,16 +572,109 @@ export default function Billing() {
               })}
             </div>
 
+            <section id="sample-runs" className="mt-7 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-5 sm:p-6">
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-start">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Pricing proof</p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-white">See what a workflow could use.</h2>
+                  <p className="mt-3 text-sm leading-6 text-slate-400">
+                    These are sample estimates for the buying conversation: what Violema reads, where approval happens, how many credits a run uses, and what that means monthly.
+                  </p>
+                  <div className="mt-5 rounded-2xl border border-violet-500/20 bg-violet-500/8 px-4 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-200/80">Cost visibility</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-300">
+                      These are illustrative estimates, not measured customer results. Actual credit use depends on sources, model routes, output length and retries.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3">
+                  {SAMPLE_RUNS.map((run) => (
+                    <article
+                      id={run.id}
+                      key={run.id}
+                      className="rounded-2xl border border-navy-700/70 bg-navy-950/45 p-4 scroll-mt-24"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{run.planLabel}</p>
+                          <h3 className="mt-1 text-lg font-semibold text-white">{run.title}</h3>
+                          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">{run.summary}</p>
+                        </div>
+                        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-100">
+                          {run.approvalState}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-2 sm:grid-cols-4">
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Per run</p>
+                          <p className="mt-1 text-sm font-semibold text-white">{formatCredits(run.runCredits)} cr</p>
+                        </div>
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Monthly</p>
+                          <p className="mt-1 text-sm font-semibold text-white">{formatCredits(getMonthlyCredits(run))} cr</p>
+                        </div>
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Cadence</p>
+                          <p className="mt-1 text-sm font-semibold text-white">{run.cadence}</p>
+                        </div>
+                        <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Provider cost</p>
+                          <p className="mt-1 text-sm font-semibold text-white">{formatSampleUsd(run.providerCostUsd)}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Source trail</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {run.sources.map((source) => (
+                              <span key={source} className="rounded-full border border-cyan-500/20 bg-cyan-500/8 px-3 py-1 text-xs font-medium text-cyan-100">
+                                {source}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Run ledger</p>
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                            {run.ledger.map((event) => (
+                              <div key={event} className="flex items-start gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
+                                <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-300" />
+                                <span className="text-xs leading-5 text-slate-300">{event}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-xs leading-5 text-amber-100">
+                        Sample value check: {formatCredits(run.runCredits)} credits equals about {formatSampleUsd(getCreditValueUsd(run))} using the Start-plan reference rate, not an additional fee or the rate for every plan.
+                      </div>
+                      <Link
+                        to={getSampleRunPath(run.id)}
+                        className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:border-violet-500/35 hover:bg-violet-500/10"
+                      >
+                        Open run page
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </section>
+
             <div className="mt-8 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
               <div className="flex items-start gap-4">
                 <div className="rounded-2xl bg-cyan-500/10 p-3 text-cyan-300">
                   <Shield className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">Enterprise</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Enterprise</p>
                   <h3 className="mt-2 text-2xl font-semibold text-white">Custom for bigger teams</h3>
                   <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
-                    Custom mission volume, security controls, admin workflows, onboarding support, and SLA-ready positioning. Use this when Violema is becoming part of a broader operating stack.
+                    Custom mission volume, security controls, admin workflows, onboarding support, and service requirements agreed during scoping. Use this when Violema is becoming part of a broader operating stack.
                   </p>
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                     <Link
@@ -692,17 +702,17 @@ export default function Billing() {
               {TOP_UP_OPTIONS.map((option) => (
                 <div key={option.id} className="flex h-full flex-col rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
                   <div className="min-h-[9rem]">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">{option.label}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">{option.label}</p>
                     <p className="mt-4 text-4xl font-extrabold text-white">{formatCredits(option.credits)}</p>
                     <p className="mt-1 text-sm text-slate-500">one-time credits</p>
                     <p className="mt-4 text-sm leading-relaxed text-slate-400">{option.description}</p>
                   </div>
                   <div className="mt-6 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Price</p>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Price</p>
                     <p className="mt-2 text-xl font-semibold text-white">${option.priceUsd}</p>
                   </div>
                   <div className="mt-3 rounded-2xl border border-navy-700/60 bg-navy-950/45 px-4 py-3">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Best for</p>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Best for</p>
                     <p className="mt-2 text-sm text-slate-400">
                       {option.id === 'topup_500'
                         ? 'Light extra research or a few higher-effort task runs.'
@@ -732,7 +742,7 @@ export default function Billing() {
             </div>
 
             <div className="mt-8 rounded-[1.9rem] border border-navy-700/70 bg-navy-900/45 p-6">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">How top-ups work</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">How top-ups work</p>
               <div className="mt-4 grid gap-4 md:grid-cols-3">
                 {[
                   'Top-ups are one-time only and do not change your subscription plan.',
