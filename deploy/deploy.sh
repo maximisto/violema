@@ -40,6 +40,12 @@ COMPANY_VHOST_MARKERS=(
   '/var/www/violema-science'
 )
 
+# Markers only catch company configs that carry them. So every vhost this script
+# writes starts with this line, and an existing $NGINX_SITE or $NGINX_ENABLED is
+# rewritten only if it carries it: a company config without the markers (the
+# scientific-site cutover config is one) is refused too. DEPLOY.md quotes it.
+LEGACY_VHOST_STAMP='# Written by deploy/deploy.sh: legacy app vhost, rewritten on each full deploy.'
+
 # True if a server_name in the file names $DOMAIN or www.$DOMAIN. Exact token
 # comparison: no regex escaping, and `read -a` never glob-expands *.host names.
 serves_domain() {
@@ -62,7 +68,9 @@ serves_domain() {
 #   - a company marker in any of them (whatever DOMAIN is set to),
 #   - another file already serving $DOMAIN (a second server_name for the same
 #     host would leave nginx choosing between the company site and the old app),
-#   - a dangling symlink or an unreadable file, which cannot be inspected.
+#   - a dangling symlink or an unreadable file, which cannot be inspected,
+#   - an existing $NGINX_SITE or $NGINX_ENABLED without $LEGACY_VHOST_STAMP,
+#     since only a vhost this script wrote may be overwritten or relinked.
 # Configs included from anywhere else are not scanned.
 refuse_if_company_vhost() {
   local vhost marker
@@ -89,11 +97,18 @@ refuse_if_company_vhost() {
   Writing the legacy config would add a second server_name $DOMAIN. Nothing was changed."
     fi
   done
+  for vhost in "$NGINX_SITE" "$NGINX_ENABLED"; do
+    [[ -e "$vhost" ]] || continue
+    grep -qxF -- "$LEGACY_VHOST_STAMP" "$vhost" || die "$vhost was not written by deploy.sh (no line '$LEGACY_VHOST_STAMP').
+  Only a vhost this script wrote is rewritten; any other may be the company site. Nothing was changed.
+  For an old-app vhost written by an older deploy.sh: move it aside, then run again."
+  done
 }
 
 write_bootstrap_nginx_config() {
   refuse_if_company_vhost
   cat >"$NGINX_SITE" <<EOF
+$LEGACY_VHOST_STAMP
 server {
     listen 80;
     server_name $DOMAIN www.$DOMAIN;
@@ -125,11 +140,14 @@ EOF
 
 render_production_nginx_config() {
   refuse_if_company_vhost
-  sed \
-    -e "s|__APP_DOMAIN__|$DOMAIN|g" \
-    -e "s|__LEGACY_DOMAIN__|$LEGACY_DOMAIN|g" \
-    -e "s|__APP_DIR__|$APP_DIR|g" \
-    "$APP_DIR/deploy/nginx.conf" > "$NGINX_SITE"
+  {
+    printf '%s\n' "$LEGACY_VHOST_STAMP"
+    sed \
+      -e "s|__APP_DOMAIN__|$DOMAIN|g" \
+      -e "s|__LEGACY_DOMAIN__|$LEGACY_DOMAIN|g" \
+      -e "s|__APP_DIR__|$APP_DIR|g" \
+      "$APP_DIR/deploy/nginx.conf"
+  } > "$NGINX_SITE"
 
   local legacy_cert="/etc/letsencrypt/live/$LEGACY_DOMAIN/fullchain.pem"
   local legacy_key="/etc/letsencrypt/live/$LEGACY_DOMAIN/privkey.pem"

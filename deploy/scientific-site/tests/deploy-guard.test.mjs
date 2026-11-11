@@ -24,8 +24,12 @@ const overlayVhost = [
   '}',
   '',
 ].join('\n');
-// What the legacy template renders: violema.com, but no company markers.
-const legacyVhost = 'server {\n    listen 80;\n    server_name violema.com www.violema.com;\n    root /var/www/nexus/frontend/dist;\n}\n';
+// The line deploy.sh writes into every vhost it renders. Only a vhost carrying
+// it may be rewritten; DEPLOY.md quotes it.
+const stamp = '# Written by deploy/deploy.sh: legacy app vhost, rewritten on each full deploy.';
+// What an older deploy.sh rendered: violema.com, no company markers, no stamp.
+const olderLegacyVhost = 'server {\n    listen 80;\n    server_name violema.com www.violema.com;\n    root /var/www/nexus/frontend/dist;\n}\n';
+const legacyVhost = `${stamp}\n${olderLegacyVhost}`;
 
 function sandbox(t, { exitCodes = {} } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'violema-deploy-'));
@@ -141,8 +145,35 @@ test('without a company vhost the full deploy runs past the guard and rewrites i
       'systemctl reload nginx',
     ]);
     assert.ok(result.log.includes('frontend|npm run build'), 'the full deploy builds the frontend');
-    assert.match(readFileSync(vhostPath(box), 'utf8'), /root .*\/frontend\/dist;/, 'bootstrap legacy vhost written in the sandbox');
+    const written = readFileSync(vhostPath(box), 'utf8');
+    assert.match(written, /root .*\/frontend\/dist;/, 'bootstrap legacy vhost written in the sandbox');
+    assert.equal(written.split('\n')[0], stamp, 'the written vhost carries the stamp');
+    const again = box.run(['--skip-deps']);
+    assert.equal(again.status, 0, `a second full deploy rewrites its own vhost: ${again.stderr}`);
   }
+});
+
+test('an existing vhost this script did not write is refused, markers or not', t => {
+  // The scientific-site cutover config serves violema.com as the company site and
+  // carries neither company marker: the case the marker list alone let through.
+  const cutover = readFileSync(join(repo, 'deploy/scientific-site/cutover.nginx.conf.template'), 'utf8');
+  assert.doesNotMatch(cutover, /BEGIN VIOLEMA SCIENCE COMPANY-ONLY OVERLAY|\/var\/www\/violema-science/,
+    'this case needs a company config without markers; if the template gains one, use another');
+  for (const existing of [cutover, olderLegacyVhost]) {
+    const box = sandbox(t);
+    writeFileSync(vhostPath(box), existing);
+    symlinkSync(vhostPath(box), enabledPath(box));
+    for (const args of [[], ['--skip-deps']]) {
+      assertRefused(box.run(args), /sites-available\/violema\.com was not written by deploy\.sh/);
+      assert.equal(readFileSync(vhostPath(box), 'utf8'), existing, 'vhost bytes unchanged');
+    }
+    assert.match(box.run().stderr, /move it aside/, 'says how an older legacy vhost gets past');
+  }
+
+  // A plain file in sites-enabled would be replaced by the link, so it needs the stamp too.
+  const box = sandbox(t);
+  writeFileSync(enabledPath(box), 'server {\n    listen 80 default_server;\n    server_name _;\n}\n');
+  assertRefused(box.run(['--skip-deps']), /sites-enabled\/violema\.com was not written by deploy\.sh/);
 });
 
 test('unknown options are rejected before anything runs', t => {
