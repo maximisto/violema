@@ -71,6 +71,11 @@
   .header-inner { gap: 12px; }
   .primary-nav a { padding-inline: 8px; font-size: var(--text-caption); }
 }
+/* From 1024 to 1099 px "Quantum records" would push the logo under 248 px, so "records" is hidden on screen there. Screen readers still hear the full label. */
+@media (min-width: 1024px) and (max-width: 1099px) {
+  .primary-nav a { padding-inline: 7px; }
+  .nav-extra { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 /* The phone header stays complete while scrolling. Links open below its single row. */
 .mobile-menu-control { display: none; }
 @media (max-width: 1023px) {

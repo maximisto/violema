@@ -63,8 +63,13 @@ test('the benchmark page shows the latest dated amendment line and links the rec
   assert.match(await read(recordFiles[1]), /id="map-h"/, 'the anchor exists on the full record');
 });
 
-test('Records in the header marks the field page, and the field while a record is open', async () => {
-  const link = html => html.match(new RegExp(`<nav class="primary-nav"[\\s\\S]*?<a href="${FIELD.route}"([^>]*)>Records</a>`))?.[1];
+// The label names the field, so a visitor who has seen the Fe4S4 record knows where it lives.
+test('Quantum records in the header marks the field page, and the field while a record is open', async () => {
+  const link = html => {
+    const [, attributes, label] = html.match(new RegExp(`<nav class="primary-nav"[\\s\\S]*?<a href="${FIELD.route}"([^>]*)>([\\s\\S]*?)</a>`)) ?? [];
+    assert.equal(text(label ?? '').trim(), 'Quantum records', 'the full label stays in the link, even where the narrow desktop header hides "records" on screen');
+    return attributes;
+  };
   assert.equal(link(await read(fieldFile)), ' aria-current="page"');
   for (const file of recordFiles) assert.equal(link(await read(file)), ' aria-current="true"', file);
   for (const file of ['index.html', 'demo/index.html', 'about/index.html']) assert.equal(link(await read(file)), '', file);
