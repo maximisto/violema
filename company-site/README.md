@@ -18,7 +18,7 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/fi
 - `lib/pages.mjs`: page shell (logo header, appearance control, footer, metadata), the protocol stations, and the six routes.
 - `lib/experience.mjs`: the five homepage chapters, guided claim/source/limits interaction and six-part method explorer.
 - `lib/legal.mjs`: public website terms and privacy copy; separate from legacy workspace policies. The privacy wording follows the visit-statistics switch.
-- `lib/social.mjs`: the company's profiles (`profiles`: LinkedIn, Instagram, X, YouTube, Reddit, Facebook, GitHub, all Violema's own accounts) rendered as icon links in every footer. Max Markovtsev's existing ORCID is a separate, labelled footer link with his name and identifier in its accessible label. The founder profile data and card renderer remain available for restoring the archived biography. Brand glyphs are Simple Icons 13.21.0 (CC0; LinkedIn from purpleorange.ai). A company row whose URL is not yet confirmed has `href: null`: it keeps its place, links to `/` and its label says the page is to come. Never guess a handle.
+- `lib/social.mjs`: the company's profiles (`profiles`: LinkedIn, Instagram, X, YouTube, Reddit, Facebook, GitHub, all Violema's own accounts) rendered as icon links in every footer. Max Markovtsev's existing ORCID is a separate, labelled footer link with his name and identifier in its accessible label. The founder profile data and card renderer remain available for restoring the archived biography. Brand glyphs are Simple Icons 13.21.0 (CC0; LinkedIn from purpleorange.ai). A company row whose URL is not yet confirmed has `href: null` and is not rendered; the footer shows only confirmed profiles, and a row appears in its place once its address is filled in. Never guess a handle.
 - `lib/briefing.mjs` and `browser/briefing.mjs`: the briefing form (see "Briefing form" below).
 - `lib/routes.mjs`: the field and record routes, and `PAGES`, the registry of every page the build writes: its route, its file, whether it is indexed, and for a record the field it sits under. The shell reads indexing, the 404 page's missing canonical and the header's Records link from it, and refuses an unregistered route; the build writes each page to its file and derives the sitemap from it. A new page needs an entry here, a renderer in `scripts/build.mjs`, a line in `llms.txt` if it is indexed, and its routes in `deploy/scientific-site/routing.mjs` and on the server. The build and tests catch a missing entry, renderer, `llms.txt` line or `routing.mjs` route; nothing offline checks the server, so its locations are verified at release.
 - `lib/fields.mjs`: the Quantum advantage field page, which lists the field's records (see "Fields and hypothesis records" below).
@@ -90,6 +90,8 @@ The homepage's closing chapter holds the site's one form, `id="briefing"`, and e
 
 The handler is the one PsychDoc.AI already runs (`app/api/briefing/route.ts` in `maximisto/psychdoc-ai`): JSON only, rate limited, honeypot field `website`, the lead appended to its store and emailed to the owner. Its field contract is fixed in `lib/briefing.mjs` (`briefingIntents`, `briefingRoles`): labels are Violema's, values are the handler's. nginx hands the path over with `deploy/scientific-site/briefing-api.nginx.conf.snippet`, an exact-match location inside the company server block, placed before the legacy `/api/` prefix. That is a vhost change, so the release packet that ships the form must pin the new vhost hash and the form does not work until the location is live: check `curl -fsS -X POST https://violema.com/api/briefing -H 'content-type: application/json' -d '{}'` answers 400 with `"Check the highlighted fields."`, not 404.
 
+A link can preset the form: `/?intent=correction&role=research&topic=Fe4S4%20benchmark%20record#briefing`. `briefingPresets()` in `browser/briefing.mjs` reads `intent`, `role` and `topic` from the query. `intent` and `role` are kept only when they are values the rendered form offers, which are the handler's contract above, so a link cannot send a value the handler refuses; anything else is ignored. `topic` is trimmed, loses control characters, is cut to the field's `maxlength` and fills the field only when it is empty. No other field can be preset. The role select starts on a disabled "Choose one" with no role chosen, and the form names a missing role before it sends. The reviewer line on the quantum pages (`reviewerSought()` in `lib/records.mjs`) uses two such links; a test checks their values against `briefingIntents` and `briefingRoles`.
+
 The Website Privacy Policy describes the form (section 2, "Briefing form") and the Terms name it as the one submission the site accepts.
 
 ## Visit statistics
@@ -119,7 +121,22 @@ To turn it on, in this order:
 
 ## Logo
 
-The header shows the owner-approved scientific logos and the favicon uses the matching icon. All live in `brand/` and the build copies them unchanged: `brand/violema-restored-type-20261010.png` to `company-assets/violema-logo.png`, the October 15 supplied `brand/violema-dark-bk-logo-20261015.png` to `company-assets/violema-logo-dark.png`, and `brand/violema-fine-neck-icon-20261010.png` to `company-assets/violema-icon.png`. Do not edit, regenerate or recolour files under `brand/`; a test checks the served files are byte-identical to the approved ones. The unchanged logo is about 248 px wide on desktop and spans the available phone header width, with navigation below it on narrow screens.
+The header shows the owner-approved scientific logos and the favicon uses the matching icon. All live in `brand/` and the build copies them unchanged: `brand/violema-restored-type-20261010.png` to `company-assets/violema-logo.png`, the October 15 supplied `brand/violema-dark-bk-logo-20261015.png` to `company-assets/violema-logo-dark.png`, and `brand/violema-fine-neck-icon-20261010.png` to `company-assets/violema-icon.png`. Do not edit, regenerate or recolour files under `brand/`; a test checks the served files are byte-identical to the approved ones. The logo is about 248 px wide on desktop and spans the available phone header width, with navigation below it on narrow screens.
+
+### Brand images
+
+Pages load small copies, not the masters: the header logos are `company-assets/violema-logo-744.webp` and `company-assets/violema-logo-dark-744.webp` (744x248, three times the 248 px display width, alpha kept), and the favicon is `company-assets/violema-icon-96.png` (96x96). The full-size files above stay published at their addresses for anything outside the site that points at them; no page or stylesheet loads them, and a test checks that and the byte budgets (60 kB per logo, 30 kB for the icon). The small files are derived from the masters, which stay unchanged, with tools that ship with macOS and Homebrew's `webp`. From `company-site/`:
+
+```sh
+tmp="$(mktemp -d)"
+/usr/bin/sips -z 248 744 brand/violema-restored-type-20261010.png --out "$tmp/logo-744.png"
+/usr/bin/sips -z 248 744 brand/violema-dark-bk-logo-20261015.png --out "$tmp/logo-dark-744.png"
+/opt/homebrew/bin/cwebp -q 88 -alpha_q 100 -m 6 -sharp_yuv "$tmp/logo-744.png" -o brand/violema-logo-744.webp
+/opt/homebrew/bin/cwebp -q 88 -alpha_q 100 -m 6 -sharp_yuv "$tmp/logo-dark-744.png" -o brand/violema-logo-dark-744.webp
+/usr/bin/sips -z 96 96 brand/violema-fine-neck-icon-20261010.png --out brand/violema-icon-96.png
+```
+
+Alpha is encoded losslessly (`-alpha_q 100`) so the fine hair lines keep clean edges. Rerun these after any change to a master and commit the outputs with it.
 
 ## Updating a packet
 
