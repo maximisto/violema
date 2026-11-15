@@ -73,6 +73,8 @@ test('briefingPresets returns nothing for an empty query or an empty topic', () 
 // touches. `intent`, `role` and `topic` are what the form holds when the module starts: what the
 // page was built with, what the visitor chose while it loaded, or what a reload restored.
 function fixture({ search = '', state = null, intent = 'briefing', role = '', topic = '' } = {}) {
+  // Every call that can move the page, in order: which part, which call and with what.
+  const moves = [];
   const inert = { addEventListener() {}, setAttribute() {}, removeAttribute() {} };
   const select = (values, built, now) => {
     const options = values.map(value => ({ value, selected: value === now, defaultSelected: value === built }));
@@ -80,22 +82,32 @@ function fixture({ search = '', state = null, intent = 'briefing', role = '', to
       get value() { return options.find(option => option.selected)?.value ?? ''; },
       set value(next) { for (const option of options) option.selected = option.value === next; } };
   };
-  const text = value => ({ ...inert, value, defaultValue: '', placeholder: '', required: false, maxLength: briefingLimits.topic });
+  const text = value => ({ ...inert, value, defaultValue: '', placeholder: '', required: false, maxLength: briefingLimits.topic, validity: { valid: true } });
   const elements = {
     intent: select(briefingIntents.map(item => item.value), 'briefing', intent),
     role: select(['', ...briefingRoles.map(item => item.value)], '', role),
     name: text(''), email: text(''), organization: text(''), topic: text(topic), message: text(''), website: text(''),
   };
+  for (const [id, control] of Object.entries(elements)) control.focus = () => { moves.push({ on: id, call: 'focus' }); };
   const part = () => ({ ...inert, hidden: true, textContent: '', querySelector: part });
   const submit = part();
+  const status = { ...part(), scrollIntoView(options) { moves.push({ on: 'status', call: 'scrollIntoView', options, shown: !status.hidden }); } };
+  const sent = { ...part(), focus(options) { moves.push({ on: 'confirmation', call: 'focus', options }); } };
+  const named = { '[data-briefing-submit]': submit, '[data-briefing-status]': status, '[data-briefing-sent]': sent };
+  const listeners = {};
   const form = {
-    ...inert, elements,
+    ...inert, elements, action: '/api/briefing',
+    // As the page builds it: the title, the status line, the fields, the button row, then the confirmation.
+    children: [{ hidden: false }, status, { hidden: false }, { hidden: false }, sent],
+    addEventListener(type, listener) { listeners[type] = listener; },
+    scrollIntoView(options) { moves.push({ on: 'form', call: 'scrollIntoView', options, shown: form.children.filter(child => !child.hidden).length }); },
     dataset: { briefingIntents: JSON.stringify(briefingIntents.map(({ value, submit: label, prompt, record }) => ({ value, submit: label, prompt, record: Boolean(record) }))) },
-    querySelector: selector => (selector === '[data-briefing-submit]' ? submit : part()),
+    querySelector: selector => named[selector] ?? part(),
   };
   const history = { state, replaceState(next, _title, url) { assert.equal(url, undefined, 'the address never changes'); this.state = next; } };
-  globalThis.window = { location: { search }, history };
-  return { form, elements, submit, history };
+  globalThis.window = { location: { search, pathname: '/' }, history };
+  const press = () => listeners.submit({ preventDefault() {} });
+  return { form, elements, submit, status, sent, moves, press, history };
 }
 test.after(() => { delete globalThis.window; });
 
@@ -152,4 +164,55 @@ test('a visit without a preset link changes nothing and writes nothing to the hi
   enhanceBriefingForm(form);
   assert.deepEqual(held(elements), ['briefing', '', '']);
   assert.equal(history.state, null);
+});
+
+// A send: the visitor has filled the form and pressed the button, and the handler answers `reply`.
+// An Error as the reply is a request that never arrives.
+async function send(reply) {
+  const made = fixture({ role: 'research' });
+  enhanceBriefingForm(made.form);
+  made.elements.name.value = 'A. Reader';
+  made.elements.email.value = 'reader@example.org';
+  made.elements.organization.value = 'Example Lab';
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    if (reply instanceof Error) throw reply;
+    return { ok: reply.status < 300, json: async () => reply.body };
+  };
+  try { await made.press(); } finally { globalThis.fetch = realFetch; }
+  return made;
+}
+
+// Hiding the fields makes the form far shorter, so a visitor who pressed the button at the foot of
+// a long form is left looking below the confirmation: on a phone they saw the footer.
+test('an accepted send leaves only the confirmation and brings the page back to it', async () => {
+  const { form, sent, moves } = await send({ status: 200, body: { ok: true } });
+  assert.deepEqual(form.children.filter(child => !child.hidden), [sent]);
+  assert.deepEqual(moves, [
+    { on: 'confirmation', call: 'focus', options: { preventScroll: true } },
+    // Once the fields are hidden, and only as far as needed: a card already in full view stays put.
+    { on: 'form', call: 'scrollIntoView', options: { block: 'nearest' }, shown: 1 },
+  ]);
+});
+
+// The status line sits at the head of the form, a screen above the button on a phone. When no
+// field carries the message, a visitor who never sees the line sees a button that did nothing.
+for (const [name, reply, message] of [
+  ['a send that never arrives', new TypeError('offline'), 'Could not send your request. Try again in a moment.'],
+  ['a send turned away without naming a field', { status: 429, body: { ok: false, error: 'Too many requests. Try again in a few minutes.' } }, 'Too many requests. Try again in a few minutes.'],
+  ['a refusal whose field list names no field of the form', { status: 400, body: { ok: false, error: 'Check the highlighted fields.', fieldErrors: {} } }, 'Check the highlighted fields.'],
+]) {
+  test(`${name} keeps the form and brings its message into view`, async () => {
+    const { sent, status, moves } = await send(reply);
+    assert.equal(sent.hidden, true, 'no confirmation');
+    assert.deepEqual([status.hidden, status.textContent], [false, message]);
+    // A hidden line has no place on the page to move to, so it is shown first.
+    assert.deepEqual(moves, [{ on: 'status', call: 'scrollIntoView', options: { block: 'nearest' }, shown: true }]);
+  });
+}
+
+test('a send refused for a field moves to that field and leaves the page there', async () => {
+  const { status, moves } = await send({ status: 400, body: { ok: false, error: 'Check the highlighted fields.', fieldErrors: { email: 'Enter a valid work email.' } } });
+  assert.deepEqual([status.hidden, status.textContent], [false, 'Check the highlighted fields.']);
+  assert.deepEqual(moves, [{ on: 'email', call: 'focus' }], 'the field has its own error line; a second move would take the page away from it');
 });
