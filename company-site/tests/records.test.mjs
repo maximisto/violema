@@ -10,6 +10,8 @@ import {
   OUTCOMES, decide, resolve as resolveOutcome, parseInstant, compareInstants, verdict, raceSVG, RACE_SCALES, daysBetween, SQD_QPU_USD, BUDGET_USD,
   QUANTUM_GAP_BY_YEAR, RESPONSE_DAYS, ceilingRule, CEILING_RULE_MAX_QUANTUM_HOURS, ELAPSED_CEILING_HOURS,
 } from '../lib/fe4s4-figures.mjs';
+import { reviewerSought, REVIEW_OFFER_HREF, RULE_CHALLENGE_HREF } from '../lib/records.mjs';
+import { briefingIntents, briefingRoles } from '../lib/briefing.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -214,10 +216,35 @@ test('the full record header leads with its status and a reviewer call; AI revie
   const header = record.slice(0, record.indexOf('<article class="record-doc">'));
   assert.doesNotMatch(header, /AI model|AI reviewer/, 'the header no longer leads with AI review');
   assert.ok(header.includes('Reviewer sought.') && header.includes('has run DMRG or SQD on iron-sulfur clusters, and anyone can challenge a rule'));
-  assert.ok(header.includes('<a href="/#briefing">Offer a review or challenge a rule</a>'), 'a route to challenge a rule');
-  assert.ok(header.includes('“To review the science”'), 'the route names a choice the briefing form offers');
+  assert.equal(header.split(reviewerSought()).length - 1, 1, 'the shared reviewer line, once');
+  assert.ok(header.includes(`<a href="${REVIEW_OFFER_HREF.replaceAll('&', '&amp;')}">Offer a review</a>`), 'a preset route to offer a review');
+  assert.ok(header.includes(`<a href="${RULE_CHALLENGE_HREF.replaceAll('&', '&amp;')}">challenge a rule</a>`), 'a preset route to challenge a rule');
   const history = record.slice(record.indexOf('id="map-h"'));
   assert.ok(history.includes('Revised after reviews by two AI models from different providers'), 'the history keeps the reviews');
+});
+
+test('the reviewer line keeps its approved wording and links two briefing presets', () => {
+  assert.equal(REVIEW_OFFER_HREF, '/?intent=expert-review&role=research&topic=Fe4S4%20benchmark%20record#briefing');
+  assert.equal(RULE_CHALLENGE_HREF, '/?intent=correction&topic=Fe4S4%20benchmark%20record#briefing');
+  assert.equal(reviewerSought(), '<p class="caption record-status record-review"><strong>Reviewer sought.</strong> No domain expert has reviewed this record yet. We are looking for a reviewer who has run DMRG or SQD on iron-sulfur clusters, and anyone can challenge a rule. <a href="/?intent=expert-review&amp;role=research&amp;topic=Fe4S4%20benchmark%20record#briefing">Offer a review</a> or <a href="/?intent=correction&amp;topic=Fe4S4%20benchmark%20record#briefing">challenge a rule</a>.</p>');
+});
+
+// The presets are read by browser/briefing.mjs, which ignores any value the form does not offer, so a typo here would silently drop the preset.
+test('every preset intent and role in the reviewer links is a value the briefing form offers', () => {
+  for (const href of [REVIEW_OFFER_HREF, RULE_CHALLENGE_HREF]) {
+    const query = new URLSearchParams(href.slice(href.indexOf('?') + 1, href.indexOf('#')));
+    assert.ok(briefingIntents.some(item => item.value === query.get('intent')), `${href}: intent`);
+    if (query.has('role')) assert.ok(briefingRoles.some(item => item.value === query.get('role')), `${href}: role`);
+  }
+});
+
+test('the benchmark page head carries the reviewer line once, after the amendment and before its actions', async () => {
+  const page = await readFile(join(dist, 'records/fe4s4-benchmark/index.html'), 'utf8');
+  const head = page.match(/<section class="page-head record-head" data-fe4s4>[\s\S]*?<\/section>/)[0];
+  const line = reviewerSought();
+  assert.equal(page.split(line).length - 1, 1, 'once on the page');
+  assert.ok(head.includes(line), 'inside the head');
+  assert.ok(head.indexOf('record-amendment') < head.indexOf(line) && head.indexOf(line) < head.indexOf('<div class="actions">'), 'after the amendment, before the actions');
 });
 
 test('section 04 shows dated readings and no probabilities, from the record’s own sources', async () => {

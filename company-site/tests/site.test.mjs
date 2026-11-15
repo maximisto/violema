@@ -87,8 +87,9 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
     if(href.startsWith('#')){assert.ok(ids.includes(href.slice(1)),`Missing anchor ${href}`);continue;}
     if(!href.startsWith('/'))continue;
     if(href===TRACKER_SRC)continue; // nginx proxies it to Umami (lib/analytics.mjs); never part of dist.
-    const [path,anchor]=href.split('#');
-    let local=join(dist,path);
+    // A query presets a page's form (the briefing links); the file and the anchor must still exist.
+    const [target,anchor]=href.split('#');
+    let local=join(dist,target.split('?')[0]);
     if((await stat(local)).isDirectory())local=join(local,'index.html');
     assert.ok((await stat(local)).isFile(),`${href} exists`);
     if(anchor){const target=await readFile(local,'utf8');assert.ok(target.includes(`id="${anchor}"`),`Missing local target ${href}`);}

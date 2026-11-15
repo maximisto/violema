@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FIELD, FE4S4_ROUTE, FE4S4_RECORD_ROUTE } from '../lib/routes.mjs';
-import { AMENDMENT_NOTE } from '../lib/records.mjs';
+import { AMENDMENT_NOTE, keepDates, reviewerSought } from '../lib/records.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -28,6 +28,14 @@ test('the field page is a public page that lists Fe4S4 as its first record', asy
   for (const href of [FE4S4_ROUTE, FE4S4_RECORD_ROUTE]) assert.ok(records[0].includes(`href="${href}"`), href);
   assert.match(records[0], /Draft protocol, not yet registered/);
   assert.match(records[0], /class="instrument record-facts"/, 'the card repeats the record\'s own facts');
+});
+
+test('the field\'s record card carries the reviewer line once, after its amendment caption and before its actions', async () => {
+  const card = (await read(fieldFile)).match(/<article class="field-record"[\s\S]*?<\/article>/)[0];
+  const line = reviewerSought();
+  assert.equal(card.split(line).length - 1, 1);
+  const amendment = card.indexOf(keepDates(AMENDMENT_NOTE));
+  assert.ok(amendment > -1 && amendment < card.indexOf(line) && card.indexOf(line) < card.indexOf('<div class="actions">'), 'after the amendment, before the actions');
 });
 
 test('the field page keeps the house voice and makes no partner, customer or forecast claim', async () => {
