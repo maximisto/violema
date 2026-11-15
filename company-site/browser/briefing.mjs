@@ -133,6 +133,9 @@ export function enhanceBriefingForm(form, { touched = new Set() } = {}) {
         sent.querySelector('[data-briefing-sent-to]').textContent = body.email;
         for (const child of form.children) child.hidden = child !== sent;
         sent.focus({ preventScroll: true });
+        // The form is now far shorter, so the page has moved under a visitor who pressed the button at
+        // its foot. Bring the card back; one already in full view stays where it is.
+        form.scrollIntoView({ block: 'nearest' });
         return;
       }
       if (answer.fieldErrors) showErrors(answer.fieldErrors);
