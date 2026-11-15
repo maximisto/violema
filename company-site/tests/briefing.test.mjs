@@ -55,13 +55,12 @@ test('briefingPresets trims the topic, drops control characters and cuts it to t
 });
 
 // The form is usable before its module loads, and a reload restores what was in it.
-test('a preset never replaces a choice made before the module loaded, or one the browser restored', () => {
+test('a preset fills only a field the visitor has not touched, by one rule for every field', () => {
   const presets = { intent: 'expert-review', role: 'research', topic: 'Fe4S4 benchmark record' };
-  const untouched = { intentUntouched: true, roleUntouched: true, topicEmpty: true };
-  assert.deepEqual(presetsToApply(presets, untouched), presets, 'an untouched form takes every preset');
-  assert.deepEqual(presetsToApply(presets, { intentUntouched: false, roleUntouched: false, topicEmpty: false }), {}, 'a visitor who already chose a correction and a clinic, and typed a topic, keeps all three');
-  assert.deepEqual(presetsToApply(presets, { ...untouched, intentUntouched: false }), { role: 'research', topic: 'Fe4S4 benchmark record' }, 'each field is judged on its own');
-  assert.deepEqual(presetsToApply({}, untouched), {}, 'no preset, nothing to apply');
+  assert.deepEqual(presetsToApply(presets, () => true), presets, 'an untouched form takes every preset');
+  assert.deepEqual(presetsToApply(presets, () => false), {}, 'a visitor who already chose a correction and a clinic, and typed a topic, keeps all three');
+  assert.deepEqual(presetsToApply(presets, id => id !== 'intent'), { role: 'research', topic: 'Fe4S4 benchmark record' }, 'each field is judged on its own');
+  assert.deepEqual(presetsToApply({}, () => true), {}, 'no preset, nothing to apply');
 });
 
 test('briefingPresets returns nothing for an empty query or an empty topic', () => {
@@ -125,6 +124,12 @@ test('a reload of a preset link applies nothing, even to a field restored on its
   enhanceBriefingForm(form);
   assert.deepEqual(held(elements), ['briefing', 'clinic', '']);
   assert.deepEqual(history.state, { briefingPresets: true, kept: 1 }, 'the history entry is left as it was');
+});
+
+test('a visitor who typed a topic and cleared it while the module loaded keeps the blank', () => {
+  const { form, elements } = fixture({ search: PRESET_LINK });
+  enhanceBriefingForm(form, { touched: new Set(['topic']) });
+  assert.deepEqual(held(elements), ['correction', 'research', ''], 'the empty topic is the visitor\'s own; the selects they left alone take their presets');
 });
 
 // Some browsers clear a form on reload. With nothing restored it is a fresh form.

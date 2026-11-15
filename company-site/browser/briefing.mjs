@@ -28,14 +28,11 @@ export function briefingPresets(search, { intents, roles, topicLimit }) {
   return presets;
 }
 
-// Which presets may fill the form. The form is usable before this module loads and a reload
-// restores what was in it, so a choice already made, or a topic already typed, always wins.
-export function presetsToApply(presets, { intentUntouched, roleUntouched, topicEmpty }) {
-  const apply = {};
-  if (presets.intent && intentUntouched) apply.intent = presets.intent;
-  if (presets.role && roleUntouched) apply.role = presets.role;
-  if (presets.topic && topicEmpty) apply.topic = presets.topic;
-  return apply;
+// Which presets may fill the form: only fields the visitor has not touched. The form is usable
+// before this module loads and a reload restores what was in it, so one rule covers every field
+// and a preset can never replace a choice, a typed value or a deliberate blank.
+export function presetsToApply(presets, untouched) {
+  return Object.fromEntries(Object.entries(presets).filter(([id]) => untouched(id)));
 }
 
 // `touched` names the fields the visitor changed while this module was loading (site.mjs notes them).
@@ -78,7 +75,7 @@ export function enhanceBriefingForm(form, { touched = new Set() } = {}) {
   const entry = window.history.state && typeof window.history.state === 'object' ? window.history.state : null;
   const marked = Boolean(entry?.briefingPresets);
   const restored = marked && !(touched.size === 0 && FIELDS.every(asBuilt));
-  const apply = restored ? {} : presetsToApply(presets, { intentUntouched: untouched('intent'), roleUntouched: untouched('role'), topicEmpty: !control('topic').value });
+  const apply = restored ? {} : presetsToApply(presets, untouched);
   for (const [id, value] of Object.entries(apply)) control(id).value = value;
   if (!marked && Object.keys(presets).length) {
     // No address is passed, so the page's URL stays as it is and no new visit is counted.
