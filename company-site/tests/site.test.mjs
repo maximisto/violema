@@ -76,8 +76,8 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
   assert.doesNotMatch(html,/href="\/(?:login|signup|dashboard|terms|privacy|blog)\b/);
   assert.doesNotMatch(html,/planned destination, not live here/);
   assert.doesNotMatch(html,/—/,'Public copy uses no em-dashes');
-  assert.match(html,/<a class="brand" href="\/" aria-label="Violema home"><img class="brand-light" src="\/company-assets\/violema-logo\.png" width="2172" height="724" alt="Violema"><img class="brand-dark" src="\/company-assets\/violema-logo-dark\.png" width="2172" height="724" alt="Violema" loading="lazy"><\/a>/);
-  assert.match(html,/rel="icon" href="\/company-assets\/violema-icon\.png" type="image\/png"/);
+  assert.match(html,/<a class="brand" href="\/" aria-label="Violema home"><img class="brand-light" src="\/company-assets\/violema-logo-744\.webp" width="744" height="248" alt="Violema"><img class="brand-dark" src="\/company-assets\/violema-logo-dark-744\.webp" width="744" height="248" alt="Violema" loading="lazy"><\/a>/);
+  assert.match(html,/<link rel="icon" href="\/company-assets\/violema-icon-96\.png" type="image\/png" sizes="96x96">/);
   assert.match(html,/<meta name="color-scheme" content="light dark">/);
   assert.doesNotMatch(html,/\/Users\/|\/private\/tmp\/|OpenRouter\.env|Slack\.env|auth-users/);
   const ids=[...html.matchAll(/\sid="([^\"]+)"/g)].map(match=>match[1]);
@@ -392,6 +392,19 @@ test('the header logo and icon are the owner-approved brand files, served unchan
     const source=await readFile(join(root,'brand',approved));
     assert.ok(source.equals(await readFile(join(dist,'company-assets',served))),`${served} is ${approved}`);
   }
+});
+
+// The header shows the logo at 248 CSS px, so 744 px covers 3x screens; the masters stay served for links from outside the site.
+test('pages load small derived brand images, within their byte budgets, and never the full-size masters',async()=>{
+  for(const [name,budget] of [['violema-logo-744.webp',60_000],['violema-logo-dark-744.webp',60_000],['violema-icon-96.png',30_000]]){
+    const served=await readFile(join(dist,'company-assets',name));
+    assert.ok(served.equals(await readFile(join(root,'brand',name))),`${name} is served unchanged from brand/`);
+    assert.ok(served.length<budget,`${name} is ${served.length} bytes, budget ${budget}`);
+  }
+  // Timestamp anchors keep byte copies of pages as an earlier release served them; they are evidence and are not rewritten.
+  const built=(await readdir(dist,{recursive:true})).filter(name=>/\.(html|css)$/.test(name)&&!name.startsWith('company-assets/data/anchors/'));
+  assert.ok(built.some(name=>name.endsWith('.css'))&&built.some(name=>name.endsWith('.html')));
+  for(const file of built)assert.doesNotMatch(await readFile(join(dist,file),'utf8'),/violema-(?:logo|logo-dark|icon)\.png/,file);
 });
 
 test('approved copy: the copyright line; the materials example is no longer presented',async()=>{
