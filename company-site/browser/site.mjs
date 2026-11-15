@@ -63,7 +63,18 @@ if (header) {
 }
 
 const briefing = document.querySelector('[data-briefing-form]');
-if (briefing) import('./briefing.mjs').then(({ enhanceBriefingForm }) => enhanceBriefingForm(briefing));
+if (briefing) {
+  // The form is usable while its module loads. A field changed or typed in during that time is
+  // the visitor's own, so a link preset must not replace it, even if it ends as it was built.
+  const touched = new Set();
+  const note = event => { if (event.target.name) touched.add(event.target.name); };
+  const early = ['input', 'change'];
+  for (const type of early) briefing.addEventListener(type, note);
+  import('./briefing.mjs').then(({ enhanceBriefingForm }) => {
+    for (const type of early) briefing.removeEventListener(type, note);
+    enhanceBriefingForm(briefing, { touched });
+  });
+}
 
 // The hero trace draws once in CSS; pin the drawn state afterwards so a later layout change
 // (rotation, resize across the phone breakpoint) cannot replay it.

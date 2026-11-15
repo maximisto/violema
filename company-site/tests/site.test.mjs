@@ -76,8 +76,8 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
   assert.doesNotMatch(html,/href="\/(?:login|signup|dashboard|terms|privacy|blog)\b/);
   assert.doesNotMatch(html,/planned destination, not live here/);
   assert.doesNotMatch(html,/—/,'Public copy uses no em-dashes');
-  assert.match(html,/<a class="brand" href="\/" aria-label="Violema home"><img class="brand-light" src="\/company-assets\/violema-logo\.png" width="2172" height="724" alt="Violema"><img class="brand-dark" src="\/company-assets\/violema-logo-dark\.png" width="2172" height="724" alt="Violema" loading="lazy"><\/a>/);
-  assert.match(html,/rel="icon" href="\/company-assets\/violema-icon\.png" type="image\/png"/);
+  assert.match(html,/<a class="brand" href="\/" aria-label="Violema home"><img class="brand-light" src="\/company-assets\/violema-logo-744\.webp" width="744" height="248" alt="Violema"><img class="brand-dark" src="\/company-assets\/violema-logo-dark-744\.webp" width="744" height="248" alt="Violema" loading="lazy"><\/a>/);
+  assert.match(html,/<link rel="icon" href="\/company-assets\/violema-icon-96\.png" type="image\/png" sizes="96x96">/);
   assert.match(html,/<meta name="color-scheme" content="light dark">/);
   assert.doesNotMatch(html,/\/Users\/|\/private\/tmp\/|OpenRouter\.env|Slack\.env|auth-users/);
   const ids=[...html.matchAll(/\sid="([^\"]+)"/g)].map(match=>match[1]);
@@ -87,8 +87,9 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
     if(href.startsWith('#')){assert.ok(ids.includes(href.slice(1)),`Missing anchor ${href}`);continue;}
     if(!href.startsWith('/'))continue;
     if(href===TRACKER_SRC)continue; // nginx proxies it to Umami (lib/analytics.mjs); never part of dist.
-    const [path,anchor]=href.split('#');
-    let local=join(dist,path);
+    // A query presets a page's form (the briefing links); the file and the anchor must still exist.
+    const [target,anchor]=href.split('#');
+    let local=join(dist,target.split('?')[0]);
     if((await stat(local)).isDirectory())local=join(local,'index.html');
     assert.ok((await stat(local)).isFile(),`${href} exists`);
     if(anchor){const target=await readFile(local,'utf8');assert.ok(target.includes(`id="${anchor}"`),`Missing local target ${href}`);}
@@ -214,7 +215,7 @@ test('the founder archive retains six former-client marks and their original ass
   assert.match(css,/\[data-theme='dark'\] \.founder-client-logo \{ filter: brightness\(0\) invert\(1\); \}/);
 });
 
-test('every footer links the company profiles as icon links; a row without a confirmed URL stays in place and says so',async()=>{
+test('every footer links only the confirmed company profiles as icon links; a row without a confirmed URL is not rendered',async()=>{
   assert.deepEqual(profiles.map(profile=>profile.id),['linkedin','instagram','x','youtube','reddit','facebook','github']);
   for(const profile of profiles){
     assert.equal(profile.owner,'Violema',`${profile.id} is the company account, not a personal one`);
@@ -223,15 +224,23 @@ test('every footer links the company profiles as icon links; a row without a con
   }
   assert.equal(profiles.find(profile=>profile.id==='linkedin').href,'https://www.linkedin.com/company/violema/','the company page, not the founder\'s');
   assert.equal(profiles.find(profile=>profile.id==='instagram').href,'https://www.instagram.com/violemaai/');
-  for(const [,file] of pages){
+  const confirmed=profiles.filter(profile=>profile.href);
+  assert.deepEqual(confirmed.map(profile=>profile.id),['linkedin','instagram']);
+  for(const file of [...pages.map(([,file])=>file),'404.html']){
     const html=await readFile(join(dist,file),'utf8');
     const list=html.match(/<ul class="social-list footer-social" aria-label="Social profiles">([\s\S]*?)<\/ul>/)?.[1]??'';
-    const links=[...list.matchAll(/<a class="social-link social-link--([a-z]+)( social-link--pending)?" href="([^"]+)"( target="_blank" rel="noopener noreferrer")? aria-label="([^"]+)" title="([^"]+)"><svg/g)].map(match=>match.slice(1));
-    assert.deepEqual(links,profiles.map(profile=>profile.href
-      ?[profile.id,undefined,profile.href,' target="_blank" rel="noopener noreferrer"',`Violema on ${profile.name}`,profile.name]
-      :[profile.id,' social-link--pending','/',undefined,`Violema on ${profile.name}, page to come`,`${profile.name}: page to come`]),`${file} footer profiles`);
+    const links=[...list.matchAll(/<li><a class="social-link social-link--([a-z]+)" href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="([^"]+)" title="([^"]+)"><svg/g)].map(match=>match.slice(1));
+    assert.deepEqual(links,confirmed.map(profile=>[profile.id,profile.href,`Violema on ${profile.name}`,profile.name]),`${file} footer profiles`);
+    assert.equal((list.match(/<li>/g)||[]).length,confirmed.length,`${file} footer has no other rows`);
     assert.ok(!list.includes('maximisto')&&!list.includes('orcid.org'),`${file} footer carries no personal profile`);
   }
+});
+
+// Timestamp anchors keep byte copies of pages as an earlier release served them; they are evidence and are not rewritten.
+test('no built page offers a profile that is still to come',async()=>{
+  const built=(await readdir(dist,{recursive:true})).filter(name=>name.endsWith('.html')&&!name.startsWith('company-assets/data/anchors/'));
+  assert.ok(built.length>=pages.length);
+  for(const file of built)assert.doesNotMatch(await readFile(join(dist,file),'utf8'),/page to come|social-link--pending/,file);
 });
 
 test('/about/ leads with the company and charter while the founder section stays outside the public build',async()=>{
@@ -383,6 +392,19 @@ test('the header logo and icon are the owner-approved brand files, served unchan
     const source=await readFile(join(root,'brand',approved));
     assert.ok(source.equals(await readFile(join(dist,'company-assets',served))),`${served} is ${approved}`);
   }
+});
+
+// The header shows the logo at 248 CSS px, so 744 px covers 3x screens; the masters stay served for links from outside the site.
+test('pages load small derived brand images, within their byte budgets, and never the full-size masters',async()=>{
+  for(const [name,budget] of [['violema-logo-744.webp',60_000],['violema-logo-dark-744.webp',60_000],['violema-icon-96.png',30_000]]){
+    const served=await readFile(join(dist,'company-assets',name));
+    assert.ok(served.equals(await readFile(join(root,'brand',name))),`${name} is served unchanged from brand/`);
+    assert.ok(served.length<budget,`${name} is ${served.length} bytes, budget ${budget}`);
+  }
+  // Timestamp anchors keep byte copies of pages as an earlier release served them; they are evidence and are not rewritten.
+  const built=(await readdir(dist,{recursive:true})).filter(name=>/\.(html|css)$/.test(name)&&!name.startsWith('company-assets/data/anchors/'));
+  assert.ok(built.some(name=>name.endsWith('.css'))&&built.some(name=>name.endsWith('.html')));
+  for(const file of built)assert.doesNotMatch(await readFile(join(dist,file),'utf8'),/violema-(?:logo|logo-dark|icon)\.png/,file);
 });
 
 test('approved copy: the copyright line; the materials example is no longer presented',async()=>{

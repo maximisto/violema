@@ -25,6 +25,11 @@ const logoFiles = [
   ['violema-restored-type-20261010.png', 'violema-logo.png'],
   ['violema-dark-bk-logo-20261015.png', 'violema-logo-dark.png'],
   ['violema-fine-neck-icon-20261010.png', 'violema-icon.png'],
+  // Small copies derived from the masters above (README, "Brand images"); pages load these, and the
+  // three full-size files stay published for anything outside the site that points at them.
+  ['violema-logo-744.webp', 'violema-logo-744.webp'],
+  ['violema-logo-dark-744.webp', 'violema-logo-dark-744.webp'],
+  ['violema-icon-96.png', 'violema-icon-96.png'],
   ['psychdoc-wordmark-light.svg', 'psychdoc-wordmark-light.svg'],
   ['psychdoc-wordmark-dark.svg', 'psychdoc-wordmark-dark.svg'],
 ];

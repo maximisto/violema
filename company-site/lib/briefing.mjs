@@ -14,10 +14,10 @@ export const BRIEFING_FALLBACK = 'https://psychdoc.ai/#briefing';
 
 export const briefingRoles = [
   { value: 'biotech', label: 'Biotech or pharma team' },
-  { value: 'fund', label: 'Investor or fund' },
+  { value: 'fund', label: 'Investor, funder or prize program' },
   { value: 'clinic', label: 'Clinic or care operator' },
-  { value: 'research', label: 'Research group' },
-  { value: 'other', label: 'Other' },
+  { value: 'research', label: 'Research group or national lab' },
+  { value: 'other', label: 'Technology vendor or other' },
 ];
 
 // One entry per request type. `submit` names the button and `prompt` the message placeholder, so a
@@ -49,11 +49,11 @@ export function briefingForm() {
     + `<p class="briefing-status" data-briefing-status role="alert" hidden></p>`
     + `<div class="briefing-grid">`
     + field('intent', 'What do you need?', `<select class="briefing-control" id="briefing-intent" name="intent" required>${options(briefingIntents, first.value)}</select>`)
-    + field('role', 'You are', `<select class="briefing-control" id="briefing-role" name="role" required>${options(briefingRoles, 'biotech')}</select>`)
+    + field('role', 'You are', `<select class="briefing-control" id="briefing-role" name="role" required aria-describedby="briefing-role-error"><option value="" selected disabled>Choose one</option>${options(briefingRoles)}</select>`)
     + field('name', 'Name', input('name', 'text', `required maxlength="${briefingLimits.name}" autocomplete="name" aria-describedby="briefing-name-error"`))
     + field('email', 'Work email', input('email', 'email', 'required autocomplete="email" inputmode="email" aria-describedby="briefing-email-error"'))
     + field('organization', 'Organization', input('organization', 'text', `maxlength="${briefingLimits.organization}" autocomplete="organization" aria-describedby="briefing-organization-error"`))
-    + field('topic', 'Research question or field', input('topic', 'text', `maxlength="${briefingLimits.topic}" placeholder="For example: psilocybin for treatment-resistant depression" aria-describedby="briefing-topic-error"`), { optional: true })
+    + field('topic', 'Research question or field', input('topic', 'text', `maxlength="${briefingLimits.topic}" placeholder="For example: psilocybin for depression, or a quantum chemistry benchmark" aria-describedby="briefing-topic-error"`), { optional: true })
     + field('message', 'Anything we should know', `<textarea class="briefing-control" id="briefing-message" name="message" rows="5" maxlength="${briefingLimits.message}" placeholder="${e(first.prompt)}" aria-describedby="briefing-message-error"></textarea>`, { optional: true })
     + `</div>`
     // A trap for form-filling bots: hidden from people and assistive technology, and the handler
