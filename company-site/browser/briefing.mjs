@@ -28,6 +28,16 @@ export function briefingPresets(search, { intents, roles, topicLimit }) {
   return presets;
 }
 
+// Which presets may fill the form. The form is usable before this module loads and a reload
+// restores what was in it, so a choice already made, or a topic already typed, always wins.
+export function presetsToApply(presets, { intentUntouched, roleUntouched, topicEmpty }) {
+  const apply = {};
+  if (presets.intent && intentUntouched) apply.intent = presets.intent;
+  if (presets.role && roleUntouched) apply.role = presets.role;
+  if (presets.topic && topicEmpty) apply.topic = presets.topic;
+  return apply;
+}
+
 export function enhanceBriefingForm(form) {
   const intents = JSON.parse(form.dataset.briefingIntents);
   const submit = form.querySelector('[data-briefing-submit]');
@@ -54,10 +64,10 @@ export function enhanceBriefingForm(form) {
   // The allowed values are the form's own options, so the presets follow the rendered contract.
   const offered = id => [...control(id).options].map(option => option.value).filter(Boolean);
   const presets = briefingPresets(window.location.search, { intents: offered('intent'), roles: offered('role'), topicLimit: control('topic').maxLength });
-  if (presets.intent) control('intent').value = presets.intent;
-  if (presets.role) control('role').value = presets.role;
-  // A topic the visitor already typed, or the browser restored, is never overwritten.
-  if (presets.topic && !control('topic').value) control('topic').value = presets.topic;
+  // A select is untouched only while every option is still as the page was built.
+  const untouched = id => [...control(id).options].every(option => option.selected === option.defaultSelected);
+  const apply = presetsToApply(presets, { intentUntouched: untouched('intent'), roleUntouched: untouched('role'), topicEmpty: !control('topic').value });
+  for (const [id, value] of Object.entries(apply)) control(id).value = value;
   applyIntent();
 
   const clearErrors = () => {

@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { briefingRoles, briefingIntents, briefingLimits } from '../lib/briefing.mjs';
-import { briefingPresets } from '../browser/briefing.mjs';
+import { briefingPresets, presetsToApply } from '../browser/briefing.mjs';
 
 const dist = join(resolve(dirname(fileURLToPath(import.meta.url)), '..'), 'dist');
 const form = async () => (await readFile(join(dist, 'index.html'), 'utf8')).match(/<form class="briefing-form"[\s\S]*?<\/form>/)[0];
@@ -52,6 +52,16 @@ test('briefingPresets trims the topic, drops control characters and cuts it to t
   assert.deepEqual(briefingPresets('?topic=abcdef', { ...allowed, topicLimit: 3 }), { topic: 'abc' });
   assert.deepEqual(briefingPresets('?topic=abcdef', { ...allowed, topicLimit: -1 }), { topic: 'abcdef' }, 'an input without maxlength reports -1, which is no limit');
   assert.deepEqual(briefingPresets('?topic=%F0%9F%A7%AA%F0%9F%A7%AA', { ...allowed, topicLimit: 3 }), { topic: '🧪' }, 'a cut never leaves half a character');
+});
+
+// The form is usable before its module loads, and a reload restores what was in it.
+test('a preset never replaces a choice made before the module loaded, or one the browser restored', () => {
+  const presets = { intent: 'expert-review', role: 'research', topic: 'Fe4S4 benchmark record' };
+  const untouched = { intentUntouched: true, roleUntouched: true, topicEmpty: true };
+  assert.deepEqual(presetsToApply(presets, untouched), presets, 'an untouched form takes every preset');
+  assert.deepEqual(presetsToApply(presets, { intentUntouched: false, roleUntouched: false, topicEmpty: false }), {}, 'a visitor who already chose a correction and a clinic, and typed a topic, keeps all three');
+  assert.deepEqual(presetsToApply(presets, { ...untouched, intentUntouched: false }), { role: 'research', topic: 'Fe4S4 benchmark record' }, 'each field is judged on its own');
+  assert.deepEqual(presetsToApply({}, untouched), {}, 'no preset, nothing to apply');
 });
 
 test('briefingPresets returns nothing for an empty query or an empty topic', () => {
