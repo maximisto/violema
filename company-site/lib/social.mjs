@@ -14,8 +14,8 @@ const glyphs = {
 };
 
 // The company's own profiles, in footer order. Every row is Violema's account, never a
-// personal one. A row whose URL is not yet confirmed carries `href: null`: it keeps its place
-// in the row, links back to this site and says so, until the owner supplies the address.
+// personal one. A row without a confirmed address carries `href: null` and is not rendered; it
+// appears in the footer, in this order, once the owner supplies the address and it is filled in.
 // Never guess a handle: a wrong link ships as a broken page or somebody else's profile.
 // TikTok keeps a glyph above but has no row: no company account is known.
 export const profiles = [
@@ -46,14 +46,12 @@ export function founderOrcidLink() {
 }
 
 // Icon-only links name their destination for screen readers and show it on hover. A profile
-// without a confirmed URL is a same-site link that says the page is still to come.
+// without a confirmed URL renders nothing.
 export function profileLinks(ids = profiles.map(profile => profile.id)) {
   return ids.map(id => {
     const profile = profiles.find(entry => entry.id === id);
     if (!profile) throw new Error(`No company profile "${id}"`);
-    if (!profile.href) {
-      return `<li><a class="social-link social-link--${id} social-link--pending" href="/" aria-label="${profile.owner} on ${profile.name}, page to come" title="${profile.name}: page to come">${profileIcon(id)}</a></li>`;
-    }
+    if (!profile.href) return '';
     return `<li><a class="social-link social-link--${id}" href="${profile.href}" target="_blank" rel="noopener noreferrer" aria-label="${profile.owner} on ${profile.name}" title="${profile.name}">${profileIcon(id)}</a></li>`;
   }).join('');
 }

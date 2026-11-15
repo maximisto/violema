@@ -215,7 +215,7 @@ test('the founder archive retains six former-client marks and their original ass
   assert.match(css,/\[data-theme='dark'\] \.founder-client-logo \{ filter: brightness\(0\) invert\(1\); \}/);
 });
 
-test('every footer links the company profiles as icon links; a row without a confirmed URL stays in place and says so',async()=>{
+test('every footer links only the confirmed company profiles as icon links; a row without a confirmed URL is not rendered',async()=>{
   assert.deepEqual(profiles.map(profile=>profile.id),['linkedin','instagram','x','youtube','reddit','facebook','github']);
   for(const profile of profiles){
     assert.equal(profile.owner,'Violema',`${profile.id} is the company account, not a personal one`);
@@ -224,15 +224,23 @@ test('every footer links the company profiles as icon links; a row without a con
   }
   assert.equal(profiles.find(profile=>profile.id==='linkedin').href,'https://www.linkedin.com/company/violema/','the company page, not the founder\'s');
   assert.equal(profiles.find(profile=>profile.id==='instagram').href,'https://www.instagram.com/violemaai/');
-  for(const [,file] of pages){
+  const confirmed=profiles.filter(profile=>profile.href);
+  assert.deepEqual(confirmed.map(profile=>profile.id),['linkedin','instagram']);
+  for(const file of [...pages.map(([,file])=>file),'404.html']){
     const html=await readFile(join(dist,file),'utf8');
     const list=html.match(/<ul class="social-list footer-social" aria-label="Social profiles">([\s\S]*?)<\/ul>/)?.[1]??'';
-    const links=[...list.matchAll(/<a class="social-link social-link--([a-z]+)( social-link--pending)?" href="([^"]+)"( target="_blank" rel="noopener noreferrer")? aria-label="([^"]+)" title="([^"]+)"><svg/g)].map(match=>match.slice(1));
-    assert.deepEqual(links,profiles.map(profile=>profile.href
-      ?[profile.id,undefined,profile.href,' target="_blank" rel="noopener noreferrer"',`Violema on ${profile.name}`,profile.name]
-      :[profile.id,' social-link--pending','/',undefined,`Violema on ${profile.name}, page to come`,`${profile.name}: page to come`]),`${file} footer profiles`);
+    const links=[...list.matchAll(/<li><a class="social-link social-link--([a-z]+)" href="([^"]+)" target="_blank" rel="noopener noreferrer" aria-label="([^"]+)" title="([^"]+)"><svg/g)].map(match=>match.slice(1));
+    assert.deepEqual(links,confirmed.map(profile=>[profile.id,profile.href,`Violema on ${profile.name}`,profile.name]),`${file} footer profiles`);
+    assert.equal((list.match(/<li>/g)||[]).length,confirmed.length,`${file} footer has no other rows`);
     assert.ok(!list.includes('maximisto')&&!list.includes('orcid.org'),`${file} footer carries no personal profile`);
   }
+});
+
+// Timestamp anchors keep byte copies of pages as an earlier release served them; they are evidence and are not rewritten.
+test('no built page offers a profile that is still to come',async()=>{
+  const built=(await readdir(dist,{recursive:true})).filter(name=>name.endsWith('.html')&&!name.startsWith('company-assets/data/anchors/'));
+  assert.ok(built.length>=pages.length);
+  for(const file of built)assert.doesNotMatch(await readFile(join(dist,file),'utf8'),/page to come|social-link--pending/,file);
 });
 
 test('/about/ leads with the company and charter while the founder section stays outside the public build',async()=>{
