@@ -38,7 +38,8 @@ export function presetsToApply(presets, { intentUntouched, roleUntouched, topicE
   return apply;
 }
 
-export function enhanceBriefingForm(form) {
+// `touched` names the fields the visitor changed while this module was loading (site.mjs notes them).
+export function enhanceBriefingForm(form, { touched = new Set() } = {}) {
   const intents = JSON.parse(form.dataset.briefingIntents);
   const submit = form.querySelector('[data-briefing-submit]');
   const status = form.querySelector('[data-briefing-status]');
@@ -64,10 +65,25 @@ export function enhanceBriefingForm(form) {
   // The allowed values are the form's own options, so the presets follow the rendered contract.
   const offered = id => [...control(id).options].map(option => option.value).filter(Boolean);
   const presets = briefingPresets(window.location.search, { intents: offered('intent'), roles: offered('role'), topicLimit: control('topic').maxLength });
-  // A select is untouched only while every option is still as the page was built.
-  const untouched = id => [...control(id).options].every(option => option.selected === option.defaultSelected);
-  const apply = presetsToApply(presets, { intentUntouched: untouched('intent'), roleUntouched: untouched('role'), topicEmpty: !control('topic').value });
+  // A field is as built while it holds what the page was rendered with, and untouched if the
+  // visitor also did not change it while this module was loading.
+  const asBuilt = id => {
+    const field = control(id);
+    return field.options ? [...field.options].every(option => option.selected === option.defaultSelected) : field.value === field.defaultValue;
+  };
+  const untouched = id => !touched.has(id) && asBuilt(id);
+  // Presets fill a page once. The mark sits on this history entry, so a reload or a return that
+  // restores anything keeps all of it, even a field put back on the option it was built with.
+  // Some browsers clear a form on reload: with nothing restored it is a fresh form and takes them again.
+  const entry = window.history.state && typeof window.history.state === 'object' ? window.history.state : null;
+  const marked = Boolean(entry?.briefingPresets);
+  const restored = marked && !(touched.size === 0 && FIELDS.every(asBuilt));
+  const apply = restored ? {} : presetsToApply(presets, { intentUntouched: untouched('intent'), roleUntouched: untouched('role'), topicEmpty: !control('topic').value });
   for (const [id, value] of Object.entries(apply)) control(id).value = value;
+  if (!marked && Object.keys(presets).length) {
+    // No address is passed, so the page's URL stays as it is and no new visit is counted.
+    try { window.history.replaceState({ ...entry, briefingPresets: true }, ''); } catch { /* The presets still applied; only the reload guard is lost. */ }
+  }
   applyIntent();
 
   const clearErrors = () => {
