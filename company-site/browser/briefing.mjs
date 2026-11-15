@@ -92,6 +92,7 @@ export function enhanceBriefingForm(form, { touched = new Set() } = {}) {
     status.hidden = true;
     status.textContent = '';
   };
+  // Marks each field the errors name and moves to the first. Says whether they named any.
   const showErrors = errors => {
     let first = null;
     for (const id of FIELDS) {
@@ -102,6 +103,14 @@ export function enhanceBriefingForm(form, { touched = new Set() } = {}) {
       first ??= control(id);
     }
     first?.focus();
+    return first !== null;
+  };
+  // The status line sits at the head of the form, a screen above the button on a phone. When no
+  // field carries the message the line is all the visitor gets, so bring it into view.
+  const showStatus = (text, { fieldNamed }) => {
+    status.textContent = text;
+    status.hidden = false;
+    if (!fieldNamed) status.scrollIntoView({ block: 'nearest' });
   };
 
   // The same rules the handler applies first, so an empty required field is named before a
@@ -120,7 +129,7 @@ export function enhanceBriefingForm(form, { touched = new Set() } = {}) {
     event.preventDefault();
     clearErrors();
     const errors = localErrors();
-    if (Object.keys(errors).length) return showErrors(errors);
+    if (Object.keys(errors).length) { showErrors(errors); return; }
     const body = Object.fromEntries(FIELDS.map(id => [id, control(id).value.trim()]));
     body.website = control('website').value;
     body.sourcePage = window.location.pathname;
@@ -138,12 +147,10 @@ export function enhanceBriefingForm(form, { touched = new Set() } = {}) {
         form.scrollIntoView({ block: 'nearest' });
         return;
       }
-      if (answer.fieldErrors) showErrors(answer.fieldErrors);
-      status.textContent = answer.error || FALLBACK_ERROR;
-      status.hidden = false;
+      const fieldNamed = answer.fieldErrors ? showErrors(answer.fieldErrors) : false;
+      showStatus(answer.error || FALLBACK_ERROR, { fieldNamed });
     } catch {
-      status.textContent = FALLBACK_ERROR;
-      status.hidden = false;
+      showStatus(FALLBACK_ERROR, { fieldNamed: false });
     } finally {
       submit.disabled = false;
       submit.removeAttribute('aria-busy');

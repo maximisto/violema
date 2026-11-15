@@ -88,9 +88,10 @@ function fixture({ search = '', state = null, intent = 'briefing', role = '', to
     role: select(['', ...briefingRoles.map(item => item.value)], '', role),
     name: text(''), email: text(''), organization: text(''), topic: text(topic), message: text(''), website: text(''),
   };
+  for (const [id, control] of Object.entries(elements)) control.focus = () => { moves.push({ on: id, call: 'focus' }); };
   const part = () => ({ ...inert, hidden: true, textContent: '', querySelector: part });
   const submit = part();
-  const status = part();
+  const status = { ...part(), scrollIntoView(options) { moves.push({ on: 'status', call: 'scrollIntoView', options }); } };
   const sent = { ...part(), focus(options) { moves.push({ on: 'confirmation', call: 'focus', options }); } };
   const named = { '[data-briefing-submit]': submit, '[data-briefing-status]': status, '[data-briefing-sent]': sent };
   const listeners = {};
@@ -166,6 +167,7 @@ test('a visit without a preset link changes nothing and writes nothing to the hi
 });
 
 // A send: the visitor has filled the form and pressed the button, and the handler answers `reply`.
+// An Error as the reply is a request that never arrives.
 async function send(reply) {
   const made = fixture({ role: 'research' });
   enhanceBriefingForm(made.form);
@@ -173,7 +175,10 @@ async function send(reply) {
   made.elements.email.value = 'reader@example.org';
   made.elements.organization.value = 'Example Lab';
   const realFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: reply.status < 300, json: async () => reply.body });
+  globalThis.fetch = async () => {
+    if (reply instanceof Error) throw reply;
+    return { ok: reply.status < 300, json: async () => reply.body };
+  };
   try { await made.press(); } finally { globalThis.fetch = realFetch; }
   return made;
 }
@@ -188,4 +193,25 @@ test('an accepted send leaves only the confirmation and brings the page back to 
     // Once the fields are hidden, and only as far as needed: a card already in full view stays put.
     { on: 'form', call: 'scrollIntoView', options: { block: 'nearest' }, shown: 1 },
   ]);
+});
+
+// The status line sits at the head of the form, a screen above the button on a phone. When no
+// field carries the message, a visitor who never sees the line sees a button that did nothing.
+for (const [name, reply, message] of [
+  ['a send that never arrives', new TypeError('offline'), 'Could not send your request. Try again in a moment.'],
+  ['a send turned away without naming a field', { status: 429, body: { ok: false, error: 'Too many requests. Try again in a few minutes.' } }, 'Too many requests. Try again in a few minutes.'],
+  ['a refusal whose field list names no field of the form', { status: 400, body: { ok: false, error: 'Check the highlighted fields.', fieldErrors: {} } }, 'Check the highlighted fields.'],
+]) {
+  test(`${name} keeps the form and brings its message into view`, async () => {
+    const { sent, status, moves } = await send(reply);
+    assert.equal(sent.hidden, true, 'no confirmation');
+    assert.deepEqual([status.hidden, status.textContent], [false, message]);
+    assert.deepEqual(moves, [{ on: 'status', call: 'scrollIntoView', options: { block: 'nearest' } }]);
+  });
+}
+
+test('a send refused for a field moves to that field and leaves the page there', async () => {
+  const { status, moves } = await send({ status: 400, body: { ok: false, error: 'Check the highlighted fields.', fieldErrors: { email: 'Enter a valid work email.' } } });
+  assert.deepEqual([status.hidden, status.textContent], [false, 'Check the highlighted fields.']);
+  assert.deepEqual(moves, [{ on: 'email', call: 'focus' }], 'the field has its own error line; a second move would take the page away from it');
 });
