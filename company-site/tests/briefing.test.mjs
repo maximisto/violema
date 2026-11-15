@@ -91,7 +91,7 @@ function fixture({ search = '', state = null, intent = 'briefing', role = '', to
   for (const [id, control] of Object.entries(elements)) control.focus = () => { moves.push({ on: id, call: 'focus' }); };
   const part = () => ({ ...inert, hidden: true, textContent: '', querySelector: part });
   const submit = part();
-  const status = { ...part(), scrollIntoView(options) { moves.push({ on: 'status', call: 'scrollIntoView', options }); } };
+  const status = { ...part(), scrollIntoView(options) { moves.push({ on: 'status', call: 'scrollIntoView', options, shown: !status.hidden }); } };
   const sent = { ...part(), focus(options) { moves.push({ on: 'confirmation', call: 'focus', options }); } };
   const named = { '[data-briefing-submit]': submit, '[data-briefing-status]': status, '[data-briefing-sent]': sent };
   const listeners = {};
@@ -206,7 +206,8 @@ for (const [name, reply, message] of [
     const { sent, status, moves } = await send(reply);
     assert.equal(sent.hidden, true, 'no confirmation');
     assert.deepEqual([status.hidden, status.textContent], [false, message]);
-    assert.deepEqual(moves, [{ on: 'status', call: 'scrollIntoView', options: { block: 'nearest' } }]);
+    // A hidden line has no place on the page to move to, so it is shown first.
+    assert.deepEqual(moves, [{ on: 'status', call: 'scrollIntoView', options: { block: 'nearest' }, shown: true }]);
   });
 }
 
