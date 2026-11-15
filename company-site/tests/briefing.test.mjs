@@ -20,7 +20,8 @@ test('role labels fit visitors outside biotech; the values are the handler\'s an
 });
 
 test('the role select starts on a disabled "Choose one" and preselects no role', async () => {
-  const role = (await form()).match(/<select class="briefing-control" id="briefing-role" name="role" required>([\s\S]*?)<\/select>/)[1];
+  // The select names its error line, so a screen reader hears "Choose what describes you." with the field.
+  const role = (await form()).match(/<select class="briefing-control" id="briefing-role" name="role" required aria-describedby="briefing-role-error">([\s\S]*?)<\/select>/)[1];
   assert.ok(role.startsWith('<option value="" selected disabled>Choose one</option>'));
   assert.equal((role.match(/ selected/g) || []).length, 1, 'only the placeholder is selected');
   assert.deepEqual([...role.matchAll(/<option value="([a-z-]+)">([^<]+)<\/option>/g)].map(match => match[1]), briefingRoles.map(item => item.value));

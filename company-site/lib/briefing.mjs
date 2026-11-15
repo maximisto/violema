@@ -49,7 +49,7 @@ export function briefingForm() {
     + `<p class="briefing-status" data-briefing-status role="alert" hidden></p>`
     + `<div class="briefing-grid">`
     + field('intent', 'What do you need?', `<select class="briefing-control" id="briefing-intent" name="intent" required>${options(briefingIntents, first.value)}</select>`)
-    + field('role', 'You are', `<select class="briefing-control" id="briefing-role" name="role" required><option value="" selected disabled>Choose one</option>${options(briefingRoles)}</select>`)
+    + field('role', 'You are', `<select class="briefing-control" id="briefing-role" name="role" required aria-describedby="briefing-role-error"><option value="" selected disabled>Choose one</option>${options(briefingRoles)}</select>`)
     + field('name', 'Name', input('name', 'text', `required maxlength="${briefingLimits.name}" autocomplete="name" aria-describedby="briefing-name-error"`))
     + field('email', 'Work email', input('email', 'email', 'required autocomplete="email" inputmode="email" aria-describedby="briefing-email-error"'))
     + field('organization', 'Organization', input('organization', 'text', `maxlength="${briefingLimits.organization}" autocomplete="organization" aria-describedby="briefing-organization-error"`))
