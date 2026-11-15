@@ -3,6 +3,30 @@
 // cannot reach the JSON-only handler, and the noscript line names the fallback.
 const FALLBACK_ERROR = 'Could not send your request. Try again in a moment.';
 const FIELDS = ['intent', 'role', 'name', 'email', 'organization', 'topic', 'message'];
+// C0 and C1 control characters, including line breaks: a one-line topic never carries them.
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+// Links such as /?intent=correction&topic=...#briefing preset the form. Only values the form
+// itself offers are kept, so a hand-edited link can never send the handler a value it refuses.
+// Pure, so it runs under node --test; the caller passes the page's query string.
+export function briefingPresets(search, { intents, roles, topicLimit }) {
+  const query = new URLSearchParams(search);
+  const presets = {};
+  const intent = query.get('intent');
+  const role = query.get('role');
+  if (intents.includes(intent)) presets.intent = intent;
+  if (roles.includes(role)) presets.role = role;
+  let topic = (query.get('topic') ?? '').replace(CONTROL_CHARACTERS, '').trim();
+  // An input without maxlength reports -1: no limit to cut to.
+  if (topicLimit >= 0 && topic.length > topicLimit) {
+    topic = topic.slice(0, topicLimit);
+    // Never end on the first half of a surrogate pair.
+    if (/[\ud800-\udbff]$/.test(topic)) topic = topic.slice(0, -1);
+    topic = topic.trimEnd();
+  }
+  if (topic) presets.topic = topic;
+  return presets;
+}
 
 export function enhanceBriefingForm(form) {
   const intents = JSON.parse(form.dataset.briefingIntents);
@@ -26,6 +50,14 @@ export function enhanceBriefingForm(form) {
     control('message').required = Boolean(intent.record);
   };
   control('intent').addEventListener('change', applyIntent);
+
+  // The allowed values are the form's own options, so the presets follow the rendered contract.
+  const offered = id => [...control(id).options].map(option => option.value).filter(Boolean);
+  const presets = briefingPresets(window.location.search, { intents: offered('intent'), roles: offered('role'), topicLimit: control('topic').maxLength });
+  if (presets.intent) control('intent').value = presets.intent;
+  if (presets.role) control('role').value = presets.role;
+  // A topic the visitor already typed, or the browser restored, is never overwritten.
+  if (presets.topic && !control('topic').value) control('topic').value = presets.topic;
   applyIntent();
 
   const clearErrors = () => {
@@ -53,6 +85,7 @@ export function enhanceBriefingForm(form) {
   // round trip; the handler's own field errors replace these when it answers.
   const localErrors = () => {
     const errors = {};
+    if (!control('role').value) errors.role = 'Choose what describes you.';
     if (!control('name').value.trim()) errors.name = 'Enter your name.';
     if (!control('email').validity.valid || !control('email').value.includes('@')) errors.email = 'Enter a valid work email.';
     if (control('organization').required && !control('organization').value.trim()) errors.organization = 'Enter your organization.';
