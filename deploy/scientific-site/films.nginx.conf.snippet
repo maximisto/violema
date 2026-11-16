@@ -1,0 +1,45 @@
+    # BEGIN VIOLEMA FILMS
+    # Film pages: public and in the sitemap. Exact routes, like every page above, with the field block's method guard, root and headers.
+    location = /films/zero-babies {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /films/zero-babies/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    location = /films/zero-babies/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /films/zero-babies/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    location = /films/zero-babies/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        try_files /films/zero-babies/index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    # Film media, posters and captions. A longer prefix than /company-assets/, so it wins for these files only.
+    # Types are set here because stock mime.types has no text/vtt, and with nosniff a browser drops a mistyped
+    # caption track. Video files carry their hash in the name, so they never change in place.
+    # An add_header here replaces every server-level one, so this block repeats them all.
+    location ^~ /company-assets/films/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        root /var/www/violema-science/current;
+        types { video/mp4 mp4; text/vtt vtt; image/webp webp; image/jpeg jpg; }
+        default_type application/octet-stream;
+        try_files $uri =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin" always;
+    }
+    # END VIOLEMA FILMS

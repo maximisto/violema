@@ -46,6 +46,12 @@ ${exact}
     location ^~ /company-assets/ {
 ${readOnly}        try_files $uri =404;
     }
+    # Stock mime.types has no text/vtt, and with nosniff a browser drops a mistyped caption track.
+    location ^~ /company-assets/films/ {
+${readOnly}        types { video/mp4 mp4; text/vtt vtt; image/webp webp; image/jpeg jpg; }
+        default_type application/octet-stream;
+        try_files $uri =404;
+    }
     # The old workspace app moved to agent.purpleorange.ai: its pages, assets and
     # unknown paths are the company 404 page, never a redirect or the legacy SPA.
     location / { return 404; }`;

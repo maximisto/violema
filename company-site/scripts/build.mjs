@@ -5,9 +5,12 @@ import { corpora, stressTest } from '../data/corpora.mjs';
 import { homePage, methodPage, demoPage, reviewPage, aboutPage, legalPage, notFoundPage } from '../lib/pages.mjs';
 import { fe4s4Page, fe4s4RecordPage } from '../lib/records.mjs';
 import { fieldPage } from '../lib/fields.mjs';
-import { PAGES, FIELD, FE4S4_ROUTE, FE4S4_RECORD_ROUTE } from '../lib/routes.mjs';
+import { filmPage, filmCaptions, filmAssetBase } from '../lib/films.mjs';
+import { ZERO_BABIES } from '../data/films.mjs';
+import { PAGES, FIELD, FE4S4_ROUTE, FE4S4_RECORD_ROUTE, ZERO_BABIES_ROUTE } from '../lib/routes.mjs';
 import { exportCorpora } from './export-corpora.mjs';
 import { checkTrials } from './export-trials.mjs';
+import { checkFilmMedia, stageFilmMedia } from './film-media.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -39,6 +42,11 @@ const clientLogoFiles = ['unilever.svg', 'wrigley.svg', 'nestle.svg'];
 await exportCorpora(undefined, { check: true });
 // Trial records must match primary.studies; with SYPRES_CSV set they are also re-derived from the pinned CSV.
 const trials = await checkTrials({ csv: process.env.SYPRES_CSV });
+// Film media sit outside git, pinned in data/films.mjs (README, "Films"). Checked before the old dist is cleared:
+// a file that differs from its pin always fails; a missing one fails unless VIOLEMA_SKIP_FILM_MEDIA=1.
+const filmMedia = await checkFilmMedia(ZERO_BABIES);
+const skipFilmMedia = process.env.VIOLEMA_SKIP_FILM_MEDIA === '1';
+if (filmMedia.missing.length && !skipFilmMedia) throw new Error(`Film media missing from ${filmMedia.from}: ${filmMedia.missing.join(', ')}. Put the pinned files there or set VIOLEMA_MEDIA_DIR (README, "Films"). VIOLEMA_SKIP_FILM_MEDIA=1 builds without them; the film page then has no video.`);
 // Only the generated company-site directory is removed; application output is separate.
 await rm(dist, { recursive: true, force: true });
 for (const directory of ['company-assets/browser', 'company-assets/data', 'company-assets/fonts', 'company-assets/clients']) {
@@ -58,6 +66,8 @@ const rendered = new Map([
   [FIELD.route, fieldPage()],
   [FE4S4_ROUTE, fe4s4Page()],
   [FE4S4_RECORD_ROUTE, fe4s4RecordPage()],
+  // Film 01 and its record: public, indexed and listed in the sitemap and llms.txt below.
+  [ZERO_BABIES_ROUTE, filmPage(ZERO_BABIES, ZERO_BABIES_ROUTE)],
 ]);
 // The shell refuses an unregistered route, so the only gap left is a registered page with no renderer.
 const unrendered = PAGES.filter(page => !rendered.has(page.route)).map(page => page.route);
@@ -75,6 +85,8 @@ for (const [source, destination] of [
   ['browser/diagrams.mjs', 'company-assets/browser/diagrams.mjs'],
   ['browser/diagrams.css', 'company-assets/diagrams.css'],
   ['browser/records.css', 'company-assets/records.css'],
+  ['browser/films.css', 'company-assets/films.css'],
+  ['browser/film.mjs', 'company-assets/browser/film.mjs'],
   ['browser/fe4s4.mjs', 'company-assets/browser/fe4s4.mjs'],
   ['lib/fe4s4-figures.mjs', 'company-assets/browser/fe4s4-figures.mjs'],
   ['browser/site.mjs', 'company-assets/browser/site.mjs'],
@@ -111,13 +123,19 @@ for (const [source, destination] of logoFiles) await copyFile(join(root, 'brand'
 for (const name of clientLogoFiles) await copyFile(join(assets, 'clients', name), join(dist, 'company-assets/clients', name));
 await copyFile(join(assets, 'violema-social-hero.jpg'), join(dist, 'company-assets/violema-social-hero.jpg'));
 await copyFile(join(assets, 'max-markovtsev.jpg'), join(dist, 'company-assets/max-markovtsev.jpg'));
+// Film 01: posters and share card from assets/films/, captions from data/films.mjs, media from the pinned folder.
+const filmDir = join(dist, filmAssetBase(ZERO_BABIES).slice(1));
+await mkdir(filmDir, { recursive: true });
+for (const name of [...ZERO_BABIES.media.cuts.map(cut => cut.poster), ZERO_BABIES.media.card.file]) await copyFile(join(assets, 'films', ZERO_BABIES.slug, name), join(filmDir, name));
+await writeFile(join(filmDir, ZERO_BABIES.media.captions), filmCaptions(ZERO_BABIES));
+if (!skipFilmMedia) await stageFilmMedia(ZERO_BABIES, filmDir, filmMedia.from);
 await writeFile(join(dist, 'robots.txt'), 'User-agent: *\nAllow: /\n\nSitemap: https://violema.com/sitemap.xml\n');
 // Every indexable page in registry order; the physician walkthrough and the 404 page stay out.
 const sitemapRoutes = PAGES.filter(page => page.indexable).map(page => page.route);
 await writeFile(join(dist, 'sitemap.xml'), '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + sitemapRoutes.map(path => `<url><loc>https://violema.com${path}</loc></url>`).join('') + '</urlset>\n');
 // Written by hand, one line per page; tests/site.test.mjs checks that every indexable page but the home page is linked.
-await writeFile(join(dist, 'llms.txt'), '# Violema\n\nScientific evidence systems that connect claims to sources, make consequential assumptions visible, and keep the record open to review. Prepared demonstrations remain subject to independent scientific review.\n\n- [Method](https://violema.com/method/): source, claim, assumption, review and version records.\n- [Evidence lab](https://violema.com/demo/): one manually prepared PsychDoc packet; a demonstration, not universal scientific validity.\n- [About Violema](https://violema.com/about/): company charter, scientific governance, and divisions.\n- [Quantum advantage records](https://violema.com/fields/quantum-advantage/): draft protocols for committed tests of claims that a quantum-assisted workflow beats the strongest publicly tested classical methods on a defined problem, chemistry first.\n- [Fe₄S₄ benchmark record](https://violema.com/records/fe4s4-benchmark/): a draft committed test of one narrow quantum-advantage claim on an iron-sulfur benchmark, with its outcome rule written before any result counts.\n- [Fe₄S₄ full record](https://violema.com/records/fe4s4-benchmark/record/): the claim, the test and its outcome rule, and the evidence in the order it became public.\n- [PsychDoc](https://psychdoc.ai/): first scientific application.\n- [Website Terms of Use](https://violema.com/legal/terms/): public scientific website terms.\n- [Website Privacy Policy](https://violema.com/legal/privacy/): public scientific website information practices.\n');
-console.log(`Built seven static pages, one field page, two record pages, the 404 page and ${corpora.length} source packets in company-site/dist.`);
+await writeFile(join(dist, 'llms.txt'), '# Violema\n\nScientific evidence systems that connect claims to sources, make consequential assumptions visible, and keep the record open to review. Prepared demonstrations remain subject to independent scientific review.\n\n- [Method](https://violema.com/method/): source, claim, assumption, review and version records.\n- [Evidence lab](https://violema.com/demo/): one manually prepared PsychDoc packet; a demonstration, not universal scientific validity.\n- [About Violema](https://violema.com/about/): company charter, scientific governance, and divisions.\n- [Quantum advantage records](https://violema.com/fields/quantum-advantage/): draft protocols for committed tests of claims that a quantum-assisted workflow beats the strongest publicly tested classical methods on a defined problem, chemistry first.\n- [Fe₄S₄ benchmark record](https://violema.com/records/fe4s4-benchmark/): a draft committed test of one narrow quantum-advantage claim on an iron-sulfur benchmark, with its outcome rule written before any result counts.\n- [Fe₄S₄ full record](https://violema.com/records/fe4s4-benchmark/record/): the claim, the test and its outcome rule, and the evidence in the order it became public.\n- [Zero Babies, film 01](https://violema.com/films/zero-babies/): a 52-second film on how a 1993 study of 36 college students became a claim about babies, with each claim\'s sources, limits and date.\n- [PsychDoc](https://psychdoc.ai/): first scientific application.\n- [Website Terms of Use](https://violema.com/legal/terms/): public scientific website terms.\n- [Website Privacy Policy](https://violema.com/legal/privacy/): public scientific website information practices.\n');
+console.log(`Built seven static pages, one field page, two record pages, one film page${skipFilmMedia ? ' (no film media)' : ''}, the 404 page and ${corpora.length} source packets in company-site/dist.`);
 
 const heroAssets = join(assets, 'violema-hero');
 await mkdir(join(dist, 'company-assets/violema-hero'), { recursive: true });

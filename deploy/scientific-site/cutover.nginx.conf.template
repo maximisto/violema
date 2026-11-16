@@ -213,6 +213,18 @@ server {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         try_files /records/fe4s4-benchmark/record/index.html =404;
     }
+    location = /films/zero-babies {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /films/zero-babies/index.html =404;
+    }
+    location = /films/zero-babies/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /films/zero-babies/index.html =404;
+    }
+    location = /films/zero-babies/index.html {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files /films/zero-babies/index.html =404;
+    }
     location = /robots.txt {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
         try_files /robots.txt =404;
@@ -227,6 +239,13 @@ server {
     }
     location ^~ /company-assets/ {
         if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        try_files $uri =404;
+    }
+    # Stock mime.types has no text/vtt, and with nosniff a browser drops a mistyped caption track.
+    location ^~ /company-assets/films/ {
+        if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+        types { video/mp4 mp4; text/vtt vtt; image/webp webp; image/jpeg jpg; }
+        default_type application/octet-stream;
         try_files $uri =404;
     }
     # The old workspace app moved to agent.purpleorange.ai: its pages, assets and

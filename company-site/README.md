@@ -11,7 +11,7 @@ npm test
 npm run preview
 ```
 
-Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/fields/quantum-advantage/`, `/records/fe4s4-benchmark/`, `/legal/terms/` and `/legal/privacy/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method, demo, about, field, record and website policy HTML is indexable; robots.txt allows crawling and the sitemap lists those nine routes. The physician review page uses `noindex,follow` and is excluded from the sitemap. This is discoverability control, not authentication. Missing static paths return 404 locally. The links `/login`, `/terms` and `/privacy` belong to the preserved production application and are not part of this bundle.
+Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/fields/quantum-advantage/`, `/records/fe4s4-benchmark/`, `/films/zero-babies/`, `/legal/terms/` and `/legal/privacy/`. `PORT` can override the local preview port. The preview server binds to loopback, supports only GET/HEAD, and returns `X-Robots-Tag: noindex, nofollow`. Built homepage, method, demo, about, field, record, film and website policy HTML is indexable; robots.txt allows crawling and the sitemap lists those ten routes. The film page needs its video files to build (see "Films"). The physician review page uses `noindex,follow` and is excluded from the sitemap. This is discoverability control, not authentication. Missing static paths return 404 locally. The links `/login`, `/terms` and `/privacy` belong to the preserved production application and are not part of this bundle.
 
 ## Layout
 
@@ -23,6 +23,8 @@ Open `http://127.0.0.1:4317/`, `/method/`, `/demo/`, `/review/`, `/about/`, `/fi
 - `lib/routes.mjs`: the field and record routes, and `PAGES`, the registry of every page the build writes: its route, its file, whether it is indexed, and for a record the field it sits under. The shell reads indexing, the 404 page's missing canonical and the header's Records link from it, and refuses an unregistered route; the build writes each page to its file and derives the sitemap from it. A new page needs an entry here, a renderer in `scripts/build.mjs`, a line in `llms.txt` if it is indexed, and its routes in `deploy/scientific-site/routing.mjs` and on the server. The build and tests catch a missing entry, renderer, `llms.txt` line or `routing.mjs` route; nothing offline checks the server, so its locations are verified at release.
 - `lib/fields.mjs`: the Quantum advantage field page, which lists the field's records (see "Fields and hypothesis records" below).
 - `lib/records.mjs`, `lib/fe4s4-figures.mjs`, `browser/fe4s4.mjs` and `browser/records.css`: the hypothesis records and the field page's styles (see "Fields and hypothesis records" below). `data/fe4s4-record.html` holds the Fe₄S₄ record's checked text.
+- `lib/films.mjs`, `data/films.mjs`, `browser/film.mjs`, `browser/films.css` and `assets/films/`: the film pages, their checked text, the player, and the posters and share cards (see "Films" below).
+- `scripts/film-media.mjs`: pins a film file and checks and stages the pinned files at build time (see "Films" below).
 - `lib/analytics.mjs`: the visit-statistics switch (Umami website ID and policy date) and the tracker tag. See "Visit statistics" below.
 - `lib/how-it-works.mjs`: the method page's "How it works" and "Where this is going" sections: two inline SVG diagrams of PsychDoc's evidence system, coloured only through tokens, with their figures read from `data/how-it-works.mjs`.
 - `lib/render.mjs`: shared evidence renderer: escaped text, safe source links, bounded additive-shift arithmetic, the interval scale, the trace specimen (a claim joined to its cited source records), the bias control and the demo bench.
@@ -70,6 +72,35 @@ A strip at the end shows the event ledger on PsychDoc's map. `/records/fe4s4-ben
 The figures are pure functions in `lib/fe4s4-figures.mjs`. The build renders every figure as SVG, so each page is complete without JavaScript. `browser/fe4s4.mjs`, which `site.mjs` loads only where `[data-fe4s4]` exists, re-renders through the same module (copied to `company-assets/browser/fe4s4-figures.mjs`). It adds the turning cluster, the random configurations, the scale control, the timeline selection and the outcome builder. Motion stops under reduced motion, in a hidden tab, off screen, and on Pause.
 
 Every number on the page is a value from the record or is derived from one in the figures module, and `tests/records.test.mjs` pins the derivations. Its opening section repeats the record history's dated Amendment 1 line (`AMENDMENT_NOTE`) and links that history. The field and record pages are public: `index,follow`, in the sitemap and `llms.txt`, typed as articles (records) for link previews. `tests/fields.test.mjs` pins the field page, the links to it and the breadcrumbs. The violema.com vhost serves an allowlist of exact routes, so each new field or record route also needs its entry in `lib/routes.mjs`, its locations in `deploy/scientific-site/routing.mjs` and its locations on the server. Release `fe4s4-record-20261024` shows the record block and the guarded script that adds it; `deploy/scientific-site/fields.nginx.conf.snippet` is the field block, and a routing test keeps it equal to the model.
+
+## Films
+
+`/films/zero-babies/` is Violema film 01, Zero Babies. The page starts with the film in its wide (2.39:1) and vertical (9:16) cuts and says how it was made. Below the film is its record:
+- the claim and the four dated entries the film ends on, each with what the sources say and its limits;
+- every spoken and on-screen line, with its time, its kind (sourced, derived, argument, product) and its sources;
+- the six numbered sources, as numbered in the film;
+- what the film does not say.
+
+`data/films.mjs` holds all of it as checked on 2026-11-15, and `lib/films.mjs` renders it. Without JavaScript the page is complete: the cut that fits the screen shows (`browser/films.css`), and each line's time jumps to the player. `browser/film.mjs`, which `site.mjs` loads only where `[data-film]` exists, adds the cut switch (keeping the time and whether it was playing), plays one cut at a time, and plays the film from a line's time. Nothing plays on its own. The page is public: `index,follow`, in the sitemap and `llms.txt`, with a still from the film as its share card.
+
+**Wording.** Spoken lines are script v1.4 and on-screen lines are the brand cut's graphics, word for word. Captions are the cut's word timing (`brand-film/captions.js`). These live in the film's own folder, outside this repository, and the film's claim ledger is the fact check that cleared them. Editing a line here does not change the film, and a changed or new line reopens the check for that line. `tests/films.test.mjs` holds what the repository can check:
+- every source number resolves, and the end card's count matches the list;
+- the ledger's never-say lines are absent, and the settled facts read as settled;
+- captions are valid WebVTT and cover every spoken line but the end card, which shows its line on screen, as in the film;
+- the served video files are the pinned ones.
+
+**Media.** Video files are never committed. `data/films.mjs` pins each cut by name, size and SHA-256. The name carries the hash's first 8 hex digits, so a new file gets a new address and no cache serves an old cut. The build reads the cuts from `company-site/media/films/` (git-ignored) or from `VIOLEMA_MEDIA_DIR`, refuses a missing or mismatched file, and copies them to `dist/company-assets/films/<slug>/`. It also copies the posters and share card from `assets/films/<slug>/` and writes the WebVTT captions from the cues. `VIOLEMA_SKIP_FILM_MEDIA=1` builds without the video for local work: the player then has nothing to play, and the tests skip only the pin check and the page walk's links to the two video files. Build a release packet with the media present.
+
+**Dropping in the final film.**
+1. Put the final cuts where the build reads them: `company-site/media/films/` or `VIOLEMA_MEDIA_DIR`.
+2. Run `node scripts/film-media.mjs <final-wide.mp4> zero-babies-wide`, then the same for the vertical cut with `zero-babies-vertical`. Each prints the pinned entry: the hashed file name, size, SHA-256, width, height and duration. Save each file under its printed name and replace that cut's `file`, `sha256` and `bytes` in `data/films.mjs`. Set `media.duration` and `runtime` from the printed duration.
+3. Copy the final cut's `captions.js` into `cues`, as `[start, end, text]`, and its beat start times into `lines[].at`.
+4. If any spoken or on-screen line changed, change it here word for word and have it re-checked before release.
+5. If the poster frame changed, replace the WebP posters (each at its cut's size) and the 1200 by 630 share card in `assets/films/zero-babies/`.
+6. Set `status: 'final'` and `published` to the release date (YYYY-MM-DD). The draft note goes away, and the page gains a schema.org VideoObject for search engines.
+7. Run `npm run build && npm test`, then check the page in the preview in light and dark, at phone and desktop widths.
+
+**Server.** The vhost serves an allowlist, so a release with the film must install `deploy/scientific-site/films.nginx.conf.snippet`. It holds the page's three exact locations and a `^~ /company-assets/films/` location that types MP4, WebVTT, WebP and JPEG. The types matter because stock `mime.types` has no `text/vtt`, and with `nosniff` a browser drops a caption track served under the wrong type. A routing test keeps the snippet equal to the model. The preview server answers byte ranges, as nginx does, because Safari will not play video without them.
 
 ## Timestamp anchors
 

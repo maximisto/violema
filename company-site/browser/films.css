@@ -1,0 +1,114 @@
+/* Films: the player and the film's record. Page sections use the site's tokens in either theme; the player is a dark
+   .instrument, as on the homepage and the records, so the film sits on black whatever the theme. records.css supplies
+   the chapter labels, section heads and limit lists. */
+
+.film-head h1 { max-width: 14ch; }
+.film-head .lede { max-width: 62ch; }
+
+/* ---------- Player ---------- */
+
+.film-player { margin: 0; overflow: hidden; box-shadow: var(--shadow-raised); }
+.film-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 12px 16px 12px 20px; border-bottom: 1px solid var(--line); }
+.film-bar .instrument-title { margin: 0; }
+.film-cuts { display: inline-flex; gap: 4px; padding: 3px; border: 1px solid var(--line-strong); border-radius: 999px; }
+.film-cuts[hidden] { display: none; }
+.film-cut { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); font-family: var(--font-display); font-size: var(--text-caption); font-weight: 600; cursor: pointer; transition: background-color var(--duration) var(--ease), color var(--duration) var(--ease); }
+.film-cut span { font-family: var(--font-mono); font-weight: 500; }
+.film-cut:hover { color: var(--ink); }
+.film-cut[aria-pressed='true'] { background: var(--accent); color: var(--accent-ink); }
+
+.film-stage { background: #000; }
+.film-frame video { display: block; width: 100%; height: auto; background: #000; }
+/* The vertical cut keeps its 9:16 shape and fits the screen's height; the stage letterboxes it in black. */
+.film-frame-vertical video { width: min(100%, calc(min(78svh, 780px) * 9 / 16)); margin-inline: auto; aspect-ratio: 9 / 16; }
+
+/* One cut shows at a time: the reader's choice once film.mjs runs, before that the one that fits the screen. */
+.film-frame-vertical,
+.film-player[data-cut='vertical'] .film-frame-wide { display: none; }
+.film-player[data-cut='vertical'] .film-frame-vertical { display: block; }
+@media (max-width: 640px) and (orientation: portrait) {
+  .film-player:not([data-cut]) .film-frame-wide { display: none; }
+  .film-player:not([data-cut]) .film-frame-vertical { display: block; }
+}
+
+.film-foot { display: grid; gap: 10px; padding: 14px 20px 16px; border-top: 1px solid var(--line); font-size: var(--text-caption); line-height: 1.5; color: var(--ink-2); }
+.film-draft { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 0; }
+.film-downloads { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; }
+.film-downloads a { color: var(--ink); text-underline-offset: 3px; }
+.film-downloads a:hover { color: var(--accent); }
+
+.film-notes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px 48px; margin-top: 40px; }
+.film-notes h3 { margin: 0; padding-top: 16px; font-size: 1.25rem; line-height: 1.3; }
+.film-notes .field-limits { margin: 0; max-width: none; }
+
+/* ---------- Record ---------- */
+
+.film-claim { display: grid; gap: 12px; padding: clamp(20px, 3vw, 32px); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+.film-claim-label { margin: 0; font-family: var(--font-display); font-size: var(--text-caption); font-weight: 600; color: var(--ink-3); }
+.film-claim-text { max-width: 28ch; margin: 0; font-family: var(--font-display); font-size: clamp(1.625rem, 1rem + 2.2vw, 2.5rem); font-weight: 600; line-height: 1.12; letter-spacing: -0.015em; color: var(--ink); }
+.film-chip { justify-self: start; margin: 4px 0 0; padding: 4px 12px; border: 1px solid var(--accent); border-radius: 999px; font-family: var(--font-display); font-size: var(--text-caption); font-weight: 500; line-height: 1.4; color: var(--accent); }
+
+.film-timeline { display: grid; margin: 32px 0 0; padding: 0; list-style: none; }
+.film-entry { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 24px; padding: 28px 0; border-top: 1px solid var(--line); scroll-margin-top: calc(var(--header-height) + 16px); }
+.film-entry-year { margin: 0; font-family: var(--font-display); font-size: 2rem; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--accent); }
+.film-entry-now .film-entry-year { color: var(--ink-3); }
+.film-onscreen { max-width: 56ch; margin: 0; font-family: var(--font-display); font-size: 1.25rem; font-weight: 500; line-height: 1.4; color: var(--ink); }
+.film-entry-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 40px; margin: 20px 0 0; }
+.film-entry-facts dt { font-family: var(--font-display); font-size: var(--text-caption); font-weight: 600; color: var(--ink-3); }
+.film-entry-facts dd { margin: 6px 0 0; line-height: 1.6; color: var(--ink-2); }
+.film-also { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 10px; }
+.film-also a, .film-source-read a { color: var(--accent); text-underline-offset: 3px; overflow-wrap: anywhere; }
+
+/* A label above the text it introduces: who speaks, or what the screen shows. */
+.film-tag { display: block; margin: 0 0 4px; font-family: var(--font-display); font-size: var(--text-caption); font-weight: 600; line-height: 1.4; color: var(--ink-3); }
+
+/* Source numbers, as superscripts in the film; 24 px targets. */
+.film-refs, .film-sourced { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.film-ref { display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 6px; background: var(--surface-2); font-family: var(--font-display); font-size: var(--text-caption); font-weight: 600; line-height: 1; color: var(--accent); text-decoration: none; vertical-align: middle; }
+.film-ref:hover { background: var(--accent); color: var(--accent-ink); }
+
+/* ---------- Every line ---------- */
+
+.film-lines { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.film-line { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 24px; padding: 28px 0; border-bottom: 1px solid var(--line); }
+.film-line-time { margin: 0; }
+.film-line-time a { display: inline-flex; align-items: center; justify-content: center; min-width: 68px; min-height: 44px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 999px; font-family: var(--font-mono); font-size: var(--text-caption); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); text-decoration: none; transition: border-color var(--duration) var(--ease), color var(--duration) var(--ease); }
+.film-line-time a::before { content: ''; width: 0; height: 0; margin-right: 8px; border-block: 5px solid transparent; border-left: 8px solid currentColor; }
+.film-line-time a:hover { border-color: var(--accent); color: var(--accent); }
+.film-line-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; }
+.film-beat { font-family: var(--font-display); font-size: 1.25rem; font-weight: 650; line-height: 1.3; color: var(--ink); }
+.film-said { max-width: 62ch; margin: 0; font-size: 1.125rem; line-height: 1.55; color: var(--ink); }
+.film-said.is-silent { color: var(--ink-3); }
+.film-screen { margin-top: 16px; }
+.film-screen ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.film-screen li { max-width: 100%; padding: 4px 10px; border-radius: var(--radius-nested); background: var(--surface-2); line-height: 1.45; color: var(--ink); }
+.film-note { max-width: 68ch; margin: 16px 0 0; line-height: 1.6; color: var(--ink-2); }
+.film-sourced { margin: 14px 0 0; }
+.film-sourced > span { margin-right: 6px; font-family: var(--font-display); font-size: var(--text-caption); font-weight: 600; color: var(--ink-3); }
+
+/* ---------- Sources and close ---------- */
+
+.film-sources { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.film-sources li { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 20px; padding: 24px 0; border-bottom: 1px solid var(--line); scroll-margin-top: calc(var(--header-height) + 16px); }
+.film-sources li:target { background: linear-gradient(90deg, var(--surface-2), transparent 70%); }
+.film-source-n { font-family: var(--font-display); font-size: 2rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--accent); }
+.film-source-cite { max-width: 64ch; margin: 0; font-family: var(--font-display); font-size: 1.125rem; font-weight: 500; line-height: 1.45; color: var(--ink); }
+.film-source-read { max-width: 68ch; margin: 8px 0 0; color: var(--ink-2); }
+.film-checked { max-width: 72ch; margin: 28px 0 0; line-height: 1.6; color: var(--ink-2); }
+
+@media (max-width: 767px) {
+  .film-notes, .film-entry, .film-entry-facts { grid-template-columns: minmax(0, 1fr); }
+  .film-notes h3 { padding-top: 0; }
+  .film-entry { gap: 10px; }
+  .film-entry-year { font-size: 1.75rem; }
+}
+@media (max-width: 599px) {
+  .film-bar { padding: 10px 12px 10px 16px; }
+  .film-foot { padding: 12px 16px 14px; }
+  .film-line { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .film-sources li { grid-template-columns: 40px minmax(0, 1fr); gap: 12px; }
+  .film-source-n { font-size: 1.625rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .film-cut, .film-line-time a { transition: none; }
+}

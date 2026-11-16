@@ -36,7 +36,8 @@ const shareCard = {
 export const longDate = iso => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`));
 
 // Indexing and the 404 page's missing canonical come from the page registry; records are articles rather than site pages.
-function head(route, title, description, { lab = false, ogType = 'website' } = {}) {
+// A page may bring its own 1200 × 630 card (a film shows its still) and one extra JSON-LD object.
+function head(route, title, description, { lab = false, ogType = 'website', card = shareCard, structuredData = null } = {}) {
   const { indexable, notFound } = pageFor(route);
   return [
     '<meta charset="utf-8">',
@@ -53,18 +54,20 @@ function head(route, title, description, { lab = false, ogType = 'website' } = {
     `<meta property="og:title" content="${e(title)}">`,
     `<meta property="og:description" content="${e(description)}">`,
     ...(notFound ? [] : [`<meta property="og:url" content="https://violema.com${route}">`]),
-    `<meta property="og:image" content="https://violema.com${shareCard.image}">`,
+    `<meta property="og:image" content="https://violema.com${card.image}">`,
     '<meta property="og:image:type" content="image/jpeg">',
     '<meta property="og:image:width" content="1200">',
     '<meta property="og:image:height" content="630">',
-    `<meta property="og:image:alt" content="${e(shareCard.ogAlt)}">`,
+    `<meta property="og:image:alt" content="${e(card.ogAlt)}">`,
     '<meta name="twitter:card" content="summary_large_image">',
     `<meta name="twitter:title" content="${e(title)}">`,
     `<meta name="twitter:description" content="${e(description)}">`,
-    `<meta name="twitter:image" content="https://violema.com${shareCard.image}">`,
-    `<meta name="twitter:image:alt" content="${e(shareCard.twitterAlt)}">`,
+    `<meta name="twitter:image" content="https://violema.com${card.image}">`,
+    `<meta name="twitter:image:alt" content="${e(card.twitterAlt)}">`,
     ...(indexable ? ['<meta name="googlebot" content="max-image-preview:large">'] : []),
     ...(route === '/' ? ['<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","@id":"https://violema.com/#webpage","url":"https://violema.com/","name":"Scientific evidence systems | Violema","primaryImageOfPage":{"@type":"ImageObject","url":"https://violema.com/company-assets/violema-social-hero.jpg","width":1200,"height":630}}</script>'] : []),
+    // JSON-LD is script text, so "<" is escaped to keep it from closing the element.
+    ...(structuredData ? [`<script type="application/ld+json">${JSON.stringify(structuredData).replaceAll('<', '\\u003c')}</script>`] : []),
     '<link rel="icon" href="/company-assets/violema-icon-96.png" type="image/png" sizes="96x96">',
     ...fontFiles.map(file => `<link rel="preload" href="/company-assets/fonts/${file}" as="font" type="font/woff2" crossorigin>`),
     '<script>try{if(localStorage.getItem("violema-theme")==="dark")document.documentElement.dataset.theme="dark"}catch{}</script>',
@@ -72,7 +75,8 @@ function head(route, title, description, { lab = false, ogType = 'website' } = {
     '<link rel="stylesheet" href="/company-assets/appearance.css">',
     ...(['/', '/about/'].includes(route) ? ['<link rel="stylesheet" href="/company-assets/experience.css">'] : []),
     ...(route === '/method/' ? ['<link rel="stylesheet" href="/company-assets/diagrams.css">'] : []),
-    ...(route.startsWith('/records/') || route.startsWith('/fields/') ? ['<link rel="stylesheet" href="/company-assets/records.css">'] : []),
+    ...(route.startsWith('/records/') || route.startsWith('/fields/') || route.startsWith('/films/') ? ['<link rel="stylesheet" href="/company-assets/records.css">'] : []),
+    ...(route.startsWith('/films/') ? ['<link rel="stylesheet" href="/company-assets/films.css">'] : []),
     ...(lab ? labModules : []).map(href => `<link rel="modulepreload" href="${href}">`),
   ].join('');
 }
