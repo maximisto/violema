@@ -65,6 +65,9 @@ test('rendered configs match committed inert templates and proxy all API locatio
     assert.equal((output.match(/location \^~ \/api\/ \{/g) || []).length, mode === 'preview' ? 2 : 3);
     assert.match(output, /location = \/api \{/);
     assert.match(output, /location = \/method \{[\s\S]*?try_files \/method\/index\.html =404;/);
+    // Every company server types the film files: stock mime.types has no text/vtt, and nosniff drops a mistyped track.
+    const films = output.match(/location \^~ \/company-assets\/films\/ \{\n {8}if \(\$request_method !~ \^\(GET\|HEAD\)\$\) \{ return 405; \}\n {8}types \{ video\/mp4 mp4; text\/vtt vtt; image\/webp webp; image\/jpeg jpg; \}\n {8}default_type application\/octet-stream;\n {8}try_files \$uri =404;\n {4}\}/g) || [];
+    assert.ok(films.length > 0 && films.length === (output.match(/location \^~ \/company-assets\/ \{/g) || []).length, mode);
     assert.match(output, /location \/ \{ return 404; \}/);
     assert.match(output, /error_page 404 \/404\.html;\n    location = \/404\.html \{\n        internal;/);
     assert.doesNotMatch(output, /proxy_redirect|proxy_cookie_domain|rewrite\s|return 30[12]|scientific_browser_redirect|\$request_uri#/);
@@ -116,4 +119,20 @@ test('the live-vhost fields snippet holds exactly the modelled field routes', ()
     assert.match(block, /try_files \/fields\/quantum-advantage\/index\.html =404;/);
   }
   assert.match(snippet, /^    # BEGIN VIOLEMA FIELDS\n[\s\S]*\n    # END VIOLEMA FIELDS\n$/);
+});
+
+test('the live-vhost films snippet holds exactly the modelled film routes and types the film assets', () => {
+  const snippet = readFileSync(resolve(packet, 'films.nginx.conf.snippet'), 'utf8');
+  const exact = [...snippet.matchAll(/location = (\S+) \{/g)].map(match => match[1]);
+  assert.deepEqual(exact, companyPages.filter(([route]) => route.startsWith('/films/')).map(([route]) => route));
+  for (const route of exact) assert.equal(classify({ target: route }).kind, 'company', route);
+  for (const block of snippet.split('location ').slice(1)) assert.match(block, /if \(\$request_method !~ \^\(GET\|HEAD\)\$\) \{ return 405; \}/);
+  for (const block of snippet.split('location = ').slice(1)) assert.match(block, /try_files \/films\/zero-babies\/index\.html =404;/);
+  // Stock mime.types has no text/vtt, and with nosniff a mistyped caption track is dropped.
+  const assets = snippet.match(/location \^~ \/company-assets\/films\/ \{[\s\S]*?\n    \}/)?.[0];
+  assert.ok(assets, 'the film assets have their own location');
+  assert.match(assets, /types \{ video\/mp4 mp4; text\/vtt vtt; image\/webp webp; image\/jpeg jpg; \}/);
+  // A location's own add_header drops the server's, so each location repeats every server-level header.
+  for (const block of snippet.split('location ').slice(1)) for (const header of ['X-Content-Type-Options "nosniff"', 'X-Frame-Options "SAMEORIGIN"', 'Referrer-Policy "strict-origin"']) assert.ok(block.includes(`add_header ${header} always;`), header);
+  assert.match(snippet, /^    # BEGIN VIOLEMA FILMS\n[\s\S]*\n    # END VIOLEMA FILMS\n$/);
 });

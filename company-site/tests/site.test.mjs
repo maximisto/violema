@@ -10,6 +10,8 @@ import { homePage, presentedCorpora } from '../lib/pages.mjs';
 import { TRACKER_SRC } from '../lib/analytics.mjs';
 import { profiles, profileIcon } from '../lib/social.mjs';
 import { PAGES } from '../lib/routes.mjs';
+import { FILMS } from '../data/films.mjs';
+import { filmMediaPaths } from '../lib/films.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=join(root,'dist');
@@ -17,6 +19,9 @@ const founderArchive=join(root,'archive/about-founder-20261102');
 // Every registered page with a canonical address; the 404 page has its own test.
 const pages=PAGES.filter(page=>!page.notFound).map(page=>[page.route,page.file]);
 const decode = value => value.replaceAll('&amp;','&');
+// Video files stay out of git (README, "Films"); a build may leave them out only when told to.
+const skipFilmMedia=process.env.VIOLEMA_SKIP_FILM_MEDIA==='1';
+const filmMedia=new Set(FILMS.flatMap(filmMediaPaths));
 
 test('additive replay preserves original result and interval width throughout declared domain',()=>{
   const original=calculateBiasScenario(stressTest,0);
@@ -87,6 +92,7 @@ for(const [route,file] of pages)test(`${route} is meaningful HTML with correct m
     if(href.startsWith('#')){assert.ok(ids.includes(href.slice(1)),`Missing anchor ${href}`);continue;}
     if(!href.startsWith('/'))continue;
     if(href===TRACKER_SRC)continue; // nginx proxies it to Umami (lib/analytics.mjs); never part of dist.
+    if(skipFilmMedia&&filmMedia.has(href))continue; // Built without the film files on purpose; tests/films.test.mjs says so.
     // A query presets a page's form (the briefing links); the file and the anchor must still exist.
     const [target,anchor]=href.split('#');
     let local=join(dist,target.split('?')[0]);

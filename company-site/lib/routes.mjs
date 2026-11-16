@@ -3,6 +3,8 @@
 export const FIELD = { route: '/fields/quantum-advantage/', name: 'Quantum advantage' };
 export const FE4S4_ROUTE = '/records/fe4s4-benchmark/';
 export const FE4S4_RECORD_ROUTE = '/records/fe4s4-benchmark/record/';
+// Film 01 and the record behind it; its content and media pins are in data/films.mjs.
+export const ZERO_BABIES_ROUTE = '/films/zero-babies/';
 
 // Every page the build writes, in sitemap order. An indexable page carries index,follow and is listed in
 // the sitemap; a record names the field it sits under. The live vhost is an allowlist, so a new route also
@@ -17,6 +19,7 @@ export const PAGES = Object.freeze([
   { route: FIELD.route, indexable: true },
   { route: FE4S4_ROUTE, indexable: true, field: FIELD.route },
   { route: FE4S4_RECORD_ROUTE, indexable: true, field: FIELD.route },
+  { route: ZERO_BABIES_ROUTE, indexable: true },
   { route: '/legal/terms/', indexable: true },
   { route: '/legal/privacy/', indexable: true },
   // nginx serves the 404 page at whatever address missed, so it has no canonical URL of its own.
