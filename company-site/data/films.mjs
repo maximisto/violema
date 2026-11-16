@@ -25,7 +25,7 @@ export const ZERO_BABIES = deepFreeze({
   // 'draft' shows the draft note under the player. With the final media in place, set 'final' and the release date.
   status: 'draft',
   published: null,
-  draftNote: 'Draft cut. Music, sound and one pronunciation fix are still to come. The final film replaces this file.',
+  draftNote: 'Draft cut. Music and sound are still to come. The final film replaces this file.',
   description: 'A 52-second film on how a 1993 study of 36 college students became a claim about babies. With each claim it makes, its sources, its limits and its date.',
   lede: 'In 1993, a study of 36 college students reported a short-lived effect of Mozart on spatial tasks. By 1998, Georgia’s governor asked for $105,000 to send classical music to every newborn in the state. This film follows the claim. Below it is the record: each claim, with its sources, its limits and its date.',
 
@@ -35,8 +35,8 @@ export const ZERO_BABIES = deepFreeze({
     captions: 'zero-babies.en.vtt',
     card: { file: 'zero-babies-card.jpg', alt: 'A still from Zero Babies, a Violema film: a baby in a crib beside the words 0 babies.' },
     cuts: [
-      { id: 'wide', label: 'Wide', ratio: '2.39:1', file: 'zero-babies-wide-e4d7da5c.mp4', sha256: 'e4d7da5cf6cae6ff1eaa347d8843d941aeeb9451e1b235a2a9e82966d471cbe2', bytes: 17408437, width: 1920, height: 804, poster: 'zero-babies-wide-poster.webp' },
-      { id: 'vertical', label: 'Vertical', ratio: '9:16', file: 'zero-babies-vertical-34595ce0.mp4', sha256: '34595ce0afeed42eb17b002182dbbab0b0ba4b885decd29022657a1c3ca4ea20', bytes: 15842177, width: 1080, height: 1920, poster: 'zero-babies-vertical-poster.webp' },
+      { id: 'wide', label: 'Wide', ratio: '2.39:1', file: 'zero-babies-wide-e422f2c9.mp4', sha256: 'e422f2c9babbf3b0669c0f7a7a19ed3e13af43148bbafd1945a8363699ed28e3', bytes: 17439371, width: 1920, height: 804, poster: 'zero-babies-wide-poster.webp' },
+      { id: 'vertical', label: 'Vertical', ratio: '9:16', file: 'zero-babies-vertical-6eee4604.mp4', sha256: '6eee4604a0c42a0d5e95a4422b440a846292a6b9cde71a33001fa5ef775ff830', bytes: 16026884, width: 1080, height: 1920, poster: 'zero-babies-vertical-poster.webp' },
     ],
   },
 
@@ -57,8 +57,8 @@ export const ZERO_BABIES = deepFreeze({
     [35.68, 37.767, 'Now the claims are about cancer drugs.'],
     [37.767, 39.59, 'AI writes one in seconds.'],
     [39.59, 41.18, 'Testing it takes a lab.'],
-    [42.88, 44.455, 'Violema keeps the record.'],
-    [44.455, 47.927, 'Each claim with its sources, its limits and its date.'],
+    [42.88, 44.181, 'Violema keeps the record.'],
+    [44.181, 47.557, 'Each claim with its sources, its limits and its date.'],
   ],
 
   // Numbered as in the film. `read` says how the source was read on the check date.
@@ -119,7 +119,7 @@ export const ZERO_BABIES = deepFreeze({
     { at: 31.3, beat: 'Scale', kind: 'sourced', voice: null, spoken: null, screen: ['TESTED · 1993', '36', 'college students', 'Each dot is one person. Two different groups, drawn at one scale.', 'PROPOSED · 1998', 'about 100,000', 'new parents a year', 'Georgia’s governor asked for $105,000.', 'the 36, at the same scale', 'Babies in the 1993 study: 0'], refs: [1, 3], note: 'Two different groups. The 36 students were not drawn from the parents. The 1998 report counts new parents, some 100,000 a year, not babies, and it reports a request.' },
     { at: 35.3, beat: 'Why now', kind: 'argument', voice: 'Narrator', spoken: 'Now the claims are about cancer drugs. AI writes one in seconds. Testing it takes a lab.', screen: [], refs: [], note: 'No source is cited. This is the film’s reason the record matters now, not a measured comparison.' },
     { at: 42.5, beat: 'The record', kind: 'product', voice: 'Narrator', spoken: 'Violema keeps the record. Each claim with its sources, its limits and its date.', screen: ['THE RECORD', 'Claim: “Listening to Mozart makes babies smarter”', 'Babies in the 1993 study: 0', '2026 · this film'], refs: [1, 3, 4, 5, 6], note: 'This page is that record. The four dated entries on screen are under The record, with their sources and limits. Keeping a record is not independent scientific review.' },
-    { at: 48.2, beat: 'End card', kind: 'card', voice: 'Narrator', spoken: 'Violema. Where science keeps score.', screen: ['Where science keeps score.', 'violema.com', 'Scenes are generated. Six sources.'], refs: [], note: 'The six sources are listed below. What the scenes show is described under the film.' },
+    { at: 48.2, beat: 'End card', kind: 'card', voice: 'Narrator', spoken: 'Violema. Where science keeps score.', screen: ['Where science keeps score.', 'violema.com/films/zero-babies', 'Scenes are generated. Six sources.'], refs: [], note: 'The six sources are listed below. What the scenes show is described under the film.' },
   ],
 
   disclosures: [
